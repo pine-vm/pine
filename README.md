@@ -1,3 +1,3 @@
 # Kalmit
 
-Deterministic builds.
+Transparent Builds.
