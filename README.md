@@ -1,3 +1,3 @@
 # Kalmit
 
-Transparent Builds.
+Transparent Computing
