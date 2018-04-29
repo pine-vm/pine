@@ -1,3 +1,3 @@
 # Kalmit
 
-Transparent Computing
+Simple Computing
