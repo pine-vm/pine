@@ -1,3 +1,3 @@
 # Kalmit
 
-Simple Computing
+Simple Game Development
