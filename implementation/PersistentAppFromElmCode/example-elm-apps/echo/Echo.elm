@@ -15,11 +15,14 @@ serializeState _ = ""
 deserializeState : String -> State
 deserializeState _ = ()
 
+initState : State
+initState = ()
+
 -- Ensure Elm compiler understands that functions above are needed in the artifact.
 main : Program Int State String
 main =
     Platform.worker
-        {   init = (\_ -> ((), Cmd.none))
+        {   init = (\_ -> (initState, Cmd.none))
         ,   update = (\request stateBefore ->
                 (serializedRequest request (stateBefore |> serializeState |> deserializeState) |> Tuple.mapSecond (always Cmd.none)))
         ,   subscriptions = (\_ -> Sub.none)
