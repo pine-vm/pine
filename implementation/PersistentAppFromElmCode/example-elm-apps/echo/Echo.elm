@@ -18,7 +18,7 @@ deserializeState _ = ()
 initState : State
 initState = ()
 
--- Ensure Elm compiler understands that functions above are needed in the artifact.
+-- Support function-level dead code elimination (https://elm-lang.org/blog/small-assets-without-the-headache) Elm code needed to inform the Elm compiler about our entry points.
 main : Program Int State String
 main =
     Platform.worker
