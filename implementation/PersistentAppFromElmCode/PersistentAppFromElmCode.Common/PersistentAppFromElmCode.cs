@@ -136,8 +136,12 @@ namespace PersistentAppFromElmCode.Common
             return Encoding.UTF8.GetString(outputFileContent);
         }
 
+        /*
+        Elm executable obtained on 2018-09-03 from
+        https://github.com/elm/compiler/releases/download/0.19.0/installer-for-windows.exe
+        */
         static byte[] GetElmExecutableFile => BlobLibrary.GetBlobWithSHA1(
-            CommonConversion.ByteArrayFromStringBase16("612535DC989098715541AC35F321FE2B63116A6B"));
+            CommonConversion.ByteArrayFromStringBase16("80E414D3A261951BD2A732FD82B7D6994E017927"));
 
         public const string appStateJsVarName = "app_state";
 
