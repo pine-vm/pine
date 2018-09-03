@@ -7,7 +7,7 @@ namespace PersistentAppFromElmCode.Common
 {
     public class ExecutableFile
     {
-        static public (string standardOutput, IReadOnlyCollection<(string name, byte[] content)> resultingFiles) ExecuteFileWithArguments(
+        static public (int exitCode, string standardOutput, IReadOnlyCollection<(string name, byte[] content)> resultingFiles) ExecuteFileWithArguments(
             IReadOnlyCollection<(string name, byte[] content)> environmentFiles,
             byte[] executableFile,
             string arguments)
@@ -56,7 +56,7 @@ namespace PersistentAppFromElmCode.Common
 
             Directory.Delete(workingDirectory, true);
 
-            return (standardOutput, resultFiles);
+            return (exitCode, standardOutput, resultFiles);
         }
     }
 }

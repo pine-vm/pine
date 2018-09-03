@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -129,7 +129,9 @@ namespace PersistentAppFromElmCode.Common
                 commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
 
             if (outputFileContent == null)
-                throw new NotImplementedException("Output file not found.\nMaybe standard output from compilations helps to find the cause:\n" + commandResults.standardOutput);
+                throw new NotImplementedException(
+                    "Output file not found. Maybe output from Elm make helps to find the cause:\nExit Code: " + commandResults.exitCode +
+                    "\nStandard Output:\n" + commandResults.standardOutput);
 
             return Encoding.UTF8.GetString(outputFileContent);
         }
