@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -14,6 +14,10 @@ namespace PersistentAppFromElmCode.Common
     public interface IApp<RequestT, ResponseT>
     {
         ResponseT Request(RequestT serializedRequest);
+
+        string GetSerializedState();
+
+        string SetSerializedState(string serializedState);
     }
 
     public interface IAppWithCustomSerialization : IApp<string, string>
@@ -44,7 +48,7 @@ namespace PersistentAppFromElmCode.Common
             var initAppResult = browserPage.EvaluateExpressionAsync(javascriptPreparedToRun).Result;
 
             var resetAppStateResult = browserPage.EvaluateExpressionAsync(
-                PersistentAppFromElm019Code.appStateJsVarName + " = " + "initState;").Result;
+                PersistentAppFromElm019Code.appStateJsVarName + " = " + PersistentAppFromElm019Code.initStateJsFunctionPublishedSymbol + ";").Result;
         }
 
         static string AsJavascriptExpression(string originalString) =>
@@ -64,6 +68,27 @@ namespace PersistentAppFromElmCode.Common
             var processRequestResult = browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
 
             return processRequestResult;
+        }
+
+        public string GetSerializedState()
+        {
+            var expressionJavascript =
+                PersistentAppFromElm019Code.serializeStateJsFunctionPublishedSymbol +
+                "(" + PersistentAppFromElm019Code.appStateJsVarName + ")";
+
+            return browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
+        }
+
+        public string SetSerializedState(string serializedState)
+        {
+            var serializedStateExpression = AsJavascriptExpression(serializedState);
+
+            var expressionJavascript =
+                PersistentAppFromElm019Code.appStateJsVarName +
+                " = " + PersistentAppFromElm019Code.deserializeStateJsFunctionPublishedSymbol +
+                "(" + serializedStateExpression + ");";
+
+            return browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
         }
     }
 
@@ -114,7 +139,13 @@ namespace PersistentAppFromElmCode.Common
 
         public const string appStateJsVarName = "app_state";
 
+        public const string initStateJsFunctionPublishedSymbol = "initState";
+
         public const string serializedRequestFunctionPublishedSymbol = "serializedRequest";
+
+        public const string serializeStateJsFunctionPublishedSymbol = "serializeState";
+
+        public const string deserializeStateJsFunctionPublishedSymbol = "deserializeState";
 
         /*
         Takes the javascript as emitted from Elm make 0.19 and inserts additional statements to
@@ -145,19 +176,19 @@ namespace PersistentAppFromElmCode.Common
                     new
                     {
                         name = pathToInitialStateFunction,
-                        publicName = "initState",
+                        publicName = initStateJsFunctionPublishedSymbol,
                         arity = 0,
                     },
                     new
                     {
                         name = pathToSerializeStateFunction,
-                        publicName = "serializeState",
+                        publicName = serializeStateJsFunctionPublishedSymbol,
                         arity = 1,
                     },
                     new
                     {
                         name = pathToDeserializeStateFunction,
-                        publicName = "deserializeState",
+                        publicName = deserializeStateJsFunctionPublishedSymbol,
                         arity = 1,
                     },
                 }
