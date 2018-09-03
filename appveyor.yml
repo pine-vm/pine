@@ -1,0 +1,21 @@
+version: 1.0.{build}
+image: Visual Studio 2017
+init:
+- cmd: wmic os get osarchitecture
+build_script:
+- cmd: >-
+    dotnet --version
+
+
+    dotnet restore ./implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Common/PersistentAppFromElmCode.Common.csproj --verbosity m
+
+
+    dotnet publish ./implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Common/PersistentAppFromElmCode.Common.csproj
+test_script:
+- cmd: >-
+    dotnet restore ./implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Test/PersistentAppFromElmCode.Test.csproj --verbosity m
+
+
+    cd implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Test
+
+    dotnet test
