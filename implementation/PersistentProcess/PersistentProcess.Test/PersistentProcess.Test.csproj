@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PersistentAppFromElmCode.Common\PersistentAppFromElmCode.Common.csproj" />
+    <ProjectReference Include="..\PersistentProcess.Common\PersistentProcess.Common.csproj" />
   </ItemGroup>
 
 </Project>

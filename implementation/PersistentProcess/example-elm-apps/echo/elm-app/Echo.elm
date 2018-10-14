@@ -6,8 +6,8 @@ type alias State = ()
 
 type alias Msg = String
 
-serializedRequest : String -> State -> (State, String)
-serializedRequest request stateBefore = (stateBefore, "Echo from Elm:" ++ request)
+serializedEvent : String -> State -> (State, String)
+serializedEvent event stateBefore = (stateBefore, "Echo from Elm:" ++ event)
 
 serializeState : State -> String
 serializeState _ = ""
@@ -23,7 +23,7 @@ main : Program Int State String
 main =
     Platform.worker
         {   init = (\_ -> (initState, Cmd.none))
-        ,   update = (\request stateBefore ->
-                (serializedRequest request (stateBefore |> serializeState |> deserializeState) |> Tuple.mapSecond (always Cmd.none)))
+        ,   update = (\event stateBefore ->
+                (serializedEvent event (stateBefore |> serializeState |> deserializeState) |> Tuple.mapSecond (always Cmd.none)))
         ,   subscriptions = (\_ -> Sub.none)
         }

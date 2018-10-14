@@ -1,0 +1,9 @@
+{
+    "WithCustomSerialization": {
+        "pathToFileWithElmEntryPoint": "Counter.elm",
+        "pathToInitialStateFunction": "Counter.initState",
+        "pathToSerializedEventFunction": "Counter.processSerializedEvent",
+        "pathToSerializeStateFunction": "Counter.serializeState",
+        "pathToDeserializeStateFunction": "Counter.deserializeState"
+    }
+}

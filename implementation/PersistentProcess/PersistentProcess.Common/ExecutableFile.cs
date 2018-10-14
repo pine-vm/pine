@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-namespace PersistentAppFromElmCode.Common
+namespace Kalmit
 {
     public class ExecutableFile
     {
@@ -12,7 +12,7 @@ namespace PersistentAppFromElmCode.Common
             byte[] executableFile,
             string arguments)
         {
-            var workingDirectory = Filesystem.MakeRandomDirectoryInTempDirectory();
+            var workingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
             var executableFileName = "name-used-to-execute-file.exe";
 

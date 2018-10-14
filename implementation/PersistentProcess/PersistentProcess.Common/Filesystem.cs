@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace PersistentAppFromElmCode
+namespace Kalmit
 {
     public class Filesystem
     {
@@ -22,7 +22,7 @@ namespace PersistentAppFromElmCode
             return path;
         }
 
-        static public string MakeRandomDirectoryInTempDirectory()
+        static public string CreateRandomDirectoryInTempDirectory()
         {
             var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
             Directory.CreateDirectory(directory);

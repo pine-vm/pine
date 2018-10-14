@@ -6,16 +6,13 @@ build_script:
 - cmd: >-
     dotnet --version
 
+    dotnet restore ./implementation/PersistentProcess/PersistentProcess.Common/PersistentProcess.Common.csproj --verbosity m
 
-    dotnet restore ./implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Common/PersistentAppFromElmCode.Common.csproj --verbosity m
-
-
-    dotnet publish ./implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Common/PersistentAppFromElmCode.Common.csproj
+    dotnet publish ./implementation/PersistentProcess/PersistentProcess.Common/PersistentProcess.Common.csproj
 test_script:
 - cmd: >-
-    dotnet restore ./implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Test/PersistentAppFromElmCode.Test.csproj --verbosity m
+    dotnet restore ./implementation/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --verbosity m
 
-
-    cd implementation/PersistentAppFromElmCode/PersistentAppFromElmCode.Test
+    cd implementation/PersistentProcess/PersistentProcess.Test
 
     dotnet test

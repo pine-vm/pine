@@ -1,40 +1,38 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Kalmit;
 using Newtonsoft.Json;
 using PuppeteerSharp;
 
-namespace PersistentAppFromElmCode.Common
+namespace Kalmit
 {
-    public interface IApp<RequestT, ResponseT>
+    public interface IProcess<EventT, ResponseT>
     {
-        ResponseT Request(RequestT serializedRequest);
+        ResponseT ProcessEvent(EventT serializedEvent);
 
         string GetSerializedState();
 
         string SetSerializedState(string serializedState);
     }
 
-    public interface IAppWithCustomSerialization : IApp<string, string>
+    public interface IProcessWithCustomSerialization : IProcess<string, string>
     {
     }
 
-    public interface IDisposableAppWithCustomSerialization : IAppWithCustomSerialization, IDisposable
+    public interface IDisposableProcessWithCustomSerialization : IProcessWithCustomSerialization, IDisposable
     {
     }
 
-    class AppWithCustomSerializationHostedWithPuppeteer : IDisposableAppWithCustomSerialization
+    class ProcessWithCustomSerializationHostedWithPuppeteer : IDisposableProcessWithCustomSerialization
     {
         readonly Browser browser;
 
         readonly Page browserPage;
 
-        public AppWithCustomSerializationHostedWithPuppeteer(string javascriptPreparedToRun)
+        public ProcessWithCustomSerializationHostedWithPuppeteer(string javascriptPreparedToRun)
         {
             new BrowserFetcher().DownloadAsync(BrowserFetcher.DefaultRevision).Wait();
 
@@ -48,7 +46,7 @@ namespace PersistentAppFromElmCode.Common
             var initAppResult = browserPage.EvaluateExpressionAsync(javascriptPreparedToRun).Result;
 
             var resetAppStateResult = browserPage.EvaluateExpressionAsync(
-                PersistentAppFromElm019Code.appStateJsVarName + " = " + PersistentAppFromElm019Code.initStateJsFunctionPublishedSymbol + ";").Result;
+                ProcessFromElm019Code.appStateJsVarName + " = " + ProcessFromElm019Code.initStateJsFunctionPublishedSymbol + ";").Result;
         }
 
         static string AsJavascriptExpression(string originalString) =>
@@ -59,22 +57,22 @@ namespace PersistentAppFromElmCode.Common
             browser?.Dispose();
         }
 
-        public string Request(string serializedRequest)
+        public string ProcessEvent(string serializedEvent)
         {
-            var requestExpression = AsJavascriptExpression(serializedRequest);
+            var eventExpression = AsJavascriptExpression(serializedEvent);
 
-            var expressionJavascript = PersistentAppFromElm019Code.requestSyncronousJsFunctionName + "(" + requestExpression + ")";
+            var expressionJavascript = ProcessFromElm019Code.processEventSyncronousJsFunctionName + "(" + eventExpression + ")";
 
-            var processRequestResult = browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
+            var processEventtResult = browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
 
-            return processRequestResult;
+            return processEventtResult;
         }
 
         public string GetSerializedState()
         {
             var expressionJavascript =
-                PersistentAppFromElm019Code.serializeStateJsFunctionPublishedSymbol +
-                "(" + PersistentAppFromElm019Code.appStateJsVarName + ")";
+                ProcessFromElm019Code.serializeStateJsFunctionPublishedSymbol +
+                "(" + ProcessFromElm019Code.appStateJsVarName + ")";
 
             return browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
         }
@@ -84,35 +82,102 @@ namespace PersistentAppFromElmCode.Common
             var serializedStateExpression = AsJavascriptExpression(serializedState);
 
             var expressionJavascript =
-                PersistentAppFromElm019Code.appStateJsVarName +
-                " = " + PersistentAppFromElm019Code.deserializeStateJsFunctionPublishedSymbol +
+                ProcessFromElm019Code.appStateJsVarName +
+                " = " + ProcessFromElm019Code.deserializeStateJsFunctionPublishedSymbol +
                 "(" + serializedStateExpression + ");";
 
             return browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
         }
     }
 
-    public class PersistentAppFromElm019Code
+    public struct ElmAppEntryConfig
     {
-        static public IDisposableAppWithCustomSerialization WithCustomSerialization(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
-            string pathToFileWithElmEntryPoint,
-            string pathToSerializedRequestFunction,
-            string pathToInitialStateFunction,
-            string pathToSerializeStateFunction,
-            string pathToDeserializeStateFunction)
+        //  This provides information about entry points in the elm app relative to the files which make up the elm app.
+
+        public ElmAppEntryConfigWithCustomSerialization? WithCustomSerialization;
+
+        public struct ElmAppEntryConfigWithCustomSerialization
         {
-            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, pathToFileWithElmEntryPoint);
+            public string pathToFileWithElmEntryPoint;
+            public string pathToInitialStateFunction;
+            public string pathToSerializedEventFunction;
+            public string pathToSerializeStateFunction;
+            public string pathToDeserializeStateFunction;
+        }
+    }
+
+    public class ElmAppWithEntryConfig
+    {
+        public ElmAppEntryConfig? EntryConfig;
+
+        public IReadOnlyCollection<(string filePath, byte[] fileContent)> ElmAppFiles;
+
+        const string entryConfigFileName = "elm-app.entry-config.json";
+
+        const string elmAppFilesDirectory = "elm-app";
+
+        static public ElmAppWithEntryConfig FromFiles(IReadOnlyCollection<(string name, byte[] content)> files)
+        {
+            var entryConfigFile =
+                files.FirstOrDefault(file => String.Equals(file.name, entryConfigFileName, StringComparison.InvariantCultureIgnoreCase));
+
+            var entryConfig =
+                entryConfigFile.content == null ? (ElmAppEntryConfig?)null
+                : JsonConvert.DeserializeObject<ElmAppEntryConfig>(Encoding.UTF8.GetString(entryConfigFile.content));
+
+            var codeFiles =
+                files.Select(file =>
+                {
+                    var codeFilePath = Regex.Match(file.name, elmAppFilesDirectory + @"\\(.+)", RegexOptions.IgnoreCase);
+
+                    if (!codeFilePath.Success)
+                        return (null, null);
+
+                    return (name: codeFilePath.Groups[1].Value, file.content);
+                })
+                .Where(file => 0 < file.name?.Length && ProcessFromElm019Code.FilePathMatchesPatternOfFilesInElmApp(file.name))
+                .ToList();
+
+            return new ElmAppWithEntryConfig
+            {
+                EntryConfig = entryConfig,
+                ElmAppFiles = codeFiles,
+            };
+        }
+
+        public IReadOnlyCollection<(string name, byte[] content)> AsFiles()
+        {
+            var entryConfigFiles =
+                new[] { EntryConfig }
+                .WhereHasValue()
+                .Select(entryConfig =>
+                    (entryConfigFileName, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(entryConfig))));
+
+            var elmAppFiles =
+                ElmAppFiles
+                ?.Select(appFile => (elmAppFilesDirectory + @"\" + appFile.filePath, appFile.fileContent));
+
+            return (elmAppFiles.EmptyIfNull()).Concat(entryConfigFiles).ToList();
+        }
+    }
+
+    public class ProcessFromElm019Code
+    {
+        static public IDisposableProcessWithCustomSerialization WithCustomSerialization(
+            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            ElmAppEntryConfig.ElmAppEntryConfigWithCustomSerialization entryConfig)
+        {
+            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, entryConfig.pathToFileWithElmEntryPoint);
 
             var javascriptPreparedToRun =
                 BuildAppJavascript(
                     javascriptFromElmMake,
-                    pathToSerializedRequestFunction,
-                    pathToInitialStateFunction,
-                    pathToSerializeStateFunction,
-                    pathToDeserializeStateFunction);
+                    entryConfig.pathToSerializedEventFunction,
+                    entryConfig.pathToInitialStateFunction,
+                    entryConfig.pathToSerializeStateFunction,
+                    entryConfig.pathToDeserializeStateFunction);
 
-            return new AppWithCustomSerializationHostedWithPuppeteer(javascriptPreparedToRun);
+            return new ProcessWithCustomSerializationHostedWithPuppeteer(javascriptPreparedToRun);
         }
 
         static string CompileElmToJavascript(
@@ -147,7 +212,7 @@ namespace PersistentAppFromElmCode.Common
 
         public const string initStateJsFunctionPublishedSymbol = "initState";
 
-        public const string serializedRequestFunctionPublishedSymbol = "serializedRequest";
+        public const string serializedEventFunctionPublishedSymbol = "serializedEvent";
 
         public const string serializeStateJsFunctionPublishedSymbol = "serializeState";
 
@@ -158,11 +223,11 @@ namespace PersistentAppFromElmCode.Common
         prepare the script for usage in our application.
         This preparation includes:
         + Publish interfacing functions of app to the global scope.
-        + Add a function which implements a request to the app, stores the resulting app state and returns the response of the app.
+        + Add a function which implements processing an event and storing the resulting process state and returns the response of the process.
         */
         static string BuildAppJavascript(
             string javascriptFromElmMake,
-            string pathToSerializedRequestFunction,
+            string pathToSerializedEventFunction,
             string pathToInitialStateFunction,
             string pathToSerializeStateFunction,
             string pathToDeserializeStateFunction)
@@ -175,8 +240,8 @@ namespace PersistentAppFromElmCode.Common
                 {
                     new
                     {
-                        name = pathToSerializedRequestFunction,
-                        publicName = serializedRequestFunctionPublishedSymbol,
+                        name = pathToSerializedEventFunction,
+                        publicName = serializedEventFunctionPublishedSymbol,
                         arity = 2,
                     },
                     new
@@ -219,25 +284,25 @@ namespace PersistentAppFromElmCode.Common
             var publicationInsertString =
                 string.Join(Environment.NewLine, new[] { "" }.Concat(publishStatements).Concat(new[] { "" }));
 
-            var processRequestAndUpdateStateFunctionJavascriptLines = new[]
+            var processEventAndUpdateStateFunctionJavascriptLines = new[]
             {
-                "var " + requestSyncronousJsFunctionName + " = function(requestSerial){",
-                "var newStateAndResponse = " + serializedRequestFunctionPublishedSymbol + "(requestSerial," + appStateJsVarName + ");",
+                "var " + processEventSyncronousJsFunctionName + " = function(eventSerial){",
+                "var newStateAndResponse = " + serializedEventFunctionPublishedSymbol + "(eventSerial," + appStateJsVarName + ");",
                 appStateJsVarName + " = newStateAndResponse.a;",
                 "return newStateAndResponse.b;",
                 "}",
             };
 
-            var processRequestAndUpdateStateFunctionJavascript =
-                String.Join(Environment.NewLine, processRequestAndUpdateStateFunctionJavascriptLines);
+            var processEventAndUpdateStateFunctionJavascript =
+                String.Join(Environment.NewLine, processEventAndUpdateStateFunctionJavascriptLines);
 
             return
                 javascriptFromElmMake.Insert(publicationInsertLocation, publicationInsertString) +
                 Environment.NewLine +
-                processRequestAndUpdateStateFunctionJavascript;
+                processEventAndUpdateStateFunctionJavascript;
         }
 
-        public const string requestSyncronousJsFunctionName = "request";
+        public const string processEventSyncronousJsFunctionName = "processEvent";
 
         static string BuildElmFunctionPublicationExpression(string functionToCallName, int arity)
         {

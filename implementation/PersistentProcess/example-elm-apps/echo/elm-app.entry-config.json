@@ -1,0 +1,9 @@
+{
+    "WithCustomSerialization": {
+        "pathToFileWithElmEntryPoint": "Echo.elm",
+        "pathToInitialStateFunction": "Echo.initState",
+        "pathToSerializedEventFunction": "Echo.serializedEvent",
+        "pathToSerializeStateFunction": "Echo.serializeState",
+        "pathToDeserializeStateFunction": "Echo.deserializeState"
+    }
+}
