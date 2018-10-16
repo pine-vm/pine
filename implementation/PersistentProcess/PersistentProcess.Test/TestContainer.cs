@@ -82,7 +82,7 @@ namespace Kalmit.PersistentProcess.Test
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
             var elmAppFile = Path.Combine(testDirectory, "elm-app");
-            var processHistoryFile = Path.Combine(testDirectory, "process-history");
+            var processStoreDirectory = Path.Combine(testDirectory, "process-store");
 
             File.WriteAllBytes(elmAppFile, ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles()));
 
@@ -97,9 +97,16 @@ namespace Kalmit.PersistentProcess.Test
                         (-10, -6),
                     }).ToList();
 
+            IDisposableProcessWithCustomSerialization InstantiatePersistentProcess()
+            {
+                var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory);
+
+                return new Kalmit.PersistentProcess.PersistentProcessWithHistoryOnFileFromElm019Code(store, store, elmAppFile);
+            }
+
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
             {
-                using (var processInstance = new Kalmit.PersistentProcessWithHistoryOnFileFromElm019Code(processHistoryFile, elmAppFile))
+                using (var processInstance = InstantiatePersistentProcess())
                 {
                     var processResponse = processInstance.ProcessEvent(serializedEvent);
 

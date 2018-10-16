@@ -30,7 +30,7 @@ namespace Kalmit
 
             File.WriteAllBytes(executableFilePath, executableFile);
 
-            var process = new Process()
+            var process = new System.Diagnostics.Process
             {
                 StartInfo = new ProcessStartInfo
                 {
