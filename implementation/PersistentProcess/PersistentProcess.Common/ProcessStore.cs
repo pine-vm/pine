@@ -11,7 +11,10 @@ namespace Kalmit.ProcessStore
     {
         public byte[] ParentHash;
 
-        public string[] AppendedEvents;
+        public IReadOnlyList<string> AppendedEvents;
+
+        static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
+            new System.Security.Cryptography.SHA256Managed().ComputeHash(serialized);
     }
 
     public class ReductionRecord
@@ -21,21 +24,21 @@ namespace Kalmit.ProcessStore
         public string ReducedValue;
     }
 
-    public interface IProcessStoreSink
+    public interface IProcessStoreWriter
     {
-        byte[] AppendComposition(CompositionRecord composition);
+        void AppendSerializedCompositionRecord(byte[] serializedCompositionRecord);
 
         void StoreReduction(ReductionRecord reduction);
     }
 
-    public interface IProcessStoreSource
+    public interface IProcessStoreReader
     {
-        IEnumerable<(byte[] hash, CompositionRecord composition)> EnumerateCompositionsReverse();
+        IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse();
 
         ReductionRecord GetReduction(byte[] reducedCompositionHash);
     }
 
-    public class ProcessStoreInFileDirectory : IProcessStoreSink, IProcessStoreSource
+    public class ProcessStoreInFileDirectory : IProcessStoreWriter, IProcessStoreReader
     {
         string directory;
 
@@ -43,32 +46,21 @@ namespace Kalmit.ProcessStore
 
         string ReductionDirectoryPath => Path.Combine(directory, "reduction");
 
+        static public string ReductionFileNameFromReducedCompositionHash(byte[] hash) =>
+            BitConverter.ToString(hash).Replace("-", "");
+
         string ReductionFilePathFromReducedCompositionHash(byte[] hash) =>
-            Path.Combine(ReductionDirectoryPath, BitConverter.ToString(hash).Replace("-", ""));
-
-        static byte[] HashFromSerialRepresentation(byte[] serialized) =>
-            new System.Security.Cryptography.SHA256Managed().ComputeHash(serialized);
-
-        static string Serialize(CompositionRecord composition) =>
-            JsonConvert.SerializeObject(composition);
+            Path.Combine(ReductionDirectoryPath, ReductionFileNameFromReducedCompositionHash(hash));
 
         public ProcessStoreInFileDirectory(string directory)
         {
             this.directory = directory;
         }
 
-        public IEnumerable<(byte[] hash, CompositionRecord composition)> EnumerateCompositionsReverse()
-        {
-            var recordsLinesReverse =
-                File.Exists(CompositionFilePath) ?
-                File.ReadAllLines(CompositionFilePath, Encoding.UTF8).Reverse() : new string[0];
-
-            return
-                recordsLinesReverse
-                .Select(recordLine =>
-                    (HashFromSerialRepresentation(Encoding.UTF8.GetBytes(recordLine)),
-                    JsonConvert.DeserializeObject<CompositionRecord>(recordLine)));
-        }
+        public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
+            (File.Exists(CompositionFilePath) ?
+            File.ReadAllLines(CompositionFilePath, Encoding.UTF8).Reverse() : new string[0])
+            .Select(Encoding.UTF8.GetBytes);
 
         public ReductionRecord GetReduction(byte[] reducedCompositionHash)
         {
@@ -87,17 +79,12 @@ namespace Kalmit.ProcessStore
             return reduction;
         }
 
-        public byte[] AppendComposition(CompositionRecord record)
+        public void AppendSerializedCompositionRecord(byte[] record)
         {
-            var serializedRecord =
-                Encoding.UTF8.GetBytes(Serialize(record));
-
             var filePath = CompositionFilePath;
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-            File.AppendAllLines(CompositionFilePath, new[] { Encoding.UTF8.GetString(serializedRecord) });
-
-            return HashFromSerialRepresentation(serializedRecord);
+            File.AppendAllLines(CompositionFilePath, new[] { Encoding.UTF8.GetString(record) });
         }
 
         public void StoreReduction(ReductionRecord record)

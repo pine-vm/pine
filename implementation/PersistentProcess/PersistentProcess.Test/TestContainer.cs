@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Kalmit.ProcessStore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Kalmit.PersistentProcess.Test
@@ -81,10 +82,7 @@ namespace Kalmit.PersistentProcess.Test
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-            var elmAppFile = Path.Combine(testDirectory, "elm-app");
             var processStoreDirectory = Path.Combine(testDirectory, "process-store");
-
-            File.WriteAllBytes(elmAppFile, ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles()));
 
             var eventsAndExpectedResponses =
                 CounterProcessTestEventsAndExpectedResponses(
@@ -101,7 +99,8 @@ namespace Kalmit.PersistentProcess.Test
             {
                 var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory);
 
-                return new Kalmit.PersistentProcess.PersistentProcessWithHistoryOnFileFromElm019Code(store, store, elmAppFile);
+                return new PersistentProcessWithControlFlowOverStoreWriter(
+                    new PersistentProcessWithHistoryOnFileFromElm019Code(store, CounterElmAppFile), store);
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
@@ -117,6 +116,63 @@ namespace Kalmit.PersistentProcess.Test
             Directory.Delete(testDirectory, true);
         }
 
+        [TestMethod]
+        public void Restore_counter_process_state_over_compositions()
+        {
+            var eventsAndExpectedResponses =
+                CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (1, 2),
+                        (2, 4),
+                        (-10, -6),
+                    }).ToList();
+
+            var processStoreCompositions = new List<byte[]>();
+
+            PersistentProcessWithHistoryOnFileFromElm019Code InstantiatePersistentProcess()
+            {
+                var storeReader = new ProcessStoreReaderFromDelegates
+                {
+                    EnumerateSerializedCompositionsRecordsReverseDelegate =
+                        processStoreCompositions.AsEnumerable().Reverse,
+
+                    GetReductionDelegate = hash => null,
+                };
+
+                return new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, CounterElmAppFile);
+            }
+
+            foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
+            {
+                using (var processInstance = InstantiatePersistentProcess())
+                {
+                    var (processResponses, compositionRecord) = processInstance.ProcessEvents(new[] { serializedEvent });
+
+                    var processResponse = processResponses.Single();
+
+                    processStoreCompositions.Add(compositionRecord.serializedCompositionRecord);
+
+                    Assert.AreEqual(expectedResponse, processResponse, false, "process response");
+                }
+            }
+        }
+
+        class ProcessStoreReaderFromDelegates : IProcessStoreReader
+        {
+            public Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate;
+
+            public Func<byte[], ReductionRecord> GetReductionDelegate;
+
+            public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
+                EnumerateSerializedCompositionsRecordsReverseDelegate();
+
+            public ReductionRecord GetReduction(byte[] reducedCompositionHash) =>
+                GetReductionDelegate(reducedCompositionHash);
+        }
+
         static Kalmit.IDisposableProcessWithCustomSerialization BuildInstanceOfCounterProcess() =>
             Kalmit.ProcessFromElm019Code.WithCustomSerialization(
                 CounterElmApp.ElmAppFiles,
@@ -124,6 +180,8 @@ namespace Kalmit.PersistentProcess.Test
 
         static ElmAppWithEntryConfig CounterElmApp =
             GetElmAppWithEntryConfigFromExampleName("counter");
+
+        static byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles());
 
         static ElmAppWithEntryConfig GetElmAppWithEntryConfigFromExampleName(string exampleName) =>
             ElmAppWithEntryConfig.FromFiles(
