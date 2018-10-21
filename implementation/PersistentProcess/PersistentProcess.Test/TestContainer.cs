@@ -160,6 +160,63 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void Restore_counter_process_state_from_combination_of_reduction_and_compositions()
+        {
+            var eventsAndExpectedResponses =
+                CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (1, 2),
+                        (2, 4),
+                        (3, 7),
+                        (4, 11),
+                        (5, 16),
+                        (-10, 6),
+                    }).ToList();
+
+            var processStoreCompositions = new List<byte[]>();
+
+            ReductionRecord lastReductionRecord = null;
+
+            PersistentProcessWithHistoryOnFileFromElm019Code InstantiatePersistentProcess()
+            {
+                var storeReader = new ProcessStoreReaderFromDelegates
+                {
+                    EnumerateSerializedCompositionsRecordsReverseDelegate =
+                        processStoreCompositions.AsEnumerable().Reverse,
+
+                    GetReductionDelegate = compositionHash =>
+                        (lastReductionRecord?.ReducedCompositionHash?.SequenceEqual(compositionHash) ?? false) ?
+                        lastReductionRecord : null,
+                };
+
+                return new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, CounterElmAppFile);
+            }
+
+            foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
+            {
+                using (var processInstance = InstantiatePersistentProcess())
+                {
+                    var (processResponses, compositionRecord) = processInstance.ProcessEvents(new[] { serializedEvent });
+
+                    var processResponse = processResponses.Single();
+
+                    processStoreCompositions.Add(compositionRecord.serializedCompositionRecord);
+
+                    if (3 < processStoreCompositions.Count)
+                    {
+                        lastReductionRecord = processInstance.ReductionRecordForCurrentState();
+                        processStoreCompositions = processStoreCompositions.TakeLast(1).ToList();
+                    }
+
+                    Assert.AreEqual(expectedResponse, processResponse, false, "process response");
+                }
+            }
+        }
+
         class ProcessStoreReaderFromDelegates : IProcessStoreReader
         {
             public Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate;

@@ -17,7 +17,6 @@ Current focus is the project to support Elm as a language to model game mechanic
 
 #### Reduce Operating Expenses
 
-+ Support restoring state from a combination of snapshot and events.
 + Support integrating app to configure tradeoff between the cost of persisting and cost of restoring.
 + Reduce load on storage: Provide automation to remove reductions which are not needed anymore from the store.
 + Make it easier to truncate history: Support dividing composition log into multiple files by time. (e.g. continue to log on new file each day)
