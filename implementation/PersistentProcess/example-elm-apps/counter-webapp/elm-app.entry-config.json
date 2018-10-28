@@ -1,0 +1,9 @@
+{
+    "WithCustomSerialization": {
+        "pathToFileWithElmEntryPoint": "CounterWebApp.elm",
+        "pathToInitialStateFunction": "CounterWebApp.initState",
+        "pathToSerializedEventFunction": "CounterWebApp.processSerializedEvent",
+        "pathToSerializeStateFunction": "CounterWebApp.serializeState",
+        "pathToDeserializeStateFunction": "CounterWebApp.deserializeState"
+    }
+}
