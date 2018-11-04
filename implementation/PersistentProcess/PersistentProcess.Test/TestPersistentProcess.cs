@@ -89,7 +89,7 @@ namespace Kalmit.PersistentProcess.Test
 
             IDisposableProcessWithCustomSerialization InstantiatePersistentProcess()
             {
-                var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory);
+                var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory, null);
 
                 return new PersistentProcessWithControlFlowOverStoreWriter(
                     new PersistentProcessWithHistoryOnFileFromElm019Code(store, TestSetup.CounterElmAppFile), store);
