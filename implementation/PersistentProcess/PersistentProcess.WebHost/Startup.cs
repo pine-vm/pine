@@ -13,7 +13,17 @@ namespace Kalmit.PersistentProcess.WebHost
     {
         public void ConfigureServices(IServiceCollection services)
         {
-            var config = services.BuildServiceProvider().GetService<IConfiguration>();
+            var serviceProvider = services.BuildServiceProvider();
+            var config = serviceProvider.GetService<IConfiguration>();
+
+            var getDateTimeOffset = serviceProvider.GetService<Func<DateTimeOffset>>();
+
+            if (getDateTimeOffset == null)
+            {
+                getDateTimeOffset = () => DateTimeOffset.UtcNow;
+                services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset);
+            }
+
             var processStoreDirectory = config.GetValue<string>(Configuration.ProcessStoreDirectoryPathSettingKey);
             var processStore = new Kalmit.ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory);
 
@@ -37,7 +47,8 @@ namespace Kalmit.PersistentProcess.WebHost
             IApplicationBuilder app,
             IHostingEnvironment env,
             ProcessStore.IProcessStoreWriter processStoreWriter,
-            IPersistentProcess persistentProcess)
+            IPersistentProcess persistentProcess,
+            Func<DateTimeOffset> getDateTimeOffset)
         {
             if (env.IsDevelopment())
             {
@@ -46,9 +57,14 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var nextHttpRequestIndex = 0;
 
+            var cyclicReductionStoreLock = new object();
+            var cyclicReductionStoreLastTime = getDateTimeOffset();
+            var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
+
             app.Run(async (context) =>
             {
-                var timeMilli = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var currentDateTime = getDateTimeOffset();
+                var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
                 var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
 
                 var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
@@ -100,6 +116,34 @@ namespace Kalmit.PersistentProcess.WebHost
                 else
                 {
                     throw new NotImplementedException("Async HTTP Response is not implemented yet.");
+                }
+
+                System.Threading.Thread.MemoryBarrier();
+                var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
+
+                if (cyclicReductionStoreDistanceSeconds <= cyclicReductionStoreLastAge.TotalSeconds)
+                {
+                    if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
+                    {
+                        try
+                        {
+                            var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
+
+                            if (afterLockCyclicReductionStoreLastAge.TotalSeconds < cyclicReductionStoreDistanceSeconds)
+                                return;
+
+                            var reductionRecord = persistentProcess.ReductionRecordForCurrentState();
+
+                            processStoreWriter.StoreReduction(reductionRecord);
+
+                            cyclicReductionStoreLastTime = currentDateTime;
+                            System.Threading.Thread.MemoryBarrier();
+                        }
+                        finally
+                        {
+                            System.Threading.Monitor.Exit(cyclicReductionStoreLock);
+                        }
+                    }
                 }
             });
         }

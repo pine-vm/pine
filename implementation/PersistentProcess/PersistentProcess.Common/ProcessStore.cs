@@ -94,5 +94,10 @@ namespace Kalmit.ProcessStore
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
             File.WriteAllText(filePath, JsonConvert.SerializeObject(record), Encoding.UTF8);
         }
+
+        public IEnumerable<string> ReductionsFilePaths() =>
+            Directory.Exists(ReductionDirectoryPath) ?
+            Directory.EnumerateFiles(ReductionDirectoryPath, "*", SearchOption.AllDirectories) :
+            Array.Empty<string>();
     }
 }

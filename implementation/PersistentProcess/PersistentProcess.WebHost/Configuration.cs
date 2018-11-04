@@ -1,4 +1,6 @@
+using System;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
@@ -17,5 +19,10 @@ namespace Kalmit.PersistentProcess.WebHost
             this IWebHostBuilder orig,
             string elmAppFilePath) =>
             orig.UseSetting(ElmAppFilePathSettingKey, elmAppFilePath);
+
+        static public IWebHostBuilder WithSettingDateTimeOffsetDelegate(
+            this IWebHostBuilder orig,
+            Func<DateTimeOffset> getDateTimeOffset) =>
+            orig.ConfigureServices(services => services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset));
     }
 }
