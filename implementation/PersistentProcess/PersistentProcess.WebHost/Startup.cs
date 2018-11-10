@@ -16,6 +16,10 @@ namespace Kalmit.PersistentProcess.WebHost
             var serviceProvider = services.BuildServiceProvider();
             var config = serviceProvider.GetService<IConfiguration>();
 
+            var webAppConfigFile = System.IO.File.ReadAllBytes(config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey));
+            var webAppConfig = WebAppConfiguration.FromFiles(ZipArchive.EntriesFromZipArchive(webAppConfigFile).ToList());
+            services.AddSingleton<WebAppConfiguration>(webAppConfig);
+
             var getDateTimeOffset = serviceProvider.GetService<Func<DateTimeOffset>>();
 
             if (getDateTimeOffset == null)
@@ -36,18 +40,16 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
         {
-            var config = services.GetService<IConfiguration>();
-
-            var elmAppFilePath = config.GetValue<string>(Configuration.ElmAppFilePathSettingKey);
-            var elmAppFile = System.IO.File.ReadAllBytes(elmAppFilePath);
+            var webAppConfig = services.GetService<WebAppConfiguration>();
 
             return new PersistentProcessWithHistoryOnFileFromElm019Code(
-                services.GetService<ProcessStore.IProcessStoreReader>(), elmAppFile);
+                services.GetService<ProcessStore.IProcessStoreReader>(), webAppConfig.ElmAppFile);
         }
 
         public void Configure(
             IApplicationBuilder app,
             IHostingEnvironment env,
+            WebAppConfiguration webAppConfig,
             ProcessStore.IProcessStoreWriter processStoreWriter,
             IPersistentProcess persistentProcess,
             Func<DateTimeOffset> getDateTimeOffset)
@@ -63,7 +65,9 @@ namespace Kalmit.PersistentProcess.WebHost
             var cyclicReductionStoreLastTime = getDateTimeOffset();
             var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
 
-            app.Run(async (context) =>
+            app
+            .Use(async (context, next) => await Asp.StaticFilesMiddlewareFromWebApp(webAppConfig, context, next))
+            .Run(async (context) =>
             {
                 var currentDateTime = getDateTimeOffset();
                 var timeMilli = currentDateTime.ToUnixTimeMilliseconds();

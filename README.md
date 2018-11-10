@@ -12,7 +12,6 @@ Current focus is the project to support Elm as a language to model game mechanic
 
 Following features are considered most important for the first use in production. The first app expected to rely on a Kalmit Persistent Process in production is a web app.
 
-+ Expand WebHost to serve requests with matching URLs and method from static files. (Probably add an app description including a "static" directory and a config file to model the list of redirects to static files. This app model can contain the elm-app as a special named file "elm-app.zip" which was a root level file so far. This way, the path to the Elm App zip archive does not need to be modeled on the configuration root anymore.)
 + Support maintenance of app over HTTP interface: Support authorized root user to read and write the app state over HTTP.
 
 #### Web App Robustness

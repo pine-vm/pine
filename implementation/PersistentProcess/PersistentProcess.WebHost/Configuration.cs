@@ -8,17 +8,17 @@ namespace Kalmit.PersistentProcess.WebHost
     {
         static public string ProcessStoreDirectoryPathSettingKey => "processStoreDirectoryPath";
 
-        static public string ElmAppFilePathSettingKey => "elmAppFilePath";
+        static public string WebAppConfigurationFilePathSettingKey => "webAppConfigurationFilePath";
 
         static public IWebHostBuilder WithSettingProcessStoreDirectoryPath(
             this IWebHostBuilder orig,
             string processStoreDirectoryPath) =>
             orig.UseSetting(ProcessStoreDirectoryPathSettingKey, processStoreDirectoryPath);
 
-        static public IWebHostBuilder WithSettingElmAppFilePath(
+        static public IWebHostBuilder WithSettingWebAppConfigurationFilePath(
             this IWebHostBuilder orig,
-            string elmAppFilePath) =>
-            orig.UseSetting(ElmAppFilePathSettingKey, elmAppFilePath);
+            string webAppConfigurationFilePath) =>
+            orig.UseSetting(WebAppConfigurationFilePathSettingKey, webAppConfigurationFilePath);
 
         static public IWebHostBuilder WithSettingDateTimeOffsetDelegate(
             this IWebHostBuilder orig,

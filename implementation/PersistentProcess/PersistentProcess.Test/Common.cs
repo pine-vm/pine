@@ -25,12 +25,10 @@ namespace Kalmit.PersistentProcess.Test
         static ElmAppWithEntryConfig CounterElmApp =
             GetElmAppWithEntryConfigFromExampleName("counter");
 
-        static ElmAppWithEntryConfig CounterElmWebApp =
+        static public ElmAppWithEntryConfig CounterElmWebApp =
             GetElmAppWithEntryConfigFromExampleName("counter-webapp");
 
         static public byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles());
-
-        static public byte[] CounterElmWebAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmWebApp.AsFiles());
 
         static public ElmAppWithEntryConfig GetElmAppWithEntryConfigFromExampleName(string exampleName) =>
             ElmAppWithEntryConfig.FromFiles(
