@@ -15,4 +15,4 @@ test_script:
 
     cd implementation/PersistentProcess/PersistentProcess.Test
 
-    dotnet test
+    dotnet test --test-adapter-path:. --logger:Appveyor
