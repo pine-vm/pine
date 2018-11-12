@@ -36,6 +36,8 @@ namespace Kalmit.PersistentProcess.WebHost
             services.AddSingleton<ProcessStore.IProcessStoreReader>(processStore);
             services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);
             services.AddSingleton<IPersistentProcess>(BuildPersistentProcess);
+
+            Asp.ConfigureServices(services);
         }
 
         static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
@@ -66,7 +68,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
 
             app
-            .Use(async (context, next) => await Asp.StaticFilesMiddlewareFromWebApp(webAppConfig, context, next))
+            .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppConfig, context, next))
             .Run(async (context) =>
             {
                 var currentDateTime = getDateTimeOffset();

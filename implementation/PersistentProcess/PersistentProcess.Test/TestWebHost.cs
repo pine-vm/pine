@@ -1,61 +1,15 @@
 using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Kalmit.PersistentProcess.WebHost;
 using MoreLinq;
 using System.Collections.Generic;
 using System;
 using System.Net;
 using System.Net.Http;
+using FluentAssertions;
 
 namespace Kalmit.PersistentProcess.Test
 {
-    public class WebHostTestSetup : IDisposable
-    {
-        readonly string testDirectory;
-
-        readonly Func<DateTimeOffset> persistentProcessHostDateTime;
-
-        string WebAppConfigFilePath => Path.Combine(testDirectory, "web-app");
-
-        public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
-
-        public Microsoft.AspNetCore.TestHost.TestServer BuildServer() =>
-            new Microsoft.AspNetCore.TestHost.TestServer(
-                Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(null)
-                .WithSettingProcessStoreDirectoryPath(ProcessStoreDirectory)
-                .WithSettingWebAppConfigurationFilePath(WebAppConfigFilePath)
-                .WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
-
-        static public WebHostTestSetup Setup(
-            WebAppConfiguration webAppConfig,
-            Func<DateTimeOffset> persistentProcessHostDateTime = null)
-        {
-            var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
-
-            var setup = new WebHostTestSetup(testDirectory, persistentProcessHostDateTime);
-
-            var webAppConfigFilePath = setup.WebAppConfigFilePath;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(webAppConfigFilePath));
-
-            File.WriteAllBytes(webAppConfigFilePath, ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles()));
-
-            return setup;
-        }
-
-        public void Dispose()
-        {
-            Directory.Delete(testDirectory, true);
-        }
-
-        WebHostTestSetup(string testDirectory, Func<DateTimeOffset> persistentProcessHostDateTime)
-        {
-            this.testDirectory = testDirectory;
-            this.persistentProcessHostDateTime = persistentProcessHostDateTime;
-        }
-    }
-
     [TestClass]
     public class TestWebHost
     {
@@ -90,7 +44,7 @@ namespace Kalmit.PersistentProcess.Test
                 IEnumerable<string> ReadStoredReductionFileRelativePaths()
                 {
                     System.Threading.Thread.Sleep(1111);  //  Storing reduction may be completed after client has received response.
-                    return new ProcessStore.ProcessStoreInFileDirectory(testSetup.ProcessStoreDirectory, null).ReductionsFilesNames();
+                    return testSetup.BuildProcessStoreInFileDirectory().ReductionsFilesNames();
                 }
 
                 using (var server = testSetup.BuildServer())
@@ -163,7 +117,7 @@ namespace Kalmit.PersistentProcess.Test
                 TestElmWebAppHttpServer.CounterWebApp, () => persistentProcessHostDateTime))
             {
                 ProcessStore.ProcessStoreInFileDirectory BuildProcessStore() =>
-                    new ProcessStore.ProcessStoreInFileDirectory(testSetup.ProcessStoreDirectory, null);
+                    testSetup.BuildProcessStoreInFileDirectory();
 
                 IEnumerable<string> ReadCompositionLogFilesNames() =>
                     BuildProcessStore().EnumerateCompositionsLogFilesNames();
@@ -266,7 +220,7 @@ namespace Kalmit.PersistentProcess.Test
                 .WithMap(
                     new WebAppConfigurationMap
                     {
-                        MapsFromRequestUrlToStaticFileName = new[]
+                        mapsFromRequestUrlToStaticFileName = new[]
                         {
                             new WebAppConfigurationMap.ConditionalMapFromStringToString
                             {
@@ -368,6 +322,120 @@ namespace Kalmit.PersistentProcess.Test
                         var httpResponseContent = PostAppEventAndGetResponseStringFromServer(server, serializedEvent);
 
                         Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Web_host_rate_limits_requests_before_reaching_persistent_process()
+        {
+            const int requestBatchSize = 100;
+            const int minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit = 85;
+            const int rateLimitWindowSize = 10;
+
+            var persistentProcessHostDateTime = new DateTimeOffset(2018, 11, 12, 19, 51, 13, TimeSpan.Zero);
+
+            void letTimePassInPersistentProcessHost(TimeSpan amount) =>
+                persistentProcessHostDateTime = persistentProcessHostDateTime + amount;
+
+            var requestsBatches =
+                Enumerable.Range(0, 3)
+                .Select(batchIndex =>
+                    Enumerable.Range(0, requestBatchSize)
+                    .Select(indexInBatch => "Batch " + batchIndex + ", Event " + indexInBatch).ToList())
+                    .ToList();
+
+            var webAppConfig =
+                TestElmWebAppHttpServer.CounterWebApp
+                .WithMap(
+                    new WebAppConfigurationMap
+                    {
+                        singleRateLimitWindowPerClientIPv4Address = new WebAppConfigurationMap.RateLimitWindow
+                        {
+                            windowSizeInMs = 1000 * rateLimitWindowSize,
+                            limit = rateLimitWindowSize,
+                        },
+                    });
+
+            using (var testSetup = WebHostTestSetup.Setup(webAppConfig, () => persistentProcessHostDateTime))
+            {
+                IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
+                    testSetup.EnumerateStoredProcessEventsReverse()
+                    .Select(processEvent => processEvent?.httpRequest?.request?.bodyAsString)
+                    .WhereNotNull();
+
+                HttpResponseMessage PostStringContentToServer(
+                    Microsoft.AspNetCore.TestHost.TestServer server, string requestContent)
+                {
+                    using (var client = server.CreateClient())
+                    {
+                        return
+                            client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
+                    }
+                }
+
+                IEnumerable<HttpResponseMessage> whereStatusCodeTooManyRequests(
+                    IEnumerable<HttpResponseMessage> httpResponses) =>
+                    httpResponses.Where(httpResponse => httpResponse.StatusCode == HttpStatusCode.TooManyRequests);
+
+                using (var server = testSetup.BuildServer())
+                {
+                    {
+                        var firstBatchHttpResponses =
+                            requestsBatches[0].Select(processEvent =>
+                            {
+                                letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
+
+                                return PostStringContentToServer(server, processEvent);
+                            }).ToList();
+
+                        whereStatusCodeTooManyRequests(firstBatchHttpResponses).Count()
+                        .Should().Be(0, "No HTTP response from the first batch has status code 'Too Many Requests'.");
+
+                        CollectionAssert.IsSubsetOf(
+                            requestsBatches[0],
+                            EnumerateStoredProcessEventsHttpRequestsBodies().ToList(),
+                            "All events from the first batch have been stored.");
+                    }
+
+                    {
+                        var secondBatchHttpResponses =
+                            requestsBatches[1].Select(processEvent =>
+                            {
+                                //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
+                                letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
+
+                                return PostStringContentToServer(server, processEvent);
+                            }).ToList();
+
+                        whereStatusCodeTooManyRequests(secondBatchHttpResponses).Count()
+                        .Should().BeGreaterThan(minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
+                            "At least this many requests in the fast batch are expected to be answered with status code 'Too Many Requests'.");
+
+                        requestsBatches[1].Except(EnumerateStoredProcessEventsHttpRequestsBodies()).Count()
+                        .Should().BeGreaterThan(minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
+                            "At least this many requests in the fast batch are expected to be filtered out by rate-limit before reaching the persistent process.");
+                    }
+
+                    {
+                        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(rateLimitWindowSize));
+
+                        var thirdBatchHttpResponses =
+                            requestsBatches[2].Select(processEvent =>
+                            {
+                                letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
+
+                                return PostStringContentToServer(server, processEvent);
+                            }).ToList();
+
+                        whereStatusCodeTooManyRequests(thirdBatchHttpResponses).Count()
+                        .Should().Be(0, "No HTTP response from the third batch has status code 'Too Many Requests'.");
+
+                        CollectionAssert.IsSubsetOf(
+                            requestsBatches[2],
+                            EnumerateStoredProcessEventsHttpRequestsBodies().ToList(),
+                            "All events from the third batch have been stored.");
                     }
                 }
             }

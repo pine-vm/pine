@@ -17,7 +17,6 @@ Following features are considered most important for the first use in production
 #### Web App Robustness
 
 + Support caching per URL for requests using the "GET" method. Probably the URL patterns here should be modeled with the same model as the one used to redirect to static files.
-+ Support rate-limiting scoped to client address.
 
 #### Reduce Development Expenses
 

@@ -9,13 +9,22 @@ namespace Kalmit.PersistentProcess
 {
     public class WebAppConfigurationMap
     {
-        public ConditionalMapFromStringToString[] MapsFromRequestUrlToStaticFileName;
+        public ConditionalMapFromStringToString[] mapsFromRequestUrlToStaticFileName;
+
+        public RateLimitWindow singleRateLimitWindowPerClientIPv4Address;
 
         public class ConditionalMapFromStringToString
         {
             public string matchingRegexPattern;
 
             public string resultString;
+        }
+
+        public class RateLimitWindow
+        {
+            public int windowSizeInMs;
+
+            public int limit;
         }
     }
 
