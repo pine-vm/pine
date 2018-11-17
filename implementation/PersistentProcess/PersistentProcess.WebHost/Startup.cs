@@ -42,10 +42,13 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
         {
-            var webAppConfig = services.GetService<WebAppConfiguration>();
+            var elmAppFile = services.GetService<WebAppConfiguration>()?.ElmAppFile;
+
+            if (elmAppFile == null)
+                return null;
 
             return new PersistentProcessWithHistoryOnFileFromElm019Code(
-                services.GetService<ProcessStore.IProcessStoreReader>(), webAppConfig.ElmAppFile);
+                services.GetService<ProcessStore.IProcessStoreReader>(), elmAppFile);
         }
 
         public void Configure(
@@ -53,7 +56,6 @@ namespace Kalmit.PersistentProcess.WebHost
             IHostingEnvironment env,
             WebAppConfiguration webAppConfig,
             ProcessStore.IProcessStoreWriter processStoreWriter,
-            IPersistentProcess persistentProcess,
             Func<DateTimeOffset> getDateTimeOffset)
         {
             if (env.IsDevelopment())
@@ -71,6 +73,8 @@ namespace Kalmit.PersistentProcess.WebHost
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppConfig, context, next))
             .Run(async (context) =>
             {
+                var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
+
                 var currentDateTime = getDateTimeOffset();
                 var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
                 var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);

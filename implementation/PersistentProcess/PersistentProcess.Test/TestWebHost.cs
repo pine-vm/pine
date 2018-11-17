@@ -328,6 +328,56 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
+        public void Web_host_can_be_configured_without_elm_app()
+        {
+            var defaultStaticFile =
+                Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
+                .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
+                .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem)))
+                .ToArray();
+
+            var webAppConfig =
+                new WebAppConfiguration()
+                .WithMap(
+                    new WebAppConfigurationMap
+                    {
+                        mapsFromRequestUrlToStaticFileName = new[]
+                        {
+                            new WebAppConfigurationMap.ConditionalMapFromStringToString
+                            {
+                                matchingRegexPattern = ".*",
+                                resultString = nameof(defaultStaticFile),
+                            },
+                        },
+                    })
+                .WithStaticFiles(
+                    new[]
+                    {
+                        (nameof(defaultStaticFile), defaultStaticFile),
+                    });
+
+            using (var testSetup = WebHostTestSetup.Setup(webAppConfig))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    using (var client = server.CreateClient())
+                    {
+                        foreach (var pathWhichShouldBeMappedToDefaultStaticFile in new[] { "", "index.html", "almost-anything-else-too" })
+                        {
+                            var response = client.GetAsync(pathWhichShouldBeMappedToDefaultStaticFile).Result;
+
+                            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, "Response status code");
+                            CollectionAssert.AreEqual(
+                                defaultStaticFile,
+                                response.Content.ReadAsByteArrayAsync().Result,
+                                "Response Content");
+                        }
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
         public void Web_host_rate_limits_requests_before_reaching_persistent_process()
         {
             const int requestBatchSize = 100;
