@@ -29,12 +29,12 @@ namespace Kalmit
             var codeFiles =
                 files.Select(file =>
                 {
-                    var codeFilePath = Regex.Match(file.name, elmAppFilesDirectory + @"\\(.+)", RegexOptions.IgnoreCase);
+                    var codeFilePath = Regex.Match(file.name, elmAppFilesDirectory + @"(\\|\/)(.+)", RegexOptions.IgnoreCase);
 
                     if (!codeFilePath.Success)
                         return (null, null);
 
-                    return (name: codeFilePath.Groups[1].Value, file.content);
+                    return (name: codeFilePath.Groups[2].Value, file.content);
                 })
                 .Where(file => 0 < file.name?.Length && ProcessFromElm019Code.FilePathMatchesPatternOfFilesInElmApp(file.name))
                 .ToList();

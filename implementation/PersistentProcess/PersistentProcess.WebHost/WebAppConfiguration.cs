@@ -57,12 +57,12 @@ namespace Kalmit.PersistentProcess
             var staticFiles =
                 files.Select(file =>
                 {
-                    var staticFilePathMatch = Regex.Match(file.name, staticFilesDirectoryName + @"\\(.+)", RegexOptions.IgnoreCase);
+                    var staticFilePathMatch = Regex.Match(file.name, staticFilesDirectoryName + @"(\\|\/)(.+)", RegexOptions.IgnoreCase);
 
                     if (!staticFilePathMatch.Success)
                         return (null, null);
 
-                    return (name: staticFilePathMatch.Groups[1].Value, file.content);
+                    return (name: staticFilePathMatch.Groups[2].Value, file.content);
                 })
                 .Where(file => 0 < file.name?.Length)
                 .ToList();
