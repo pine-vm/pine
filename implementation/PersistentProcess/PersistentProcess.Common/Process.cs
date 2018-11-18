@@ -133,19 +133,38 @@ namespace Kalmit
 
             var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\"";
 
-            var elmHomeDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
-            Directory.CreateDirectory(elmHomeDirectory);
-
             var commandResults = ExecutableFile.ExecuteFileWithArguments(
                 elmCodeFiles,
                 GetElmExecutableFile,
                 command,
                 new Dictionary<string, string>()
                 {
-                    {"ELM_HOME", elmHomeDirectory}, //  Avoid elm make failing on `getAppUserDataDirectory`.
-                });
+                    //  Avoid elm make failing on `getAppUserDataDirectory`.
+                    /* Also, work around problems with elm make like this:
+                    -- HTTP PROBLEM ----------------------------------------------------------------
 
-            Directory.Delete(elmHomeDirectory, true);
+                    The following HTTP request failed:
+                        <https://github.com/elm/core/zipball/1.0.0/>
+
+                    Here is the error message I was able to extract:
+
+                    HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
+                    requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
+                    path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
+                    Nothing rawBody = False redirectCount = 10 responseTimeout =
+                    ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
+                    (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
+                    Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
+                    [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
+                    GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
+                    Too Many
+                    Requests"),("Retry-After","120")
+
+                    To avoid elm make failing with this error, break isolation here and reuse elm home directory.
+                    An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
+                    */
+                    {"ELM_HOME", GetElmHomeDirectory()},
+                });
 
             var outputFileContent =
                 commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
@@ -283,5 +302,14 @@ namespace Kalmit
                 Path.GetFileName(filePath),
                 "(^" + Regex.Escape("elm.json") + "|" + Regex.Escape(".elm") + ")$",
                 RegexOptions.IgnoreCase);
+
+        static string elmHomeDirectory;
+
+        static string GetElmHomeDirectory()
+        {
+            elmHomeDirectory = elmHomeDirectory ?? Path.Combine(Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
+            Directory.CreateDirectory(elmHomeDirectory);
+            return elmHomeDirectory;
+        }
     }
 }
