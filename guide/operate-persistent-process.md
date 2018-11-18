@@ -61,3 +61,25 @@ Yesterday, it was too late to continue investigating, and now after coming back 
 
 While setting the certificate up, I also found this guide helpful to check if the certificate was loaded: https://blogs.msdn.microsoft.com/karansingh/2017/03/15/azure-app-services-how-to-determine-if-the-client-certificate-is-loaded/
 
+### Elm Make Fails On `getAppUserDataDirectory`
+
+When trying to use the elm executable with the `make` command, it failed with output like this:
+```standard-output
+elm.exe: getAppUserDataDirectory:sHGetFolderPath: illegal operation (unsupported operation)
+```
+
+More information about the problem is found at http://hackage.haskell.org/package/directory-1.3.3.1/docs/System-Directory.html#v:getAppUserDataDirectory :
+
+> The argument is usually the name of the application. Since it will be integrated into the path, it must consist of valid path characters.  
+>  
+> + On Unix-like systems, the path is ~/.<app>.  
+> + On Windows, the path is %APPDATA%/<app> (e.g. C:/Users/<user>/AppData/Roaming/<app>)  
+> Note: the directory may not actually exist, in which case you would need to create it. It is expected that the parent directory exists and is writable.  
+>  
+> The operation may fail with:  
+>  
+> + `UnsupportedOperation` The operating system has no notion of application-specific data directory.  
+> + `isDoesNotExistError` The home directory for the current user does not exist, or cannot be found.
+
+As Markus Laire points out [on the elm-lang forum](https://discourse.elm-lang.org/t/how-to-get-around-elm-make-error-on-getappuserdatadirectory/2551/2?u=viir), for the special case of elm, this problem can be avoided by setting `ELM_HOME` for the elm make process. This approach made it possible to fix the problem in the framework implementation, so that no setup is required to account for this.
+

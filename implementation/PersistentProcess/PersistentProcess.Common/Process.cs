@@ -133,15 +133,29 @@ namespace Kalmit
 
             var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\"";
 
-            var commandResults = ExecutableFile.ExecuteFileWithArguments(elmCodeFiles, GetElmExecutableFile, command);
+            var elmHomeDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+            Directory.CreateDirectory(elmHomeDirectory);
+
+            var commandResults = ExecutableFile.ExecuteFileWithArguments(
+                elmCodeFiles,
+                GetElmExecutableFile,
+                command,
+                new Dictionary<string, string>()
+                {
+                    {"ELM_HOME", elmHomeDirectory}, //  Avoid elm make failing on `getAppUserDataDirectory`.
+                });
+
+            Directory.Delete(elmHomeDirectory, true);
 
             var outputFileContent =
                 commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
 
             if (outputFileContent == null)
                 throw new NotImplementedException(
-                    "Output file not found. Maybe output from Elm make helps to find the cause:\nExit Code: " + commandResults.exitCode +
-                    "\nStandard Output:\n" + commandResults.standardOutput);
+                    "Output file not found. Maybe the output from the Elm make process helps to find the cause:" +
+                    "\nExit Code: " + commandResults.processOutput.ExitCode +
+                    "\nStandard Output:\n'" + commandResults.processOutput.StandardOutput + "'" +
+                    "\nStandard Error:\n'" + commandResults.processOutput.StandardError + "'");
 
             return Encoding.UTF8.GetString(outputFileContent);
         }

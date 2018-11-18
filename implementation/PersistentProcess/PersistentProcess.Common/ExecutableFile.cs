@@ -7,10 +7,20 @@ namespace Kalmit
 {
     public class ExecutableFile
     {
-        static public (int exitCode, string standardOutput, IReadOnlyCollection<(string name, byte[] content)> resultingFiles) ExecuteFileWithArguments(
+        public struct ProcessOutput
+        {
+            public string StandardError;
+
+            public string StandardOutput;
+
+            public int ExitCode;
+        }
+
+        static public (ProcessOutput processOutput, IReadOnlyCollection<(string name, byte[] content)> resultingFiles) ExecuteFileWithArguments(
             IReadOnlyCollection<(string name, byte[] content)> environmentFiles,
             byte[] executableFile,
-            string arguments)
+            string arguments,
+            IDictionary<string, string> environmentStrings)
         {
             var workingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -39,11 +49,16 @@ namespace Kalmit
                     Arguments = arguments,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                 },
             };
 
+            foreach (var envString in environmentStrings.EmptyIfNull())
+                process.StartInfo.Environment[envString.Key] = envString.Value;
+
             process.Start();
             var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
 
             process.WaitForExit();
             var exitCode = process.ExitCode;
@@ -56,7 +71,12 @@ namespace Kalmit
 
             Directory.Delete(workingDirectory, true);
 
-            return (exitCode, standardOutput, resultFiles);
+            return (new ProcessOutput
+            {
+                ExitCode = exitCode,
+                StandardError = standardError,
+                StandardOutput = standardOutput,
+            }, resultFiles);
         }
     }
 }
