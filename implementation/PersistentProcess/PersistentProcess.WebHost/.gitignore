@@ -1,3 +1,6 @@
 /obj/
 /bin/
 
+/temp-livetest/
+/.local-chromium/
+/.cache/

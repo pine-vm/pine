@@ -1,9 +1,9 @@
 {
-   // Use IntelliSense to find out which attributes exist for C# debugging
-   // Use hover for the description of the existing attributes
-   // For further information visit https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md
-   "version": "0.2.0",
-   "configurations": [
+    // Use IntelliSense to find out which attributes exist for C# debugging
+    // Use hover for the description of the existing attributes
+    // For further information visit https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md
+    "version": "0.2.0",
+    "configurations": [
         {
             "name": ".NET Core Launch (web)",
             "type": "coreclr",
@@ -30,7 +30,10 @@
                 }
             },
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "APPSETTING_webAppConfigurationFilePath": ".\\temp-livetest\\web-app",
+                "APPSETTING_processStoreDirectoryPath": ".\\temp-livetest\\process-store",
+                "APPSETTING_adminRootPassword": "Root-Password_1234567"
             },
             "sourceFileMap": {
                 "/Views": "${workspaceFolder}/Views"
@@ -41,6 +44,6 @@
             "type": "coreclr",
             "request": "attach",
             "processId": "${command:pickProcess}"
-        }
-    ,]
+        },
+    ]
 }
