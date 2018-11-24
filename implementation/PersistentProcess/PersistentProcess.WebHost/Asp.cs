@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kalmit.PersistentProcess.WebHost
@@ -25,7 +29,8 @@ namespace Kalmit.PersistentProcess.WebHost
         static public async Task MiddlewareFromWebAppConfig(
             WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next) =>
             await StaticFilesMiddlewareFromWebAppConfig(webAppConfig, context,
-                () => RateLimitMiddlewareFromWebAppConfig(webAppConfig, context, next));
+                () => RateLimitMiddlewareFromWebAppConfig(webAppConfig, context,
+                () => AdminPersistentProcessMiddlewareFromWebAppConfig(webAppConfig, context, next)));
 
         static async Task StaticFilesMiddlewareFromWebAppConfig(
             WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next)
@@ -68,13 +73,14 @@ namespace Kalmit.PersistentProcess.WebHost
         {
             string ClientId()
             {
+                const string defaultClientId = "MapToIPv4-failed";
                 try
                 {
-                    return context.Connection.RemoteIpAddress.MapToIPv4().ToString();
+                    return context.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? defaultClientId;
                 }
                 catch
                 {
-                    return "MapToIPv4-failed";
+                    return defaultClientId;
                 }
             }
 
@@ -106,6 +112,82 @@ namespace Kalmit.PersistentProcess.WebHost
                 limit = map.singleRateLimitWindowPerClientIPv4Address.limit,
                 windowSize = map.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
             });
+        }
+
+        static async Task AdminPersistentProcessMiddlewareFromWebAppConfig(
+            WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next)
+        {
+            if (string.Equals(context.Request.Path, "/" + Configuration.AdminPersistentProcessStatePath))
+            {
+                var configuration = context.RequestServices.GetService<IConfiguration>();
+
+                var rootPassword = configuration.GetValue<string>(Configuration.AdminRootPasswordSettingKey);
+
+                var expectedAuthorization = Configuration.BasicAuthenticationForAdminRoot(rootPassword);
+
+                context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
+
+                AuthenticationHeaderValue.TryParse(
+                    requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
+
+                if (!(0 < rootPassword?.Length))
+                {
+                    context.Response.StatusCode = 403;
+                    await context.Response.WriteAsync("Forbidden");
+                    return;
+                }
+
+                var buffer = new byte[400];
+
+                var decodedRequestAuthorizationParameter =
+                    Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
+                    Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
+
+                if (!(string.Equals(expectedAuthorization, decodedRequestAuthorizationParameter) &&
+                    string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
+                {
+                    context.Response.StatusCode = 401;
+                    context.Response.Headers.Add(
+                        "WWW-Authenticate",
+                        @"Basic realm=""" + context.Request.Host + "/" + Configuration.AdminPath + @""", charset=""UTF-8""");
+                    await context.Response.WriteAsync("Unauthorized");
+                    return;
+                }
+
+                if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEnd();
+
+                    var processStoreWriter = context.RequestServices.GetService<ProcessStore.IProcessStoreWriter>();
+
+                    var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
+
+                    var compositionRecord = persistentProcess.SetState(stateToSet);
+
+                    processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
+
+                    context.Response.StatusCode = 200;
+                    await context.Response.WriteAsync("Successfully set process state.");
+                    return;
+                }
+
+                if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
+
+                    var reducedValue = persistentProcess.ReductionRecordForCurrentState().ReducedValue;
+
+                    context.Response.StatusCode = 200;
+                    await context.Response.WriteAsync(reducedValue);
+                    return;
+                }
+
+                context.Response.StatusCode = 405;
+                await context.Response.WriteAsync("Method not supported.");
+                return;
+            }
+
+            await next?.Invoke();
         }
     }
 }

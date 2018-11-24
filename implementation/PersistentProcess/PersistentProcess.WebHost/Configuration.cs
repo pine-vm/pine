@@ -7,9 +7,21 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     static public class Configuration
     {
+        static public string AdminPath => "kalmit-admin";
+
+        static public string AdminPersistentProcessStatePath => AdminPath + "/process/state";
+
         static public string ProcessStoreDirectoryPathSettingKey => "processStoreDirectoryPath";
 
         static public string WebAppConfigurationFilePathSettingKey => "webAppConfigurationFilePath";
+
+        static public string AdminRootPasswordSettingKey => "adminRootPassword";
+
+        static public string AdminRootUserName => "root";
+
+        //  https://en.wikipedia.org/wiki/Basic_access_authentication
+        static public string BasicAuthenticationForAdminRoot(string password) =>
+            AdminRootUserName + ":" + password;
 
         static public IWebHostBuilder WithSettingProcessStoreDirectoryPath(
             this IWebHostBuilder orig,
@@ -20,6 +32,11 @@ namespace Kalmit.PersistentProcess.WebHost
             this IWebHostBuilder orig,
             string webAppConfigurationFilePath) =>
             orig.UseSetting(WebAppConfigurationFilePathSettingKey, webAppConfigurationFilePath);
+
+        static public IWebHostBuilder WithSettingAdminRootPassword(
+            this IWebHostBuilder orig,
+            string adminRootPassword) =>
+            orig.UseSetting(AdminRootPasswordSettingKey, adminRootPassword);
 
         static public IWebHostBuilder WithSettingDateTimeOffsetDelegate(
             this IWebHostBuilder orig,

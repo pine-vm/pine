@@ -11,6 +11,8 @@ namespace Kalmit.ProcessStore
     {
         public byte[] ParentHash;
 
+        public string SetState;
+
         public IReadOnlyList<string> AppendedEvents;
 
         static public byte[] HashFromSerialRepresentation(byte[] serialized) =>

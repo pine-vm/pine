@@ -7,6 +7,9 @@ using System;
 using System.Net;
 using System.Net.Http;
 using FluentAssertions;
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Hosting;
+using Kalmit.PersistentProcess.WebHost;
 
 namespace Kalmit.PersistentProcess.Test
 {
@@ -490,5 +493,98 @@ namespace Kalmit.PersistentProcess.Test
                 }
             }
         }
+
+        [TestMethod]
+        public void Web_host_supports_setting_persistent_process_state_after_authorization()
+        {
+            const string rootPassword = "Root-Password_1234567";
+
+            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap =
+                builder => builder.WithSettingAdminRootPassword(rootPassword);
+
+            using (var testSetup = WebHostTestSetup.Setup(TestElmWebAppHttpServer.StringBuilderWebApp, webHostBuilderMap))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    Assert.AreEqual(
+                        "",
+                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
+                        "Initial State");
+
+                    Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(server, "part-a").StatusCode);
+
+                    Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(server, "-part-b").StatusCode);
+
+                    Assert.AreEqual(
+                        "part-a-part-b",
+                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
+                        "State After Multiple Posts");
+
+                    using (var client = server.CreateClient())
+                    {
+                        Assert.AreEqual(
+                            HttpStatusCode.Unauthorized,
+                            HttpSetPersistentProcessState(client, "new-state").Result.StatusCode,
+                                "HTTP status code for unauthorized request to set persistent process state.");
+
+                        Assert.AreEqual(
+                            "part-a-part-b",
+                            HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
+                            "State after failing to set persistent process state.");
+
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                            "Basic",
+                            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                                WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+
+                        Assert.AreEqual(
+                            HttpStatusCode.OK,
+                            HttpSetPersistentProcessState(client, "new-state").Result.StatusCode,
+                                "HTTP status code for authorized request to set persistent process state.");
+                    }
+
+                    Assert.AreEqual(
+                        "new-state",
+                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
+                        "State after setting persistent process state.");
+
+                    Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(server, "_appendix").StatusCode);
+                }
+
+                using (var server = testSetup.BuildServer())
+                {
+                    Assert.AreEqual(
+                        "new-state_appendix",
+                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
+                        "State after setting persistent process state, appending, and restarting server.");
+                }
+            }
+        }
+
+        static HttpResponseMessage HttpGetAtRoot(
+            Microsoft.AspNetCore.TestHost.TestServer server)
+        {
+            using (var client = server.CreateClient())
+            {
+                return client.GetAsync("").Result;
+            }
+        }
+
+        static HttpResponseMessage HttpPostStringContentAtRoot(
+            Microsoft.AspNetCore.TestHost.TestServer server, string requestContent)
+        {
+            using (var client = server.CreateClient())
+            {
+                return
+                    client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
+            }
+        }
+
+        static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetPersistentProcessState(
+            HttpClient client,
+            string state) =>
+            client.PostAsync(
+                Kalmit.PersistentProcess.WebHost.Configuration.AdminPersistentProcessStatePath,
+                new StringContent(state, System.Text.Encoding.UTF8));
     }
 }

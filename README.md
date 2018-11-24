@@ -8,12 +8,6 @@ Current focus is the project to support Elm as a language to model game mechanic
 
 ### Backlog
 
-#### Go-Live / First Integration
-
-Following features are considered most important for the first use in production. The first app expected to rely on a Kalmit Persistent Process in production is a web app.
-
-+ Support maintenance of app over HTTP interface: Support authorized root user to read and write the app state over HTTP.
-
 #### Web App Robustness
 
 + Support caching per URL for requests using the "GET" method. Probably the URL patterns here should be modeled with the same model as the one used to redirect to static files.

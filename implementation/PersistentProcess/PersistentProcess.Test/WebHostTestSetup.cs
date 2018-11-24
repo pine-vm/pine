@@ -6,6 +6,7 @@ using System;
 using Newtonsoft.Json;
 using Kalmit.ProcessStore;
 using System.Text;
+using Microsoft.AspNetCore.Hosting;
 
 namespace Kalmit.PersistentProcess.Test
 {
@@ -13,7 +14,7 @@ namespace Kalmit.PersistentProcess.Test
     {
         readonly string testDirectory;
 
-        readonly Func<DateTimeOffset> persistentProcessHostDateTime;
+        readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
 
         string WebAppConfigFilePath => Path.Combine(testDirectory, "web-app");
 
@@ -21,18 +22,25 @@ namespace Kalmit.PersistentProcess.Test
 
         public Microsoft.AspNetCore.TestHost.TestServer BuildServer() =>
             new Microsoft.AspNetCore.TestHost.TestServer(
-                Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(null)
+                (webHostBuilderMap ?? (builder => builder))
+                (Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(null)
                 .WithSettingProcessStoreDirectoryPath(ProcessStoreDirectory)
-                .WithSettingWebAppConfigurationFilePath(WebAppConfigFilePath)
-                .WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
+                .WithSettingWebAppConfigurationFilePath(WebAppConfigFilePath)));
 
         static public WebHostTestSetup Setup(
             WebAppConfiguration webAppConfig,
-            Func<DateTimeOffset> persistentProcessHostDateTime = null)
+            Func<DateTimeOffset> persistentProcessHostDateTime = null) =>
+            Setup(
+                webAppConfig,
+                builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
+
+        static public WebHostTestSetup Setup(
+            WebAppConfiguration webAppConfig,
+            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-            var setup = new WebHostTestSetup(testDirectory, persistentProcessHostDateTime);
+            var setup = new WebHostTestSetup(testDirectory, webHostBuilderMap);
 
             var webAppConfigFilePath = setup.WebAppConfigFilePath;
 
@@ -48,10 +56,10 @@ namespace Kalmit.PersistentProcess.Test
             Directory.Delete(testDirectory, true);
         }
 
-        WebHostTestSetup(string testDirectory, Func<DateTimeOffset> persistentProcessHostDateTime)
+        WebHostTestSetup(string testDirectory, Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)
         {
             this.testDirectory = testDirectory;
-            this.persistentProcessHostDateTime = persistentProcessHostDateTime;
+            this.webHostBuilderMap = webHostBuilderMap;
         }
 
         public ProcessStore.ProcessStoreInFileDirectory BuildProcessStoreInFileDirectory() =>

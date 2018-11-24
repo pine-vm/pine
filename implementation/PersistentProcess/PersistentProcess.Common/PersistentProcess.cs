@@ -13,6 +13,8 @@ namespace Kalmit.PersistentProcess
         (IReadOnlyList<string> responses, (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash))
             ProcessEvents(IReadOnlyList<string> serializedEvents);
 
+        (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash) SetState(string state);
+
         ReductionRecord ReductionRecordForCurrentState();
     }
 
@@ -67,7 +69,10 @@ namespace Kalmit.PersistentProcess
 
                     foreach (var followingComposition in compositionChain)
                     {
-                        foreach (var appendedEvent in followingComposition.composition.AppendedEvents)
+                        if (followingComposition.composition.SetState != null)
+                            process.SetSerializedState(followingComposition.composition.SetState);
+
+                        foreach (var appendedEvent in followingComposition.composition.AppendedEvents.EmptyIfNull())
                             process.ProcessEvent(appendedEvent);
 
                         lastStateHash = followingComposition.hash;
@@ -131,6 +136,29 @@ namespace Kalmit.PersistentProcess
                     };
             }
         }
+
+        public (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash) SetState(string state)
+        {
+            lock (process)
+            {
+                process.SetSerializedState(state);
+
+                var compositionRecord = new CompositionRecord
+                {
+                    ParentHash = lastStateHash,
+                    SetState = state,
+                };
+
+                var serializedCompositionRecord =
+                    Encoding.UTF8.GetBytes(Serialize(compositionRecord));
+
+                var compositionHash = CompositionRecord.HashFromSerialRepresentation(serializedCompositionRecord);
+
+                lastStateHash = compositionHash;
+
+                return (serializedCompositionRecord, compositionHash);
+            }
+        }
     }
 
     public class PersistentProcessWithControlFlowOverStoreWriter : IDisposableProcessWithCustomSerialization
@@ -167,7 +195,15 @@ namespace Kalmit.PersistentProcess
 
         string IProcess<string, string>.SetSerializedState(string serializedState)
         {
-            throw new NotImplementedException();
+            lock (process)
+            {
+                var (serializedCompositionRecord, serializedCompositionRecordHash) =
+                    process.SetState(serializedState);
+
+                storeWriter.AppendSerializedCompositionRecord(serializedCompositionRecord);
+
+                return null;
+            }
         }
 
         public void Dispose() => (process as IDisposable)?.Dispose();

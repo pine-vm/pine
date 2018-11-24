@@ -12,6 +12,10 @@ namespace Kalmit.PersistentProcess.Test
             new WebAppConfiguration()
             .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp.AsFiles()));
 
+        static public WebAppConfiguration StringBuilderWebApp =>
+            new WebAppConfiguration()
+            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.StringBuilderElmWebApp.AsFiles()));
+
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()
         {
