@@ -39,49 +39,65 @@ namespace Kalmit.PersistentProcess
 
             var emptyInitHash = CompositionRecord.HashFromSerialRepresentation(new byte[0]);
 
+            string dictKeyForHash(byte[] hash) => Convert.ToBase64String(hash);
+
+            var compositionRecords = new Dictionary<string, (byte[] compositionRecordHash, CompositionRecord compositionRecord)>();
+
             var compositionChain = new Stack<(byte[] hash, CompositionRecord composition)>();
 
             foreach (var serializedCompositionRecord in storeReader.EnumerateSerializedCompositionsRecordsReverse())
             {
-                var compositionRecord = JsonConvert.DeserializeObject<CompositionRecord>(
-                    System.Text.Encoding.UTF8.GetString(serializedCompositionRecord));
-
-                var compositionRecordHash = CompositionRecord.HashFromSerialRepresentation(serializedCompositionRecord);
-
-                var compositionChainElement = (compositionRecordHash, compositionRecord);
-
-                if (compositionChain.Any() && !compositionRecordHash.SequenceEqual(compositionChain.Peek().composition.ParentHash))
-                    continue;   //  Not connected to the chain from the last composition record.
-
-                var reduction = storeReader.GetReduction(compositionRecordHash);
-
-                if (reduction != null || emptyInitHash.SequenceEqual(compositionRecord.ParentHash))
                 {
-                    if (reduction != null)
-                    {
-                        process.SetSerializedState(reduction.ReducedValue);
-                        lastStateHash = reduction.ReducedCompositionHash;
-                    }
-                    else
-                    {
+                    var compositionRecord = JsonConvert.DeserializeObject<CompositionRecord>(
+                        System.Text.Encoding.UTF8.GetString(serializedCompositionRecord));
+
+                    var compositionRecordHash = CompositionRecord.HashFromSerialRepresentation(serializedCompositionRecord);
+
+                    var compositionChainElement = (compositionRecordHash, compositionRecord);
+
+                    if (!compositionChain.Any())
                         compositionChain.Push(compositionChainElement);
-                    }
-
-                    foreach (var followingComposition in compositionChain)
-                    {
-                        if (followingComposition.composition.SetState != null)
-                            process.SetSerializedState(followingComposition.composition.SetState);
-
-                        foreach (var appendedEvent in followingComposition.composition.AppendedEvents.EmptyIfNull())
-                            process.ProcessEvent(appendedEvent);
-
-                        lastStateHash = followingComposition.hash;
-                    }
-
-                    return;
+                    else
+                        compositionRecords[dictKeyForHash(compositionRecordHash)] = compositionChainElement;
                 }
 
-                compositionChain.Push(compositionChainElement);
+                while (true)
+                {
+                    var (compositionRecordHash, compositionRecord) = compositionChain.Peek();
+
+                    var reduction = storeReader.GetReduction(compositionRecordHash);
+
+                    if (reduction != null || emptyInitHash.SequenceEqual(compositionRecord.ParentHash))
+                    {
+                        if (reduction != null)
+                        {
+                            compositionChain.Pop();
+                            process.SetSerializedState(reduction.ReducedValue);
+                            lastStateHash = reduction.ReducedCompositionHash;
+                        }
+
+                        foreach (var followingComposition in compositionChain)
+                        {
+                            if (followingComposition.composition.SetState != null)
+                                process.SetSerializedState(followingComposition.composition.SetState);
+
+                            foreach (var appendedEvent in followingComposition.composition.AppendedEvents.EmptyIfNull())
+                                process.ProcessEvent(appendedEvent);
+
+                            lastStateHash = followingComposition.hash;
+                        }
+
+                        return;
+                    }
+
+                    var parentKey = dictKeyForHash(compositionRecord.ParentHash);
+
+                    if (!compositionRecords.TryGetValue(parentKey, out var compositionChainElementFromPool))
+                        break;
+
+                    compositionChain.Push(compositionChainElementFromPool);
+                    compositionRecords.Remove(parentKey);
+                }
             }
 
             if (compositionChain.Any())

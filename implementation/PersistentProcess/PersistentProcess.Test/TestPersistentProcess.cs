@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using FluentAssertions;
 using Kalmit.ProcessStore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
@@ -213,6 +214,90 @@ namespace Kalmit.PersistentProcess.Test
 
                 reductionRecordAvailableFromStore = lastEventReductionRecord;
                 processStoreCompositions = processStoreCompositions.AsEnumerable().Reverse().Take(1).ToList();
+            }
+        }
+
+        [TestMethod]
+        public void Restore_process_still_works_after_shuffling_records_in_process_store()
+        {
+            int fibonacci(int index) =>
+                index <= 1 ? 1 : fibonacci(index - 2) + fibonacci(index - 1);
+
+            var processAdditions =
+                Enumerable.Range(0, 10).Select(fibonacci).Concat(new[] { 0 }).ToList();
+
+            var eventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(processAdditions).ToList();
+
+            var lastIdempotentEventAndExpectedResponse = eventsAndExpectedResponses.Last();
+
+            var processStoreCompositionsBeforeShuffle = new List<byte[]>();
+
+            PersistentProcessWithHistoryOnFileFromElm019Code InstantiatePersistentProcess(IProcessStoreReader storeReader) =>
+                new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmAppFile);
+
+            void AssertProcessIsInFinalState(IPersistentProcess process, IList<byte[]> processStoreCompositions)
+            {
+                var (processResponses, compositionRecord) = process.ProcessEvents(
+                    new[] { lastIdempotentEventAndExpectedResponse.serializedEvent });
+
+                processStoreCompositions?.Add(compositionRecord.serializedCompositionRecord);
+
+                var processResponse = processResponses.Single();
+
+                Assert.AreEqual(
+                    lastIdempotentEventAndExpectedResponse.expectedResponse, processResponse, false,
+                    "process response");
+            }
+
+            using (var processInstance = InstantiatePersistentProcess(TestSetup.EmptyProcessStoreReader()))
+            {
+                Assert.ThrowsException<AssertFailedException>(
+                    () => AssertProcessIsInFinalState(processInstance, processStoreCompositionsBeforeShuffle));
+
+                foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
+                {
+                    var (processResponses, compositionRecord) = processInstance.ProcessEvents(
+                        new[] { serializedEvent });
+
+                    var processResponse = processResponses.Single();
+
+                    Assert.AreEqual(expectedResponse, processResponse, false, "process response");
+
+                    processStoreCompositionsBeforeShuffle.Add(compositionRecord.serializedCompositionRecord);
+                }
+
+                AssertProcessIsInFinalState(processInstance, processStoreCompositionsBeforeShuffle);
+
+                processStoreCompositionsBeforeShuffle.Count.Should()
+                    .BeGreaterOrEqualTo(
+                        eventsAndExpectedResponses.Count,
+                        "All events should have been stored.");
+            }
+
+            var shuffledRecords =
+                processStoreCompositionsBeforeShuffle
+                .Batch(4)
+                .Select((batch, batchIndex) => (batchIndex % 2 == 0) ? batch : batch.Reverse())
+                .SelectMany(batch => batch)
+                .ToList();
+
+            CollectionAssert.AreNotEqual(processStoreCompositionsBeforeShuffle, shuffledRecords);
+
+            var shuffledStoreReader = new ProcessStoreReaderFromDelegates
+            {
+                EnumerateSerializedCompositionsRecordsReverseDelegate = shuffledRecords.AsEnumerable().Reverse,
+                GetReductionDelegate = compositionHash => null,
+            };
+
+            using (var processInstance = InstantiatePersistentProcess(shuffledStoreReader))
+            {
+                AssertProcessIsInFinalState(processInstance, null);
+
+                Assert.AreEqual(
+                    processAdditions.Sum().ToString(),
+                    processInstance.ReductionRecordForCurrentState().ReducedValue,
+                    "Sum of all additions should equal reduced state of restored process.");
             }
         }
 

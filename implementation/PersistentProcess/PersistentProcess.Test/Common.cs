@@ -17,6 +17,24 @@ namespace Kalmit.PersistentProcess.Test
                 (Newtonsoft.Json.JsonConvert.SerializeObject(new { addition = additionAndExpectedResponse.addition }),
                 additionAndExpectedResponse.expectedResponse.ToString()));
 
+        static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
+            IEnumerable<int> additions, int previousValue = 0)
+        {
+            IEnumerable<(int addition, int expectedResponse)> enumerateWithExplicitExpectedResult()
+            {
+                var currentValue = previousValue;
+
+                foreach (var addition in additions)
+                {
+                    currentValue += addition;
+
+                    yield return (addition, currentValue);
+                }
+            }
+
+            return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
+        }
+
         static public Kalmit.IDisposableProcessWithCustomSerialization BuildInstanceOfCounterProcess() =>
             Kalmit.ProcessFromElm019Code.WithCustomSerialization(
                 CounterElmApp.ElmAppFiles,
@@ -36,6 +54,13 @@ namespace Kalmit.PersistentProcess.Test
         static public ElmAppWithEntryConfig GetElmAppWithEntryConfigFromExampleName(string exampleName) =>
             ElmAppWithEntryConfig.FromFiles(
                 Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)));
+
+        static public IProcessStoreReader EmptyProcessStoreReader() =>
+            new ProcessStoreReaderFromDelegates
+            {
+                EnumerateSerializedCompositionsRecordsReverseDelegate = () => Array.Empty<byte[]>(),
+                GetReductionDelegate = _ => null,
+            };
     }
 
     class ProcessStoreReaderFromDelegates : IProcessStoreReader
