@@ -13,7 +13,7 @@ namespace Kalmit
 
         public IReadOnlyCollection<(string filePath, byte[] fileContent)> ElmAppFiles;
 
-        const string entryConfigFileName = "elm-app.entry-config.json";
+        const string entryConfigFileName = "elm-app.map.json";
 
         const string elmAppFilesDirectory = "elm-app";
 
