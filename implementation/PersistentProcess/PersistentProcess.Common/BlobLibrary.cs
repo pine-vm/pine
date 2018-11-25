@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 
@@ -13,28 +12,28 @@ namespace Kalmit
 
         static string containerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 
-        static public byte[] GetBlobWithSHA1(byte[] sha1)
+        static public byte[] GetBlobWithSHA256(byte[] sha256)
         {
-            var sha1DirectoryName = "by-sha1";
+            var sha256DirectoryName = "by-sha256";
 
-            var fileName = BitConverter.ToString(sha1).Replace("-", "").ToUpperInvariant();
+            var fileName = BitConverter.ToString(sha256).Replace("-", "").ToUpperInvariant();
 
-            var cacheFilePath = Path.Combine(cacheDirectory, sha1DirectoryName, fileName);
+            var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
 
-            bool blobHasExpectedSHA1(byte[] blob) =>
-                Enumerable.SequenceEqual(new SHA1Managed().ComputeHash(blob), sha1);
+            bool blobHasExpectedSHA256(byte[] blob) =>
+                Enumerable.SequenceEqual(new SHA256Managed().ComputeHash(blob), sha256);
 
             try
             {
                 var fromCache = File.ReadAllBytes(cacheFilePath);
 
-                if (blobHasExpectedSHA1(fromCache))
+                if (blobHasExpectedSHA256(fromCache))
                     return fromCache;
             }
             catch
             { }
 
-            var url = containerUrl + "/" + sha1DirectoryName + "/" + fileName;
+            var url = containerUrl + "/" + sha256DirectoryName + "/" + fileName;
 
             var httpClient = new HttpClient();
 
@@ -42,7 +41,7 @@ namespace Kalmit
 
             var responseContent = response.Content.ReadAsByteArrayAsync().Result;
 
-            if (!blobHasExpectedSHA1(responseContent))
+            if (!blobHasExpectedSHA256(responseContent))
                 throw new NotImplementedException("Received unexpected blob.");
 
             Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));

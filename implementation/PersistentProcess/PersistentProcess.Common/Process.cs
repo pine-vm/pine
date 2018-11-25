@@ -183,8 +183,8 @@ namespace Kalmit
         Elm executable obtained on 2018-09-03 from
         https://github.com/elm/compiler/releases/download/0.19.0/installer-for-windows.exe
         */
-        static byte[] GetElmExecutableFile => BlobLibrary.GetBlobWithSHA1(
-            CommonConversion.ByteArrayFromStringBase16("80E414D3A261951BD2A732FD82B7D6994E017927"));
+        static byte[] GetElmExecutableFile => BlobLibrary.GetBlobWithSHA256(
+            CommonConversion.ByteArrayFromStringBase16("08931A8DB552E67EF09C4ECD0A9E8E464FFDFF29BC58DAD2990DDE5D4FDC7C6F"));
 
         public const string appStateJsVarName = "app_state";
 
