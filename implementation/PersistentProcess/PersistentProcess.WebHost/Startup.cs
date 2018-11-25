@@ -90,11 +90,16 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
 
-                var (responses, compositionRecord) = persistentProcess.ProcessEvents(new[] { serializedInterfaceEvent });
+                string serializedResponse = null;
 
-                processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
+                lock (processStoreWriter)
+                {
+                    var (responses, compositionRecord) = persistentProcess.ProcessEvents(new[] { serializedInterfaceEvent });
 
-                var serializedResponse = responses.Single();
+                    processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
+
+                    serializedResponse = responses.Single();
+                }
 
                 InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
 
@@ -146,7 +151,10 @@ namespace Kalmit.PersistentProcess.WebHost
 
                             var reductionRecord = persistentProcess.ReductionRecordForCurrentState();
 
-                            processStoreWriter.StoreReduction(reductionRecord);
+                            lock (processStoreWriter)
+                            {
+                                processStoreWriter.StoreReduction(reductionRecord);
+                            }
 
                             cyclicReductionStoreLastTime = currentDateTime;
                             System.Threading.Thread.MemoryBarrier();
