@@ -4,8 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using ChakraCore.NET;
+using ChakraCore.NET.API;
 using Newtonsoft.Json;
-using PuppeteerSharp;
 
 namespace Kalmit
 {
@@ -28,25 +29,19 @@ namespace Kalmit
 
     class ProcessWithCustomSerializationHostedWithPuppeteer : IDisposableProcessWithCustomSerialization
     {
-        readonly Browser browser;
+        readonly ChakraRuntime chakraRuntime;
+        readonly ChakraContext chakraContext;
 
-        readonly Page browserPage;
 
         public ProcessWithCustomSerializationHostedWithPuppeteer(string javascriptPreparedToRun)
         {
-            new BrowserFetcher().DownloadAsync(BrowserFetcher.DefaultRevision).Wait();
+            chakraRuntime = ChakraRuntime.Create();
+            chakraContext = chakraRuntime.CreateContext(true);
 
-            browser = Puppeteer.LaunchAsync(new LaunchOptions
-            {
-                Headless = true,
-            }).Result;
+            var initAppResult = chakraContext.RunScript(javascriptPreparedToRun);
 
-            browserPage = browser.NewPageAsync().Result;
-
-            var initAppResult = browserPage.EvaluateExpressionAsync(javascriptPreparedToRun).Result;
-
-            var resetAppStateResult = browserPage.EvaluateExpressionAsync(
-                ProcessFromElm019Code.appStateJsVarName + " = " + ProcessFromElm019Code.initStateJsFunctionPublishedSymbol + ";").Result;
+            var resetAppStateResult = chakraContext.RunScript(
+                ProcessFromElm019Code.appStateJsVarName + " = " + ProcessFromElm019Code.initStateJsFunctionPublishedSymbol + ";");
         }
 
         static string AsJavascriptExpression(string originalString) =>
@@ -54,7 +49,8 @@ namespace Kalmit
 
         public void Dispose()
         {
-            browser?.Dispose();
+            chakraContext?.Dispose();
+            chakraRuntime?.Dispose();
         }
 
         public string ProcessEvent(string serializedEvent)
@@ -63,7 +59,7 @@ namespace Kalmit
 
             var expressionJavascript = ProcessFromElm019Code.processEventSyncronousJsFunctionName + "(" + eventExpression + ")";
 
-            var processEventtResult = browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
+            var processEventtResult = chakraContext.RunScript(expressionJavascript);
 
             return processEventtResult;
         }
@@ -74,7 +70,7 @@ namespace Kalmit
                 ProcessFromElm019Code.serializeStateJsFunctionPublishedSymbol +
                 "(" + ProcessFromElm019Code.appStateJsVarName + ")";
 
-            return browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
+            return chakraContext.RunScript(expressionJavascript);
         }
 
         public string SetSerializedState(string serializedState)
@@ -86,7 +82,7 @@ namespace Kalmit
                 " = " + ProcessFromElm019Code.deserializeStateJsFunctionPublishedSymbol +
                 "(" + serializedStateExpression + ");";
 
-            return browserPage.EvaluateExpressionAsync<string>(expressionJavascript).Result;
+            return chakraContext.RunScript(expressionJavascript);
         }
     }
 
@@ -210,8 +206,26 @@ namespace Kalmit
             string pathToSerializeStateFunction,
             string pathToDeserializeStateFunction)
         {
+            /*
+            Work around runtime exception with javascript from Elm make:
+            > "Script threw an exception. 'console' is not defined"
+
+            2018-12-02 Observed problematic statements in output from elm make, causing running the script to fail:
+            console.warn('Compiled in DEV mode. Follow the advice at https://elm-lang.org/0.19.0/optimize for better performance and smaller assets.');
+            [...]
+            console.log(tag + ': ' + _Debug_toString(value));
+
+            For some applications collecting the arguments to those functions might be interesting,
+            to implement this, have a look at https://github.com/Microsoft/ChakraCore/wiki/JavaScript-Runtime-(JSRT)-Overview
+            */
+            var javascriptMinusExceptions =
+                Regex.Replace(
+                    javascriptFromElmMake,
+                    "^\\s*console\\.\\w+\\(.+$", "",
+                    RegexOptions.Multiline);
+
             var invokeExportStatementMatch =
-                Regex.Matches(javascriptFromElmMake, Regex.Escape("_Platform_export(")).OfType<Match>().LastOrDefault();
+                Regex.Matches(javascriptMinusExceptions, Regex.Escape("_Platform_export(")).OfType<Match>().LastOrDefault();
 
             var listFunctionToPublish =
                 new[]
@@ -275,7 +289,7 @@ namespace Kalmit
                 String.Join(Environment.NewLine, processEventAndUpdateStateFunctionJavascriptLines);
 
             return
-                javascriptFromElmMake.Insert(publicationInsertLocation, publicationInsertString) +
+                javascriptMinusExceptions.Insert(publicationInsertLocation, publicationInsertString) +
                 Environment.NewLine +
                 processEventAndUpdateStateFunctionJavascript;
         }
