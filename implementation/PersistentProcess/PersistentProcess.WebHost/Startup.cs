@@ -66,7 +66,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var nextHttpRequestIndex = 0;
 
             var cyclicReductionStoreLock = new object();
-            var cyclicReductionStoreLastTime = getDateTimeOffset();
+            DateTimeOffset? cyclicReductionStoreLastTime = null;
             var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
 
             app
@@ -138,7 +138,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 System.Threading.Thread.MemoryBarrier();
                 var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
 
-                if (cyclicReductionStoreDistanceSeconds <= cyclicReductionStoreLastAge.TotalSeconds)
+                if (!(cyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds))
                 {
                     if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
                     {
@@ -146,7 +146,7 @@ namespace Kalmit.PersistentProcess.WebHost
                         {
                             var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
 
-                            if (afterLockCyclicReductionStoreLastAge.TotalSeconds < cyclicReductionStoreDistanceSeconds)
+                            if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
                                 return;
 
                             var reductionRecord = persistentProcess.ReductionRecordForCurrentState();
