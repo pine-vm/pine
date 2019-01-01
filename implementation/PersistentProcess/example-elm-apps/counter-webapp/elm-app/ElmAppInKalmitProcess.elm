@@ -22,6 +22,7 @@ type KalmitProcessResponse
 
 type alias HttpRequestEvent =
     { httpRequestId : String
+    , posixTimeMilli : Int
     , requestContext : HttpRequestContext
     , request : HttpRequestProperties
     }
@@ -84,8 +85,9 @@ decodeKalmitProcessEvent =
 
 decodeHttpRequestEvent : Json.Decode.Decoder HttpRequestEvent
 decodeHttpRequestEvent =
-    Json.Decode.map3 HttpRequestEvent
+    Json.Decode.map4 HttpRequestEvent
         (Json.Decode.field "httpRequestId" Json.Decode.string)
+        (Json.Decode.field "posixTimeMilli" Json.Decode.int)
         (Json.Decode.field "requestContext" decodeHttpRequestContext)
         (Json.Decode.field "request" decodeHttpRequest)
 

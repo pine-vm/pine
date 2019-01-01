@@ -81,7 +81,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
 
-                var httpEvent = AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId);
+                var httpEvent = AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
 
                 var interfaceEvent = new InterfaceToHost.Event
                 {
@@ -175,10 +175,13 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static InterfaceToHost.HttpRequestEvent AsPersistentProcessInterfaceHttpRequestEvent(
             HttpContext httpContext,
-            string httpRequestId)
+            string httpRequestId,
+            DateTimeOffset time)
         {
             return new InterfaceToHost.HttpRequestEvent
             {
+                posixTimeMilli = time.ToUnixTimeMilliseconds(),
+
                 httpRequestId = httpRequestId,
 
                 requestContext = new InterfaceToHost.HttpRequestContext

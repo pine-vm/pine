@@ -1,4 +1,6 @@
-﻿namespace Kalmit.PersistentProcess.InterfaceToHost
+﻿using System;
+
+namespace Kalmit.PersistentProcess.InterfaceToHost
 {
     public class Event
     {
@@ -19,6 +21,8 @@
 
     public class HttpRequestEvent
     {
+        public Int64 posixTimeMilli;
+
         public string httpRequestId;
 
         public HttpRequestContext requestContext;
