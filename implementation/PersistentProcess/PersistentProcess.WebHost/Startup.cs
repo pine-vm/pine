@@ -37,6 +37,8 @@ namespace Kalmit.PersistentProcess.WebHost
             services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);
             services.AddSingleton<IPersistentProcess>(BuildPersistentProcess);
 
+            services.AddCors();
+
             Asp.ConfigureServices(services);
         }
 
@@ -68,6 +70,15 @@ namespace Kalmit.PersistentProcess.WebHost
             var cyclicReductionStoreLock = new object();
             DateTimeOffset? cyclicReductionStoreLastTime = null;
             var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
+
+            if (webAppConfig?.Map?.corsAllowAnything ?? false)
+            {
+                app.UseCors(builder => builder
+                    .AllowAnyOrigin()
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .AllowCredentials());
+            }
 
             app
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppConfig, context, next))

@@ -13,6 +13,8 @@ namespace Kalmit.PersistentProcess
 
         public RateLimitWindow singleRateLimitWindowPerClientIPv4Address;
 
+        public bool corsAllowAnything;
+
         public class ConditionalMapFromStringToString
         {
             public string matchingRegexPattern;
