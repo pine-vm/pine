@@ -1,10 +1,21 @@
 # Kalmit
 
-Simple Game Development
+*Simple Persistent Processes*
 
-## Maintain State In Production
+Kalmit supports modeling a persistent process using the Elm programming language, by providing:
++ Framework to automatically persist and restore the process state.
++ Web server to host a persistent process as a web service:
+  + HTTP requests and responses are mapped to Elm types.
+  + Additional common functionality like serving static files, rate-limiting, CORS configuration.
+  + Admin interface to read and set the process state.
 
-Current focus is the project to support Elm as a language to model game mechanics while at the same time offering a framework to maintain state in production. See the project description at [projects/Maintain State In Production.md](projects/Maintain%20State%20In%20Production.md)
+## Deployment
+
++ For deploying on Azure app service, see [guide/operate-persistent-process.md](./guide/operate-persistent-process.md)
+
+## Support
+
+Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issues), [twitter](https://twitter.com/michael_raetzel) or [email](mailto:Michael@michaelrätzel.com).
 
 ### Backlog
 
