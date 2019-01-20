@@ -1,3 +1,5 @@
+This document reported on the state in August 2018, before work on the open source implementation started.
+
 # Maintain State In Production
 
 ## Observations
@@ -7,7 +9,7 @@ Observations from video game development projects:
 Games are implemented to run in popular web browsers, game mechanics are modeled using the Elm language. Eventually, games support people playing together, over a central server. Both server and client implementations integrate the game mechanics. On the server, the state should be maintained over longer time spans and needs to be recovered in case of unexpected shutdown of the host.
 Now the challenge is to model the game mechanics on the server so they can be executed in a persistent environment.
 
-Asking around, it looks like there is no solution for Elm:
+Asking around, it looks like there is no public solution for Elm:
 https://discourse.elm-lang.org/t/how-to-maintain-state-in-production-and-recover-from-unexpected-shutdown/1063
 
 ## Alternative Approaches
