@@ -83,3 +83,75 @@ More information about the problem is found at http://hackage.haskell.org/packag
 
 As Markus Laire points out [on the elm-lang forum](https://discourse.elm-lang.org/t/how-to-get-around-elm-make-error-on-getappuserdatadirectory/2551/2?u=viir), for the special case of elm, this problem can be avoided by setting `ELM_HOME` for the elm make process. This approach made it possible to fix the problem in the framework implementation, so that no setup is required to account for this.
 
+### 2019-01-26 Again Elm Make HTTPS Certificate Problem
+
+On 2019-01-26, Elm make fails again:
+```
+System.NotImplementedException: Output file not found. Maybe the output from the Elm make process helps to find the cause: Exit Code: 1 Standard Output: '' Standard Error: '-- HTTP PROBLEM ----------------------------------------------------------------
+ 
+ The following HTTP request failed:
+ 
+ <https://package.elm-lang.org/all-packages>
+ 
+ Here is the error message I was able to extract:
+ 
+ HttpExceptionRequest Request { host = "package.elm-lang.org" port = 443
+ secure = True requestHeaders =
+ [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")] path =
+ "/all-packages" queryString = "" method = "GET" proxy = Nothing rawBody =
+ False redirectCount = 10 responseTimeout = ResponseTimeoutDefault
+ requestVersion = HTTP/1.1 } (InternalException (HandshakeFailed
+ (Error_Protocol ("certificate has unknown CA",True,UnknownCa))))
+ 
+ '
+ at Kalmit.ProcessFromElm019Code.CompileElmToJavascript(IReadOnlyCollection`1 elmCodeFiles, String pathToFileWithElmEntryPoint) in K:\Source\Repos\Kalmit\implementation\PersistentProcess\PersistentProcess.Common\Process.cs:line 214
+ at 
+ ```
+
+ + This instance is hosted in an Azure Web App which and worked a few weeks earlier.
+ + I do not remember changing anything in this App. Did Microsoft change something in how the certificates are propagated? I do not find a clue online. Azure exhibited problems depending on the Region before (Cosmos DB) so document some details about the App Service Plan displayed in the Azure Portal: `Location: North Europe` `App Service Plan: general (Basic: 1 Small)`.
+ + Is the problem specific to the state App Service Plan? Test with a new Web App running on a new App Service Plan. For the new web app `kalmit-web-host-livetest-2`, create New App Service Plan in region `East US` and pricing plan `B1 Basic`.
+ + In addition to the Kalmit deployment, add the root certificate used when opening https://package.elm-lang.org in chrome : `DAC9024F54D8F6DF94935FB1732638CA6AD77C13`
+ + On this new web app, get an error too:
+ ```
+ System.NotImplementedException: Output file not found. Maybe the output from the Elm make process helps to find the cause:
+Exit Code: 1
+Standard Output:
+''
+Standard Error:
+'-- HTTP PROBLEM ----------------------------------------------------------------
+
+The following HTTP request failed:
+
+    <https://package.elm-lang.org/all-packages>
+
+Here is the error message I was able to extract:
+
+    HttpExceptionRequest Request { host = "package.elm-lang.org" port = 443
+    secure = True requestHeaders =
+    [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")] path =
+    "/all-packages" queryString = "" method = "GET" proxy = Nothing rawBody =
+    False redirectCount = 10 responseTimeout = ResponseTimeoutDefault
+    requestVersion = HTTP/1.1 } (InternalException (HandshakeFailed
+    (Error_Protocol ("certificate has unknown CA",True,UnknownCa))))
+```
++ What happens if the certificate is removed from the Web App? After deleting the certificate in Azure Portal and restarting the app, get the `certificate has unknown CA` error again. So maybe the certificate is not propagated into the app scope, to begin with?
++ Upload the certificate again to continue testing.
++ Check in Kudu: Under environment, it also displays `WEBSITE_LOAD_CERTIFICATES = *`.
++ Use powershell to dump info about certificates: `Get-ChildItem -Recurse Cert: 2>&1 > .\cert.log`. In the resulting file, `DAC9024F54D8F6DF94935FB1732638CA6AD77C13` is found in this entry:
+```
+[...]
+Name : My
+
+Subject      : CN=DST Root CA X3, O=Digital Signature Trust Co.
+Issuer       : CN=DST Root CA X3, O=Digital Signature Trust Co.
+Thumbprint   : DAC9024F54D8F6DF94935FB1732638CA6AD77C13
+FriendlyName : 
+NotBefore    : 9/30/2000 9:12:19 PM
+NotAfter     : 9/30/2021 2:01:15 PM
+Extensions   : {System.Security.Cryptography.Oid, 
+               System.Security.Cryptography.Oid, 
+               System.Security.Cryptography.Oid}
+[...]
+```
++ So the certificate is contained in the `My` scope. Is this not sufficient anymore for elm make? Can we add the certificate to a larger scope? Can we start the elm process in a different way so that it has access to the certificate?
