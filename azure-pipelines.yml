@@ -5,9 +5,12 @@ trigger:
 - master
 
 pool:
-  vmImage: 'vs2017-win2016'
+  vmImage: $(vmImage)
 
 steps:
+- script: |
+    echo my vmImage is $(vmImage)
+
 - script: dotnet --version
 
 - script: dotnet test ./implementation/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --logger trx
