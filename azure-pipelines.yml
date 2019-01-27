@@ -1,0 +1,26 @@
+# Script for Azure Pipelines
+# https://docs.microsoft.com/azure/devops/pipelines
+
+trigger:
+- master
+
+pool:
+  vmImage: 'vs2017-win2016'
+
+variables:
+  buildConfiguration: 'Release'
+
+steps:
+- script: dotnet --version
+
+- script: dotnet test ./implementation/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --logger trx
+  displayName: 'test'
+
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testRunner: VSTest
+    testResultsFiles: '**/*.trx'
+
+- script: dotnet publish ./implementation/PersistentProcess/PersistentProcess.WebHost/PersistentProcess.WebHost.csproj
+  displayName: 'publish web host'
