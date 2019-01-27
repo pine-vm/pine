@@ -26,3 +26,10 @@ Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issu
 + World Domination
 
 For a more details about planned work, see the [backlog](./backlog.md).
+
+## Development Build Status
+
+Platform | Status
+--- | ---
+| vs2017-win2016 | [![Build Status Windows](https://dev.azure.com/kalmit/kalmit/_apis/build/status/Kalmit%20Windows?branchName=master)](https://dev.azure.com/kalmit/kalmit/_build/latest?definitionId=2?branchName=master) |
+| ubuntu-16.04 | [![Build Status Linux](https://dev.azure.com/kalmit/kalmit/_apis/build/status/Kalmit%20Linux?branchName=master)](https://dev.azure.com/kalmit/kalmit/_build/latest?definitionId=3?branchName=master) |
