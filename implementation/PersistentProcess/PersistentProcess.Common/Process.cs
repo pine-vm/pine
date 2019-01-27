@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using ChakraCore.NET;
@@ -175,12 +176,21 @@ namespace Kalmit
             return Encoding.UTF8.GetString(outputFileContent);
         }
 
-        /*
-        Elm executable obtained on 2018-09-03 from
-        https://github.com/elm/compiler/releases/download/0.19.0/installer-for-windows.exe
-        */
-        static byte[] GetElmExecutableFile => BlobLibrary.GetBlobWithSHA256(
-            CommonConversion.ByteArrayFromStringBase16("08931A8DB552E67EF09C4ECD0A9E8E464FFDFF29BC58DAD2990DDE5D4FDC7C6F"));
+        static byte[] GetElmExecutableFile =>
+            BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
+                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ?
+                /*
+                Elm executable loaded on 2019-01-27 from
+                https://github.com/elm/compiler/releases/download/0.19.0/binaries-for-linux.tar.gz
+                */
+                "280CFC0F4FDE4FC281325A289A645B44468388F25DBF0F87AE72A23DAF822D1A"
+                :
+                /*
+                Elm executable obtained on 2018-09-03 from
+                https://github.com/elm/compiler/releases/download/0.19.0/installer-for-windows.exe
+                */
+                "08931A8DB552E67EF09C4ECD0A9E8E464FFDFF29BC58DAD2990DDE5D4FDC7C6F"));
 
         public const string appStateJsVarName = "app_state";
 

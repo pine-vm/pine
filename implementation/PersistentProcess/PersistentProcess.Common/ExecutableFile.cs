@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Kalmit
 {
@@ -40,6 +42,11 @@ namespace Kalmit
 
             File.WriteAllBytes(executableFilePath, executableFile);
 
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                LinuxExecWithBash("chmod +x -v " + executableFilePath);
+            }
+
             var process = new System.Diagnostics.Process
             {
                 StartInfo = new ProcessStartInfo
@@ -77,6 +84,41 @@ namespace Kalmit
                 StandardError = standardError,
                 StandardOutput = standardOutput,
             }, resultFiles);
+        }
+
+        //  Helper for Linux platform. Thank you Kyle Spearrin!
+        //  https://stackoverflow.com/questions/45132081/file-permissions-on-linux-unix-with-net-core/47918132#47918132
+        static public void LinuxExecWithBash(string cmd)
+        {
+            var escapedArgs = cmd.Replace("\"", "\\\"");
+
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    FileName = "/bin/bash",
+                    Arguments = $"-c \"{escapedArgs}\""
+                }
+            };
+
+            process.Start();
+            process.WaitForExit();
+
+            Console.WriteLine(
+                "Executed command with bash: " +
+                Newtonsoft.Json.JsonConvert.SerializeObject(
+                    new
+                    {
+                        cmd = cmd,
+                        exitCode = process.ExitCode,
+                        standardOut = process.StandardOutput.ReadToEnd(),
+                        standardError = process.StandardError.ReadToEnd(),
+                    }));
         }
     }
 }
