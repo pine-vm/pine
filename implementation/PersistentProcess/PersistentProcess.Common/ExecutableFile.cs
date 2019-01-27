@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Mono.Unix;
 
 namespace Kalmit
 {
@@ -44,7 +45,11 @@ namespace Kalmit
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                LinuxExecWithBash("chmod +x -v " + executableFilePath);
+                var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePath);
+
+                unixFileInfo.FileAccessPermissions |=
+                    FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
+                    FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
             }
 
             var process = new System.Diagnostics.Process
