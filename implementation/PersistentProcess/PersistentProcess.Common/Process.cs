@@ -5,8 +5,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using ChakraCore.NET;
-using ChakraCore.NET.API;
+using JavaScriptEngineSwitcher.ChakraCore;
+using JavaScriptEngineSwitcher.Core;
 using Newtonsoft.Json;
 
 namespace Kalmit
@@ -30,18 +30,22 @@ namespace Kalmit
 
     class ProcessWithCustomSerializationHostedWithPuppeteer : IDisposableProcessWithCustomSerialization
     {
-        readonly ChakraRuntime chakraRuntime;
-        readonly ChakraContext chakraContext;
+        readonly IJsEngine javascriptEngine;
 
 
         public ProcessWithCustomSerializationHostedWithPuppeteer(string javascriptPreparedToRun)
         {
-            chakraRuntime = ChakraRuntime.Create();
-            chakraContext = chakraRuntime.CreateContext(true);
+            javascriptEngine = new ChakraCoreJsEngine(
+                new ChakraCoreSettings
+                {
+                    DisableEval = true,
+                    EnableExperimentalFeatures = true
+                }
+            );
 
-            var initAppResult = chakraContext.RunScript(javascriptPreparedToRun);
+            var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
 
-            var resetAppStateResult = chakraContext.RunScript(
+            var resetAppStateResult = javascriptEngine.Evaluate(
                 ProcessFromElm019Code.appStateJsVarName + " = " + ProcessFromElm019Code.initStateJsFunctionPublishedSymbol + ";");
         }
 
@@ -50,8 +54,7 @@ namespace Kalmit
 
         public void Dispose()
         {
-            chakraContext?.Dispose();
-            chakraRuntime?.Dispose();
+            javascriptEngine?.Dispose();
         }
 
         public string ProcessEvent(string serializedEvent)
@@ -60,9 +63,7 @@ namespace Kalmit
 
             var expressionJavascript = ProcessFromElm019Code.processEventSyncronousJsFunctionName + "(" + eventExpression + ")";
 
-            var processEventtResult = chakraContext.RunScript(expressionJavascript);
-
-            return processEventtResult;
+            return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
         }
 
         public string GetSerializedState()
@@ -71,7 +72,7 @@ namespace Kalmit
                 ProcessFromElm019Code.serializeStateJsFunctionPublishedSymbol +
                 "(" + ProcessFromElm019Code.appStateJsVarName + ")";
 
-            return chakraContext.RunScript(expressionJavascript);
+            return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
         }
 
         public string SetSerializedState(string serializedState)
@@ -83,7 +84,14 @@ namespace Kalmit
                 " = " + ProcessFromElm019Code.deserializeStateJsFunctionPublishedSymbol +
                 "(" + serializedStateExpression + ");";
 
-            return chakraContext.RunScript(expressionJavascript);
+            return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
+        }
+
+        string EvaluateInJsEngineAndReturnResultAsString(string expressionJavascript)
+        {
+            var evalResult = javascriptEngine.Evaluate(expressionJavascript);
+
+            return evalResult?.ToString();
         }
     }
 

@@ -27,7 +27,7 @@ Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issu
 
 For a more details about planned work, see the [backlog](./backlog.md).
 
-## Development Build Status
+## CI Build Status
 
 Platform | Status
 --- | ---
