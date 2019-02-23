@@ -9,10 +9,6 @@ Kalmit supports modeling a persistent process using the Elm programming language
   + Admin interface to read and set the process state.
   + Additional common functionality like static files, rate-limiting, CORS.
 
-## Deployment
-
-+ For configuring for deployment to Azure app service, see [guide/operate-persistent-process.md](./guide/operate-persistent-process.md)
-
 ## Support
 
 Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issues), [twitter](https://twitter.com/michael_raetzel) or [email](mailto:Michael@michaelrätzel.com).

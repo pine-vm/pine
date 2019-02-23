@@ -1,0 +1,4 @@
+**/obj/
+**/bin/
+**/.local-chromium
+**/.cache
