@@ -1,16 +1,25 @@
 using System;
 using System.Linq;
+using FluffySpoon.AspNet.LetsEncrypt;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
     public class Startup
     {
+        private readonly ILogger<Startup> _logger;
+
+        public Startup(ILogger<Startup> logger)
+        {
+            _logger = logger;
+        }
+
         public void ConfigureServices(IServiceCollection services)
         {
             var serviceProvider = services.BuildServiceProvider();
@@ -38,6 +47,18 @@ namespace Kalmit.PersistentProcess.WebHost
             services.AddSingleton<IPersistentProcess>(BuildPersistentProcess);
 
             services.AddCors();
+
+            var letsEncryptOptions = webAppConfig?.Map?.letsEncryptOptions;
+            if (letsEncryptOptions == null)
+            {
+                _logger.LogInformation("I did not find letsEncryptOptions.");
+            }
+            else
+            {
+                services.AddFluffySpoonLetsEncryptRenewalService(webAppConfig?.Map?.letsEncryptOptions);
+                services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
+                services.AddFluffySpoonLetsEncryptFileChallengePersistence();
+            }
 
             Asp.ConfigureServices(services);
         }
@@ -79,6 +100,9 @@ namespace Kalmit.PersistentProcess.WebHost
                     .AllowAnyHeader()
                     .AllowCredentials());
             }
+
+            if (webAppConfig?.Map?.letsEncryptOptions != null)
+                app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
             app
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppConfig, context, next))

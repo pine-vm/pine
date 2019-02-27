@@ -15,6 +15,8 @@ namespace Kalmit.PersistentProcess
 
         public bool corsAllowAnything;
 
+        public FluffySpoon.AspNet.LetsEncrypt.LetsEncryptOptions letsEncryptOptions;
+
         public class ConditionalMapFromStringToString
         {
             public string matchingRegexPattern;
