@@ -18,6 +18,9 @@ namespace Kalmit.PersistentProcess.WebHost
         public Startup(ILogger<Startup> logger)
         {
             _logger = logger;
+
+            _logger.LogTrace("Testing LogTrace");
+            _logger.LogDebug("Testing LogDebug");
         }
 
         public void ConfigureServices(IServiceCollection services)

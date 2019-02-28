@@ -15,7 +15,16 @@ namespace Kalmit.PersistentProcess.WebHost
 
         public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder(args)
-                .ConfigureLogging(l => l.AddConsole(x => x.IncludeScopes = true))
+                .ConfigureAppConfiguration((hostingContext, config) =>
+                {
+                    config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+                })
+                .ConfigureLogging((hostingContext, logging) =>
+                {
+                    logging.AddConfiguration(hostingContext.Configuration.GetSection("Logging"));
+                    logging.AddConsole();
+                    logging.AddDebug();
+                })
                 .UseKestrel(kestrelOptions =>
                 {
                     kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
