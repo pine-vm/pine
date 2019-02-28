@@ -60,7 +60,7 @@ namespace Kalmit.PersistentProcess.WebHost
             {
                 services.AddFluffySpoonLetsEncryptRenewalService(webAppConfig?.Map?.letsEncryptOptions);
                 services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
-                services.AddFluffySpoonLetsEncryptFileChallengePersistence();
+                services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
             }
 
             Asp.ConfigureServices(services);
