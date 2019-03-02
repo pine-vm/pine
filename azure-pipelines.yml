@@ -11,6 +11,11 @@ steps:
 - script: |
     echo my vmImage is $(vmImage)
 
+- task: DotNetCoreInstaller@0
+  inputs:
+    packageType: 'sdk' # Options: runtime, sdk
+    version: '2.2.104' 
+
 - script: dotnet --version
 
 - script: dotnet test ./implementation/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --logger trx
