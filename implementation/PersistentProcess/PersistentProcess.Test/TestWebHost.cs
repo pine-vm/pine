@@ -584,7 +584,8 @@ namespace Kalmit.PersistentProcess.Test
             HttpClient client,
             string state) =>
             client.PostAsync(
-                Kalmit.PersistentProcess.WebHost.Configuration.AdminPersistentProcessStatePath,
+                Kalmit.PersistentProcess.WebHost.Configuration.AdminPath +
+                Kalmit.PersistentProcess.WebHost.Configuration.ApiPersistentProcessStatePath,
                 new StringContent(state, System.Text.Encoding.UTF8));
     }
 }

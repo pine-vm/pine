@@ -117,7 +117,9 @@ namespace Kalmit.PersistentProcess.WebHost
         static async Task AdminPersistentProcessMiddlewareFromWebAppConfig(
             WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next)
         {
-            if (string.Equals(context.Request.Path, "/" + Configuration.AdminPersistentProcessStatePath))
+            if (context.Request.Path.StartsWithSegments(
+                new PathString(Configuration.AdminPath),
+                out var requestPathInAdmin))
             {
                 var configuration = context.RequestServices.GetService<IConfiguration>();
 
@@ -149,41 +151,48 @@ namespace Kalmit.PersistentProcess.WebHost
                     context.Response.StatusCode = 401;
                     context.Response.Headers.Add(
                         "WWW-Authenticate",
-                        @"Basic realm=""" + context.Request.Host + "/" + Configuration.AdminPath + @""", charset=""UTF-8""");
+                        @"Basic realm=""" + context.Request.Host + Configuration.AdminPath + @""", charset=""UTF-8""");
                     await context.Response.WriteAsync("Unauthorized");
                     return;
                 }
 
-                if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                if (string.Equals(requestPathInAdmin, Configuration.ApiPersistentProcessStatePath))
                 {
-                    var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEnd();
+                    if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEnd();
 
-                    var processStoreWriter = context.RequestServices.GetService<ProcessStore.IProcessStoreWriter>();
+                        var processStoreWriter = context.RequestServices.GetService<ProcessStore.IProcessStoreWriter>();
 
-                    var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
+                        var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
 
-                    var compositionRecord = persistentProcess.SetState(stateToSet);
+                        var compositionRecord = persistentProcess.SetState(stateToSet);
 
-                    processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
+                        processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
 
-                    context.Response.StatusCode = 200;
-                    await context.Response.WriteAsync("Successfully set process state.");
+                        context.Response.StatusCode = 200;
+                        await context.Response.WriteAsync("Successfully set process state.");
+                        return;
+                    }
+
+                    if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
+
+                        var reducedValue = persistentProcess.ReductionRecordForCurrentState().ReducedValue;
+
+                        context.Response.StatusCode = 200;
+                        await context.Response.WriteAsync(reducedValue);
+                        return;
+                    }
+
+                    context.Response.StatusCode = 405;
+                    await context.Response.WriteAsync("Method not supported.");
                     return;
                 }
 
-                if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
-
-                    var reducedValue = persistentProcess.ReductionRecordForCurrentState().ReducedValue;
-
-                    context.Response.StatusCode = 200;
-                    await context.Response.WriteAsync(reducedValue);
-                    return;
-                }
-
-                context.Response.StatusCode = 405;
-                await context.Response.WriteAsync("Method not supported.");
+                context.Response.StatusCode = 404;
+                await context.Response.WriteAsync("Not Found");
                 return;
             }
 

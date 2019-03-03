@@ -7,9 +7,9 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     static public class Configuration
     {
-        static public string AdminPath => "kalmit-admin";
+        static public string AdminPath => "/kalmit-admin";
 
-        static public string AdminPersistentProcessStatePath => AdminPath + "/process/state";
+        static public string ApiPersistentProcessStatePath => "/api/process/state";
 
         static public string ProcessStoreDirectoryPathSettingKey => "processStoreDirectoryPath";
 
