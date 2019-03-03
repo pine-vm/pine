@@ -1,9 +1,6 @@
 # Script for Azure Pipelines
 # https://docs.microsoft.com/azure/devops/pipelines
 
-trigger:
-- master
-
 pool:
   vmImage: $(vmImage)
 
