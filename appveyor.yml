@@ -1,4 +1,7 @@
 version: 1.0.{build}
+branches:
+  only:
+  - trigger-appveyor/*
 image: Visual Studio 2017
 init:
 - cmd: wmic os get osarchitecture
