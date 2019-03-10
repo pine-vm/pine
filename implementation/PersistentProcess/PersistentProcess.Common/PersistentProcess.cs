@@ -37,7 +37,7 @@ namespace Kalmit.PersistentProcess
                 elmApp.ElmAppFiles,
                 elmApp.EntryConfig.Value.WithCustomSerialization.Value);
 
-            var emptyInitHash = CompositionRecord.HashFromSerialRepresentation(new byte[0]);
+            var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(new byte[0]);
 
             string dictKeyForHash(byte[] hash) => Convert.ToBase64String(hash);
 
@@ -48,10 +48,31 @@ namespace Kalmit.PersistentProcess
             foreach (var serializedCompositionRecord in storeReader.EnumerateSerializedCompositionsRecordsReverse())
             {
                 {
-                    var compositionRecord = JsonConvert.DeserializeObject<CompositionRecord>(
+                    var compositionRecordFromFile = JsonConvert.DeserializeObject<CompositionRecordInFile>(
                         System.Text.Encoding.UTF8.GetString(serializedCompositionRecord));
 
-                    var compositionRecordHash = CompositionRecord.HashFromSerialRepresentation(serializedCompositionRecord);
+                    var compositionRecordHash = CompositionRecordInFile.HashFromSerialRepresentation(serializedCompositionRecord);
+
+                    var compositionRecord =
+                        new CompositionRecord
+                        {
+                            ParentHash =
+                                compositionRecordFromFile.ParentHashBase16 != null ?
+                                CommonConversion.ByteArrayFromStringBase16(compositionRecordFromFile.ParentHashBase16)
+
+                                // TODO: Remove this fallback after migration of apps in production.
+                                : compositionRecordFromFile.ParentHash,
+                            SetStateLiteralString = compositionRecordFromFile.SetStateLiteralString
+                            
+                                // TODO: Remove this fallback after migration of apps in production.
+                                ?? compositionRecordFromFile.SetState,
+
+                            AppendedEventsLiteralString =
+                                compositionRecordFromFile.AppendedEventsLiteralString
+
+                                // TODO: Remove this fallback after migration of apps in production.
+                                ?? compositionRecordFromFile.AppendedEvents,
+                        };
 
                     var compositionChainElement = (compositionRecordHash, compositionRecord);
 
@@ -72,16 +93,16 @@ namespace Kalmit.PersistentProcess
                         if (reduction != null)
                         {
                             compositionChain.Pop();
-                            process.SetSerializedState(reduction.ReducedValue);
+                            process.SetSerializedState(reduction.ReducedValueLiteralString);
                             lastStateHash = reduction.ReducedCompositionHash;
                         }
 
                         foreach (var followingComposition in compositionChain)
                         {
-                            if (followingComposition.composition.SetState != null)
-                                process.SetSerializedState(followingComposition.composition.SetState);
+                            if (followingComposition.composition.SetStateLiteralString != null)
+                                process.SetSerializedState(followingComposition.composition.SetStateLiteralString);
 
-                            foreach (var appendedEvent in followingComposition.composition.AppendedEvents.EmptyIfNull())
+                            foreach (var appendedEvent in followingComposition.composition.AppendedEventsLiteralString.EmptyIfNull())
                                 process.ProcessEvent(appendedEvent);
 
                             lastStateHash = followingComposition.hash;
@@ -109,7 +130,7 @@ namespace Kalmit.PersistentProcess
             lastStateHash = emptyInitHash;
         }
 
-        static string Serialize(CompositionRecord composition) =>
+        static string Serialize(CompositionRecordInFile composition) =>
             JsonConvert.SerializeObject(composition);
 
         public (IReadOnlyList<string> responses, (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash))
@@ -121,16 +142,16 @@ namespace Kalmit.PersistentProcess
                     serializedEvents.Select(serializedEvent => process.ProcessEvent(serializedEvent))
                     .ToList();
 
-                var compositionRecord = new CompositionRecord
+                var compositionRecord = new CompositionRecordInFile
                 {
-                    ParentHash = lastStateHash,
-                    AppendedEvents = serializedEvents,
+                    ParentHashBase16 = ProcessStoreInFileDirectory.ToStringBase16(lastStateHash),
+                    AppendedEventsLiteralString = serializedEvents,
                 };
 
                 var serializedCompositionRecord =
                     Encoding.UTF8.GetBytes(Serialize(compositionRecord));
 
-                var compositionHash = CompositionRecord.HashFromSerialRepresentation(serializedCompositionRecord);
+                var compositionHash = CompositionRecordInFile.HashFromSerialRepresentation(serializedCompositionRecord);
 
                 lastStateHash = compositionHash;
 
@@ -148,7 +169,7 @@ namespace Kalmit.PersistentProcess
                     new ReductionRecord
                     {
                         ReducedCompositionHash = lastStateHash,
-                        ReducedValue = process.GetSerializedState(),
+                        ReducedValueLiteralString = process.GetSerializedState(),
                     };
             }
         }
@@ -159,16 +180,16 @@ namespace Kalmit.PersistentProcess
             {
                 process.SetSerializedState(state);
 
-                var compositionRecord = new CompositionRecord
+                var compositionRecord = new CompositionRecordInFile
                 {
-                    ParentHash = lastStateHash,
-                    SetState = state,
+                    ParentHashBase16 = ProcessStoreInFileDirectory.ToStringBase16(lastStateHash),
+                    SetStateLiteralString = state,
                 };
 
                 var serializedCompositionRecord =
                     Encoding.UTF8.GetBytes(Serialize(compositionRecord));
 
-                var compositionHash = CompositionRecord.HashFromSerialRepresentation(serializedCompositionRecord);
+                var compositionHash = CompositionRecordInFile.HashFromSerialRepresentation(serializedCompositionRecord);
 
                 lastStateHash = compositionHash;
 
@@ -207,7 +228,7 @@ namespace Kalmit.PersistentProcess
             }
         }
 
-        string IProcess<string, string>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValue;
+        string IProcess<string, string>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValueLiteralString;
 
         string IProcess<string, string>.SetSerializedState(string serializedState)
         {

@@ -296,7 +296,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 Assert.AreEqual(
                     processAdditions.Sum().ToString(),
-                    processInstance.ReductionRecordForCurrentState().ReducedValue,
+                    processInstance.ReductionRecordForCurrentState().ReducedValueLiteralString,
                     "Sum of all additions should equal reduced state of restored process.");
             }
         }

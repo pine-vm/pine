@@ -179,10 +179,11 @@ namespace Kalmit.PersistentProcess.WebHost
                     {
                         var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
 
-                        var reducedValue = persistentProcess.ReductionRecordForCurrentState().ReducedValue;
+                        var reducedValueLiteralString =
+                            persistentProcess.ReductionRecordForCurrentState().ReducedValueLiteralString;
 
                         context.Response.StatusCode = 200;
-                        await context.Response.WriteAsync(reducedValue);
+                        await context.Response.WriteAsync(reducedValueLiteralString);
                         return;
                     }
 

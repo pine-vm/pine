@@ -11,19 +11,37 @@ namespace Kalmit.ProcessStore
     {
         public byte[] ParentHash;
 
-        public string SetState;
+        public string SetStateLiteralString;
 
-        public IReadOnlyList<string> AppendedEvents;
+        public IReadOnlyList<string> AppendedEventsLiteralString;
+    }
+    
+    public class CompositionRecordInFile
+    {
+        public string ParentHashBase16;
+
+        public string SetStateLiteralString;
+
+        public IReadOnlyList<string> AppendedEventsLiteralString;
 
         static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
             new System.Security.Cryptography.SHA256Managed().ComputeHash(serialized);
+
+        [Obsolete("Temporary support for migration from old process store.")]
+        public byte[] ParentHash;
+
+        [Obsolete("Temporary support for migration from old process store.")]
+        public string SetState;
+
+        [Obsolete("Temporary support for migration from old process store.")]
+        public IReadOnlyList<string> AppendedEvents;
     }
 
     public class ReductionRecord
     {
         public byte[] ReducedCompositionHash;
 
-        public string ReducedValue;
+        public string ReducedValueLiteralString;
     }
 
     public interface IProcessStoreWriter
@@ -42,6 +60,19 @@ namespace Kalmit.ProcessStore
 
     public class ProcessStoreInFileDirectory : IProcessStoreWriter, IProcessStoreReader
     {
+        private class ReductionRecordInFile
+        {
+            public string ReducedCompositionHashBase16;
+
+            public string ReducedValueLiteralString;
+
+            [Obsolete("Temporary support for migration from old process store.")]
+            public byte[] ReducedCompositionHash;
+
+            [Obsolete("Temporary support for migration from old process store.")]
+            public string ReducedValue;
+        }
+
         string directory;
 
         Func<string> getCompositionLogRequestedNextFileName;
@@ -53,11 +84,8 @@ namespace Kalmit.ProcessStore
 
         string ReductionDirectoryPath => Path.Combine(directory, "reduction");
 
-        static public string ReductionFileNameFromReducedCompositionHash(byte[] hash) =>
-            BitConverter.ToString(hash).Replace("-", "");
-
-        string ReductionFilePathFromReducedCompositionHash(byte[] hash) =>
-            Path.Combine(ReductionDirectoryPath, ReductionFileNameFromReducedCompositionHash(hash));
+        static public string ToStringBase16(byte[] array) =>
+            BitConverter.ToString(array).Replace("-", "").ToUpperInvariant();
 
         public ProcessStoreInFileDirectory(
             string directory,
@@ -82,19 +110,34 @@ namespace Kalmit.ProcessStore
 
         public ReductionRecord GetReduction(byte[] reducedCompositionHash)
         {
-            var filePath = ReductionFilePathFromReducedCompositionHash(reducedCompositionHash);
+            var reducedCompositionHashBase16 = ToStringBase16(reducedCompositionHash);
+
+            var filePath = Path.Combine(ReductionDirectoryPath, reducedCompositionHashBase16);
 
             if (!File.Exists(filePath))
                 return null;
 
-            var reduction =
-                JsonConvert.DeserializeObject<ReductionRecord>(
+            var reductionRecordFromFile =
+                JsonConvert.DeserializeObject<ReductionRecordInFile>(
                     File.ReadAllText(filePath, Encoding.UTF8));
 
-            if (!reducedCompositionHash.SequenceEqual(reduction.ReducedCompositionHash))
-                throw new Exception("Unexpected content in file " + filePath + ", hash does not match");
+            // TODO: Remove this fallback after migration of apps in production.
+            var matches2018Format =
+                reductionRecordFromFile.ReducedCompositionHash?.SequenceEqual(reducedCompositionHash) ?? false;
 
-            return reduction;
+            if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16
+                && !matches2018Format)
+                throw new Exception("Unexpected content in file " + filePath + ", composition hash does not match.");
+
+            return new ReductionRecord
+            {
+                ReducedCompositionHash = reducedCompositionHash,
+                ReducedValueLiteralString = reductionRecordFromFile.ReducedValueLiteralString
+
+                // TODO: Remove this fallback after migration of apps in production.
+                ?? reductionRecordFromFile.ReducedValue
+                ,
+            };
         }
 
         public void AppendSerializedCompositionRecord(byte[] record)
@@ -131,10 +174,18 @@ namespace Kalmit.ProcessStore
 
         public void StoreReduction(ReductionRecord record)
         {
-            var filePath = ReductionFilePathFromReducedCompositionHash(record.ReducedCompositionHash);
+            var recordInFile = new ReductionRecordInFile
+            {
+                ReducedCompositionHashBase16 = ToStringBase16(record.ReducedCompositionHash),
+                ReducedValueLiteralString = record.ReducedValueLiteralString,
+            };
+
+            var fileName = recordInFile.ReducedCompositionHashBase16;
+
+            var filePath = Path.Combine(ReductionDirectoryPath, fileName);
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-            File.WriteAllText(filePath, JsonConvert.SerializeObject(record), Encoding.UTF8);
+            File.WriteAllText(filePath, JsonConvert.SerializeObject(recordInFile), Encoding.UTF8);
         }
 
         public IEnumerable<string> ReductionsFilesNames() =>
