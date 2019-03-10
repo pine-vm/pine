@@ -19,4 +19,7 @@ ENV APPSETTING_processStoreDirectoryPath="./../process-store"
 COPY --from=build-env /app/PersistentProcess.WebHost/out ./app/
 ENTRYPOINT ["dotnet", "./app/PersistentProcess.WebHost.dll"]
 
+# Configure a default app. Replace this file with a zip archive which contains your app.
+COPY ./default-config/web-app/web-app-config.zip .
+
 # ENV APPSETTING_adminRootPassword="password-for-kalmit-root"
