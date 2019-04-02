@@ -28,7 +28,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Restore_counter_process_state()
+        public void Restore_process_state()
         {
             AssertProcessRestoresStateWithSequenceOfEventsAndExpectedResponses(
                 TestSetup.BuildInstanceOfCounterProcess,
@@ -71,7 +71,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Restore_counter_process_state_over_file()
+        public void Restore_process_state_over_file()
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -110,7 +110,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Restore_counter_process_state_over_compositions()
+        public void Restore_process_state_over_compositions()
         {
             var eventsAndExpectedResponses =
                 TestSetup.CounterProcessTestEventsAndExpectedResponses(
@@ -154,7 +154,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Restore_counter_process_state_from_combination_of_reduction_and_compositions()
+        public void Restore_process_state_from_combination_of_reduction_and_compositions()
         {
             var eventsAndExpectedResponses =
                 TestSetup.CounterProcessTestEventsAndExpectedResponses(

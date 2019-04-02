@@ -331,7 +331,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Web_host_can_be_configured_without_elm_app()
+        public void Web_host_can_be_configured_to_serve_static_files_without_elm_app()
         {
             var defaultStaticFile =
                 Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
@@ -495,7 +495,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Web_host_supports_setting_persistent_process_state_after_authorization()
+        public void Web_host_supports_setting_persistent_process_state_only_after_authorization()
         {
             const string rootPassword = "Root-Password_1234567";
 
