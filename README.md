@@ -7,7 +7,11 @@ Kalmit supports modeling a persistent process using the Elm programming language
 + A web server to host a persistent process as a web service:
   + HTTP requests and responses are mapped to Elm types.
   + Admin interface to read and set the process state.
-  + Additional common functionality like static files, rate-limiting, CORS.
+  + Additional common functionality like Let's Encrypt, static files, rate-limiting, CORS.
+
+## Configure & Deploy
+
+See the guide on [how to configure and deploy your web app](guide/how-to-configure-and-deploy-your-kalmit-web-app.md).
 
 ## Support
 
