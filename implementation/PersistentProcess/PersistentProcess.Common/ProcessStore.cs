@@ -15,7 +15,7 @@ namespace Kalmit.ProcessStore
 
         public IReadOnlyList<string> AppendedEventsLiteralString;
     }
-    
+
     public class CompositionRecordInFile
     {
         public string ParentHashBase16;
@@ -25,7 +25,7 @@ namespace Kalmit.ProcessStore
         public IReadOnlyList<string> AppendedEventsLiteralString;
 
         static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
-            new System.Security.Cryptography.SHA256Managed().ComputeHash(serialized);
+            CommonConversion.HashSHA256(serialized);
 
         [Obsolete("Temporary support for migration from old process store.")]
         public byte[] ParentHash;
@@ -84,9 +84,6 @@ namespace Kalmit.ProcessStore
 
         string ReductionDirectoryPath => Path.Combine(directory, "reduction");
 
-        static public string ToStringBase16(byte[] array) =>
-            BitConverter.ToString(array).Replace("-", "").ToUpperInvariant();
-
         public ProcessStoreInFileDirectory(
             string directory,
             Func<string> getCompositionLogRequestedNextFileName)
@@ -110,7 +107,7 @@ namespace Kalmit.ProcessStore
 
         public ReductionRecord GetReduction(byte[] reducedCompositionHash)
         {
-            var reducedCompositionHashBase16 = ToStringBase16(reducedCompositionHash);
+            var reducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(reducedCompositionHash);
 
             var filePath = Path.Combine(ReductionDirectoryPath, reducedCompositionHashBase16);
 
@@ -176,7 +173,7 @@ namespace Kalmit.ProcessStore
         {
             var recordInFile = new ReductionRecordInFile
             {
-                ReducedCompositionHashBase16 = ToStringBase16(record.ReducedCompositionHash),
+                ReducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(record.ReducedCompositionHash),
                 ReducedValueLiteralString = record.ReducedValueLiteralString,
             };
 

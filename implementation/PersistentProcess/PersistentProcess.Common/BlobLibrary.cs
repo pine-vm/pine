@@ -21,7 +21,7 @@ namespace Kalmit
             var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
 
             bool blobHasExpectedSHA256(byte[] blob) =>
-                Enumerable.SequenceEqual(new SHA256Managed().ComputeHash(blob), sha256);
+                Enumerable.SequenceEqual(CommonConversion.HashSHA256(blob), sha256);
 
             try
             {

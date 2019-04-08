@@ -29,6 +29,10 @@ namespace Kalmit.PersistentProcess.WebHost
             var config = serviceProvider.GetService<IConfiguration>();
 
             var webAppConfigFile = System.IO.File.ReadAllBytes(config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey));
+
+            _logger.LogInformation("Loaded configuration " +
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigFile)));
+
             var webAppConfig = WebAppConfiguration.FromFiles(ZipArchive.EntriesFromZipArchive(webAppConfigFile).ToList());
             services.AddSingleton<WebAppConfiguration>(webAppConfig);
 
@@ -54,10 +58,11 @@ namespace Kalmit.PersistentProcess.WebHost
             var letsEncryptOptions = webAppConfig?.Map?.letsEncryptOptions;
             if (letsEncryptOptions == null)
             {
-                _logger.LogInformation("I did not find letsEncryptOptions.");
+                _logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
             }
             else
             {
+                _logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
                 services.AddFluffySpoonLetsEncryptRenewalService(webAppConfig?.Map?.letsEncryptOptions);
                 services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
                 services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();

@@ -63,7 +63,7 @@ namespace Kalmit.PersistentProcess
                                 // TODO: Remove this fallback after migration of apps in production.
                                 : compositionRecordFromFile.ParentHash,
                             SetStateLiteralString = compositionRecordFromFile.SetStateLiteralString
-                            
+
                                 // TODO: Remove this fallback after migration of apps in production.
                                 ?? compositionRecordFromFile.SetState,
 
@@ -144,7 +144,7 @@ namespace Kalmit.PersistentProcess
 
                 var compositionRecord = new CompositionRecordInFile
                 {
-                    ParentHashBase16 = ProcessStoreInFileDirectory.ToStringBase16(lastStateHash),
+                    ParentHashBase16 = CommonConversion.StringBase16FromByteArray(lastStateHash),
                     AppendedEventsLiteralString = serializedEvents,
                 };
 
@@ -182,7 +182,7 @@ namespace Kalmit.PersistentProcess
 
                 var compositionRecord = new CompositionRecordInFile
                 {
-                    ParentHashBase16 = ProcessStoreInFileDirectory.ToStringBase16(lastStateHash),
+                    ParentHashBase16 = CommonConversion.StringBase16FromByteArray(lastStateHash),
                     SetStateLiteralString = state,
                 };
 
