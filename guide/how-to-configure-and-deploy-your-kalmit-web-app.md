@@ -4,7 +4,7 @@ The configuration of Kalmit web apps is done in the `web-app-config.zip` file. T
 
 ## `web-app-config.zip`
 
-An example is the default app in the project repository at [/implementation/PersistentProcess/default-config/web-app/web-app-config.zip](https://github.com/Viir/Kalmit/blob/fcba53c01c28fe89616420d247a82af7ad534c3f/implementation/PersistentProcess/default-config/web-app/web-app-config.zip)
+An example is the default app in the project repository at [/implementation/PersistentProcess/default-config/web-app/web-app-config.zip](https://github.com/Viir/Kalmit/blob/8a28424f5d550c0583293002b26568c5ea128ba8/implementation/PersistentProcess/default-config/web-app/web-app-config.zip)
 
 The general structure of `web-app-config.zip` is as follows:
 
@@ -46,7 +46,7 @@ The Elm app is contained in the `elm-app` directory in the `elm-app.zip` archive
 
 ## Deploy Using Docker
 
-The easiest way to deploy your Kalmit web app is using Docker. ⚠ The instructions below depend on familiarity with Docker, at least knowing the relation between image and container is a precondition. The base image `kalmit/kalmit-web-app` contains everything you need to start a web app:
+The easiest way to deploy your Kalmit web app is using Docker. The instructions below depend on familiarity with Docker, at least knowing the relation between image and container is a precondition. The base image [`kalmit/kalmit-web-app`](https://hub.docker.com/r/kalmit/kalmit-web-app) contains everything you need to start a web app:
 ```powershell
 docker run -p 80:80 kalmit/kalmit-web-app
 ```
@@ -123,7 +123,10 @@ For more details about environment variables in docker, see https://docs.docker.
 ## Manage the Process Store
 
 The process store contains not only the latest state of the app but also the event log.
-In the Docker image `kalmit/kalmit-web-app`, the process store is located in the directory `kalmit/process-store`.
+In the Docker image `kalmit/kalmit-web-app`, the process store is located in the directory `/kalmit/process-store`.
 You can copy this directory to backup the process store or copy it to another container.
-Alternatively, use [docker volumes](https://docs.docker.com/storage/volumes/) to map this directory to another location.
 
+Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
+```powershell
+docker run --mount source=your-docker-volume-name,destination=/kalmit/process-store -p 80:80 kalmit/kalmit-web-app
+```
