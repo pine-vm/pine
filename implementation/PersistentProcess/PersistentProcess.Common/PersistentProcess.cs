@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -30,7 +31,7 @@ namespace Kalmit.PersistentProcess
             byte[] elmAppFile)
         {
             var elmApp =
-                ElmAppWithEntryConfig.FromFiles(ZipArchive.EntriesFromZipArchive(elmAppFile).ToList());
+                ElmAppWithEntryConfig.FromFiles(ZipArchive.EntriesFromZipArchive(elmAppFile).ToImmutableList());
 
             process =
                 ProcessFromElm019Code.WithCustomSerialization(
@@ -57,21 +58,15 @@ namespace Kalmit.PersistentProcess
                         new CompositionRecord
                         {
                             ParentHash =
-                                compositionRecordFromFile.ParentHashBase16 != null ?
-                                CommonConversion.ByteArrayFromStringBase16(compositionRecordFromFile.ParentHashBase16)
+                                CommonConversion.ByteArrayFromStringBase16(compositionRecordFromFile.ParentHashBase16),
 
-                                // TODO: Remove this fallback after migration of apps in production.
-                                : compositionRecordFromFile.ParentHash,
-                            SetStateLiteralString = compositionRecordFromFile.SetStateLiteralString
-
-                                // TODO: Remove this fallback after migration of apps in production.
-                                ?? compositionRecordFromFile.SetState,
+                            SetStateLiteralString = compositionRecordFromFile.SetState?.LiteralString,
 
                             AppendedEventsLiteralString =
-                                compositionRecordFromFile.AppendedEventsLiteralString
+                                compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString)?.ToImmutableList()
 
                                 // TODO: Remove this fallback after migration of apps in production.
-                                ?? compositionRecordFromFile.AppendedEvents,
+                                ?? compositionRecordFromFile.AppendedEventsLiteralString,
                         };
 
                     var compositionChainElement = (compositionRecordHash, compositionRecord);
@@ -140,12 +135,12 @@ namespace Kalmit.PersistentProcess
             {
                 var responses =
                     serializedEvents.Select(serializedEvent => process.ProcessEvent(serializedEvent))
-                    .ToList();
+                    .ToImmutableList();
 
                 var compositionRecord = new CompositionRecordInFile
                 {
                     ParentHashBase16 = CommonConversion.StringBase16FromByteArray(lastStateHash),
-                    AppendedEventsLiteralString = serializedEvents,
+                    AppendedEvents = serializedEvents.Select(@event => new ValueInFile { LiteralString = @event }).ToImmutableList(),
                 };
 
                 var serializedCompositionRecord =
@@ -183,7 +178,7 @@ namespace Kalmit.PersistentProcess
                 var compositionRecord = new CompositionRecordInFile
                 {
                     ParentHashBase16 = CommonConversion.StringBase16FromByteArray(lastStateHash),
-                    SetStateLiteralString = state,
+                    SetState = new ValueInFile { LiteralString = state },
                 };
 
                 var serializedCompositionRecord =

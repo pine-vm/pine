@@ -70,7 +70,7 @@ namespace Kalmit.PersistentProcess.Test
             .EnumerateSerializedCompositionsRecordsReverse()
             .Select(Encoding.UTF8.GetString)
             .Select(JsonConvert.DeserializeObject<CompositionRecordInFile>)
-            .SelectMany(compositionRecord => compositionRecord.AppendedEventsLiteralString.Reverse())
+            .SelectMany(compositionRecord => compositionRecord.AppendedEvents.Reverse().Select(record => record.LiteralString))
             .Select(JsonConvert.DeserializeObject<PersistentProcess.InterfaceToHost.Event>);
     }
 }

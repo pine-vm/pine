@@ -7,6 +7,21 @@ using Newtonsoft.Json;
 
 namespace Kalmit.ProcessStore
 {
+    public class ValueInFile
+    {
+        public string LiteralString;
+
+        /*
+        Future: Reduce operation expenses by sharing objects: Support reusing values here by reference.
+        public string HashBase16;
+        */
+
+        /*
+        Future: Switch to a simpler literal model.
+        public byte[] Literal;
+        */
+    }
+
     public class CompositionRecord
     {
         public byte[] ParentHash;
@@ -20,21 +35,15 @@ namespace Kalmit.ProcessStore
     {
         public string ParentHashBase16;
 
-        public string SetStateLiteralString;
+        public ValueInFile SetState;
 
-        public IReadOnlyList<string> AppendedEventsLiteralString;
+        public IReadOnlyList<ValueInFile> AppendedEvents;
 
         static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
             CommonConversion.HashSHA256(serialized);
 
         [Obsolete("Temporary support for migration from old process store.")]
-        public byte[] ParentHash;
-
-        [Obsolete("Temporary support for migration from old process store.")]
-        public string SetState;
-
-        [Obsolete("Temporary support for migration from old process store.")]
-        public IReadOnlyList<string> AppendedEvents;
+        public IReadOnlyList<string> AppendedEventsLiteralString;
     }
 
     public class ReductionRecord
@@ -64,13 +73,10 @@ namespace Kalmit.ProcessStore
         {
             public string ReducedCompositionHashBase16;
 
+            public ValueInFile ReducedValue;
+
+            [Obsolete("Temporary support for migration from old process store.")]
             public string ReducedValueLiteralString;
-
-            [Obsolete("Temporary support for migration from old process store.")]
-            public byte[] ReducedCompositionHash;
-
-            [Obsolete("Temporary support for migration from old process store.")]
-            public string ReducedValue;
         }
 
         string directory;
@@ -118,21 +124,16 @@ namespace Kalmit.ProcessStore
                 JsonConvert.DeserializeObject<ReductionRecordInFile>(
                     File.ReadAllText(filePath, Encoding.UTF8));
 
-            // TODO: Remove this fallback after migration of apps in production.
-            var matches2018Format =
-                reductionRecordFromFile.ReducedCompositionHash?.SequenceEqual(reducedCompositionHash) ?? false;
-
-            if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16
-                && !matches2018Format)
+            if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
                 throw new Exception("Unexpected content in file " + filePath + ", composition hash does not match.");
 
             return new ReductionRecord
             {
                 ReducedCompositionHash = reducedCompositionHash,
-                ReducedValueLiteralString = reductionRecordFromFile.ReducedValueLiteralString
+                ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString
 
                 // TODO: Remove this fallback after migration of apps in production.
-                ?? reductionRecordFromFile.ReducedValue
+                ?? reductionRecordFromFile.ReducedValueLiteralString
                 ,
             };
         }
