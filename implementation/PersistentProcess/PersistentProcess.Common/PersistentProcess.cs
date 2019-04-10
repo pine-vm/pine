@@ -22,6 +22,9 @@ namespace Kalmit.PersistentProcess
     //  A provisional special case for a process from an elm app. Migrations give an example of why the elm code should be modeled on the history as well.
     public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProcess, IDisposable
     {
+        static readonly Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings =
+            ProcessStore.ProcessStoreInFileDirectory.RecordSerializationSettings;
+
         byte[] lastStateHash;
 
         IDisposableProcessWithCustomSerialization process;
@@ -126,7 +129,7 @@ namespace Kalmit.PersistentProcess
         }
 
         static string Serialize(CompositionRecordInFile composition) =>
-            JsonConvert.SerializeObject(composition);
+            JsonConvert.SerializeObject(composition, recordSerializationSettings);
 
         public (IReadOnlyList<string> responses, (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash))
             ProcessEvents(IReadOnlyList<string> serializedEvents)

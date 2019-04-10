@@ -90,6 +90,13 @@ namespace Kalmit.ProcessStore
 
         string ReductionDirectoryPath => Path.Combine(directory, "reduction");
 
+        static public Newtonsoft.Json.JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
+        {
+            NullValueHandling = NullValueHandling.Ignore
+        };
+
+        static Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
+
         public ProcessStoreInFileDirectory(
             string directory,
             Func<string> getCompositionLogRequestedNextFileName)
@@ -183,7 +190,7 @@ namespace Kalmit.ProcessStore
             var filePath = Path.Combine(ReductionDirectoryPath, fileName);
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-            File.WriteAllText(filePath, JsonConvert.SerializeObject(recordInFile), Encoding.UTF8);
+            File.WriteAllText(filePath, JsonConvert.SerializeObject(recordInFile, RecordSerializationSettings), Encoding.UTF8);
         }
 
         public IEnumerable<string> ReductionsFilesNames() =>
