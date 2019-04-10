@@ -12,11 +12,6 @@ The general structure of `web-app-config.zip` is as follows:
 web-app-config.zip
 +-- map.json
 +-- elm-app.zip
-    +-- elm-app.map.json
-    +-- elm-app
-        +-- elm.json
-        +-- ElmAppInKalmitProcess.elm
-        +-- Your Elm Files
 +-- (Optional) static-files
 ```
 
@@ -30,6 +25,15 @@ Since all of these features are optional to use, in the simplest case, it only c
 ```
 
 ### `elm-app.zip`
+
+```
+elm-app.zip
++-- elm-app.map.json
++-- elm-app
+    +-- elm.json
+    +-- ElmAppInKalmitProcess.elm
+    +-- Your Elm Files
+```
 
 The Elm app is contained in the `elm-app` directory in the `elm-app.zip` archive. At the root level, the archive contains the `elm-app.map.json` file to tell the framework which functions in your elm app to use. It looks like this:
 ```json
