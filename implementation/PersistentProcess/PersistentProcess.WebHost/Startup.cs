@@ -47,7 +47,12 @@ namespace Kalmit.PersistentProcess.WebHost
             var processStoreDirectory = config.GetValue<string>(Configuration.ProcessStoreDirectoryPathSettingKey);
             var processStore = new Kalmit.ProcessStore.ProcessStoreInFileDirectory(
                 processStoreDirectory,
-                () => getDateTimeOffset().ToString("yyyy-MM-dd") + ".composition.jsonl");
+                () =>
+                {
+                    var time = getDateTimeOffset();
+                    var directoryName = time.ToString("yyyy-MM-dd");
+                    return System.IO.Path.Combine(directoryName, directoryName + "T" + time.ToString("HH") + ".composition.jsonl");
+                });
 
             services.AddSingleton<ProcessStore.IProcessStoreReader>(processStore);
             services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);

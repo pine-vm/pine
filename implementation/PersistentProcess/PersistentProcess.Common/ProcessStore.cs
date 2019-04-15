@@ -110,7 +110,7 @@ namespace Kalmit.ProcessStore
 
         public IEnumerable<string> EnumerateCompositionsLogFilesNames() =>
             Directory.Exists(CompositionDirectoryPath) ?
-            CompositionLogFileOrder(Directory.GetFiles(CompositionDirectoryPath)) :
+            CompositionLogFileOrder(Directory.GetFiles(CompositionDirectoryPath, "*", SearchOption.AllDirectories)) :
             (IEnumerable<string>)Array.Empty<string>();
 
         public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
