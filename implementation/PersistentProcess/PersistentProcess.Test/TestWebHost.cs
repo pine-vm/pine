@@ -561,6 +561,60 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void Web_host_propagates_HTTP_headers()
+        {
+            // This name needs to be consistent with the code in Elm app CrossPropagateHttpHeadersToAndFromBody.
+            const string appSpecificHttpResponseHeaderName = "response-header-name";
+
+            using (var testSetup = WebHostTestSetup.Setup(TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody, builder => builder))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    using (var client = server.CreateClient())
+                    {
+                        var requestHeaderValue = "HTTP request header value.";
+                        var requestContentString = "HTTP request content.";
+
+                        const string appSpecificHttpRequestHeaderName = "request-header-name";
+
+                        client.DefaultRequestHeaders.Add(appSpecificHttpRequestHeaderName, WebUtility.UrlEncode(requestHeaderValue));
+
+                        var response = client.PostAsync("", new StringContent(requestContentString)).Result;
+
+                        var responseContentString = response.Content.ReadAsStringAsync().Result;
+
+                        var collectionFromResponseContent =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<Web_host_propagates_HTTP_headers_Response_Entry[]>(
+                                responseContentString);
+
+                        var matchingEntryFromResponseContent =
+                            collectionFromResponseContent
+                            .First(entry => entry.name == appSpecificHttpRequestHeaderName);
+
+                        Assert.AreEqual(
+                            requestHeaderValue,
+                            WebUtility.UrlDecode(matchingEntryFromResponseContent.values.FirstOrDefault()),
+                            "Expect the HTTP request header was propagated to an entry in the response content.");
+
+                        response.Headers.TryGetValues(appSpecificHttpResponseHeaderName, out var appSpecificHttpHeaderValues);
+
+                        Assert.AreEqual(
+                            requestContentString,
+                            WebUtility.UrlDecode(appSpecificHttpHeaderValues?.FirstOrDefault()),
+                            "Expect the HTTP request content was propagated to the response header with name '" + appSpecificHttpResponseHeaderName + "'");
+                    }
+                }
+            }
+        }
+
+        class Web_host_propagates_HTTP_headers_Response_Entry
+        {
+            public string name;
+
+            public string[] values;
+        }
+
         static HttpResponseMessage HttpGetAtRoot(
             Microsoft.AspNetCore.TestHost.TestServer server)
         {

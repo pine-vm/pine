@@ -176,6 +176,14 @@ namespace Kalmit.PersistentProcess.WebHost
                 if (completeHttpResponseResponse != null)
                 {
                     context.Response.StatusCode = completeHttpResponseResponse.completeHttpResponse.response.statusCode;
+
+                    foreach (var headerToAdd in (completeHttpResponseResponse.completeHttpResponse.response.headersToAdd).EmptyIfNull())
+                    {
+                        context.Response.Headers.Add(
+                            headerToAdd.name,
+                            new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values));
+                    }
+
                     await context.Response.WriteAsync(completeHttpResponseResponse.completeHttpResponse.response?.bodyAsString ?? "");
                 }
                 else
@@ -226,6 +234,11 @@ namespace Kalmit.PersistentProcess.WebHost
             string httpRequestId,
             DateTimeOffset time)
         {
+            var httpHeaders =
+                httpContext.Request.Headers
+                .Select(header => new InterfaceToHost.HttpHeader { name = header.Key, values = header.Value.ToArray() })
+                .ToArray();
+
             return new InterfaceToHost.HttpRequestEvent
             {
                 posixTimeMilli = time.ToUnixTimeMilliseconds(),
@@ -242,6 +255,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     method = httpContext.Request.Method,
                     uri = httpContext.Request.GetDisplayUrl(),
                     bodyAsString = new System.IO.StreamReader(httpContext.Request.Body).ReadToEnd(),
+                    headers = httpHeaders,
                 }
             };
         }

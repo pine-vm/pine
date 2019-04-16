@@ -1,4 +1,4 @@
-module StringBuilderWebApp exposing
+module CrossPropagateHttpHeadersToAndFromBody exposing
     ( State
     , deserializeState
     , initState
@@ -9,13 +9,12 @@ module StringBuilderWebApp exposing
     )
 
 import ElmAppInKalmitProcess
-import Json.Decode
 import Json.Encode
 import Platform
 
 
 type alias State =
-    String
+    ()
 
 
 processSerializedEvent : String -> State -> ( State, String )
@@ -28,43 +27,48 @@ processEvent hostEvent stateBefore =
     case hostEvent of
         ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
             let
-                state =
-                    case httpRequestEvent.request.method |> String.toLower of
-                        "get" ->
-                            stateBefore
+                headerToPropagateBody =
+                    { name = "response-header-name"
+                    , values = [ httpRequestEvent.request.bodyAsString |> Maybe.withDefault "" ]
+                    }
 
-                        "post" ->
-                            stateBefore ++ (httpRequestEvent.request.bodyAsString |> Maybe.withDefault "")
-
-                        _ ->
-                            stateBefore
+                responseBody =
+                    httpRequestEvent.request.headers
+                        |> Json.Encode.list
+                            (\requestHeader ->
+                                [ ( "name", requestHeader.name |> Json.Encode.string )
+                                , ( "values", requestHeader.values |> Json.Encode.list Json.Encode.string )
+                                ]
+                                    |> Json.Encode.object
+                            )
+                        |> Json.Encode.encode 0
 
                 httpResponse =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsString = Just state
-                        , headersToAdd = []
+                        , bodyAsString = Just responseBody
+                        , headersToAdd = [ headerToPropagateBody ]
                         }
                     }
                         |> ElmAppInKalmitProcess.CompleteHttpResponse
             in
-            ( state, [ httpResponse ] )
+            ( stateBefore, [ httpResponse ] )
 
 
 serializeState : State -> String
 serializeState =
-    identity
+    always ""
 
 
 deserializeState : String -> State
 deserializeState =
-    identity
+    always ()
 
 
 initState : State
 initState =
-    ""
+    ()
 
 
 

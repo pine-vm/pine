@@ -1,0 +1,9 @@
+{
+    "WithCustomSerialization": {
+        "pathToFileWithElmEntryPoint": "CrossPropagateHttpHeadersToAndFromBody.elm",
+        "pathToInitialStateFunction": "CrossPropagateHttpHeadersToAndFromBody.initState",
+        "pathToSerializedEventFunction": "CrossPropagateHttpHeadersToAndFromBody.processSerializedEvent",
+        "pathToSerializeStateFunction": "CrossPropagateHttpHeadersToAndFromBody.serializeState",
+        "pathToDeserializeStateFunction": "CrossPropagateHttpHeadersToAndFromBody.deserializeState"
+    }
+}

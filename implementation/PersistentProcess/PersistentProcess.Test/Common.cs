@@ -49,7 +49,10 @@ namespace Kalmit.PersistentProcess.Test
         static public ElmAppWithEntryConfig StringBuilderElmWebApp =
             GetElmAppWithEntryConfigFromExampleName("string-builder-webapp");
 
-        static public byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles());
+         static public ElmAppWithEntryConfig CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
+            GetElmAppWithEntryConfigFromExampleName("cross-propagate-http-headers-to-and-from-body");
+
+       static public byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles());
 
         static public ElmAppWithEntryConfig GetElmAppWithEntryConfigFromExampleName(string exampleName) =>
             ElmAppWithEntryConfig.FromFiles(

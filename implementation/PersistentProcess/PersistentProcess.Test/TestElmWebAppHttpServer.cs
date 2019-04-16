@@ -16,6 +16,10 @@ namespace Kalmit.PersistentProcess.Test
             new WebAppConfiguration()
             .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.StringBuilderElmWebApp.AsFiles()));
 
+        static public WebAppConfiguration CrossPropagateHttpHeadersToAndFromBody =>
+            new WebAppConfiguration()
+            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp.AsFiles()));
+
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()
         {

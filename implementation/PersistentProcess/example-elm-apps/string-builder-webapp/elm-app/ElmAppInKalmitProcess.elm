@@ -37,6 +37,7 @@ type alias HttpRequestProperties =
     { method : String
     , uri : String
     , bodyAsString : Maybe String
+    , headers : List HttpHeader
     }
 
 
@@ -54,6 +55,13 @@ type alias HttpResponseResponse =
 type alias HttpResponse =
     { statusCode : Int
     , bodyAsString : Maybe String
+    , headersToAdd : List HttpHeader
+    }
+
+
+type alias HttpHeader =
+    { name : String
+    , values : List String
     }
 
 
@@ -100,10 +108,18 @@ decodeHttpRequestContext =
 
 decodeHttpRequest : Json.Decode.Decoder HttpRequestProperties
 decodeHttpRequest =
-    Json.Decode.map3 HttpRequestProperties
+    Json.Decode.map4 HttpRequestProperties
         (Json.Decode.field "method" Json.Decode.string)
         (Json.Decode.field "uri" Json.Decode.string)
         (decodeOptionalField "bodyAsString" Json.Decode.string)
+        (Json.Decode.field "headers" (Json.Decode.list decodeHttpHeader))
+
+
+decodeHttpHeader : Json.Decode.Decoder HttpHeader
+decodeHttpHeader =
+    Json.Decode.map2 HttpHeader
+        (Json.Decode.field "name" Json.Decode.string)
+        (Json.Decode.field "values" (Json.Decode.list Json.Decode.string))
 
 
 decodeOptionalField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
@@ -152,9 +168,18 @@ encodeHttpResponseResponse httpResponseResponse =
 encodeHttpResponse : HttpResponse -> Json.Encode.Value
 encodeHttpResponse httpResponse =
     [ ( "statusCode", httpResponse.statusCode |> Json.Encode.int |> Just )
+    , ( "headersToAdd", httpResponse.headersToAdd |> Json.Encode.list encodeHttpHeader |> Just )
     , ( "bodyAsString", httpResponse.bodyAsString |> Maybe.map Json.Encode.string )
     ]
         |> filterTakeOnlyWhereTupleSecondNotNothing
+        |> Json.Encode.object
+
+
+encodeHttpHeader : HttpHeader -> Json.Encode.Value
+encodeHttpHeader httpHeader =
+    [ ( "name", httpHeader.name |> Json.Encode.string )
+    , ( "values", httpHeader.values |> Json.Encode.list Json.Encode.string )
+    ]
         |> Json.Encode.object
 
 

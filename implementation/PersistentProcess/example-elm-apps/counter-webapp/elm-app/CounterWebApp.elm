@@ -56,6 +56,7 @@ processEvent hostEvent stateBefore =
                     , response =
                         { statusCode = httpResponseCode
                         , bodyAsString = Just httpResponseBody
+                        , headersToAdd = []
                         }
                     }
                         |> ElmAppInKalmitProcess.CompleteHttpResponse

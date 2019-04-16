@@ -42,6 +42,15 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public string uri;
 
         public string bodyAsString;
+
+        public HttpHeader[] headers;
+    }
+
+    public class HttpHeader
+    {
+        public string name;
+
+        public string[] values;
     }
 
     public class HttpResponseResponse
@@ -56,5 +65,7 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public int statusCode;
 
         public string bodyAsString;
+
+        public HttpHeader[] headersToAdd;
     }
 }
