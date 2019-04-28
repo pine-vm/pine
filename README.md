@@ -1,13 +1,18 @@
 # Kalmit
 
-*Simple Persistent Processes*
+*Simple development and operation of web services*
 
-Kalmit supports modeling a persistent process using the Elm programming language, by providing:
-+ A framework to automatically persist the process state and restore the app state when the server restarts.
-+ A web server to host a persistent process as a web service:
-  + HTTP requests and responses are mapped to Elm types.
-  + Admin interface to read and set the process state.
-  + Additional common functionality like Let's Encrypt, static files, rate-limiting, CORS.
+Implement your web service the simple way, using the [Elm programming language](https://elm-lang.org):
+
++ Don't worry about connecting to a database or losing application state: The runtime persists each `update` so the app state can be restored. To learn more about this feature, see the [guide on persistence in Kalmit](./guide/persistence-in-kalmit.md)
++ HTTP requests and responses are mapped to Elm types so that you can work with a strongly typed interface.
+
+To help you with the operation side, the Kalmit web host supports configuring common functionality:
+
++ Admin interface to read and set the app state, in case you want to manually intervene or monitor.
++ Automatically get and renew SSL certificates from Let's Encrypt.
++ Rate-limit client HTTP requests which result in updates of your app.
++ Serve static files on selected paths.
 
 ## Configure & Deploy
 
@@ -15,7 +20,7 @@ See the guide on [how to configure and deploy your web app](guide/how-to-configu
 
 ## Support
 
-Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issues), [twitter](https://twitter.com/michael_raetzel) or [email](mailto:Michael@michaelrätzel.com).
+Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issues), [twitter](https://twitter.com/michael_raetzel) or [email](mailto:michael@michaelrätzel.com).
 
 ## Roadmap
 
