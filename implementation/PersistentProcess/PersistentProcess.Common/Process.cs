@@ -28,12 +28,12 @@ namespace Kalmit
     {
     }
 
-    class ProcessWithCustomSerializationHostedWithPuppeteer : IDisposableProcessWithCustomSerialization
+    class ProcessWithCustomSerializationHostedWithChakraCore : IDisposableProcessWithCustomSerialization
     {
         readonly IJsEngine javascriptEngine;
 
 
-        public ProcessWithCustomSerializationHostedWithPuppeteer(string javascriptPreparedToRun)
+        public ProcessWithCustomSerializationHostedWithChakraCore(string javascriptPreparedToRun)
         {
             javascriptEngine = new ChakraCoreJsEngine(
                 new ChakraCoreSettings
@@ -127,7 +127,7 @@ namespace Kalmit
                     entryConfig.pathToSerializeStateFunction,
                     entryConfig.pathToDeserializeStateFunction);
 
-            return new ProcessWithCustomSerializationHostedWithPuppeteer(javascriptPreparedToRun);
+            return new ProcessWithCustomSerializationHostedWithChakraCore(javascriptPreparedToRun);
         }
 
         static string CompileElmToJavascript(
