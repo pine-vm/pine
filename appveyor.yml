@@ -9,13 +9,13 @@ build_script:
 - cmd: >-
     dotnet --version
 
-    dotnet restore ./implementation/PersistentProcess/PersistentProcess.Common/PersistentProcess.Common.csproj --verbosity m
+    dotnet restore ./implement/PersistentProcess/PersistentProcess.Common/PersistentProcess.Common.csproj --verbosity m
 
-    dotnet publish ./implementation/PersistentProcess/PersistentProcess.Common/PersistentProcess.Common.csproj
+    dotnet publish ./implement/PersistentProcess/PersistentProcess.Common/PersistentProcess.Common.csproj
 test_script:
 - cmd: >-
-    dotnet restore ./implementation/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --verbosity m
+    dotnet restore ./implement/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --verbosity m
 
-    cd implementation/PersistentProcess/PersistentProcess.Test
+    cd implement/PersistentProcess/PersistentProcess.Test
 
     dotnet test --test-adapter-path:. --logger:Appveyor
