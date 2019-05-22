@@ -38,7 +38,7 @@ namespace Kalmit.PersistentProcess.Test
         static public Kalmit.IDisposableProcessWithCustomSerialization BuildInstanceOfCounterProcess() =>
             Kalmit.ProcessFromElm019Code.WithCustomSerialization(
                 CounterElmApp.ElmAppFiles,
-                CounterElmApp.EntryConfig.Value.WithCustomSerialization.Value);
+                CounterElmApp.EntryConfig.Value.WithCustomSerialization.Value).process;
 
         static ElmAppWithEntryConfig CounterElmApp =
             GetElmAppWithEntryConfigFromExampleName("counter");

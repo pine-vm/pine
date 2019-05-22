@@ -113,7 +113,9 @@ namespace Kalmit
 
     public class ProcessFromElm019Code
     {
-        static public IDisposableProcessWithCustomSerialization WithCustomSerialization(
+        static public (IDisposableProcessWithCustomSerialization process,
+            (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
+            WithCustomSerialization(
             IReadOnlyCollection<(string, byte[])> elmCodeFiles,
             ElmAppEntryConfig.ElmAppEntryConfigWithCustomSerialization entryConfig)
         {
@@ -127,7 +129,9 @@ namespace Kalmit
                     entryConfig.pathToSerializeStateFunction,
                     entryConfig.pathToDeserializeStateFunction);
 
-            return new ProcessWithCustomSerializationHostedWithChakraCore(javascriptPreparedToRun);
+            return
+                (new ProcessWithCustomSerializationHostedWithChakraCore(javascriptPreparedToRun),
+                (javascriptFromElmMake, javascriptPreparedToRun));
         }
 
         static string CompileElmToJavascript(

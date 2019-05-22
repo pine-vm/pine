@@ -29,6 +29,10 @@ namespace Kalmit.PersistentProcess
 
         IDisposableProcessWithCustomSerialization process;
 
+        public readonly string JavascriptFromElmMake;
+
+        public readonly string JavascriptPreparedToRun;
+
         public PersistentProcessWithHistoryOnFileFromElm019Code(
             IProcessStoreReader storeReader,
             byte[] elmAppFile)
@@ -36,7 +40,7 @@ namespace Kalmit.PersistentProcess
             var elmApp =
                 ElmAppWithEntryConfig.FromFiles(ZipArchive.EntriesFromZipArchive(elmAppFile).ToImmutableList());
 
-            process =
+            (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
                 ProcessFromElm019Code.WithCustomSerialization(
                 elmApp.ElmAppFiles,
                 elmApp.EntryConfig.Value.WithCustomSerialization.Value);

@@ -19,7 +19,7 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var process = Kalmit.ProcessFromElm019Code.WithCustomSerialization(
                 elmCodeFiles: elmApp.ElmAppFiles,
-                entryConfig: elmApp.EntryConfig.Value.WithCustomSerialization.Value))
+                entryConfig: elmApp.EntryConfig.Value.WithCustomSerialization.Value).process)
             {
                 var response = process.ProcessEvent("Hello!");
 
