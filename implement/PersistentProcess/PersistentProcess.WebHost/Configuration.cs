@@ -28,6 +28,16 @@ namespace Kalmit.PersistentProcess.WebHost
             string processStoreDirectoryPath) =>
             orig.UseSetting(ProcessStoreDirectoryPathSettingKey, processStoreDirectoryPath);
 
+        static public IWebHostBuilder WithSettingProcessStoreDirectoryPathDefault(
+            this IWebHostBuilder orig,
+            string processStoreDirectoryPathDefault)
+        {
+            if (0 < orig.GetSetting(ProcessStoreDirectoryPathSettingKey)?.Length)
+                return orig;
+
+            return orig.UseSetting(ProcessStoreDirectoryPathSettingKey, processStoreDirectoryPathDefault);
+        }
+
         static public IWebHostBuilder WithSettingWebAppConfigurationFilePath(
             this IWebHostBuilder orig,
             string webAppConfigurationFilePath) =>

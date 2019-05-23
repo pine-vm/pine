@@ -38,7 +38,8 @@ namespace Kalmit.PersistentProcess
             byte[] elmAppFile)
         {
             var elmApp =
-                ElmAppWithEntryConfig.FromFiles(ZipArchive.EntriesFromZipArchive(elmAppFile).ToImmutableList());
+                ElmAppWithEntryConfig.FromFilesFilteredForElmApp(
+                    ZipArchive.EntriesFromZipArchive(elmAppFile).ToImmutableList());
 
             (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
                 ProcessFromElm019Code.WithCustomSerialization(

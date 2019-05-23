@@ -17,7 +17,7 @@ namespace Kalmit
 
         const string elmAppFilesDirectory = "elm-app";
 
-        static public ElmAppWithEntryConfig FromFiles(IReadOnlyCollection<(string name, byte[] content)> files)
+        static public ElmAppWithEntryConfig FromFilesFilteredForElmApp(IReadOnlyCollection<(string name, byte[] content)> files)
         {
             var entryConfigFile =
                 files.FirstOrDefault(file => String.Equals(file.name, entryConfigFileName, StringComparison.InvariantCultureIgnoreCase));
