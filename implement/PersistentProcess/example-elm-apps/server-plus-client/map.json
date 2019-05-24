@@ -1,0 +1,8 @@
+{
+    "mapsFromRequestUrlToStaticFileName": [
+        {
+            "matchingRegexPattern": "^.*//[^/]+(|/(?!api/).*)$",
+            "resultString": "client.html"
+        }
+    ]
+}

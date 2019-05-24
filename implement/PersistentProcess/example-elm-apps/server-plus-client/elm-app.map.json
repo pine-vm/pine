@@ -1,0 +1,9 @@
+{
+    "WithCustomSerialization": {
+        "pathToFileWithElmEntryPoint": "src/Server/Main.elm",
+        "pathToInitialStateFunction": "Main.interfaceToHost_initState",
+        "pathToSerializedEventFunction": "Main.interfaceToHost_processEvent",
+        "pathToSerializeStateFunction": "Main.interfaceToHost_serializeState",
+        "pathToDeserializeStateFunction": "Main.interfaceToHost_deserializeState"
+    }
+}

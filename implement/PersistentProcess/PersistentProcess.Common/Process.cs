@@ -136,10 +136,19 @@ namespace Kalmit
 
         static string CompileElmToJavascript(
             IReadOnlyCollection<(string, byte[])> elmCodeFiles,
-            string pathToFileWithElmEntryPoint)
-        {
-            var outputFileName = "file-for-elm-make-output.js";
+            string pathToFileWithElmEntryPoint) =>
+            CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js");
 
+        static public string CompileElmToHtml(
+            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            string pathToFileWithElmEntryPoint) =>
+            CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html");
+
+        static string CompileElm(
+            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            string pathToFileWithElmEntryPoint,
+            string outputFileName)
+        {
             var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\"";
 
             var commandResults = ExecutableFile.ExecuteFileWithArguments(

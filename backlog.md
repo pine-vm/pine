@@ -2,7 +2,6 @@
 
 ### Integration Development
 
-+ Add a CLI to support starting a web host by automatically compiling the web app config from local files. Support specifying client app, server app and optionally a `map.json`. (Use case from [explore/2019-05-08.migrating-drts-game-to-kalmit](./explore/2019-05-08.migrating-drts-game-to-kalmit/2019-05-08.migrating-drts-game-to-kalmit.md))
 + Expand the interface between host and Elm app to support sending HTTP requests and receiving HTTP responses. (Use case from [explore/2019-05-08.migrating-drts-game-to-kalmit](./explore/2019-05-08.migrating-drts-game-to-kalmit/2019-05-08.migrating-drts-game-to-kalmit.md))
 + Automate boring tasks: Support deriving the functions for serializing and deserializing from the app state Elm type. This depends on parsing imports, types and aliases from modules. How does this work with types the original Elm app code does not export from the defining module (opaque types)?
 + Support [function-level dead code elimination](https://elm-lang.org/blog/small-assets-without-the-headache): Generate the Elm code needed to inform the Elm compiler about our entry points.
@@ -22,3 +21,4 @@
 Ensure people can easily understand for a given change how well it would fit into the project:
 
 + Increase test coverage: The process store can reliably model values as offered on the interface. (E.g. line-breaks (or similar UTF sequences) in the serialized event do not damage the composition store)
++ Add an automated test for using the CLI to build a web app configuration from local files.
