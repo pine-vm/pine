@@ -11,7 +11,9 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     static public class BuildConfigurationFromArguments
     {
-        public const string ClientHtmlStaticFileName = "client.html";
+        public const string FrontendWebStaticFileName = "FrontendWeb.html";
+
+        public const string ElmAppSubdirectoryName = "elm-app";
 
         static public IWebHostBuilder BuildConfiguration(
             this IWebHostBuilder webHostBuilder,
@@ -23,13 +25,13 @@ namespace Kalmit.PersistentProcess.WebHost
                 .FirstOrDefault(match => match.Success)
                 ?.Groups[1].Value;
 
-            var clientAppSource = argumentValueFromParameterName("--client-app-source");
+            var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
 
             var currentDirectory = Environment.CurrentDirectory;
 
             Console.WriteLine(
                 "I build the configuration before starting the server. The currentDirectory is '" +
-                currentDirectory + "', clientAppSource is '" + clientAppSource + "'.");
+                currentDirectory + "', frontendWebElmSource is '" + frontendWebElmSource + "'.");
 
             var tempConfigDirectory = Path.Combine(currentDirectory, ".kalmit", "temp-config");
             var webAppConfigFilePath = Path.Combine(tempConfigDirectory, "web-app-config.zip");
@@ -42,55 +44,49 @@ namespace Kalmit.PersistentProcess.WebHost
             //  Provide a default location for the process store, which can be overridden.
             webHostBuilder.WithSettingProcessStoreDirectoryPathDefault(processStoreDirectoryPathDefault);
 
-            var serverElmAppFiles =
-                ElmAppWithEntryConfig
-                .FromFilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(currentDirectory))
-                .AsFiles();
+            var elmAppFiles =
+                ElmApp
+                .FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName)))
+                .ToImmutableList();
 
-            Console.WriteLine("I found " + serverElmAppFiles.Count + " Elm app files to build the server app.");
+            Console.WriteLine("I found " + elmAppFiles.Count + " files to build the Elm app.");
 
-            byte[] clientElmApp = null;
+            byte[] frontendWebFile = null;
 
-            if (0 < clientAppSource?.Length)
+            if (0 < frontendWebElmSource?.Length)
             {
-                var clientElmAppSearchBegin =
-                    Path.IsPathRooted(clientAppSource) ? clientAppSource : Path.Combine(currentDirectory, clientAppSource);
+                var frontendWebElmSearchBegin =
+                    Path.IsPathRooted(frontendWebElmSource) ? frontendWebElmSource :
+                    Path.Combine(currentDirectory, frontendWebElmSource);
 
-                Console.WriteLine("I begin to search for an Elm app at '" + clientElmAppSearchBegin + "'.");
+                Console.WriteLine("I begin to search for an Elm app at '" + frontendWebElmSearchBegin + "'.");
 
-                var clientElmAppRootDirectory = FindDirectoryUpwardContainingElmJson(clientElmAppSearchBegin);
+                var frontendWebElmAppRootDirectory = FindDirectoryUpwardContainingElmJson(frontendWebElmSearchBegin);
 
-                if (clientElmAppRootDirectory == null)
+                if (frontendWebElmAppRootDirectory == null)
                 {
-                    var errorMessage = "I did not find a directory containing the client Elm app.";
+                    var errorMessage = "I did not find a directory containing the frontend Elm app.";
                     Console.WriteLine(errorMessage);
                     throw new ArgumentException(errorMessage);
                 }
 
-                Console.WriteLine("I found an Elm app in directory '" + clientElmAppRootDirectory + "'.");
+                Console.WriteLine("I found an Elm app in directory '" + frontendWebElmAppRootDirectory + "'.");
 
-                var clientAppSourceFileName = Path.GetFileName(clientAppSource);
+                var frontendWebElmSourceFileName = Path.GetFileName(frontendWebElmSource);
 
-                var clientElmCodeFiles =
-                    ElmAppWithEntryConfig
-                    .FromFilesFilteredForElmApp(
-                        Filesystem.GetAllFilesFromDirectory(clientElmAppRootDirectory)
-                        .Select(file => ("elm-app/" + file.name, file.content))
-                        .ToImmutableList())
-                    .AsFiles()
-                    .Select(file => (name: file.name.Substring(8), file.content))
+                var frontendWebElmCodeFiles =
+                    ElmApp
+                    .FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(frontendWebElmAppRootDirectory))
                     .ToImmutableList();
 
-                Console.WriteLine("I found " + clientElmCodeFiles.Count + " Elm app files to build the client app.");
+                Console.WriteLine("I found " + frontendWebElmCodeFiles.Count + " files to build the frontent Elm app.");
 
                 var pathToEntryPointFile =
-                    clientElmCodeFiles
-                    .Select(file => file.name)
-                    .FirstOrDefault(candidate => Path.GetFileName(candidate) == clientAppSourceFileName);
+                    Path.GetRelativePath(frontendWebElmAppRootDirectory, frontendWebElmSearchBegin);
 
-                var clientHtml = ProcessFromElm019Code.CompileElmToHtml(clientElmCodeFiles, pathToEntryPointFile);
+                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(frontendWebElmCodeFiles, pathToEntryPointFile);
 
-                clientElmApp = Encoding.UTF8.GetBytes(clientHtml);
+                frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);
             }
 
             WebAppConfigurationMap map = null;
@@ -111,13 +107,13 @@ namespace Kalmit.PersistentProcess.WebHost
             }
 
             var staticFiles =
-                clientElmApp == null ?
+                frontendWebFile == null ?
                 Array.Empty<(string name, byte[] content)>() :
-                new[] { (name: ClientHtmlStaticFileName, clientElmApp) };
+                new[] { (name: FrontendWebStaticFileName, frontendWebFile) };
 
             var webAppConfig =
                 new WebAppConfiguration()
-                .WithElmApp(ZipArchive.ZipArchiveFromEntries(serverElmAppFiles))
+                .WithElmApp(ZipArchive.ZipArchiveFromEntries(elmAppFiles))
                 .WithStaticFiles(staticFiles)
                 .WithMap(map);
 

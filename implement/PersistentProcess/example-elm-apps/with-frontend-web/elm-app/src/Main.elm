@@ -8,10 +8,10 @@ module Main exposing
     , processEvent
     )
 
+import ElmAppInKalmitProcess
 import Json.Decode
 import Json.Encode
 import Platform
-import Server.ElmAppInKalmitProcess as ElmAppInKalmitProcess
 
 
 type alias State =

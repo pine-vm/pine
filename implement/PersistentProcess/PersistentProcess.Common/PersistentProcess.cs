@@ -27,7 +27,7 @@ namespace Kalmit.PersistentProcess
 
         byte[] lastStateHash;
 
-        IDisposableProcessWithCustomSerialization process;
+        IDisposableProcessWithStringInterface process;
 
         public readonly string JavascriptFromElmMake;
 
@@ -37,14 +37,11 @@ namespace Kalmit.PersistentProcess
             IProcessStoreReader storeReader,
             byte[] elmAppFile)
         {
-            var elmApp =
-                ElmAppWithEntryConfig.FromFilesFilteredForElmApp(
-                    ZipArchive.EntriesFromZipArchive(elmAppFile).ToImmutableList());
+            var elmAppFiles =
+                ElmApp.FilesFilteredForElmApp(ZipArchive.EntriesFromZipArchive(elmAppFile)).ToImmutableList();
 
             (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
-                ProcessFromElm019Code.WithCustomSerialization(
-                elmApp.ElmAppFiles,
-                elmApp.EntryConfig.Value.WithCustomSerialization.Value);
+                ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles);
 
             var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(new byte[0]);
 
@@ -127,7 +124,7 @@ namespace Kalmit.PersistentProcess
             if (compositionChain.Any())
                 throw new NotImplementedException(
                     "I did not find a reduction for any composition on the chain to the last composition (" +
-                    JsonConvert.SerializeObject(compositionChain.Last().hash) +
+                    CommonConversion.StringBase16FromByteArray(compositionChain.Last().hash) +
                     ").");
 
             lastStateHash = emptyInitHash;
@@ -201,7 +198,7 @@ namespace Kalmit.PersistentProcess
         }
     }
 
-    public class PersistentProcessWithControlFlowOverStoreWriter : IDisposableProcessWithCustomSerialization
+    public class PersistentProcessWithControlFlowOverStoreWriter : IDisposableProcessWithStringInterface
     {
         IPersistentProcess process;
 

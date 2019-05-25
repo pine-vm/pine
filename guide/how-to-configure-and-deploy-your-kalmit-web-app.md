@@ -10,43 +10,35 @@ The general structure of `web-app-config.zip` is as follows:
 
 ```
 web-app-config.zip
-+-- map.json
 +-- elm-app.zip
++-- (Optional) map.json
 +-- (Optional) static-files
 ```
 
 ### `map.json`
 
-The `map.json` file is where you can add configuration for Let's Encrypt, rate-limiting and other features.
-Since all of these features are optional to use, in the simplest case, it only contains an empty json object:
-```json
-{
-}
-```
+The `map.json` file is where you can add configuration for Let's Encrypt, rate-limiting, and other features.
+Since all of these features are optional to use, in the simplest case, this file is not present at all.
 
 ### `elm-app.zip`
 
 ```
 elm-app.zip
-+-- elm-app.map.json
-+-- elm-app
-    +-- elm.json
++-- elm.json
++-- src
+    +-- Main.elm
     +-- ElmAppInKalmitProcess.elm
-    +-- Your Elm Files
+    +-- Other Elm files...
 ```
 
-The Elm app is contained in the `elm-app` directory in the `elm-app.zip` archive. At the root level, the archive contains the `elm-app.map.json` file to tell the framework which functions in your elm app to use. It looks like this:
-```json
-{
-    "WithCustomSerialization": {
-        "pathToFileWithElmEntryPoint": "DefaultWebApp.elm",
-        "pathToInitialStateFunction": "DefaultWebApp.initState",
-        "pathToSerializedEventFunction": "DefaultWebApp.processSerializedEvent",
-        "pathToSerializeStateFunction": "DefaultWebApp.serializeState",
-        "pathToDeserializeStateFunction": "DefaultWebApp.deserializeState"
-    }
-}
-```
+The Elm app is contained in the `elm-app.zip` archive. At the root level, this ZIP archive contains the `elm.json` file. The module containing the app is expected at `src/Main.elm`. The `Main` Elm module needs to contain the following functions:
+
++ `interfaceToHost_processEvent : String -> State -> ( State, String )`
++ `interfaceToHost_initState : State`
++ `interfaceToHost_serializeState : State -> String`
++ `interfaceToHost_deserializeState : String -> State`
+
+An example of a `Main` module can be seen in this example app at [implement/PersistentProcess/example-elm-apps/with-frontend-web/elm-app/src/Main.elm](./../implement/PersistentProcess/example-elm-apps/with-frontend-web/elm-app/src/Main.elm)
 
 ## Deploy Using Docker
 

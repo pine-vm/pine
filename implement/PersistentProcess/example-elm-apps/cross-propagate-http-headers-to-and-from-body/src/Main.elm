@@ -1,11 +1,11 @@
-module CrossPropagateHttpHeadersToAndFromBody exposing
+module Main exposing
     ( State
-    , deserializeState
-    , initState
+    , interfaceToHost_deserializeState
+    , interfaceToHost_initState
+    , interfaceToHost_processEvent
+    , interfaceToHost_serializeState
     , main
     , processEvent
-    , processSerializedEvent
-    , serializeState
     )
 
 import ElmAppInKalmitProcess
@@ -15,11 +15,6 @@ import Platform
 
 type alias State =
     ()
-
-
-processSerializedEvent : String -> State -> ( State, String )
-processSerializedEvent =
-    ElmAppInKalmitProcess.wrapUpdateForSerialInterface processEvent
 
 
 processEvent : ElmAppInKalmitProcess.KalmitProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.KalmitProcessResponse )
@@ -56,19 +51,24 @@ processEvent hostEvent stateBefore =
             ( stateBefore, [ httpResponse ] )
 
 
-serializeState : State -> String
-serializeState =
+interfaceToHost_serializeState : State -> String
+interfaceToHost_serializeState =
     always ""
 
 
-deserializeState : String -> State
-deserializeState =
+interfaceToHost_deserializeState : String -> State
+interfaceToHost_deserializeState =
     always ()
 
 
-initState : State
-initState =
+interfaceToHost_initState : State
+interfaceToHost_initState =
     ()
+
+
+interfaceToHost_processEvent : String -> State -> ( State, String )
+interfaceToHost_processEvent =
+    ElmAppInKalmitProcess.wrapUpdateForSerialInterface processEvent
 
 
 
@@ -78,9 +78,9 @@ initState =
 main : Program Int State String
 main =
     Platform.worker
-        { init = \_ -> ( initState, Cmd.none )
+        { init = \_ -> ( interfaceToHost_initState, Cmd.none )
         , update =
             \event stateBefore ->
-                processSerializedEvent event (stateBefore |> serializeState |> deserializeState) |> Tuple.mapSecond (always Cmd.none)
+                interfaceToHost_processEvent event (stateBefore |> interfaceToHost_serializeState |> interfaceToHost_deserializeState) |> Tuple.mapSecond (always Cmd.none)
         , subscriptions = \_ -> Sub.none
         }

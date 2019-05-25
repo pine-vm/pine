@@ -1,9 +1,0 @@
-{
-    "WithCustomSerialization": {
-        "pathToFileWithElmEntryPoint": "StringBuilderWebApp.elm",
-        "pathToInitialStateFunction": "StringBuilderWebApp.initState",
-        "pathToSerializedEventFunction": "StringBuilderWebApp.processSerializedEvent",
-        "pathToSerializeStateFunction": "StringBuilderWebApp.serializeState",
-        "pathToDeserializeStateFunction": "StringBuilderWebApp.deserializeState"
-    }
-}

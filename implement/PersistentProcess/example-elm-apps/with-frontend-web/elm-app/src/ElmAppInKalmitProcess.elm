@@ -1,4 +1,4 @@
-module Server.ElmAppInKalmitProcess exposing
+module ElmAppInKalmitProcess exposing
     ( HttpRequestContext
     , HttpRequestEvent
     , HttpResponse

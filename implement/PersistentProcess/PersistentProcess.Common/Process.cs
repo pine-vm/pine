@@ -20,20 +20,20 @@ namespace Kalmit
         string SetSerializedState(string serializedState);
     }
 
-    public interface IProcessWithCustomSerialization : IProcess<string, string>
+    public interface IProcessWithStringInterface : IProcess<string, string>
     {
     }
 
-    public interface IDisposableProcessWithCustomSerialization : IProcessWithCustomSerialization, IDisposable
+    public interface IDisposableProcessWithStringInterface : IProcessWithStringInterface, IDisposable
     {
     }
 
-    class ProcessWithCustomSerializationHostedWithChakraCore : IDisposableProcessWithCustomSerialization
+    class ProcessHostedWithChakraCore : IDisposableProcessWithStringInterface
     {
         readonly IJsEngine javascriptEngine;
 
 
-        public ProcessWithCustomSerializationHostedWithChakraCore(string javascriptPreparedToRun)
+        public ProcessHostedWithChakraCore(string javascriptPreparedToRun)
         {
             javascriptEngine = new ChakraCoreJsEngine(
                 new ChakraCoreSettings
@@ -95,42 +95,25 @@ namespace Kalmit
         }
     }
 
-    public struct ElmAppEntryConfig
-    {
-        //  This provides information about entry points in the elm app relative to the files which make up the elm app.
-
-        public ElmAppEntryConfigWithCustomSerialization? WithCustomSerialization;
-
-        public struct ElmAppEntryConfigWithCustomSerialization
-        {
-            public string pathToFileWithElmEntryPoint;
-            public string pathToInitialStateFunction;
-            public string pathToSerializedEventFunction;
-            public string pathToSerializeStateFunction;
-            public string pathToDeserializeStateFunction;
-        }
-    }
-
     public class ProcessFromElm019Code
     {
-        static public (IDisposableProcessWithCustomSerialization process,
+        static public (IDisposableProcessWithStringInterface process,
             (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
-            WithCustomSerialization(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
-            ElmAppEntryConfig.ElmAppEntryConfigWithCustomSerialization entryConfig)
+            ProcessFromElmCodeFiles(
+            IReadOnlyCollection<(string, byte[])> elmCodeFiles)
         {
-            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, entryConfig.pathToFileWithElmEntryPoint);
+            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, ElmAppInterfaceConfig.PathToFileWithElmEntryPoint);
 
             var javascriptPreparedToRun =
                 BuildAppJavascript(
                     javascriptFromElmMake,
-                    entryConfig.pathToSerializedEventFunction,
-                    entryConfig.pathToInitialStateFunction,
-                    entryConfig.pathToSerializeStateFunction,
-                    entryConfig.pathToDeserializeStateFunction);
+                    ElmAppInterfaceConfig.PathToSerializedEventFunction,
+                    ElmAppInterfaceConfig.PathToInitialStateFunction,
+                    ElmAppInterfaceConfig.PathToSerializeStateFunction,
+                    ElmAppInterfaceConfig.PathToDeserializeStateFunction);
 
             return
-                (new ProcessWithCustomSerializationHostedWithChakraCore(javascriptPreparedToRun),
+                (new ProcessHostedWithChakraCore(javascriptPreparedToRun),
                 (javascriptFromElmMake, javascriptPreparedToRun));
         }
 
@@ -341,12 +324,6 @@ namespace Kalmit
 
         static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
             "author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
-
-        static public bool FilePathMatchesPatternOfFilesInElmApp(string filePath) =>
-            Regex.IsMatch(
-                Path.GetFileName(filePath),
-                "(^" + Regex.Escape("elm.json") + "|" + Regex.Escape(".elm") + ")$",
-                RegexOptions.IgnoreCase);
 
         static string elmHomeDirectory;
 

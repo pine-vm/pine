@@ -15,11 +15,10 @@ namespace Kalmit.PersistentProcess.Test
         [TestMethod]
         public void Get_echo_from_elm_process()
         {
-            var elmApp = TestSetup.GetElmAppWithEntryConfigFromExampleName("echo");
+            var elmApp = TestSetup.GetElmAppFromExampleName("echo");
 
-            using (var process = Kalmit.ProcessFromElm019Code.WithCustomSerialization(
-                elmCodeFiles: elmApp.ElmAppFiles,
-                entryConfig: elmApp.EntryConfig.Value.WithCustomSerialization.Value).process)
+            using (var process = Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(
+                elmCodeFiles: elmApp).process)
             {
                 var response = process.ProcessEvent("Hello!");
 
@@ -88,7 +87,7 @@ namespace Kalmit.PersistentProcess.Test
                         (-10, -6),
                     }).ToList();
 
-            IDisposableProcessWithCustomSerialization InstantiatePersistentProcess()
+            IDisposableProcessWithStringInterface InstantiatePersistentProcess()
             {
                 var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory, null);
 
@@ -302,7 +301,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         static void AssertProcessRestoresStateWithSequenceOfEventsAndExpectedResponses(
-            Func<Kalmit.IDisposableProcessWithCustomSerialization> buildNewProcessInstance,
+            Func<Kalmit.IDisposableProcessWithStringInterface> buildNewProcessInstance,
             IEnumerable<(string serializedEvent, string expectedResponse)> eventsAndExpectedResponses)
         {
             using (var baseProcess = buildNewProcessInstance())

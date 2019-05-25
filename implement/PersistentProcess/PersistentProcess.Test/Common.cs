@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using Kalmit.ProcessStore;
@@ -35,28 +36,28 @@ namespace Kalmit.PersistentProcess.Test
             return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
         }
 
-        static public Kalmit.IDisposableProcessWithCustomSerialization BuildInstanceOfCounterProcess() =>
-            Kalmit.ProcessFromElm019Code.WithCustomSerialization(
-                CounterElmApp.ElmAppFiles,
-                CounterElmApp.EntryConfig.Value.WithCustomSerialization.Value).process;
+        static public Kalmit.IDisposableProcessWithStringInterface BuildInstanceOfCounterProcess() =>
+            Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(CounterElmApp).process;
 
-        static ElmAppWithEntryConfig CounterElmApp =
-            GetElmAppWithEntryConfigFromExampleName("counter");
+        static IReadOnlyCollection<(string filePath, byte[] fileContent)> CounterElmApp =
+            GetElmAppFromExampleName("counter");
 
-        static public ElmAppWithEntryConfig CounterElmWebApp =
-            GetElmAppWithEntryConfigFromExampleName("counter-webapp");
+        static public IReadOnlyCollection<(string filePath, byte[] fileContent)> CounterElmWebApp =
+            GetElmAppFromExampleName("counter-webapp");
 
-        static public ElmAppWithEntryConfig StringBuilderElmWebApp =
-            GetElmAppWithEntryConfigFromExampleName("string-builder-webapp");
+        static public IReadOnlyCollection<(string filePath, byte[] fileContent)> StringBuilderElmWebApp =
+            GetElmAppFromExampleName("string-builder-webapp");
 
-        static public ElmAppWithEntryConfig CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
-           GetElmAppWithEntryConfigFromExampleName("cross-propagate-http-headers-to-and-from-body");
+        static public IReadOnlyCollection<(string filePath, byte[] fileContent)> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
+           GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
 
-        static public byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp.AsFiles());
+        static public byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp);
 
-        static public ElmAppWithEntryConfig GetElmAppWithEntryConfigFromExampleName(string exampleName) =>
-            ElmAppWithEntryConfig.FromFilesFilteredForElmApp(
-                Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)));
+        static public IReadOnlyCollection<(string filePath, byte[] fileContent)> GetElmAppFromExampleName(
+            string exampleName) =>
+            ElmApp.FilesFilteredForElmApp(
+                Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
+            .ToImmutableList();
 
         static public IProcessStoreReader EmptyProcessStoreReader() =>
             new ProcessStoreReaderFromDelegates

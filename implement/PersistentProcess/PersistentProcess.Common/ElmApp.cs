@@ -1,64 +1,34 @@
-using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json;
 
 namespace Kalmit
 {
-    public class ElmAppWithEntryConfig
+    public struct ElmAppInterfaceConfig
     {
-        public ElmAppEntryConfig? EntryConfig;
+        public const string PathToFileWithElmEntryPoint = "src/Main.elm";
 
-        public IReadOnlyCollection<(string filePath, byte[] fileContent)> ElmAppFiles;
+        public const string PathToInitialStateFunction = "Main.interfaceToHost_initState";
 
-        const string entryConfigFileName = "elm-app.map.json";
+        public const string PathToSerializedEventFunction = "Main.interfaceToHost_processEvent";
 
-        const string elmAppFilesDirectory = "elm-app";
+        public const string PathToSerializeStateFunction = "Main.interfaceToHost_serializeState";
 
-        static public ElmAppWithEntryConfig FromFilesFilteredForElmApp(IReadOnlyCollection<(string name, byte[] content)> files)
-        {
-            var entryConfigFile =
-                files.FirstOrDefault(file => String.Equals(file.name, entryConfigFileName, StringComparison.InvariantCultureIgnoreCase));
+        public const string PathToDeserializeStateFunction = "Main.interfaceToHost_deserializeState";
+    }
 
-            var entryConfig =
-                entryConfigFile.content == null ? (ElmAppEntryConfig?)null
-                : JsonConvert.DeserializeObject<ElmAppEntryConfig>(Encoding.UTF8.GetString(entryConfigFile.content));
+    public class ElmApp
+    {
+        static public bool FilePathMatchesPatternOfFilesInElmApp(string filePath) =>
+            Regex.IsMatch(
+                Path.GetFileName(filePath),
+                "(^" + Regex.Escape("elm.json") + "|" + Regex.Escape(".elm") + ")$",
+                RegexOptions.IgnoreCase);
 
-            var codeFiles =
-                files.Select(file =>
-                {
-                    var codeFilePath = Regex.Match(file.name, elmAppFilesDirectory + @"(\\|\/)(.+)", RegexOptions.IgnoreCase);
-
-                    if (!codeFilePath.Success)
-                        return (null, null);
-
-                    return (name: codeFilePath.Groups[2].Value, file.content);
-                })
-                .Where(file => 0 < file.name?.Length && ProcessFromElm019Code.FilePathMatchesPatternOfFilesInElmApp(file.name))
-                .ToList();
-
-            return new ElmAppWithEntryConfig
-            {
-                EntryConfig = entryConfig,
-                ElmAppFiles = codeFiles,
-            };
-        }
-
-        public IReadOnlyCollection<(string name, byte[] content)> AsFiles()
-        {
-            var entryConfigFiles =
-                new[] { EntryConfig }
-                .WhereHasValue()
-                .Select(entryConfig =>
-                    (entryConfigFileName, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(entryConfig))));
-
-            var elmAppFiles =
-                ElmAppFiles
-                ?.Select(appFile => (elmAppFilesDirectory + @"\" + appFile.filePath, appFile.fileContent));
-
-            return (elmAppFiles.EmptyIfNull()).Concat(entryConfigFiles).ToList();
-        }
+        static public IEnumerable<(string filePath, byte[] fileContent)> FilesFilteredForElmApp(
+            IEnumerable<(string filePath, byte[] fileContent)> files) =>
+            files
+            .Where(file => 0 < file.filePath?.Length && FilePathMatchesPatternOfFilesInElmApp(file.filePath));
     }
 }
