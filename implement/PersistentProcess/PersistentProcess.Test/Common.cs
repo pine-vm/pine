@@ -1,9 +1,9 @@
+using Kalmit.ProcessStore;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using Kalmit.ProcessStore;
 
 namespace Kalmit.PersistentProcess.Test
 {
@@ -50,6 +50,9 @@ namespace Kalmit.PersistentProcess.Test
 
         static public IReadOnlyCollection<(string filePath, byte[] fileContent)> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
            GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
+
+        static public IReadOnlyCollection<(string filePath, byte[] fileContent)> HttpProxyWebApp =
+           GetElmAppFromExampleName("http-proxy");
 
         static public byte[] CounterElmAppFile => ZipArchive.ZipArchiveFromEntries(CounterElmApp);
 

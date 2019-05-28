@@ -2,7 +2,6 @@
 
 ### Integration Development
 
-+ Expand the interface between host and Elm app to support sending HTTP requests and receiving HTTP responses. (Use case from [explore/2019-05-08.migrating-drts-game-to-kalmit](./explore/2019-05-08.migrating-drts-game-to-kalmit/2019-05-08.migrating-drts-game-to-kalmit.md))
 + Automate boring tasks: Support deriving the functions for serializing and deserializing from the app state Elm type. This depends on parsing imports, types and aliases from modules. How does this work with types the original Elm app code does not export from the defining module (opaque types)?
 + Support [function-level dead code elimination](https://elm-lang.org/blog/small-assets-without-the-headache): Generate the Elm code needed to inform the Elm compiler about our entry points.
 + Support hosted app choosing frequency when subscribing to time. (Could be modeled for example with Response of type `Subscriptions`, (Posix time cyclic with distance in ms, Posix time once)).

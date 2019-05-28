@@ -1,3 +1,7 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -6,10 +10,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Extensions;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
@@ -198,6 +198,23 @@ namespace Kalmit.PersistentProcess.WebHost
             }
 
             await next?.Invoke();
+        }
+
+        static public InterfaceToHost.HttpRequest AsPersistentProcessInterfaceHttpRequest(
+            HttpRequest httpRequest)
+        {
+            var httpHeaders =
+                httpRequest.Headers
+                .Select(header => new InterfaceToHost.HttpHeader { name = header.Key, values = header.Value.ToArray() })
+                .ToArray();
+
+            return new InterfaceToHost.HttpRequest
+            {
+                method = httpRequest.Method,
+                uri = httpRequest.GetDisplayUrl(),
+                bodyAsString = new System.IO.StreamReader(httpRequest.Body).ReadToEnd(),
+                headers = httpHeaders,
+            };
         }
     }
 }

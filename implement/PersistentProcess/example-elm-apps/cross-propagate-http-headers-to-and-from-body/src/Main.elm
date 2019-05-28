@@ -5,7 +5,6 @@ module Main exposing
     , interfaceToHost_processEvent
     , interfaceToHost_serializeState
     , main
-    , processEvent
     )
 
 import ElmAppInKalmitProcess
@@ -17,7 +16,7 @@ type alias State =
     ()
 
 
-processEvent : ElmAppInKalmitProcess.KalmitProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.KalmitProcessResponse )
+processEvent : ElmAppInKalmitProcess.ProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.ProcessRequest )
 processEvent hostEvent stateBefore =
     case hostEvent of
         ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
@@ -50,6 +49,9 @@ processEvent hostEvent stateBefore =
             in
             ( stateBefore, [ httpResponse ] )
 
+        ElmAppInKalmitProcess.TaskComplete _ ->
+            ( stateBefore, [] )
+
 
 interfaceToHost_serializeState : State -> String
 interfaceToHost_serializeState =
@@ -68,7 +70,7 @@ interfaceToHost_initState =
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
-    ElmAppInKalmitProcess.wrapUpdateForSerialInterface processEvent
+    ElmAppInKalmitProcess.wrapForSerialInterface_processEvent processEvent
 
 
 

@@ -1,15 +1,17 @@
-using System.IO;
-using System.Linq;
+using FluentAssertions;
+using Kalmit.PersistentProcess.WebHost;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
-using FluentAssertions;
 using System.Net.Http.Headers;
-using Microsoft.AspNetCore.Hosting;
-using Kalmit.PersistentProcess.WebHost;
 
 namespace Kalmit.PersistentProcess.Test
 {
@@ -603,6 +605,81 @@ namespace Kalmit.PersistentProcess.Test
                             requestContentString,
                             WebUtility.UrlDecode(appSpecificHttpHeaderValues?.FirstOrDefault()),
                             "Expect the HTTP request content was propagated to the response header with name '" + appSpecificHttpResponseHeaderName + "'");
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Web_host_supports_sending_HTTP_requests()
+        {
+            const string echoServerUrl = "http://localhost:6789/";
+
+            var echoWebHostBuilder =
+                Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
+                .Configure(app =>
+                {
+                    app.Run(async (context) =>
+                    {
+                        var requestRecord = Asp.AsPersistentProcessInterfaceHttpRequest(context.Request);
+
+                        context.Response.StatusCode = 200;
+
+                        await context.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(requestRecord));
+                    });
+                })
+                .UseUrls(echoServerUrl);
+
+            using (var echoServer = echoWebHostBuilder.Build())
+            {
+                echoServer.Start();
+
+                using (var testSetup = WebHostTestSetup.Setup(TestElmWebAppHttpServer.HttpProxyWebApp, builder => builder))
+                {
+                    using (var server = testSetup.BuildServer())
+                    {
+                        using (var client = server.CreateClient())
+                        {
+                            var customHeaderName = "My-custom-header";
+                            var customHeaderValue = "Hello!";
+                            var requestContentString = "HTTP request content.";
+
+                            var httpRequestMessage = new HttpRequestMessage(new HttpMethod("post"), "")
+                            {
+                                Content = new StringContent(requestContentString),
+                            };
+
+                            httpRequestMessage.Headers.Add("forward-to", echoServerUrl);
+
+                            httpRequestMessage.Headers.Add(customHeaderName, customHeaderValue);
+
+                            var response = client.SendAsync(httpRequestMessage).Result;
+
+                            var responseContentString = response.Content.ReadAsStringAsync().Result;
+
+                            var echoRequestStructure =
+                                Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.HttpRequest>(responseContentString);
+
+                            Assert.AreEqual(
+                                requestContentString,
+                                echoRequestStructure.bodyAsString,
+                                "Request body is propagated.");
+
+                            var echoCustomHeaderValues =
+                                echoRequestStructure.headers
+                                .FirstOrDefault(header => header.name == customHeaderName)
+                                ?.values;
+
+                            Assert.AreEqual(
+                                1,
+                                echoCustomHeaderValues?.Length,
+                                "Custom header name is propagated.");
+
+                            Assert.AreEqual(
+                                customHeaderValue,
+                                echoCustomHeaderValues[0],
+                                "Custom header value is propagated.");
+                        }
                     }
                 }
             }

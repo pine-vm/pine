@@ -5,18 +5,22 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
     public class Event
     {
         public HttpRequestEvent httpRequest;
+
+        public ResultFromTaskWithId taskComplete;
     }
 
     public class ResponseOverSerialInterface
     {
-        public string decodeError;
+        public string decodeEventError;
 
-        public Response[] decodeSuccess;
+        public ProcessRequest[] decodeEventSuccess;
     }
 
-    public class Response
+    public class ProcessRequest
     {
-        public HttpResponseResponse completeHttpResponse;
+        public HttpResponseRequest completeHttpResponse;
+
+        public StartTask startTask;
     }
 
     public class HttpRequestEvent
@@ -53,7 +57,7 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public string[] values;
     }
 
-    public class HttpResponseResponse
+    public class HttpResponseRequest
     {
         public string httpRequestId;
 
@@ -67,5 +71,75 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public string bodyAsString;
 
         public HttpHeader[] headersToAdd;
+    }
+
+    public class Result<Err, Ok>
+    {
+        public Err err;
+
+        public Ok ok;
+    }
+
+    public class ResultFromTaskWithId
+    {
+        public string taskId;
+
+        public TaskResult taskResult;
+    }
+
+    public class TaskResult
+    {
+        public Result<object, CreateVolatileHostComplete> createVolatileHostResponse;
+
+        public Result<RunInVolatileHostError, RunInVolatileHostComplete> runInVolatileHostResponse;
+
+        public object completeWithoutResult;
+
+        public class CreateVolatileHostComplete
+        {
+            public string hostId;
+        }
+
+        public class RunInVolatileHostError
+        {
+            public object hostNotFound;
+        }
+
+        public class RunInVolatileHostComplete
+        {
+            public string exceptionToString;
+
+            public string returnValueToString;
+
+            public long durationInMilliseconds;
+        }
+    }
+
+    public class StartTask
+    {
+        public string taskId;
+
+        public Task task;
+    }
+
+    public class Task
+    {
+        public object createVolatileHost;
+
+        public RunInVolatileHost runInVolatileHost;
+
+        public ReleaseVolatileHost releaseVolatileHost;
+
+        public class RunInVolatileHost
+        {
+            public string hostId;
+
+            public string script;
+        }
+
+        public class ReleaseVolatileHost
+        {
+            public string hostId;
+        }
     }
 }

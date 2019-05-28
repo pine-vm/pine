@@ -1,11 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using FluentAssertions;
 using Kalmit.ProcessStore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 namespace Kalmit.PersistentProcess.Test
 {

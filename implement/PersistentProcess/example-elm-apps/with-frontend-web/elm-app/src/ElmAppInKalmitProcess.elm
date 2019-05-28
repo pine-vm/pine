@@ -1,23 +1,82 @@
 module ElmAppInKalmitProcess exposing
-    ( HttpRequestContext
+    ( HttpHeader
+    , HttpRequestContext
     , HttpRequestEvent
     , HttpResponse
-    , HttpResponseResponse
-    , KalmitProcessEvent(..)
-    , KalmitProcessResponse(..)
-    , wrapUpdateForSerialInterface
+    , HttpResponseRequest
+    , ProcessEvent(..)
+    , ProcessRequest(..)
+    , Task(..)
+    , TaskResultStructure(..)
+    , decodeOptionalField
+    , wrapForSerialInterface_processEvent
     )
 
 import Json.Decode
 import Json.Encode
 
 
-type KalmitProcessEvent
+type ProcessEvent
     = HttpRequest HttpRequestEvent
+    | TaskComplete ResultFromTaskWithId
 
 
-type KalmitProcessResponse
-    = CompleteHttpResponse HttpResponseResponse
+type ProcessRequest
+    = CompleteHttpResponse HttpResponseRequest
+    | StartTask StartTaskStructure
+
+
+type alias ResultFromTaskWithId =
+    { taskId : TaskId
+    , taskResult : TaskResultStructure
+    }
+
+
+type TaskResultStructure
+    = CreateVolatileHostResponse (Result CreateVolatileHostError CreateVolatileHostComplete)
+    | RunInVolatileHostResponse (Result RunInVolatileHostError RunInVolatileHostComplete)
+    | CompleteWithoutResult
+
+
+type alias RunInVolatileHostComplete =
+    { exceptionToString : Maybe String
+    , returnValueToString : Maybe String
+    , durationInMilliseconds : Int
+    }
+
+
+type alias CreateVolatileHostError =
+    ()
+
+
+type alias CreateVolatileHostComplete =
+    { hostId : String }
+
+
+type RunInVolatileHostError
+    = HostNotFound
+
+
+type alias StartTaskStructure =
+    { taskId : TaskId
+    , task : Task
+    }
+
+
+type alias RunInVolatileHostStructure =
+    { hostId : String
+    , script : String
+    }
+
+
+type Task
+    = CreateVolatileHost
+    | RunInVolatileHost RunInVolatileHostStructure
+    | ReleaseVolatileHost ReleaseVolatileHostStructure
+
+
+type alias ReleaseVolatileHostStructure =
+    { hostId : String }
 
 
 type alias HttpRequestEvent =
@@ -42,11 +101,11 @@ type alias HttpRequestProperties =
 
 
 type ResponseOverSerialInterface
-    = DecodeError String
-    | DecodeSuccess (List KalmitProcessResponse)
+    = DecodeEventError String
+    | DecodeEventSuccess (List ProcessRequest)
 
 
-type alias HttpResponseResponse =
+type alias HttpResponseRequest =
     { httpRequestId : String
     , response : HttpResponse
     }
@@ -65,29 +124,74 @@ type alias HttpHeader =
     }
 
 
-wrapUpdateForSerialInterface : (KalmitProcessEvent -> state -> ( state, List KalmitProcessResponse )) -> String -> state -> ( state, String )
-wrapUpdateForSerialInterface update serializedEvent stateBefore =
+type alias TaskId =
+    String
+
+
+wrapForSerialInterface_processEvent : (ProcessEvent -> state -> ( state, List ProcessRequest )) -> String -> state -> ( state, String )
+wrapForSerialInterface_processEvent update serializedEvent stateBefore =
     let
         ( state, response ) =
-            case serializedEvent |> Json.Decode.decodeString decodeKalmitProcessEvent of
+            case serializedEvent |> Json.Decode.decodeString decodeProcessEvent of
                 Err error ->
                     ( stateBefore
                     , ("Failed to deserialize event: " ++ (error |> Json.Decode.errorToString))
-                        |> DecodeError
+                        |> DecodeEventError
                     )
 
                 Ok hostEvent ->
                     stateBefore
                         |> update hostEvent
-                        |> Tuple.mapSecond DecodeSuccess
+                        |> Tuple.mapSecond DecodeEventSuccess
     in
     ( state, response |> encodeResponseOverSerialInterface |> Json.Encode.encode 0 )
 
 
-decodeKalmitProcessEvent : Json.Decode.Decoder KalmitProcessEvent
-decodeKalmitProcessEvent =
+decodeProcessEvent : Json.Decode.Decoder ProcessEvent
+decodeProcessEvent =
     Json.Decode.oneOf
         [ Json.Decode.field "httpRequest" decodeHttpRequestEvent |> Json.Decode.map HttpRequest
+        , Json.Decode.field "taskComplete" decodeResultFromTaskWithId
+            |> Json.Decode.map TaskComplete
+        ]
+
+
+decodeResultFromTaskWithId : Json.Decode.Decoder ResultFromTaskWithId
+decodeResultFromTaskWithId =
+    Json.Decode.map2 ResultFromTaskWithId
+        (Json.Decode.field "taskId" Json.Decode.string)
+        (Json.Decode.field "taskResult" decodeTaskResult)
+
+
+decodeTaskResult : Json.Decode.Decoder TaskResultStructure
+decodeTaskResult =
+    Json.Decode.oneOf
+        [ Json.Decode.field "createVolatileHostResponse" (decodeResult (Json.Decode.succeed ()) decodeCreateVolatileHostComplete)
+            |> Json.Decode.map CreateVolatileHostResponse
+        , Json.Decode.field "runInVolatileHostResponse" (decodeResult decodeRunInVolatileHostError decodeRunInVolatileHostComplete)
+            |> Json.Decode.map RunInVolatileHostResponse
+        , Json.Decode.field "completeWithoutResult" (Json.Decode.succeed CompleteWithoutResult)
+        ]
+
+
+decodeCreateVolatileHostComplete : Json.Decode.Decoder CreateVolatileHostComplete
+decodeCreateVolatileHostComplete =
+    Json.Decode.map CreateVolatileHostComplete
+        (Json.Decode.field "hostId" Json.Decode.string)
+
+
+decodeRunInVolatileHostComplete : Json.Decode.Decoder RunInVolatileHostComplete
+decodeRunInVolatileHostComplete =
+    Json.Decode.map3 RunInVolatileHostComplete
+        (decodeOptionalField "exceptionToString" Json.Decode.string)
+        (decodeOptionalField "returnValueToString" Json.Decode.string)
+        (Json.Decode.field "durationInMilliseconds" Json.Decode.int)
+
+
+decodeRunInVolatileHostError : Json.Decode.Decoder RunInVolatileHostError
+decodeRunInVolatileHostError =
+    Json.Decode.oneOf
+        [ Json.Decode.field "hostNotFound" (Json.Decode.succeed HostNotFound)
         ]
 
 
@@ -127,41 +231,86 @@ decodeOptionalField fieldName decoder =
     let
         finishDecoding json =
             case Json.Decode.decodeValue (Json.Decode.field fieldName Json.Decode.value) json of
-                Ok _ ->
+                Ok val ->
+                    -- The field is present, so run the decoder on it.
                     Json.Decode.map Just (Json.Decode.field fieldName decoder)
 
                 Err _ ->
+                    -- The field was missing, which is fine!
                     Json.Decode.succeed Nothing
     in
-    Json.Decode.value |> Json.Decode.andThen finishDecoding
+    Json.Decode.value
+        |> Json.Decode.andThen finishDecoding
 
 
 encodeResponseOverSerialInterface : ResponseOverSerialInterface -> Json.Encode.Value
 encodeResponseOverSerialInterface responseOverSerialInterface =
     (case responseOverSerialInterface of
-        DecodeError error ->
-            [ ( "decodeError", error |> Json.Encode.string ) ]
+        DecodeEventError error ->
+            [ ( "decodeEventError", error |> Json.Encode.string ) ]
 
-        DecodeSuccess response ->
-            [ ( "decodeSuccess", response |> Json.Encode.list encodeKalmitProcessResponse ) ]
+        DecodeEventSuccess response ->
+            [ ( "decodeEventSuccess", response |> Json.Encode.list encodeProcessRequest ) ]
     )
         |> Json.Encode.object
 
 
-encodeKalmitProcessResponse : KalmitProcessResponse -> Json.Encode.Value
-encodeKalmitProcessResponse response =
-    case response of
+encodeProcessRequest : ProcessRequest -> Json.Encode.Value
+encodeProcessRequest request =
+    case request of
         CompleteHttpResponse httpResponse ->
-            [ ( "completeHttpResponse", httpResponse |> encodeHttpResponseResponse )
+            [ ( "completeHttpResponse", httpResponse |> encodeHttpResponseRequest )
             ]
                 |> Json.Encode.object
 
+        StartTask startTask ->
+            Json.Encode.object [ ( "startTask", startTask |> encodeStartTask ) ]
 
-encodeHttpResponseResponse : HttpResponseResponse -> Json.Encode.Value
-encodeHttpResponseResponse httpResponseResponse =
+
+encodeStartTask : StartTaskStructure -> Json.Encode.Value
+encodeStartTask startTaskAfterTime =
     Json.Encode.object
-        [ ( "httpRequestId", httpResponseResponse.httpRequestId |> Json.Encode.string )
-        , ( "response", httpResponseResponse.response |> encodeHttpResponse )
+        [ ( "taskId", startTaskAfterTime.taskId |> encodeTaskId )
+        , ( "task", startTaskAfterTime.task |> encodeTask )
+        ]
+
+
+encodeTaskId : TaskId -> Json.Encode.Value
+encodeTaskId =
+    Json.Encode.string
+
+
+encodeTask : Task -> Json.Encode.Value
+encodeTask task =
+    case task of
+        CreateVolatileHost ->
+            Json.Encode.object [ ( "createVolatileHost", Json.Encode.object [] ) ]
+
+        RunInVolatileHost runInVolatileHost ->
+            Json.Encode.object
+                [ ( "runInVolatileHost"
+                  , Json.Encode.object
+                        [ ( "hostId", runInVolatileHost.hostId |> Json.Encode.string )
+                        , ( "script", runInVolatileHost.script |> Json.Encode.string )
+                        ]
+                  )
+                ]
+
+        ReleaseVolatileHost releaseVolatileHost ->
+            Json.Encode.object
+                [ ( "releaseVolatileHost"
+                  , Json.Encode.object
+                        [ ( "hostId", releaseVolatileHost.hostId |> Json.Encode.string )
+                        ]
+                  )
+                ]
+
+
+encodeHttpResponseRequest : HttpResponseRequest -> Json.Encode.Value
+encodeHttpResponseRequest httpResponseRequest =
+    Json.Encode.object
+        [ ( "httpRequestId", httpResponseRequest.httpRequestId |> Json.Encode.string )
+        , ( "response", httpResponseRequest.response |> encodeHttpResponse )
         ]
 
 
@@ -189,3 +338,11 @@ filterTakeOnlyWhereTupleSecondNotNothing =
         (\( first, maybeSecond ) ->
             maybeSecond |> Maybe.map (\second -> ( first, second ))
         )
+
+
+decodeResult : Json.Decode.Decoder error -> Json.Decode.Decoder ok -> Json.Decode.Decoder (Result error ok)
+decodeResult errorDecoder okDecoder =
+    Json.Decode.oneOf
+        [ Json.Decode.field "err" errorDecoder |> Json.Decode.map Err
+        , Json.Decode.field "ok" okDecoder |> Json.Decode.map Ok
+        ]

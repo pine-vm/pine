@@ -1,13 +1,13 @@
-using System;
-using System.Linq;
 using FluffySpoon.AspNet.LetsEncrypt;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
@@ -117,78 +117,191 @@ namespace Kalmit.PersistentProcess.WebHost
             if (webAppConfig?.Map?.letsEncryptOptions != null)
                 app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
+            var createVolatileHostAttempts = 0;
+
+            var volatileHosts = new ConcurrentDictionary<string, CSharpScriptContext>();
+
+            InterfaceToHost.Result<InterfaceToHost.TaskResult.RunInVolatileHostError, InterfaceToHost.TaskResult.RunInVolatileHostComplete>
+                performProcessTaskRunInVolatileHost(
+                InterfaceToHost.Task.RunInVolatileHost runInVolatileHost)
+            {
+                if (!volatileHosts.TryGetValue(runInVolatileHost.hostId, out var volatileHost))
+                {
+                    return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RunInVolatileHostError, InterfaceToHost.TaskResult.RunInVolatileHostComplete>
+                    {
+                        err = new InterfaceToHost.TaskResult.RunInVolatileHostError
+                        {
+                            hostNotFound = new object(),
+                        }
+                    };
+                }
+
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var fromVolatileHostResult = volatileHost.RunScript(runInVolatileHost.script);
+
+                stopwatch.Stop();
+
+                return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RunInVolatileHostError, InterfaceToHost.TaskResult.RunInVolatileHostComplete>
+                {
+                    ok = new InterfaceToHost.TaskResult.RunInVolatileHostComplete
+                    {
+                        exceptionToString = fromVolatileHostResult.Exception?.ToString(),
+                        returnValueToString = fromVolatileHostResult.ReturnValue?.ToString(),
+                        durationInMilliseconds = stopwatch.ElapsedMilliseconds,
+                    }
+                };
+            }
+
+            InterfaceToHost.TaskResult performProcessTask(InterfaceToHost.Task task)
+            {
+                if (task?.createVolatileHost != null)
+                {
+                    var volatileHostId = System.Threading.Interlocked.Increment(ref createVolatileHostAttempts).ToString();
+
+                    volatileHosts[volatileHostId] = new CSharpScriptContext(BlobLibrary.GetBlobWithSHA256);
+
+                    return new InterfaceToHost.TaskResult
+                    {
+                        createVolatileHostResponse = new InterfaceToHost.Result<object, InterfaceToHost.TaskResult.CreateVolatileHostComplete>
+                        {
+                            ok = new InterfaceToHost.TaskResult.CreateVolatileHostComplete
+                            {
+                                hostId = volatileHostId,
+                            },
+                        },
+                    };
+                }
+
+                if (task?.releaseVolatileHost != null)
+                {
+                    volatileHosts.TryRemove(task?.releaseVolatileHost.hostId, out var volatileHost);
+
+                    return new InterfaceToHost.TaskResult
+                    {
+                        completeWithoutResult = new object(),
+                    };
+                }
+
+                if (task?.runInVolatileHost != null)
+                {
+                    return new InterfaceToHost.TaskResult
+                    {
+                        runInVolatileHostResponse = performProcessTaskRunInVolatileHost(task?.runInVolatileHost),
+                    };
+                }
+
+                throw new NotImplementedException("Unexpected task structure.");
+            }
+
+            void performProcessTaskAndFeedbackEvent(InterfaceToHost.StartTask taskWithId)
+            {
+                var taskResult = performProcessTask(taskWithId.task);
+
+                var interfaceEvent = new InterfaceToHost.Event
+                {
+                    taskComplete = new InterfaceToHost.ResultFromTaskWithId
+                    {
+                        taskId = taskWithId.taskId,
+                        taskResult = taskResult,
+                    }
+                };
+
+                processEventAndResultingRequests(interfaceEvent);
+            }
+
+            var processRequestCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
+
+            var persistentProcess = app.ApplicationServices.GetService<IPersistentProcess>();
+
+            void processEventAndResultingRequests(InterfaceToHost.Event interfaceEvent)
+            {
+                lock (processStoreWriter)
+                {
+                    var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
+
+                    var (eventResponses, compositionRecord) = persistentProcess.ProcessEvents(new[] { serializedInterfaceEvent });
+
+                    processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
+
+                    var serializedResponse = eventResponses.Single();
+
+                    InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
+
+                    try
+                    {
+                        structuredResponse =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
+                                serializedResponse);
+                    }
+                    catch (Exception parseException)
+                    {
+                        throw new Exception(
+                            "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
+                            parseException);
+                    }
+
+                    if (structuredResponse?.decodeEventSuccess == null)
+                    {
+                        throw new Exception("Hosted app failed to decode the event: " + structuredResponse.decodeEventError);
+                    }
+
+                    foreach (var requestFromProcess in structuredResponse.decodeEventSuccess)
+                    {
+                        if (requestFromProcess.completeHttpResponse != null)
+                            processRequestCompleteHttpResponse[requestFromProcess.completeHttpResponse.httpRequestId] =
+                                requestFromProcess.completeHttpResponse.response;
+
+                        if (requestFromProcess.startTask != null)
+                            System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(requestFromProcess.startTask));
+                    }
+                }
+            }
+
             app
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppConfig, context, next))
             .Run(async (context) =>
             {
-                var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
-
                 var currentDateTime = getDateTimeOffset();
                 var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
                 var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
 
                 var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
 
-                var httpEvent = AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
-
-                var interfaceEvent = new InterfaceToHost.Event
                 {
-                    httpRequest = httpEvent,
-                };
+                    var httpEvent = AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
 
-                var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
-
-                string serializedResponse = null;
-
-                lock (processStoreWriter)
-                {
-                    var (responses, compositionRecord) = persistentProcess.ProcessEvents(new[] { serializedInterfaceEvent });
-
-                    processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
-
-                    serializedResponse = responses.Single();
-                }
-
-                InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
-
-                try
-                {
-                    structuredResponse =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                            serializedResponse);
-                }
-                catch (Exception parseException)
-                {
-                    throw new Exception(
-                        "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
-                        parseException);
-                }
-
-                if (structuredResponse?.decodeSuccess == null)
-                {
-                    throw new Exception("Hosted app failed to decode the event: " + structuredResponse.decodeError);
-                }
-
-                var completeHttpResponseResponse =
-                    structuredResponse?.decodeSuccess
-                    ?.FirstOrDefault(response => response?.completeHttpResponse?.httpRequestId == httpRequestId);
-
-                if (completeHttpResponseResponse != null)
-                {
-                    context.Response.StatusCode = completeHttpResponseResponse.completeHttpResponse.response.statusCode;
-
-                    foreach (var headerToAdd in (completeHttpResponseResponse.completeHttpResponse.response.headersToAdd).EmptyIfNull())
+                    var httpRequestInterfaceEvent = new InterfaceToHost.Event
                     {
-                        context.Response.Headers.Add(
-                            headerToAdd.name,
-                            new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values));
+                        httpRequest = httpEvent,
+                    };
+
+                    processEventAndResultingRequests(httpRequestInterfaceEvent);
+                }
+
+                var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
+
+                while (true)
+                {
+                    if (processRequestCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
+                    {
+                        context.Response.StatusCode = httpResponse.statusCode;
+
+                        foreach (var headerToAdd in (httpResponse.headersToAdd).EmptyIfNull())
+                            context.Response.Headers[headerToAdd.name] =
+                                new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
+
+                        await context.Response.WriteAsync(httpResponse?.bodyAsString ?? "");
+                        break;
                     }
 
-                    await context.Response.WriteAsync(completeHttpResponseResponse.completeHttpResponse.response?.bodyAsString ?? "");
-                }
-                else
-                {
-                    throw new NotImplementedException("Async HTTP Response is not implemented yet.");
+                    if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
+                        throw new TimeoutException(
+                            "Persistent process did not return a HTTP response within " +
+                            (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
+                            " seconds.");
+
+                    System.Threading.Thread.Sleep(100);
                 }
 
                 System.Threading.Thread.MemoryBarrier();
@@ -234,11 +347,6 @@ namespace Kalmit.PersistentProcess.WebHost
             string httpRequestId,
             DateTimeOffset time)
         {
-            var httpHeaders =
-                httpContext.Request.Headers
-                .Select(header => new InterfaceToHost.HttpHeader { name = header.Key, values = header.Value.ToArray() })
-                .ToArray();
-
             return new InterfaceToHost.HttpRequestEvent
             {
                 posixTimeMilli = time.ToUnixTimeMilliseconds(),
@@ -250,13 +358,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     clientAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
                 },
 
-                request = new InterfaceToHost.HttpRequest
-                {
-                    method = httpContext.Request.Method,
-                    uri = httpContext.Request.GetDisplayUrl(),
-                    bodyAsString = new System.IO.StreamReader(httpContext.Request.Body).ReadToEnd(),
-                    headers = httpHeaders,
-                }
+                request = Asp.AsPersistentProcessInterfaceHttpRequest(httpContext.Request),
             };
         }
     }

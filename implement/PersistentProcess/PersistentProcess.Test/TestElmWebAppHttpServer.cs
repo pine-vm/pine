@@ -1,7 +1,6 @@
-using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Kalmit.PersistentProcess.WebHost;
 using MoreLinq;
+using System.Linq;
 
 namespace Kalmit.PersistentProcess.Test
 {
@@ -19,6 +18,10 @@ namespace Kalmit.PersistentProcess.Test
         static public WebAppConfiguration CrossPropagateHttpHeadersToAndFromBody =>
             new WebAppConfiguration()
             .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp));
+
+        static public WebAppConfiguration HttpProxyWebApp =>
+            new WebAppConfiguration()
+            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.HttpProxyWebApp));
 
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()
