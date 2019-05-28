@@ -1,8 +1,8 @@
-﻿using System;
-using System.Linq;
-using Microsoft.AspNetCore.Hosting;
+﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Linq;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
