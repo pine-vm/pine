@@ -27,6 +27,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
 
+            var argumentAdminRootPassword = argumentValueFromParameterName("--admin-root-password");
+
             var currentDirectory = Environment.CurrentDirectory;
 
             Console.WriteLine(
@@ -40,6 +42,9 @@ namespace Kalmit.PersistentProcess.WebHost
             Directory.CreateDirectory(tempConfigDirectory);
 
             webHostBuilder.WithSettingWebAppConfigurationFilePath(webAppConfigFilePath);
+
+            if (0 < argumentAdminRootPassword?.Length)
+                webHostBuilder.WithSettingAdminRootPassword(argumentAdminRootPassword);
 
             //  Provide a default location for the process store, which can be overridden.
             webHostBuilder.WithSettingProcessStoreDirectoryPathDefault(processStoreDirectoryPathDefault);
