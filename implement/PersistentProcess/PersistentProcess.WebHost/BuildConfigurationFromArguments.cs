@@ -84,7 +84,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     .FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(frontendWebElmAppRootDirectory))
                     .ToImmutableList();
 
-                Console.WriteLine("I found " + frontendWebElmCodeFiles.Count + " files to build the frontent Elm app.");
+                Console.WriteLine("I found " + frontendWebElmCodeFiles.Count + " files to build the frontend Elm app.");
 
                 var pathToEntryPointFile =
                     Path.GetRelativePath(frontendWebElmAppRootDirectory, frontendWebElmSearchBegin);
