@@ -92,7 +92,7 @@ namespace Kalmit.PersistentProcess.Test
                 var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory, null);
 
                 return new PersistentProcessWithControlFlowOverStoreWriter(
-                    new PersistentProcessWithHistoryOnFileFromElm019Code(store, TestSetup.CounterElmAppFile), store);
+                    new PersistentProcessWithHistoryOnFileFromElm019Code(store, TestSetup.CounterElmAppFile, logger: null), store);
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
@@ -134,7 +134,7 @@ namespace Kalmit.PersistentProcess.Test
                     GetReductionDelegate = hash => null,
                 };
 
-                return new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmAppFile);
+                return new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmAppFile, logger: null);
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
@@ -185,7 +185,10 @@ namespace Kalmit.PersistentProcess.Test
                         reductionRecordAvailableFromStore : null,
                 };
 
-                return new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmAppFile);
+                return new PersistentProcessWithHistoryOnFileFromElm019Code(
+                    storeReader,
+                    TestSetup.CounterElmAppFile,
+                    logger: null);
             }
 
             var eventsAndExpectedResponsesBatches = eventsAndExpectedResponses.Batch(3).ToList();
@@ -233,7 +236,10 @@ namespace Kalmit.PersistentProcess.Test
             var processStoreCompositionsBeforeShuffle = new List<byte[]>();
 
             PersistentProcessWithHistoryOnFileFromElm019Code InstantiatePersistentProcess(IProcessStoreReader storeReader) =>
-                new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmAppFile);
+                new PersistentProcessWithHistoryOnFileFromElm019Code(
+                    storeReader,
+                    TestSetup.CounterElmAppFile,
+                    logger: null);
 
             void AssertProcessIsInFinalState(IPersistentProcess process, IList<byte[]> processStoreCompositions)
             {

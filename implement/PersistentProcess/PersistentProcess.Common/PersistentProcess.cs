@@ -35,13 +35,18 @@ namespace Kalmit.PersistentProcess
 
         public PersistentProcessWithHistoryOnFileFromElm019Code(
             IProcessStoreReader storeReader,
-            byte[] elmAppFile)
+            byte[] elmAppFile,
+            Action<string> logger)
         {
             var elmAppFiles =
                 ElmApp.FilesFilteredForElmApp(ZipArchive.EntriesFromZipArchive(elmAppFile)).ToImmutableList();
 
             (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles);
+
+            var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            logger?.Invoke("Begin to restore the process state using the storeReader.");
 
             var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(new byte[0]);
 
@@ -108,6 +113,7 @@ namespace Kalmit.PersistentProcess
                             lastStateHash = followingComposition.hash;
                         }
 
+                        logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
                         return;
                     }
 
@@ -126,6 +132,8 @@ namespace Kalmit.PersistentProcess
                     "I did not find a reduction for any composition on the chain to the last composition (" +
                     CommonConversion.StringBase16FromByteArray(compositionChain.Last().hash) +
                     ").");
+
+            logger?.Invoke("Found no composition record, default to initial state.");
 
             lastStateHash = emptyInitHash;
         }

@@ -78,13 +78,27 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
         {
+            var logger = services.GetService<ILogger<Startup>>();
             var elmAppFile = services.GetService<WebAppConfiguration>()?.ElmAppFile;
 
             if (elmAppFile == null)
+            {
+                logger.LogInformation("Found no ElmAppFile in configuration.");
                 return null;
+            }
 
-            return new PersistentProcessWithHistoryOnFileFromElm019Code(
-                services.GetService<ProcessStore.IProcessStoreReader>(), elmAppFile);
+            logger.LogInformation("Begin to build the persistent process for Elm app " +
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(elmAppFile)));
+
+            var persistentProcess =
+                new PersistentProcessWithHistoryOnFileFromElm019Code(
+                    services.GetService<ProcessStore.IProcessStoreReader>(),
+                    elmAppFile,
+                    logger: logEntry => logger.LogInformation(logEntry));
+
+            logger.LogInformation("Completed building the persistent process.");
+
+            return persistentProcess;
         }
 
         public void Configure(
