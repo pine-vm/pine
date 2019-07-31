@@ -128,14 +128,37 @@ namespace Kalmit
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html");
 
         static string CompileElm(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            IReadOnlyCollection<(string name, byte[] content)> elmCodeFiles,
             string pathToFileWithElmEntryPoint,
             string outputFileName)
         {
+            /*
+            Unify directory separator symbols in file names to avoid this problem observed 2019-07-31:
+            I had built web-app-config.zip on a Windows system. Starting the webserver with this worked as expected in Windows. But in a Docker container it failed, with an error as below:
+            ----
+            Output file not found. Maybe the output from the Elm make process helps to find the cause:
+            Exit Code: 1
+            Standard Output:
+            ''
+            Standard Error:
+            '-- BAD JSON ----------------------------------------------------------- elm.json
+
+            The "source-directories" in your elm.json lists the following directory:
+
+                src
+
+            I cannot find that directory though! Is it missing? Is there a typo?
+            [...]
+            */
+            var elmCodeFilesWithUnifiedDirectorySeparatorChars =
+                elmCodeFiles
+                .Select(elmCodeFile => (elmCodeFile.name.Replace('\\', '/'), elmCodeFile.content))
+                .ToList();
+
             var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\"";
 
             var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                elmCodeFiles,
+                elmCodeFilesWithUnifiedDirectorySeparatorChars,
                 GetElmExecutableFile,
                 command,
                 new Dictionary<string, string>()
