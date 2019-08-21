@@ -8,7 +8,7 @@ namespace Kalmit
 {
     public class BlobLibrary
     {
-        static string cacheDirectory = Path.Combine(Directory.GetCurrentDirectory(), ".cache", "blob-library");
+        static string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
 
         static string containerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 

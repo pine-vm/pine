@@ -2,12 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Runtime.InteropServices;
 
 namespace Kalmit
 {
     public class Filesystem
     {
+        //  https://stackoverflow.com/questions/39224518/path-to-localappdata-in-asp-net-core-application#comment83608153_39225227
+        static public string CacheDirectory =>
+            Path.Combine(
+                Environment.GetEnvironmentVariable(
+                    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME"),
+                "kalmit", ".cache");
+
         static public IReadOnlyCollection<(string name, byte[] content)> GetAllFilesFromDirectory(string directoryPath) =>
                 Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
                 .Select(filePath => (GetRelativePath(directoryPath, filePath), File.ReadAllBytes(filePath)))
