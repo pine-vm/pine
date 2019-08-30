@@ -611,7 +611,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Web_host_supports_sending_HTTP_requests()
+        public void Host_supports_sending_HTTP_requests()
         {
             const string echoServerUrl = "http://localhost:6789/";
 
@@ -679,6 +679,38 @@ namespace Kalmit.PersistentProcess.Test
                                 customHeaderValue,
                                 echoCustomHeaderValues[0],
                                 "Custom header value is propagated.");
+                        }
+
+                        using (var client = server.CreateClient())
+                        {
+                            var contentTypeHeaderName = "content-type";
+                            var customContentType = "application/octet-stream";
+
+                            var httpRequestMessage = new HttpRequestMessage(new HttpMethod("post"), "")
+                            {
+                                Content = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes("Hello!")),
+                            };
+
+                            httpRequestMessage.Content.Headers.ContentType = new MediaTypeHeaderValue(customContentType);
+
+                            httpRequestMessage.Headers.Add("forward-to", echoServerUrl);
+
+                            var response = client.SendAsync(httpRequestMessage).Result;
+
+                            var responseContentString = response.Content.ReadAsStringAsync().Result;
+
+                            var echoRequestStructure =
+                                Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.HttpRequest>(responseContentString);
+
+                            var observedContentType =
+                                echoRequestStructure.headers
+                                .SingleOrDefault(header => string.Equals(header.name, contentTypeHeaderName, StringComparison.InvariantCultureIgnoreCase))
+                                ?.values.SingleOrDefault();
+
+                            Assert.AreEqual(
+                                customContentType,
+                                observedContentType,
+                                "Sent HTTP request with content type '" + customContentType + "'.");
                         }
                     }
                 }

@@ -5,7 +5,6 @@ module HttpViaVolatileHost exposing
     , scriptToGetResponseFromHttpRequest
     )
 
-import ElmAppInKalmitProcess
 import Json.Decode
 import Json.Encode
 
@@ -14,14 +13,14 @@ type alias HttpRequestProperties =
     { uri : String
     , method : String
     , headers : List HttpHeader
-    , bodyAsString : Maybe String
+    , bodyAsBase64 : Maybe String
     }
 
 
 type alias HttpResponseProperties =
     { statusCode : Int
     , headers : List HttpHeader
-    , bodyAsString : Maybe String
+    , bodyAsBase64 : Maybe String
     }
 
 
@@ -36,7 +35,7 @@ decodeVolatileHostHttpResponse =
     Json.Decode.map3 HttpResponseProperties
         (Json.Decode.field "statusCode" Json.Decode.int)
         (Json.Decode.field "headers" (Json.Decode.list decodeHttpHeader))
-        (ElmAppInKalmitProcess.decodeOptionalField "bodyAsString" Json.Decode.string)
+        (Json.Decode.field "bodyAsBase64" (jsonDecodeNullAsMaybeNothing Json.Decode.string))
 
 
 decodeHttpHeader : Json.Decode.Decoder HttpHeader
@@ -49,15 +48,11 @@ decodeHttpHeader =
 encodeHttpRequestProperties : HttpRequestProperties -> Json.Encode.Value
 encodeHttpRequestProperties httpRequestProperties =
     Json.Encode.object
-        ([ ( "uri", httpRequestProperties.uri |> Json.Encode.string )
-         , ( "method", httpRequestProperties.method |> Json.Encode.string )
-         , ( "headers", httpRequestProperties.headers |> Json.Encode.list encodeHttpHeader )
-         ]
-            ++ (httpRequestProperties.bodyAsString
-                    |> Maybe.map (\bodyAsString -> [ ( "bodyAsString", bodyAsString |> Json.Encode.string ) ])
-                    |> Maybe.withDefault []
-               )
-        )
+        [ ( "uri", httpRequestProperties.uri |> Json.Encode.string )
+        , ( "method", httpRequestProperties.method |> Json.Encode.string )
+        , ( "headers", httpRequestProperties.headers |> Json.Encode.list encodeHttpHeader )
+        , ( "bodyAsBase64", httpRequestProperties.bodyAsBase64 |> jsonEncodeMaybeNothingAsNull Json.Encode.string )
+        ]
 
 
 encodeHttpHeader : HttpHeader -> Json.Encode.Value
@@ -66,6 +61,16 @@ encodeHttpHeader httpHeader =
     , ( "values", httpHeader.values |> Json.Encode.list Json.Encode.string )
     ]
         |> Json.Encode.object
+
+
+jsonEncodeMaybeNothingAsNull : (a -> Json.Encode.Value) -> Maybe a -> Json.Encode.Value
+jsonEncodeMaybeNothingAsNull encoder =
+    Maybe.map encoder >> Maybe.withDefault Json.Encode.null
+
+
+jsonDecodeNullAsMaybeNothing : Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
+jsonDecodeNullAsMaybeNothing =
+    Json.Decode.nullable
 
 
 scriptToGetResponseFromHttpRequest : HttpRequestProperties -> String
@@ -104,7 +109,7 @@ public class HttpRequest
 
     public string uri;
 
-    public string bodyAsString;
+    public string bodyAsBase64;
 
     public HttpHeader[] headers;
 }
@@ -113,7 +118,7 @@ public class HttpResponse
 {
     public int statusCode;
 
-    public string bodyAsString;
+    public string bodyAsBase64;
 
     public HttpHeader[] headers;
 }
@@ -127,12 +132,15 @@ public class HttpHeader
 
 HttpResponse GetResponseFromHttpRequest(HttpRequest request)
 {
+    var headerContentType =
+        request?.headers?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")?.values?.FirstOrDefault();
+
     var client = new HttpClient();
 
     var httpRequestMessage = new HttpRequestMessage(method: new HttpMethod(request.method), requestUri: request.uri);
 
-    if (request.bodyAsString != null)
-        httpRequestMessage.Content = new StringContent(request.bodyAsString);
+    if (request.bodyAsBase64 != null)
+        httpRequestMessage.Content = new ByteArrayContent(Convert.FromBase64String(request.bodyAsBase64));
 
     httpRequestMessage.Headers.Clear();
 
@@ -140,12 +148,21 @@ HttpResponse GetResponseFromHttpRequest(HttpRequest request)
         foreach (var header in request.headers)
             httpRequestMessage.Headers.TryAddWithoutValidation(header.name, header.values);
 
+    /*
+    2019-08-30 Work around problem with `httpRequestMessage.Headers.TryAddWithoutValidation` (used to set headers above):
+    Also set the content-type header on `httpRequestMessage.Content.Headers.ContentType`.
+    */
+    if(headerContentType != null && httpRequestMessage.Content != null)
+        httpRequestMessage.Content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(headerContentType);
+
     var response = client.SendAsync(httpRequestMessage).Result;
 
-    var responseBodyAsString =
-        response.Content == null ?
-        null :
-        response.Content.ReadAsStringAsync().Result;
+    var responseBodyAsByteArray =
+        response.Content?.ReadAsByteArrayAsync().Result;
+
+    var responseBodyAsBase64 =
+        responseBodyAsByteArray == null ? null :
+        Convert.ToBase64String(responseBodyAsByteArray);
 
     var responseHeaders =
         response.Headers
@@ -156,7 +173,7 @@ HttpResponse GetResponseFromHttpRequest(HttpRequest request)
     {
         statusCode = (int)response.StatusCode,
         headers = responseHeaders,
-        bodyAsString = responseBodyAsString,
+        bodyAsBase64 = responseBodyAsBase64,
     };
 }
 
