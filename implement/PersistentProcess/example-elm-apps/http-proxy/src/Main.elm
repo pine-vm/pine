@@ -30,8 +30,8 @@ processEvent hostEvent stateBefore =
             in
             ( state, state |> httpRequestForwardRequestsFromState )
 
-        ElmAppInKalmitProcess.TaskComplete taskWithIdResult ->
-            case taskWithIdResult.taskResult of
+        ElmAppInKalmitProcess.TaskComplete taskComplete ->
+            case taskComplete.taskResult of
                 ElmAppInKalmitProcess.CreateVolatileHostResponse createVolatileHostResponse ->
                     case createVolatileHostResponse of
                         Err _ ->

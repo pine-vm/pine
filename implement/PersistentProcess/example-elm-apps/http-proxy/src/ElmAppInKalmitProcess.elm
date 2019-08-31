@@ -2,11 +2,15 @@ module ElmAppInKalmitProcess exposing
     ( HttpHeader
     , HttpRequestContext
     , HttpRequestEvent
+    , HttpRequestProperties
     , HttpResponse
     , HttpResponseRequest
     , ProcessEvent(..)
     , ProcessRequest(..)
+    , RunInVolatileHostError(..)
+    , StartTaskStructure
     , Task(..)
+    , TaskCompleteStructure
     , TaskResultStructure(..)
     , decodeOptionalField
     , wrapForSerialInterface_processEvent
@@ -18,7 +22,7 @@ import Json.Encode
 
 type ProcessEvent
     = HttpRequest HttpRequestEvent
-    | TaskComplete ResultFromTaskWithId
+    | TaskComplete TaskCompleteStructure
 
 
 type ProcessRequest
@@ -26,7 +30,7 @@ type ProcessRequest
     | StartTask StartTaskStructure
 
 
-type alias ResultFromTaskWithId =
+type alias TaskCompleteStructure =
     { taskId : TaskId
     , taskResult : TaskResultStructure
     }
@@ -151,14 +155,14 @@ decodeProcessEvent : Json.Decode.Decoder ProcessEvent
 decodeProcessEvent =
     Json.Decode.oneOf
         [ Json.Decode.field "httpRequest" decodeHttpRequestEvent |> Json.Decode.map HttpRequest
-        , Json.Decode.field "taskComplete" decodeResultFromTaskWithId
+        , Json.Decode.field "taskComplete" decodeTaskComplete
             |> Json.Decode.map TaskComplete
         ]
 
 
-decodeResultFromTaskWithId : Json.Decode.Decoder ResultFromTaskWithId
-decodeResultFromTaskWithId =
-    Json.Decode.map2 ResultFromTaskWithId
+decodeTaskComplete : Json.Decode.Decoder TaskCompleteStructure
+decodeTaskComplete =
+    Json.Decode.map2 TaskCompleteStructure
         (Json.Decode.field "taskId" Json.Decode.string)
         (Json.Decode.field "taskResult" decodeTaskResult)
 
