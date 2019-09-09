@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Hosting;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Immutable;
@@ -15,9 +14,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
         public const string ElmAppSubdirectoryName = "elm-app";
 
-        static public IWebHostBuilder BuildConfiguration(
-            this IWebHostBuilder webHostBuilder,
-            string[] args)
+        static public void BuildConfiguration(string[] args)
         {
             string argumentValueFromParameterName(string parameterName) =>
                 args
@@ -25,29 +22,14 @@ namespace Kalmit.PersistentProcess.WebHost
                 .FirstOrDefault(match => match.Success)
                 ?.Groups[1].Value;
 
-            var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
+            var outputArgument = argumentValueFromParameterName("--output");
 
-            var argumentAdminRootPassword = argumentValueFromParameterName("--admin-root-password");
+            var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
 
             var currentDirectory = Environment.CurrentDirectory;
 
             Console.WriteLine(
-                "I build the configuration before starting the server. The currentDirectory is '" +
-                currentDirectory + "', frontendWebElmSource is '" + frontendWebElmSource + "'.");
-
-            var tempConfigDirectory = Path.Combine(currentDirectory, ".kalmit", "temp-config");
-            var webAppConfigFilePath = Path.Combine(tempConfigDirectory, "web-app-config.zip");
-            var processStoreDirectoryPathDefault = Path.Combine(tempConfigDirectory, "process-store");
-
-            Directory.CreateDirectory(tempConfigDirectory);
-
-            webHostBuilder.WithSettingWebAppConfigurationFilePath(webAppConfigFilePath);
-
-            if (0 < argumentAdminRootPassword?.Length)
-                webHostBuilder.WithSettingAdminRootPassword(argumentAdminRootPassword);
-
-            //  Provide a default location for the process store, which can be overridden.
-            webHostBuilder.WithSettingProcessStoreDirectoryPathDefault(processStoreDirectoryPathDefault);
+                "The currentDirectory is '" + currentDirectory + "', frontendWebElmSource is '" + frontendWebElmSource + "'.");
 
             var elmAppFiles =
                 ElmApp
@@ -124,13 +106,21 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles());
 
-            Console.WriteLine("I built web app config " +
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigFile)) +
-                " to use for the server.");
+            var webAppConfigFileId = CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigFile));
 
-            File.WriteAllBytes(webAppConfigFilePath, webAppConfigFile);
+            Console.WriteLine("I built web app config " + webAppConfigFileId + ".");
 
-            return webHostBuilder;
+            if (outputArgument == null)
+            {
+                Console.WriteLine("I did not see a path for output, so I don't attempt to save the configuration to a file.");
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(outputArgument));
+                File.WriteAllBytes(outputArgument, webAppConfigFile);
+
+                Console.WriteLine("I saved web app config " + webAppConfigFileId + " to '" + outputArgument + "'");
+            }
         }
 
         static string FindDirectoryUpwardContainingElmJson(string searchBeginDirectory)

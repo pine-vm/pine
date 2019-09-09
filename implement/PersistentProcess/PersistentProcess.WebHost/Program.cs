@@ -13,7 +13,11 @@ namespace Kalmit.PersistentProcess.WebHost
             var webHostBuilder = CreateWebHostBuilder(args);
 
             if (args.Contains("build-config"))
-                webHostBuilder = webHostBuilder.BuildConfiguration(args);
+            {
+                Console.WriteLine("I build the configuration and don't start a server.");
+                BuildConfigurationFromArguments.BuildConfiguration(args);
+                return;
+            }
 
             webHostBuilder.Build().Run();
         }
