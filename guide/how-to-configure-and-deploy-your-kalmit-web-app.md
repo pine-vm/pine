@@ -1,67 +1,47 @@
 # How to Configure and Deploy Your Kalmit Web App
 
-The configuration of Kalmit web apps is done in the `web-app-config.zip` file. This ZIP archive contains the Elm app, configuration for Let's Encrypt, rate limiting, static files, and other features.
+Following is the easiest way to build and deploy your full-stack Elm app:
 
-## `web-app-config.zip`
-
-An example is the default app in the project repository at [/implementation/PersistentProcess/default-config/web-app/web-app-config.zip](https://github.com/Viir/Kalmit/blob/8a28424f5d550c0583293002b26568c5ea128ba8/implementation/PersistentProcess/default-config/web-app/web-app-config.zip)
-
-The general structure of `web-app-config.zip` is as follows:
-
-```
-web-app-config.zip
-+-- elm-app.zip
-+-- (Optional) map.json
-+-- (Optional) static-files
-```
-
-### `map.json`
-
-The `map.json` file is where you can add configuration for Let's Encrypt, rate-limiting, and other features.
-Since all of these features are optional to use, in the simplest case, this file is not present at all.
-
-### `elm-app.zip`
-
-```
-elm-app.zip
-+-- elm.json
-+-- src
-    +-- Main.elm
-    +-- ElmAppInKalmitProcess.elm
-    +-- Other Elm files...
-```
-
-The Elm app is contained in the `elm-app.zip` archive. At the root level, this ZIP archive contains the `elm.json` file. The module containing the app is expected at `src/Main.elm`. The `Main` Elm module needs to contain the following functions:
-
-+ `interfaceToHost_processEvent : String -> State -> ( State, String )`
-+ `interfaceToHost_initState : State`
-+ `interfaceToHost_serializeState : State -> String`
-+ `interfaceToHost_deserializeState : String -> State`
-
-An example of a `Main` module can be seen in this example app at [implement/PersistentProcess/example-elm-apps/with-frontend-web/elm-app/src/Main.elm](./../implement/PersistentProcess/example-elm-apps/with-frontend-web/elm-app/src/Main.elm)
-
-## Deploy Using Docker
-
-The easiest way to deploy your Kalmit web app is using Docker. The instructions below depend on familiarity with Docker, at least knowing the relation between image and container is a precondition. The base image [`kalmit/kalmit-web-app`](https://hub.docker.com/r/kalmit/kalmit-web-app) contains everything you need to start a web app:
-```powershell
-docker run -p 80:80 kalmit/kalmit-web-app
-```
-Docker will then forward you logs like these:
-```powershell
++ Make sure you have [Docker](https://www.docker.com) installed.
++ Clone this repository.
++ Run the script at [`/implement/PersistentProcess/start-server.ps1`](/implement/PersistentProcess/start-server.ps1). This script takes the example app from [/implement/PersistentProcess/example-elm-apps/default-full-stack-app](/implement/PersistentProcess/example-elm-apps/default-full-stack-app) and builds a docker image running this app.
+This script also contains a `docker run` command to start the app. Docker will then forward you logs like these:
+```shell
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      I did not find letsEncryptOptions.
+      Loaded configuration 4C632674652AC57C514DA1FD57FE57F1906037D47147E896DC85F02361AFBA9F
+info: Kalmit.PersistentProcess.WebHost.Startup[0]
+      I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
+info: Kalmit.PersistentProcess.WebHost.Startup[0]
+      Begin to build the persistent process for Elm app 5BD744FCCBF4A6C1F727DBA62816189ADB7FC18745FD5426DAAA894E4B345330
+info: Kalmit.PersistentProcess.WebHost.Startup[0]
+      Begin to restore the process state using the storeReader.
+info: Kalmit.PersistentProcess.WebHost.Startup[0]
+      Found no composition record, default to initial state.
+info: Kalmit.PersistentProcess.WebHost.Startup[0]
+      Completed building the persistent process.
 Hosting environment: Production
 Content root path: /kalmit
 Now listening on: http://[::]:80
 Now listening on: https://[::]:443
 Application started. Press Ctrl+C to shut down.
 ```
-To deploy your own web app, add your `web-app-config.zip` file to that Docker image. You can do this by building a dockerfile as follows:
-```dockerfile
-FROM kalmit/kalmit-web-app
++ When you open this site in a web browser, you will find a SPA which connects to the backend using HTTP requests. So this example app contains a backend (entry point in [elm-app/src/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Main.elm) and a frontend (entry point in [elm-app/src/FrontendWeb/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/FrontendWeb/Main.elm)).
 
-COPY ./web-app-config.zip /kalmit
-```
+## Full Stack App File Structure
+
+### Backend `Main.elm`
+
+The [main Elm module of the backend](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Main.elm) contains the following functions which are called by the engine:
+
++ `interfaceToHost_processEvent : String -> State -> ( State, String )`
++ `interfaceToHost_initState : State`
++ `interfaceToHost_serializeState : State -> String`
++ `interfaceToHost_deserializeState : String -> State`
+
+### `map.json`
+
+The `map.json` file is where you can add configuration for Let's Encrypt, rate-limiting, and other features.
+Since all of these features are optional to use, in the simplest case, this file is not present at all.
 
 ## Support HTTPS
 
@@ -83,11 +63,6 @@ The Kalmit web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncry
         "UseStaging": true
     }
 }
-```
-
-To ensure HTTPS requests reach the app, also map port `443` of the docker container:
-```powershell
-docker run -p 80:80 -p 443:443 your-docker-image
 ```
 
 When you have started a container like this, the application emits log entries indicating the progress with getting the SSL certificate:
