@@ -20,7 +20,8 @@ COPY ./example-elm-apps/default-full-stack-app /default-app/
 WORKDIR /default-app
 RUN dotnet "/kalmit/dotnet/PersistentProcess.WebHost.dll" build-config --frontend-web-elm-source="elm-app/src/FrontendWeb/Main.elm" --output="/build-output/web-app-config.zip"
 
-FROM binaries AS with-default-app
+# Reduce startup cost: Produce an image which has popular blobs already in cache: Continue with state after having built a configuration.
+FROM build-default-config AS with-default-app
 
 COPY --from=build-default-config /build-output/web-app-config.zip /kalmit/
 
