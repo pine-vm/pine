@@ -160,7 +160,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEnd();
+                        var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEndAsync().Result;
 
                         var processStoreWriter = context.RequestServices.GetService<ProcessStore.IProcessStoreWriter>();
 
@@ -212,7 +212,7 @@ namespace Kalmit.PersistentProcess.WebHost
             {
                 method = httpRequest.Method,
                 uri = httpRequest.GetDisplayUrl(),
-                bodyAsString = new System.IO.StreamReader(httpRequest.Body).ReadToEnd(),
+                bodyAsString = new System.IO.StreamReader(httpRequest.Body).ReadToEndAsync().Result,
                 headers = httpHeaders,
             };
         }

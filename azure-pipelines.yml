@@ -8,10 +8,10 @@ steps:
 - script: |
     echo my vmImage is $(vmImage)
 
-- task: DotNetCoreInstaller@0
+- task: UseDotNet@2
   inputs:
     packageType: 'sdk' # Options: runtime, sdk
-    version: '2.2.104' 
+    version: '3.0.100' 
 
 - script: dotnet --version
 

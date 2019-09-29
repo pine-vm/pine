@@ -1,5 +1,5 @@
 # Build dotnet build image
-FROM microsoft/dotnet:2.2-sdk AS build-env
+FROM mcr.microsoft.com/dotnet/core/sdk:3.0 AS build-env
 WORKDIR /app
 
 # Copy everything and build
@@ -8,7 +8,7 @@ WORKDIR /app/PersistentProcess.WebHost
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
-FROM microsoft/dotnet:2.2-aspnetcore-runtime AS binaries
+FROM mcr.microsoft.com/dotnet/core/aspnet:3.0 AS binaries
 
 COPY --from=build-env /app/PersistentProcess.WebHost/out /kalmit/dotnet/
 

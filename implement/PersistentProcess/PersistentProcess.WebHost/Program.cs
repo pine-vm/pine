@@ -34,7 +34,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     logging.AddConsole();
                     logging.AddDebug();
                 })
-                .UseKestrel(kestrelOptions =>
+                .ConfigureKestrel(kestrelOptions =>
                 {
                     kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
                     {
