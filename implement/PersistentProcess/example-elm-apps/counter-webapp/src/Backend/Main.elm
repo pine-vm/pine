@@ -1,4 +1,4 @@
-module Main exposing
+module Backend.Main exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -7,7 +7,7 @@ module Main exposing
     , main
     )
 
-import ElmAppInKalmitProcess
+import Backend.InterfaceToHost as InterfaceToHost
 import Json.Decode
 import Platform
 
@@ -20,10 +20,10 @@ type alias CounterEvent =
     { addition : Int }
 
 
-processEvent : ElmAppInKalmitProcess.ProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.ProcessRequest )
+processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 ( state, result ) =
                     case (httpRequestEvent.request.bodyAsString |> Maybe.withDefault "") |> deserializeCounterEvent of
@@ -49,11 +49,11 @@ processEvent hostEvent stateBefore =
                         , headersToAdd = []
                         }
                     }
-                        |> ElmAppInKalmitProcess.CompleteHttpResponse
+                        |> InterfaceToHost.CompleteHttpResponse
             in
             ( state, [ httpResponse ] )
 
-        ElmAppInKalmitProcess.TaskComplete _ ->
+        InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
 
 
@@ -80,7 +80,7 @@ interfaceToHost_initState =
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
-    ElmAppInKalmitProcess.wrapForSerialInterface_processEvent processEvent
+    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
 interfaceToHost_serializeState : State -> String

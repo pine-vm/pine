@@ -16,7 +16,7 @@ To help you with the operation side, the Kalmit web host supports configuring co
 
 ## Configure & Deploy
 
-See the guide on [how to configure and deploy your web app](guide/how-to-configure-and-deploy-your-kalmit-web-app.md).
+See the guide on [how to configure and deploy your web app](guide/how-to-configure-and-deploy-your-elm-full-stack-app.md).
 
 ## Support
 

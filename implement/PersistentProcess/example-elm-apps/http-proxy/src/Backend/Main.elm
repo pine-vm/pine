@@ -1,4 +1,4 @@
-module Main exposing
+module Backend.Main exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -7,32 +7,32 @@ module Main exposing
     , main
     )
 
+import Backend.HttpViaVolatileHost as HttpViaVolatileHost
+import Backend.InterfaceToHost as InterfaceToHost
 import Base64
-import ElmAppInKalmitProcess
-import HttpViaVolatileHost
 import Json.Decode
 import Platform
 
 
 type alias State =
     { volatileHostId : Maybe String
-    , httpRequestToForward : Maybe ElmAppInKalmitProcess.HttpRequestEvent
+    , httpRequestToForward : Maybe InterfaceToHost.HttpRequestEvent
     }
 
 
-processEvent : ElmAppInKalmitProcess.ProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.ProcessRequest )
+processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 state =
                     { stateBefore | httpRequestToForward = Just httpRequestEvent }
             in
             ( state, state |> httpRequestForwardRequestsFromState )
 
-        ElmAppInKalmitProcess.TaskComplete taskComplete ->
+        InterfaceToHost.TaskComplete taskComplete ->
             case taskComplete.taskResult of
-                ElmAppInKalmitProcess.CreateVolatileHostResponse createVolatileHostResponse ->
+                InterfaceToHost.CreateVolatileHostResponse createVolatileHostResponse ->
                     case createVolatileHostResponse of
                         Err _ ->
                             ( stateBefore, [] )
@@ -44,7 +44,7 @@ processEvent hostEvent stateBefore =
                             in
                             ( state, state |> httpRequestForwardRequestsFromState )
 
-                ElmAppInKalmitProcess.RunInVolatileHostResponse runInVolatileHostResponse ->
+                InterfaceToHost.RunInVolatileHostResponse runInVolatileHostResponse ->
                     case stateBefore.httpRequestToForward of
                         Nothing ->
                             ( stateBefore, [] )
@@ -106,18 +106,18 @@ processEvent hostEvent stateBefore =
                                     { stateBefore | httpRequestToForward = Nothing }
                             in
                             ( state
-                            , [ ElmAppInKalmitProcess.CompleteHttpResponse
+                            , [ InterfaceToHost.CompleteHttpResponse
                                     { httpRequestId = httpRequestToForward.httpRequestId
                                     , response = httpResponse
                                     }
                               ]
                             )
 
-                ElmAppInKalmitProcess.CompleteWithoutResult ->
+                InterfaceToHost.CompleteWithoutResult ->
                     ( stateBefore, [] )
 
 
-httpRequestForwardRequestsFromState : State -> List ElmAppInKalmitProcess.ProcessRequest
+httpRequestForwardRequestsFromState : State -> List InterfaceToHost.ProcessRequest
 httpRequestForwardRequestsFromState state =
     case state.httpRequestToForward of
         Nothing ->
@@ -126,8 +126,8 @@ httpRequestForwardRequestsFromState state =
         Just httpRequestToForward ->
             case state.volatileHostId of
                 Nothing ->
-                    [ ElmAppInKalmitProcess.StartTask
-                        { taskId = "create-vhost", task = ElmAppInKalmitProcess.CreateVolatileHost }
+                    [ InterfaceToHost.StartTask
+                        { taskId = "create-vhost", task = InterfaceToHost.CreateVolatileHost }
                     ]
 
                 Just volatileHostId ->
@@ -142,7 +142,7 @@ httpRequestForwardRequestsFromState state =
                     in
                     case maybeForwardTo of
                         Nothing ->
-                            [ ElmAppInKalmitProcess.CompleteHttpResponse
+                            [ InterfaceToHost.CompleteHttpResponse
                                 { httpRequestId = httpRequestToForward.httpRequestId
                                 , response =
                                     { statusCode = 400
@@ -170,9 +170,9 @@ httpRequestForwardRequestsFromState state =
                                     , script =
                                         HttpViaVolatileHost.scriptToGetResponseFromHttpRequest httpRequest
                                     }
-                                        |> ElmAppInKalmitProcess.RunInVolatileHost
+                                        |> InterfaceToHost.RunInVolatileHost
                             in
-                            [ ElmAppInKalmitProcess.StartTask
+                            [ InterfaceToHost.StartTask
                                 { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId
                                 , task = task
                                 }
@@ -186,7 +186,7 @@ interfaceToHost_initState =
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
-    ElmAppInKalmitProcess.wrapForSerialInterface_processEvent processEvent
+    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
 interfaceToHost_serializeState : State -> String

@@ -1,4 +1,4 @@
-module Main exposing
+module Backend.Main exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -8,28 +8,29 @@ module Main exposing
     , processEvent
     )
 
-import ElmAppInKalmitProcess
-import Json.Decode
-import Json.Encode
+import Backend.InterfaceToHost as InterfaceToHost
 import Platform
 
 
 type alias State =
-    { httpRequestsCount : Int }
+    String
 
 
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    ElmAppInKalmitProcess.wrapForSerialInterface_processEvent processEvent
-
-
-processEvent : ElmAppInKalmitProcess.ProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.ProcessRequest )
+processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 state =
-                    { stateBefore | httpRequestsCount = stateBefore.httpRequestsCount + 1 }
+                    case httpRequestEvent.request.method |> String.toLower of
+                        "get" ->
+                            stateBefore
+
+                        "post" ->
+                            stateBefore ++ (httpRequestEvent.request.bodyAsString |> Maybe.withDefault "")
+
+                        _ ->
+                            stateBefore
 
                 httpResponse =
                     { httpRequestId = httpRequestEvent.httpRequestId
@@ -37,36 +38,40 @@ processEvent hostEvent stateBefore =
                         { statusCode = 200
                         , bodyAsString =
                             Just
-                                ("You are seeing the default configuration for the web app."
-                                    ++ "\nFor information on how to configure the web app, see https://github.com/Viir/Kalmit"
-                                    ++ "\nThis web app received "
-                                    ++ (state.httpRequestsCount |> String.fromInt)
-                                    ++ " HTTP requests."
+                                ("The request uri was: "
+                                    ++ httpRequestEvent.request.uri
+                                    ++ "\nThe current state is:"
+                                    ++ state
                                 )
                         , headersToAdd = []
                         }
                     }
-                        |> ElmAppInKalmitProcess.CompleteHttpResponse
+                        |> InterfaceToHost.CompleteHttpResponse
             in
             ( state, [ httpResponse ] )
 
-        ElmAppInKalmitProcess.TaskComplete _ ->
+        InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
-
-
-interfaceToHost_serializeState : State -> String
-interfaceToHost_serializeState =
-    .httpRequestsCount >> String.fromInt
-
-
-interfaceToHost_deserializeState : String -> State
-interfaceToHost_deserializeState serializedState =
-    { httpRequestsCount = serializedState |> String.toInt |> Maybe.withDefault 0 }
 
 
 interfaceToHost_initState : State
 interfaceToHost_initState =
-    { httpRequestsCount = 0 }
+    ""
+
+
+interfaceToHost_processEvent : String -> State -> ( State, String )
+interfaceToHost_processEvent =
+    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
+
+
+interfaceToHost_serializeState : State -> String
+interfaceToHost_serializeState =
+    identity
+
+
+interfaceToHost_deserializeState : String -> State
+interfaceToHost_deserializeState =
+    identity
 
 
 

@@ -1,6 +1,6 @@
-# How to Configure and Deploy Your Kalmit Web App
+# How to Configure and Deploy Your Elm Full-Stack App
 
-Following is the easiest way to build and deploy your full-stack Elm app:
+Following is the easiest way to build and deploy your Elm full-stack app:
 
 + Make sure you have [Docker](https://www.docker.com) installed.
 + Clone this repository.
@@ -8,11 +8,11 @@ Following is the easiest way to build and deploy your full-stack Elm app:
 This script also contains a `docker run` command to start the app. Docker will then forward you logs like these:
 ```shell
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Loaded configuration 4C632674652AC57C514DA1FD57FE57F1906037D47147E896DC85F02361AFBA9F
+      Loaded configuration 007D0AC91D2AAD9E07993E9B770F02486229799610BDE7F8FDBFE36C52B69E57
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Begin to build the persistent process for Elm app 5BD744FCCBF4A6C1F727DBA62816189ADB7FC18745FD5426DAAA894E4B345330
+      Begin to build the persistent process for Elm app 33DFBE7941E4D3146F7B1EFBC58A74E67F2DB7DD661A918C765CE3A8B9AB386B
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
       Begin to restore the process state using the storeReader.
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
@@ -25,13 +25,13 @@ Now listening on: http://[::]:80
 Now listening on: https://[::]:443
 Application started. Press Ctrl+C to shut down.
 ```
-+ When you open this site in a web browser, you will find a SPA which connects to the backend using HTTP requests. So this example app contains a backend (entry point in [elm-app/src/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Main.elm) and a frontend (entry point in [elm-app/src/FrontendWeb/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/FrontendWeb/Main.elm)).
++ When you open this site in a web browser, you will find a SPA which connects to the backend using HTTP requests. So this example app contains a backend (entry point in [elm-app/src/Backend/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) and a frontend (entry point in [elm-app/src/FrontendWeb/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/FrontendWeb/Main.elm)).
 
 ## Full Stack App File Structure
 
-### Backend `Main.elm`
+### `Backend/Main.elm`
 
-The [main Elm module of the backend](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Main.elm) contains the following functions which are called by the engine:
+The [main Elm module of the backend](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
 + `interfaceToHost_processEvent : String -> State -> ( State, String )`
 + `interfaceToHost_initState : State`

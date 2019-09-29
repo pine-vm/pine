@@ -1,4 +1,4 @@
-module ElmAppInKalmitProcess exposing
+module Backend.InterfaceToHost exposing
     ( HttpHeader
     , HttpRequestContext
     , HttpRequestEvent

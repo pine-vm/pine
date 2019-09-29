@@ -1,4 +1,4 @@
-module Main exposing
+module Backend.Main exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -7,7 +7,7 @@ module Main exposing
     , main
     )
 
-import ElmAppInKalmitProcess
+import Backend.InterfaceToHost as InterfaceToHost
 import Json.Encode
 import Platform
 
@@ -16,10 +16,10 @@ type alias State =
     ()
 
 
-processEvent : ElmAppInKalmitProcess.ProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.ProcessRequest )
+processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 headerToPropagateBody =
                     { name = "response-header-name"
@@ -45,12 +45,22 @@ processEvent hostEvent stateBefore =
                         , headersToAdd = [ headerToPropagateBody ]
                         }
                     }
-                        |> ElmAppInKalmitProcess.CompleteHttpResponse
+                        |> InterfaceToHost.CompleteHttpResponse
             in
             ( stateBefore, [ httpResponse ] )
 
-        ElmAppInKalmitProcess.TaskComplete _ ->
+        InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
+
+
+interfaceToHost_initState : State
+interfaceToHost_initState =
+    ()
+
+
+interfaceToHost_processEvent : String -> State -> ( State, String )
+interfaceToHost_processEvent =
+    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
 interfaceToHost_serializeState : State -> String
@@ -61,16 +71,6 @@ interfaceToHost_serializeState =
 interfaceToHost_deserializeState : String -> State
 interfaceToHost_deserializeState =
     always ()
-
-
-interfaceToHost_initState : State
-interfaceToHost_initState =
-    ()
-
-
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    ElmAppInKalmitProcess.wrapForSerialInterface_processEvent processEvent
 
 
 

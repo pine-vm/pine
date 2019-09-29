@@ -1,4 +1,4 @@
-module HttpViaVolatileHost exposing
+module Backend.HttpViaVolatileHost exposing
     ( HttpRequestProperties
     , HttpResponseProperties
     , decodeVolatileHostHttpResponse

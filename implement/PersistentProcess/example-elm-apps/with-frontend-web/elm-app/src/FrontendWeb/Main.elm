@@ -1,4 +1,4 @@
-module Main exposing (Msg(..), State, init, main, update, view)
+module FrontendWeb.Main exposing (Msg(..), State, init, main, update, view)
 
 import Browser
 import Browser.Navigation as Navigation

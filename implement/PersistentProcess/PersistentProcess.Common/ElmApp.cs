@@ -7,15 +7,15 @@ namespace Kalmit
 {
     public struct ElmAppInterfaceConfig
     {
-        public const string PathToFileWithElmEntryPoint = "src/Main.elm";
+        public const string PathToFileWithElmEntryPoint = "src/Backend/Main.elm";
 
-        public const string PathToInitialStateFunction = "Main.interfaceToHost_initState";
+        public const string PathToInitialStateFunction = "Backend.Main.interfaceToHost_initState";
 
-        public const string PathToSerializedEventFunction = "Main.interfaceToHost_processEvent";
+        public const string PathToSerializedEventFunction = "Backend.Main.interfaceToHost_processEvent";
 
-        public const string PathToSerializeStateFunction = "Main.interfaceToHost_serializeState";
+        public const string PathToSerializeStateFunction = "Backend.Main.interfaceToHost_serializeState";
 
-        public const string PathToDeserializeStateFunction = "Main.interfaceToHost_deserializeState";
+        public const string PathToDeserializeStateFunction = "Backend.Main.interfaceToHost_deserializeState";
     }
 
     public class ElmApp

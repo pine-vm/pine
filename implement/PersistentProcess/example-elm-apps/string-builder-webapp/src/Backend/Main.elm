@@ -1,4 +1,4 @@
-module Main exposing
+module Backend.Main exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -7,7 +7,7 @@ module Main exposing
     , main
     )
 
-import ElmAppInKalmitProcess
+import Backend.InterfaceToHost as InterfaceToHost
 import Platform
 
 
@@ -15,10 +15,10 @@ type alias State =
     String
 
 
-processEvent : ElmAppInKalmitProcess.ProcessEvent -> State -> ( State, List ElmAppInKalmitProcess.ProcessRequest )
+processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        ElmAppInKalmitProcess.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 state =
                     case httpRequestEvent.request.method |> String.toLower of
@@ -39,17 +39,22 @@ processEvent hostEvent stateBefore =
                         , headersToAdd = []
                         }
                     }
-                        |> ElmAppInKalmitProcess.CompleteHttpResponse
+                        |> InterfaceToHost.CompleteHttpResponse
             in
             ( state, [ httpResponse ] )
 
-        ElmAppInKalmitProcess.TaskComplete _ ->
+        InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
+
+
+interfaceToHost_initState : State
+interfaceToHost_initState =
+    ""
 
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
-    ElmAppInKalmitProcess.wrapForSerialInterface_processEvent processEvent
+    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
 interfaceToHost_serializeState : State -> String
@@ -60,11 +65,6 @@ interfaceToHost_serializeState =
 interfaceToHost_deserializeState : String -> State
 interfaceToHost_deserializeState =
     identity
-
-
-interfaceToHost_initState : State
-interfaceToHost_initState =
-    ""
 
 
 
