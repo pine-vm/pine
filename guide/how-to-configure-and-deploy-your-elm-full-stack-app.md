@@ -45,7 +45,7 @@ Since all of these features are optional to use, in the simplest case, this file
 
 ## Support HTTPS
 
-The Kalmit web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from Let's Encrypt. To configure this, add a `letsEncryptOptions` property to the `map.json` file as follows:
+The Elm-fullstack web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from Let's Encrypt. To configure this, add a `letsEncryptOptions` property to the `map.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {

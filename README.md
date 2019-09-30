@@ -1,36 +1,19 @@
-# Kalmit
+# Elm Full-Stack
 
-*Simple development and operation of web services*
+In this repository, I share what I learn about building full-stack apps using the [Elm programming language](https://elm-lang.org). This approach emerged out of the development of online multiplayer video games like [DRTS](https://drtsgame.com).
 
-Implement your web service the simple way, using the [Elm programming language](https://elm-lang.org):
+In these applications, backend and frontend share an understanding of game mechanics and the game world. (Changes in these shared functionalities need to be synchronized between backend and frontend implementation.) Frontend and backend implementations use the same Elm modules for the common parts which need to be kept consistent. The tests run by elm-test also integrate backend and frontend for automated integration tests.
 
-+ Don't worry about connecting to a database or losing application state: The runtime persists each `update` so the app state can be restored. To learn more about this feature, see the [guide on persistence in Kalmit](./guide/persistence-in-kalmit.md)
-+ HTTP requests and responses are mapped to Elm types so that you can work with a strongly typed interface.
+Common, non-application specific functionality is implemented in the Elm-fullstack framework. This includes:
 
-To help you with the operation side, the Kalmit web host supports configuring common functionality:
-
++ Persisting each `update` in the backend and automatically restore the app state when necessary. To learn more about this functionality, see the [guide on persistence in Elm-fullstack](./guide/persistence-in-elm-fullstack.md).
++ HTTP requests and responses are mapped to Elm types so that we can work with a strongly typed interface.
 + Admin interface to read and set the app state, in case you want to manually intervene or monitor.
-+ Automatically get and renew SSL certificates from Let's Encrypt.
-+ Rate-limit client HTTP requests which result in updates of your app.
++ [HTTPS support](./guide/how-to-configure-and-deploy-your-elm-full-stack-app.md#support-https): The web host automatically gets and renews SSL certificates from Let's Encrypt.
++ Rate-limit client HTTP requests which result in updates of the app.
 + Serve static files on selected paths.
 
-## Configure & Deploy
-
-See the guide on [how to configure and deploy your web app](guide/how-to-configure-and-deploy-your-elm-full-stack-app.md).
-
-## Support
-
-Any questions? Reach out via [GitHub issues](https://github.com/Viir/Kalmit/issues), [twitter](https://twitter.com/michael_raetzel) or [email](mailto:michael@michaelrätzel.com).
-
-## Roadmap
-
-+ State Migrations
-+ Inspection
-+ Measuring Runtime Performance
-+ Increasing Runtime Performance
-+ World Domination
-
-For a more details about planned work, see the [backlog](./backlog.md).
+For how to build from Elm code and configure optional features, see the guide on [how to configure and deploy your Elm full-stack app](guide/how-to-configure-and-deploy-your-elm-full-stack-app.md).
 
 ## CI Build Status
 
