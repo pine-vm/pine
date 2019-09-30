@@ -73,10 +73,7 @@ namespace Kalmit.PersistentProcess
                             SetStateLiteralString = compositionRecordFromFile.SetState?.LiteralString,
 
                             AppendedEventsLiteralString =
-                                compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString)?.ToImmutableList()
-
-                                // TODO: Remove this fallback after migration of apps in production.
-                                ?? compositionRecordFromFile.AppendedEventsLiteralString,
+                                compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString)?.ToImmutableList(),
                         };
 
                     var compositionChainElement = (compositionRecordHash, compositionRecord);

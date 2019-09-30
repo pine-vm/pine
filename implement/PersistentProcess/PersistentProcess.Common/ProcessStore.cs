@@ -41,9 +41,6 @@ namespace Kalmit.ProcessStore
 
         static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
             CommonConversion.HashSHA256(serialized);
-
-        [Obsolete("Temporary support for migration from old process store.")]
-        public IReadOnlyList<string> AppendedEventsLiteralString;
     }
 
     public class ReductionRecord
@@ -74,9 +71,6 @@ namespace Kalmit.ProcessStore
             public string ReducedCompositionHashBase16;
 
             public ValueInFile ReducedValue;
-
-            [Obsolete("Temporary support for migration from old process store.")]
-            public string ReducedValueLiteralString;
         }
 
         string directory;
@@ -137,11 +131,7 @@ namespace Kalmit.ProcessStore
             return new ReductionRecord
             {
                 ReducedCompositionHash = reducedCompositionHash,
-                ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString
-
-                // TODO: Remove this fallback after migration of apps in production.
-                ?? reductionRecordFromFile.ReducedValueLiteralString
-                ,
+                ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString,
             };
         }
 
@@ -182,7 +172,7 @@ namespace Kalmit.ProcessStore
             var recordInFile = new ReductionRecordInFile
             {
                 ReducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(record.ReducedCompositionHash),
-                ReducedValueLiteralString = record.ReducedValueLiteralString,
+                ReducedValue = new ValueInFile { LiteralString = record.ReducedValueLiteralString },
             };
 
             var fileName = recordInFile.ReducedCompositionHashBase16;
