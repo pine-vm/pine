@@ -38,7 +38,7 @@ processEvent hostEvent stateBefore =
                         , bodyAsString =
                             Just
                                 ("You are seeing the default configuration for the web app."
-                                    ++ "\nFor information on how to configure the web app, see https://github.com/Viir/Kalmit"
+                                    ++ "\nFor information on how to configure the web app, see https://github.com/elm-fullstack/elm-fullstack"
                                     ++ "\nThis web app received "
                                     ++ (state.httpRequestsCount |> String.fromInt)
                                     ++ " HTTP requests."

@@ -15,9 +15,3 @@ Common, non-application specific functionality is implemented in the Elm-fullsta
 
 For how to build from Elm code and configure optional features, see the guide on [how to configure and deploy your Elm full-stack app](guide/how-to-configure-and-deploy-your-elm-full-stack-app.md).
 
-## CI Build Status
-
-Platform | Status
---- | ---
-| vs2017-win2016 | [![Build Status Windows](https://dev.azure.com/kalmit/kalmit/_apis/build/status/Kalmit%20Windows?branchName=master)](https://dev.azure.com/kalmit/kalmit/_build/latest?definitionId=2?branchName=master) |
-| ubuntu-16.04 | [![Build Status Linux](https://dev.azure.com/kalmit/kalmit/_apis/build/status/Kalmit%20Linux?branchName=master)](https://dev.azure.com/kalmit/kalmit/_build/latest?definitionId=3?branchName=master) |

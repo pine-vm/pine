@@ -23,7 +23,7 @@ During operation of the process, the system records the sequence of events (some
 
 On startup, the Elm-fullstack web host uses the composition log to restore the process state. It reads the sequence of events and replays the updates to compose the process state again.
 
-For an automated test covering the restoration of the process state, see the [method `Restore_process_state_over_compositions` in the implementation](https://github.com/Viir/Kalmit/blob/512bea42674f6d214745c73af8d20c52bca096f6/implement/PersistentProcess/PersistentProcess.Test/TestPersistentProcess.cs#L111-L153).
+For an automated test covering the restoration of the process state, see the [method `Restore_process_state_over_compositions` in the implementation](https://github.com/elm-fullstack/elm-fullstack/blob/512bea42674f6d214745c73af8d20c52bca096f6/implement/PersistentProcess/PersistentProcess.Test/TestPersistentProcess.cs#L111-L153).
 
 ### Optimizing for Faster Restore
 
@@ -32,4 +32,4 @@ Besides the time it takes for replaying the composition, a growing composition c
 
 To solve both the restore time and storage space problems, Elm-fullstack also stores reductions of the composition chain at regular intervals. The reduced value equals the process state derived from the reduced composition chain. When performing a restore, the composition chain is not anymore read back to the beginning of history, but only up to the last written and available reduction record. Since the earlier part of the composition log is not needed anymore for restoration, it can be truncated, freeing up storage space.
 
-The automated test [`Restore_process_state_from_combination_of_reduction_and_compositions` in the implementation](https://github.com/Viir/Kalmit/blob/512bea42674f6d214745c73af8d20c52bca096f6/implement/PersistentProcess/PersistentProcess.Test/TestPersistentProcess.cs#L155-L220) demonstrates the recovery of process states from truncated composition logs, with the help of reductions.
+The automated test [`Restore_process_state_from_combination_of_reduction_and_compositions` in the implementation](https://github.com/elm-fullstack/elm-fullstack/blob/512bea42674f6d214745c73af8d20c52bca096f6/implement/PersistentProcess/PersistentProcess.Test/TestPersistentProcess.cs#L155-L220) demonstrates the recovery of process states from truncated composition logs, with the help of reductions.

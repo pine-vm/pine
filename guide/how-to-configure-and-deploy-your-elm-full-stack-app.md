@@ -84,20 +84,20 @@ As long as the `UseStaging` property is set to `true`, the app gets the SSL cert
 ## Set a Password for the Admin Interface
 
 In case you want to use the admin interface, you can set it using the environment variable `APPSETTING_adminRootPassword`. The username is `root`.
-You can use these credentials for example at https://your-domain.com/kalmit-admin/api/process/state to inspect or set the process state.
+You can use these credentials for example at https://your-domain.com/elm-fullstack-admin/api/process/state to inspect or set the process state.
 When using Docker, you can set the environment variable when creating a container as follows:
 ```cmd
-docker run -p 80:80 --env "APPSETTING_adminRootPassword=secret" kalmit/kalmit-web-app
+docker run -p 80:80 --env "APPSETTING_adminRootPassword=secret" elmfullstack/elm-fullstack
 ```
 For more details about environment variables in docker, see https://docs.docker.com/engine/reference/run/#env-environment-variables
 
 ## Manage the Process Store
 
 The process store contains not only the latest state of the app but also the event log.
-In the Docker image `kalmit/kalmit-web-app`, the process store is located in the directory `/kalmit/process-store`.
+In the Docker image `elmfullstack/elm-fullstack`, the process store is located in the directory `/elm-fullstack/process-store`.
 You can copy this directory to backup the process store or copy it to another container.
 
 Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
 ```powershell
-docker run --mount source=your-docker-volume-name,destination=/kalmit/process-store -p 80:80 kalmit/kalmit-web-app
+docker run --mount source=your-docker-volume-name,destination=/elm-fullstack/process-store -p 80:80 elmfullstack/elm-fullstack
 ```
