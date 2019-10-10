@@ -36,13 +36,14 @@ namespace Kalmit.PersistentProcess
         public PersistentProcessWithHistoryOnFileFromElm019Code(
             IProcessStoreReader storeReader,
             byte[] elmAppFile,
-            Action<string> logger)
+            Action<string> logger,
+            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
             var elmAppFiles =
                 ElmApp.FilesFilteredForElmApp(ZipArchive.EntriesFromZipArchive(elmAppFile)).ToImmutableList();
 
             (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
-                ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles);
+                ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles, overrideElmAppInterfaceConfig);
 
             var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 

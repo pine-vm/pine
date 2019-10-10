@@ -100,17 +100,20 @@ namespace Kalmit
         static public (IDisposableProcessWithStringInterface process,
             (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
             ProcessFromElmCodeFiles(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles)
+            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
-            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, ElmAppInterfaceConfig.PathToFileWithElmEntryPoint);
+            var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
+
+            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, elmAppInterfaceConfig.RootModuleFilePath);
 
             var javascriptPreparedToRun =
                 BuildAppJavascript(
                     javascriptFromElmMake,
-                    ElmAppInterfaceConfig.PathToSerializedEventFunction,
-                    ElmAppInterfaceConfig.PathToInitialStateFunction,
-                    ElmAppInterfaceConfig.PathToSerializeStateFunction,
-                    ElmAppInterfaceConfig.PathToDeserializeStateFunction);
+                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToSerializedEventFunction,
+                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToInitialStateFunction,
+                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToSerializeStateFunction,
+                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToDeserializeStateFunction);
 
             return
                 (new ProcessHostedWithChakraCore(javascriptPreparedToRun),
