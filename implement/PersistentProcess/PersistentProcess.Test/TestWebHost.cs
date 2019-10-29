@@ -584,6 +584,8 @@ namespace Kalmit.PersistentProcess.Test
 
                         var response = client.PostAsync("", new StringContent(requestContentString)).Result;
 
+                        Assert.AreEqual("application/json", response.Content.Headers.ContentType.ToString());
+
                         var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                         var collectionFromResponseContent =

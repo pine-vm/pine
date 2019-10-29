@@ -42,7 +42,7 @@ processEvent hostEvent stateBefore =
                     , response =
                         { statusCode = 200
                         , bodyAsString = Just responseBody
-                        , headersToAdd = [ headerToPropagateBody ]
+                        , headersToAdd = [ headerToPropagateBody, { name = "content-type", values = [ "application/json" ] } ]
                         }
                     }
                         |> InterfaceToHost.CompleteHttpResponse

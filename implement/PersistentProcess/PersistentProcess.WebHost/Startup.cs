@@ -288,11 +288,19 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     if (processRequestCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
                     {
+                        var headerContentType =
+                            httpResponse.headersToAdd
+                            ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
+                            ?.values?.FirstOrDefault();
+
                         context.Response.StatusCode = httpResponse.statusCode;
 
                         foreach (var headerToAdd in (httpResponse.headersToAdd).EmptyIfNull())
                             context.Response.Headers[headerToAdd.name] =
                                 new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
+
+                        if (headerContentType != null)
+                            context.Response.ContentType = headerContentType;
 
                         await context.Response.WriteAsync(httpResponse?.bodyAsString ?? "");
                         break;
