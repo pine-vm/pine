@@ -207,20 +207,23 @@ namespace Kalmit
         }
 
         static byte[] GetElmExecutableFile =>
+            CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
+
+        static byte[] GetElmExecutableFileCompressedGzip =>
             BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
                 System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 ?
                 /*
-                Elm executable loaded on 2019-01-27 from
-                https://github.com/elm/compiler/releases/download/0.19.0/binaries-for-linux.tar.gz
+                Loaded 2019-10-29 from
+                https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
                 */
-                "280CFC0F4FDE4FC281325A289A645B44468388F25DBF0F87AE72A23DAF822D1A"
+                "E44AF52BB27F725A973478E589D990A6428E115FE1BB14F03833134D6C0F155C"
                 :
                 /*
-                Elm executable obtained on 2018-09-03 from
-                https://github.com/elm/compiler/releases/download/0.19.0/installer-for-windows.exe
+                Loaded 2019-10-29 from
+                https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
                 */
-                "08931A8DB552E67EF09C4ECD0A9E8E464FFDFF29BC58DAD2990DDE5D4FDC7C6F"));
+                "D1BF666298CBE3C5447B9CA0EA608552D750E5D232F9845C2AF11907B654903B"));
 
         public const string appStateJsVarName = "app_state";
 
@@ -349,7 +352,7 @@ namespace Kalmit
         }
 
         static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
-            "author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
+            "$author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
 
         static string elmHomeDirectory;
 

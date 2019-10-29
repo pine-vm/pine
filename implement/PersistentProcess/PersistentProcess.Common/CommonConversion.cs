@@ -19,5 +19,16 @@ namespace Kalmit
             using (var hasher = new SHA256Managed())
                 return hasher.ComputeHash(input);
         }
+
+        static public byte[] DecompressGzip(byte[] compressed)
+        {
+            using (var decompressStream = new System.IO.Compression.GZipStream(
+                new System.IO.MemoryStream(compressed), System.IO.Compression.CompressionMode.Decompress))
+            {
+                var decompressedStream = new System.IO.MemoryStream();
+                decompressStream.CopyTo(decompressedStream);
+                return decompressedStream.ToArray();
+            }
+        }
     }
 }
