@@ -14,14 +14,21 @@ namespace Kalmit
         static public DateTimeOffset EntryLastWriteTimeDefault => new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         static public byte[] ZipArchiveFromEntries(
-            IReadOnlyCollection<(string name, byte[] content)> entries,
+            IEnumerable<(string name, byte[] content)> entries,
             System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
             ZipArchiveFromEntries(
                 entries.Select(entry => (entry.name, entry.content, EntryLastWriteTimeDefault)).ToImmutableList(),
                 compressionLevel);
 
         static public byte[] ZipArchiveFromEntries(
-            IReadOnlyCollection<(string name, byte[] content, DateTimeOffset lastWriteTime)> entries,
+            IReadOnlyDictionary<IEnumerable<string>, byte[]> entries,
+            System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
+            ZipArchiveFromEntries(
+                entries.Select(entry => (name: String.Join("/", entry.Key), content: entry.Value)),
+                compressionLevel);
+
+        static public byte[] ZipArchiveFromEntries(
+            IEnumerable<(string name, byte[] content, DateTimeOffset lastWriteTime)> entries,
             System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal)
         {
             var stream = new MemoryStream();

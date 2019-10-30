@@ -105,15 +105,21 @@ namespace Kalmit
         {
             var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
-            var javascriptFromElmMake = CompileElmToJavascript(elmCodeFiles, elmAppInterfaceConfig.RootModuleFilePath);
+            var loweredElmCodeFiles =
+                ElmApp.AsCompletelyLoweredElmApp(elmCodeFiles, elmAppInterfaceConfig)
+                .Select(entry => (name: string.Join("/", entry.Key), entry.Value));
+
+            var javascriptFromElmMake = CompileElmToJavascript(
+                loweredElmCodeFiles,
+                string.Join("/", ElmApp.InterfaceToHostRootModuleFilePath));
 
             var javascriptPreparedToRun =
                 BuildAppJavascript(
                     javascriptFromElmMake,
-                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToSerializedEventFunction,
-                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToInitialStateFunction,
-                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToSerializeStateFunction,
-                    elmAppInterfaceConfig.RootModuleName + ElmAppInterfaceConvention.PathToDeserializeStateFunction);
+                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToSerializedEventFunction,
+                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToInitialStateFunction,
+                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToSerializeStateFunction,
+                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToDeserializeStateFunction);
 
             return
                 (new ProcessHostedWithChakraCore(javascriptPreparedToRun),
@@ -121,17 +127,17 @@ namespace Kalmit
         }
 
         static string CompileElmToJavascript(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            IEnumerable<(string, byte[])> elmCodeFiles,
             string pathToFileWithElmEntryPoint) =>
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js");
 
         static public string CompileElmToHtml(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            IEnumerable<(string, byte[])> elmCodeFiles,
             string pathToFileWithElmEntryPoint) =>
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html");
 
         static string CompileElm(
-            IReadOnlyCollection<(string name, byte[] content)> elmCodeFiles,
+            IEnumerable<(string name, byte[] content)> elmCodeFiles,
             string pathToFileWithElmEntryPoint,
             string outputFileName)
         {

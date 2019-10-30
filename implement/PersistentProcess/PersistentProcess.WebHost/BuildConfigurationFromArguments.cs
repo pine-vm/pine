@@ -24,6 +24,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var outputArgument = argumentValueFromParameterName("--output");
 
+            var loweredElmOutputArgument = argumentValueFromParameterName("--lowered-elm-output");
+
             var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
 
             var currentDirectory = Environment.CurrentDirectory;
@@ -31,12 +33,27 @@ namespace Kalmit.PersistentProcess.WebHost
             Console.WriteLine(
                 "The currentDirectory is '" + currentDirectory + "', frontendWebElmSource is '" + frontendWebElmSource + "'.");
 
-            var elmAppFiles =
+            var elmAppFilesBeforeLowering =
                 ElmApp
                 .FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName)))
                 .ToImmutableList();
 
-            Console.WriteLine("I found " + elmAppFiles.Count + " files to build the Elm app.");
+            Console.WriteLine("I found " + elmAppFilesBeforeLowering.Count + " files to build the Elm app.");
+
+            var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                elmAppFilesBeforeLowering, ElmAppInterfaceConfig.Default);
+
+            if (0 < loweredElmOutputArgument?.Length)
+            {
+                Console.WriteLine("I write the lowered Elm app to '" + loweredElmOutputArgument + "'.");
+
+                foreach (var file in loweredElmAppFiles)
+                {
+                    var outputPath = Path.Combine(new[] { loweredElmOutputArgument }.Concat(file.Key).ToArray());
+                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                    File.WriteAllBytes(outputPath, file.Value);
+                }
+            }
 
             byte[] frontendWebFile = null;
 
@@ -100,7 +117,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var webAppConfig =
                 new WebAppConfiguration()
-                .WithElmApp(ZipArchive.ZipArchiveFromEntries(elmAppFiles))
+                .WithElmApp(ZipArchive.ZipArchiveFromEntries(loweredElmAppFiles))
                 .WithStaticFiles(staticFiles)
                 .WithMap(map);
 

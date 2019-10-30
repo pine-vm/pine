@@ -30,6 +30,6 @@ WORKDIR /elm-fullstack
 ENV APPSETTING_webAppConfigurationFilePath="/elm-fullstack/web-app-config.zip"
 ENV APPSETTING_processStoreDirectoryPath="/elm-fullstack/process-store"
 
-ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/PersistentProcess.WebHost.dll"]
+ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/PersistentProcess.WebHost.dll", "start-server"]
 
 # ENV APPSETTING_adminRootPassword="password-for-elm-fullstack-root"
