@@ -1,9 +1,7 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_deserializeState
     , interfaceToHost_initState
     , interfaceToHost_processEvent
-    , interfaceToHost_serializeState
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
@@ -59,13 +57,3 @@ interfaceToHost_initState =
 interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
     InterfaceToHost.wrapForSerialInterface_processEvent processEvent
-
-
-interfaceToHost_serializeState : State -> String
-interfaceToHost_serializeState =
-    always ""
-
-
-interfaceToHost_deserializeState : String -> State
-interfaceToHost_deserializeState =
-    always ()

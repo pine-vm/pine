@@ -541,7 +541,7 @@ namespace Kalmit.PersistentProcess.Test
 
                         Assert.AreEqual(
                             HttpStatusCode.OK,
-                            HttpSetPersistentProcessState(client, "new-state").Result.StatusCode,
+                            HttpSetPersistentProcessState(client, @"""new-state""").Result.StatusCode,
                                 "HTTP status code for authorized request to set persistent process state.");
                     }
 

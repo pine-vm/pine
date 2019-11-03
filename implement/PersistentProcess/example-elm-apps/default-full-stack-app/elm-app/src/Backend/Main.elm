@@ -1,9 +1,7 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_deserializeState
     , interfaceToHost_initState
     , interfaceToHost_processEvent
-    , interfaceToHost_serializeState
     , processEvent
     )
 
@@ -48,16 +46,6 @@ processEvent hostEvent stateBefore =
 
         InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
-
-
-interfaceToHost_serializeState : State -> String
-interfaceToHost_serializeState =
-    .httpRequestsCount >> String.fromInt
-
-
-interfaceToHost_deserializeState : String -> State
-interfaceToHost_deserializeState serializedState =
-    { httpRequestsCount = serializedState |> String.toInt |> Maybe.withDefault 0 }
 
 
 interfaceToHost_initState : State

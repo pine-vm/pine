@@ -113,13 +113,15 @@ namespace Kalmit
                 loweredElmCodeFiles,
                 string.Join("/", ElmApp.InterfaceToHostRootModuleFilePath));
 
+            var pathToFunctionCommonStart = ElmApp.InterfaceToHostRootModuleName + ".";
+
             var javascriptPreparedToRun =
                 BuildAppJavascript(
                     javascriptFromElmMake,
-                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToSerializedEventFunction,
-                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToInitialStateFunction,
-                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToSerializeStateFunction,
-                    ElmApp.InterfaceToHostRootModuleName + ElmAppInterfaceConvention.PathToDeserializeStateFunction);
+                    pathToFunctionCommonStart + ElmAppInterfaceConvention.ProcessSerializedEventFunctionName,
+                    pathToFunctionCommonStart + ElmAppInterfaceConvention.InitialStateFunctionName,
+                    pathToFunctionCommonStart + ElmAppInterfaceConvention.SerializeStateFunctionName,
+                    pathToFunctionCommonStart + ElmAppInterfaceConvention.DeserializeStateFunctionName);
 
             return
                 (new ProcessHostedWithChakraCore(javascriptPreparedToRun),

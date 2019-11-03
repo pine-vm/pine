@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -19,13 +20,13 @@ namespace Kalmit
 
     public struct ElmAppInterfaceConvention
     {
-        public const string PathToInitialStateFunction = ".interfaceToHost_initState";
+        public const string InitialStateFunctionName = "interfaceToHost_initState";
 
-        public const string PathToSerializedEventFunction = ".interfaceToHost_processEvent";
+        public const string ProcessSerializedEventFunctionName = "interfaceToHost_processEvent";
 
-        public const string PathToSerializeStateFunction = ".interfaceToHost_serializeState";
+        public const string SerializeStateFunctionName = "interfaceToHost_serializeState";
 
-        public const string PathToDeserializeStateFunction = ".interfaceToHost_deserializeState";
+        public const string DeserializeStateFunctionName = "interfaceToHost_deserializeState";
     }
 
     public class ElmApp
@@ -63,10 +64,54 @@ namespace Kalmit
 
             var backendMainOriginalFile = originalAppFiles[backendMainFilePath];
 
+            var stateTypeNameInModule =
+                StateTypeNameFromRootElmModule(Encoding.UTF8.GetString(backendMainOriginalFile));
+
+            string getModuleText(string moduleName)
+            {
+                var filePath = FilePathFromModuleName(moduleName);
+
+                originalAppFiles.TryGetValue(filePath, out var moduleFile);
+
+                if (moduleFile == null)
+                    throw new Exception("Did not find the module named '" + moduleFile + "'");
+
+                return Encoding.UTF8.GetString(moduleFile);
+            }
+
+            var canonicalStateTypeName = interfaceConfig.RootModuleName + "." + stateTypeNameInModule;
+
+            var stateCodingFunctionNames = CompileElmValueSerializer.GetFunctionNamesFromTypeText(canonicalStateTypeName);
+
+            var stateCodingExpressions = CompileElmValueSerializer.CompileSerializingExpressions(
+                stateTypeNameInModule,
+                interfaceConfig.RootModuleName,
+                getModuleText);
+
+            var allStateCodingExpressions =
+                CompileElmValueSerializer.GetAllExpressionsFromTreeTransitive(stateCodingExpressions);
+
+            Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.expressions.Count);
+
+            var stateCodingJsonFunctionsText =
+                String.Join("\n\n",
+                allStateCodingExpressions.expressions
+                .Select(function => CompileElmValueSerializer.BuildFunctionTextsFromExpressions(
+                    function.Key,
+                    function.Value.encodeExpression,
+                    function.Value.decodeExpression))
+                .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
+
             return
                 originalAppFiles.SetItem(
                     InterfaceToHostRootModuleFilePath,
-                    Encoding.UTF8.GetBytes(LoweredRootElmModuleCode(interfaceConfig.RootModuleName)));
+                    Encoding.UTF8.GetBytes(LoweredRootElmModuleCode(
+                        interfaceConfig.RootModuleName,
+                        stateTypeNameInModule,
+                        stateCodingJsonFunctionsText,
+                        stateCodingFunctionNames.encodeFunctionName,
+                        stateCodingFunctionNames.decodeFunctionName,
+                        allStateCodingExpressions.referencedModules)));
         }
 
         static IEnumerable<string> FilePathFromModuleName(string moduleName)
@@ -79,11 +124,32 @@ namespace Kalmit
             return new[] { "src" }.Concat(directoryNames).Concat(new[] { fileName });
         }
 
+        static public string StateTypeNameFromRootElmModule(string elmModuleText)
+        {
+            var match = Regex.Match(
+                elmModuleText,
+                "^" + ElmAppInterfaceConvention.ProcessSerializedEventFunctionName +
+                @"\s*:\s*String\s*->\s*([\w\d_]+)\s*->\s*\(\s*",
+                RegexOptions.Multiline);
+
+            if (!match.Success)
+                throw new System.Exception("Did not find the expected type anotation for function " + ElmAppInterfaceConvention.ProcessSerializedEventFunctionName);
+
+            return match.Groups[1].Value;
+        }
+
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
         static public IEnumerable<string> InterfaceToHostRootModuleFilePath => FilePathFromModuleName(InterfaceToHostRootModuleName);
 
-        static public string LoweredRootElmModuleCode(string rootModuleNameBeforeLowering) => $@"
+        static public string LoweredRootElmModuleCode(
+            string rootModuleNameBeforeLowering,
+            string stateTypeNameInRootModuleBeforeLowering,
+            string stateCodingFunctions,
+            string stateEncodingFunctionName,
+            string stateDecodingFunctionName,
+            IImmutableSet<string> modulesToImport) =>
+            $@"
 module " + InterfaceToHostRootModuleName + $@" exposing
     (State
     , interfaceToHost_deserializeState
@@ -93,23 +159,39 @@ module " + InterfaceToHostRootModuleName + $@" exposing
     , main
     )
 
-import " + rootModuleNameBeforeLowering + $@" as RootModuleBeforeLowering
+import " + rootModuleNameBeforeLowering + $@"
 import Platform
+import Json.Encode
+import Json.Decode
+" + String.Join("\n", modulesToImport.Select(moduleName => "import " + moduleName))
++ $@"
+
+type alias DeserializedState = " + rootModuleNameBeforeLowering + "." + stateTypeNameInRootModuleBeforeLowering + $@"
 
 
-type alias State = RootModuleBeforeLowering.State
+type State
+    = DeserializeFailed String
+    | DeserializeSuccessful DeserializedState
 
 
-interfaceToHost_initState = RootModuleBeforeLowering.interfaceToHost_initState
+interfaceToHost_initState = " + rootModuleNameBeforeLowering + $@".interfaceToHost_initState |> DeserializeSuccessful
 
 
-interfaceToHost_processEvent = RootModuleBeforeLowering.interfaceToHost_processEvent
+interfaceToHost_processEvent hostEvent stateBefore =
+    case stateBefore of
+        DeserializeFailed _ ->
+            ( stateBefore, ""[]"" )
+
+        DeserializeSuccessful deserializedState ->
+            deserializedState
+                |> " + rootModuleNameBeforeLowering + $@".interfaceToHost_processEvent hostEvent
+                |> Tuple.mapFirst DeserializeSuccessful
 
 
-interfaceToHost_serializeState = RootModuleBeforeLowering.interfaceToHost_serializeState
+interfaceToHost_serializeState = jsonEncodeState >> Json.Encode.encode 0
 
 
-interfaceToHost_deserializeState = RootModuleBeforeLowering.interfaceToHost_deserializeState
+interfaceToHost_deserializeState = deserializeState
 
 
 -- Support function-level dead code elimination (https://elm-lang.org/blog/small-assets-without-the-headache) Elm code needed to inform the Elm compiler about our entry points.
@@ -124,7 +206,64 @@ main =
                 interfaceToHost_processEvent event (stateBefore |> interfaceToHost_serializeState |> interfaceToHost_deserializeState) |> Tuple.mapSecond (always Cmd.none)
         , subscriptions = \_ -> Sub.none
         }}
-";
 
+
+-- Inlined helpers -->
+
+
+{{-| Turn a `Result e a` to an `a`, by applying the conversion
+function specified to the `e`.
+-}}
+result_Extra_Extract : (e -> a) -> Result e a -> a
+result_Extra_Extract f x =
+    case x of
+        Ok a ->
+            a
+
+        Err e ->
+            f e
+
+
+-- Remember and communicate errors from state deserialization -->
+
+
+jsonEncodeState : State -> Json.Encode.Value
+jsonEncodeState state =
+    case state of
+        DeserializeFailed error ->
+            [ ( ""Interface_DeserializeFailed"", [ ( ""error"", error |> Json.Encode.string ) ] |> Json.Encode.object ) ] |> Json.Encode.object
+
+        DeserializeSuccessful deserializedState ->
+            deserializedState |> jsonEncodeDeserializedState
+
+
+jsonEncodeDeserializedState =
+    " + stateEncodingFunctionName + $@"
+
+
+deserializeState : String -> State
+deserializeState serializedState =
+    serializedState
+        |> Json.Decode.decodeString jsonDecodeState
+        |> Result.mapError Json.Decode.errorToString
+        |> result_Extra_Extract DeserializeFailed
+
+
+jsonDecodeState : Json.Decode.Decoder State
+jsonDecodeState =
+    Json.Decode.oneOf
+        [ Json.Decode.field ""Interface_DeserializeFailed"" (Json.Decode.field ""error"" Json.Decode.string |> Json.Decode.map DeserializeFailed)
+        , jsonDecodeDeserializedState |> Json.Decode.map DeserializeSuccessful
+        ]
+
+
+jsonDecodeDeserializedState : Json.Decode.Decoder DeserializedState
+jsonDecodeDeserializedState =
+    " + stateDecodingFunctionName + $@"
+
+
+-- State encoding and decoding functions -->
+
+" + stateCodingFunctions + "\n\n\n" + String.Join("\n\n", CompileElmValueSerializer.generalSupportingFunctionsTexts) + "\n";
     }
 }

@@ -2,7 +2,6 @@
 
 ### Integration Development
 
-+ Automate boring tasks: Support deriving the functions for serializing and deserializing from the app state Elm type. This depends on parsing imports, types and aliases from modules. How does this work with types the original Elm app code does not export from the defining module (opaque types)?
 + Support hosted app choosing frequency when subscribing to time. (Could be modeled for example with Response of type `Subscriptions`, (Posix time cyclic with distance in ms, Posix time once)).
 
 ### Integration Operation
