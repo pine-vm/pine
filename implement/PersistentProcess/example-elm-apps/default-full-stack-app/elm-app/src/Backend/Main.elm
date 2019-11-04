@@ -9,7 +9,9 @@ import Backend.InterfaceToHost as InterfaceToHost
 
 
 type alias State =
-    { httpRequestsCount : Int }
+    { httpRequestsCount : Int
+    , lastHttpRequests : List InterfaceToHost.HttpRequestEvent
+    }
 
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
@@ -23,7 +25,10 @@ processEvent hostEvent stateBefore =
         InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 state =
-                    { stateBefore | httpRequestsCount = stateBefore.httpRequestsCount + 1 }
+                    { stateBefore
+                        | httpRequestsCount = stateBefore.httpRequestsCount + 1
+                        , lastHttpRequests = httpRequestEvent :: stateBefore.lastHttpRequests |> List.take 4
+                    }
 
                 httpResponse =
                     { httpRequestId = httpRequestEvent.httpRequestId
@@ -50,4 +55,6 @@ processEvent hostEvent stateBefore =
 
 interfaceToHost_initState : State
 interfaceToHost_initState =
-    { httpRequestsCount = 0 }
+    { httpRequestsCount = 0
+    , lastHttpRequests = []
+    }
