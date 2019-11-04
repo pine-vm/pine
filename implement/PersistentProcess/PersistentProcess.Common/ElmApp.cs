@@ -160,6 +160,7 @@ module " + InterfaceToHostRootModuleName + $@" exposing
     )
 
 import " + rootModuleNameBeforeLowering + $@"
+import Dict
 import Platform
 import Json.Encode
 import Json.Decode

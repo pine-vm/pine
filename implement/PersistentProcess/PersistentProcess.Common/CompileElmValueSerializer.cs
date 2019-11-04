@@ -14,9 +14,11 @@ namespace Kalmit
 
         static string jsonDecodeFunctionNamePrefix => "jsonDecode_";
 
-        static string jsonEncodeMaybeFunctionNameCommonPart => "_generic_Maybe";
+        static string jsonCodeMaybeFunctionNameCommonPart => "_generic_Maybe";
 
-        static string jsonEncodeListFunctionNameCommonPart => "_generic_List";
+        static string jsonCodeListFunctionNameCommonPart => "_generic_List";
+
+        static string jsonCodeDictFunctionNameCommonPart => "_generic_Dict";
 
         static ImmutableDictionary<string, (string encodeExpression, string decodeExpression)> LeafExpressions =>
             ImmutableDictionary<string, (string encodeExpression, string decodeExpression)>.Empty
@@ -113,7 +115,7 @@ namespace Kalmit
                     return importedName.Value;
 
                 if (nameInThisModule.Contains('.'))
-                    throw new Exception("Failed to look up name'" + nameInThisModule + "'.");
+                    throw new Exception("Failed to look up name '" + nameInThisModule + "'.");
 
                 return (sourceModuleName, nameInThisModule);
             }
@@ -199,8 +201,8 @@ namespace Kalmit
                     {
                         canonicalTypeText = "Maybe " + parameters.Single().dependencies.canonicalTypeText,
 
-                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonEncodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
-                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonEncodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
+                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
+                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
 
                         dependencies = parameters.ToImmutableDictionary(
                             parameter => parameter.dependencies.canonicalTypeText,
@@ -216,8 +218,8 @@ namespace Kalmit
                     {
                         canonicalTypeText = "List " + parameters.Single().dependencies.canonicalTypeText,
 
-                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonEncodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
-                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonEncodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
+                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
+                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
 
                         dependencies = parameters.ToImmutableDictionary(
                             parameter => parameter.dependencies.canonicalTypeText,
@@ -227,7 +229,27 @@ namespace Kalmit
                     };
                 }
 
-                throw new NotImplementedException("Instantation is not implemented yet.");
+                if (rootType.Instance.Value.genericType == "Dict.Dict")
+                {
+                    if (parameters.Count != 2)
+                        throw new Exception("Unexpected number of parameters for 'Dict.Dict': got " + parameters.Count + " instead of 2.");
+
+                    return new CompileSerializingExpressionsResult
+                    {
+                        canonicalTypeText = "Dict.Dict " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
+
+                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
+                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
+
+                        dependencies = parameters.ToImmutableDictionary(
+                            parameter => parameter.dependencies.canonicalTypeText,
+                            parameter => parameter.dependencies),
+
+                        referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
+                    };
+                }
+
+                throw new NotImplementedException("Instantation is not implemented yet. (The type is '" + rootTypeText + "').");
             }
 
             if (rootType.Record != null)
@@ -440,7 +462,7 @@ namespace Kalmit
 
             var imports =
                 GetElmModuleTextLines(moduleText)
-                .Select(line => Regex.Match(line, @"^import\s+([\w\d\._]+)(.+)"))
+                .Select(line => Regex.Match(line, @"^import\s+([\w\d\._]+)(.*)"))
                 .Where(match => match.Success)
                 .ToImmutableDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
 
@@ -475,7 +497,32 @@ namespace Kalmit
             }
             else
             {
-                //  resolving 'exposing' in import is not implemented yet.
+                foreach (var import in imports)
+                {
+                    var exposingMatch = Regex.Match(import.Value, @"^\s*(|as\s+[\w\d_]+\s*)exposing\s*\(([^\)]*)\)");
+
+                    if (!exposingMatch.Success)
+                        continue;
+
+                    var exposedAggregated = exposingMatch.Groups[2].Value.Trim();
+
+                    if (exposedAggregated == "..")
+                    {
+                        //  resolving 'exposing(..)' in import is not implemented yet.
+
+                        return null;
+                    }
+
+                    var exposedNames =
+                        exposedAggregated
+                        .Split(new[] { ',' })
+                        .Select(commaSeparatedValue => commaSeparatedValue.Trim())
+                        .ToImmutableList();
+
+                    if (exposedNames.Contains(importedNameInModule))
+                        return (import.Key, importedNameInModule);
+                }
+
                 return null;
             }
         }
@@ -544,19 +591,31 @@ namespace Kalmit
         }
 
         static public IImmutableList<string> generalSupportingFunctionsTexts => new[]{
-            jsonEncodeFunctionNamePrefix + jsonEncodeMaybeFunctionNameCommonPart + $@" encoder =
+            jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" encoder =
     Maybe.map encoder >> Maybe.withDefault Json.Encode.null
 ",
-            jsonDecodeFunctionNamePrefix + jsonEncodeMaybeFunctionNameCommonPart + $@" =
+            jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" =
     Json.Decode.nullable
 ",
 
-            jsonEncodeFunctionNamePrefix + jsonEncodeListFunctionNameCommonPart + $@" encoder =
+            jsonEncodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + $@" encoder =
     Json.Encode.list encoder
 ",
-            jsonDecodeFunctionNamePrefix + jsonEncodeListFunctionNameCommonPart + $@" decoder =
+            jsonDecodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + $@" decoder =
     Json.Decode.list decoder
 ",
+            jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + $@" encodeKey encodeValue =
+    Dict.toList
+        >> Json.Encode.list
+            (\( key, value ) -> [ ( ""key"", key |> encodeKey ), ( ""value"", value |> encodeValue ) ] |> Json.Encode.object)
+",
+            jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + $@" decodeKey decodeValue =
+    Json.Decode.map2 Tuple.pair
+        (Json.Decode.field ""key"" decodeKey)
+        (Json.Decode.field ""value"" decodeValue)
+        |> Json.Decode.list
+        |> Json.Decode.map Dict.fromList
+"
         }.ToImmutableList();
     }
 }
