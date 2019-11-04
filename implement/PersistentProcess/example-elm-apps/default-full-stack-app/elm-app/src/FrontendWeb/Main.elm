@@ -1,4 +1,4 @@
-module FrontendWeb.Main exposing (Msg(..), State, init, main, update, view)
+module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 
 import Browser
 import Browser.Navigation as Navigation
@@ -7,6 +7,8 @@ import Html.Attributes as HA
 import Html.Events
 import Http
 import Json.Decode
+import Markdown.Parser
+import Result.Extra
 import Url
 
 
@@ -44,19 +46,19 @@ type PageState
     | Success String
 
 
-init : () -> Url.Url -> Navigation.Key -> ( State, Cmd Msg )
+init : () -> Url.Url -> Navigation.Key -> ( State, Cmd Event )
 init _ url navigationKey =
     { selectedPage = NotFound "", navigationKey = navigationKey }
         |> update (UrlChange url)
 
 
-type Msg
-    = ServerResponse { requestPage : OfferedPage, result : Result Http.Error String }
+type Event
+    = BackendResponse { requestPage : OfferedPage, result : Result Http.Error String }
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
 
 
-apiRequestCmdFromOfferedPage : OfferedPage -> Cmd Msg
+apiRequestCmdFromOfferedPage : OfferedPage -> Cmd Event
 apiRequestCmdFromOfferedPage page =
     let
         path =
@@ -69,11 +71,11 @@ apiRequestCmdFromOfferedPage page =
     in
     Http.get
         { url = path
-        , expect = Http.expectString (\result -> ServerResponse { requestPage = page, result = result })
+        , expect = Http.expectString (\result -> BackendResponse { requestPage = page, result = result })
         }
 
 
-apiRequestCmdFromSelectedPage : Page -> Maybe (Cmd Msg)
+apiRequestCmdFromSelectedPage : Page -> Maybe (Cmd Event)
 apiRequestCmdFromSelectedPage =
     offeredPageFromSelectedPage >> Maybe.map apiRequestCmdFromOfferedPage
 
@@ -91,14 +93,14 @@ offeredPageFromSelectedPage selectedPage =
             Nothing
 
 
-update : Msg -> State -> ( State, Cmd Msg )
-update msg stateBefore =
-    case msg of
-        ServerResponse { requestPage, result } ->
+update : Event -> State -> ( State, Cmd Event )
+update event stateBefore =
+    case event of
+        BackendResponse { requestPage, result } ->
             let
                 selectedPage =
                     case stateBefore.selectedPage of
-                        Home pageStateBefore ->
+                        Home _ ->
                             if requestPage /= NavigateToHome then
                                 stateBefore.selectedPage
 
@@ -114,7 +116,7 @@ update msg stateBefore =
                                 in
                                 Home pageState
 
-                        About pageStateBefore ->
+                        About _ ->
                             if requestPage /= NavigateToAbout then
                                 stateBefore.selectedPage
 
@@ -167,7 +169,7 @@ update msg stateBefore =
                     ( stateBefore, Navigation.load url )
 
 
-view : State -> Browser.Document Msg
+view : State -> Browser.Document Event
 view state =
     let
         pageContentFromPageState pageState =
@@ -179,13 +181,13 @@ view state =
                     Html.text "Loading..."
 
                 Success fullText ->
-                    [ [ "I received the following content from the server:" |> Html.text ]
+                    [ [ "I received the following content from the backend:" |> Html.text ]
                         |> Html.span []
                     , Html.pre [] [ Html.text fullText ]
                     ]
                         |> Html.div []
 
-        ( pageHeading, pageContent ) =
+        ( pageHeading, selectedPageContent ) =
             case state.selectedPage of
                 Home pageState ->
                     ( "Home", pageContentFromPageState pageState )
@@ -197,15 +199,46 @@ view state =
                     ( "Not Found", ("I found nothing at " ++ url) |> Html.text )
 
         body =
-            [ viewNavigation
+            [ globalStylesHtmlElement
+            , viewNavigation
             , [ pageHeading |> Html.text ] |> Html.h1 []
-            , pageContent
+            , viewGuide
+            , selectedPageContent
             ]
     in
     { title = pageHeading, body = body }
 
 
-viewNavigation : Html.Html Msg
+viewGuide : Html.Html event
+viewGuide =
+    guideMarkdown
+        |> Markdown.Parser.parse
+        |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
+        |> Result.andThen (Markdown.Parser.render Markdown.Parser.defaultHtmlRenderer)
+        |> Result.map (Html.div [])
+        |> Result.Extra.extract Html.text
+
+
+guideMarkdown : String
+guideMarkdown =
+    """
+Welcome to the Elm-fullstack example app.
+This app comes as default with the [docker image](https://hub.docker.com/r/elmfullstack/elm-fullstack/tags). You can replace it with your own app.
+
+You can find the source code for this app at [https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/PersistentProcess/example-elm-apps/default-full-stack-app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/PersistentProcess/example-elm-apps/default-full-stack-app)
+
+At [/elm-fullstack-admin/api/process/state](/elm-fullstack-admin/api/process/state), you can see the current state of the backend.
+The username to access that page is '`root`'. The default password is '`notempty`'.
+
+As you can see in the linked app state view, the backend state is represented as a JSON value. The functions to map to and from JSON are not part of the application code, because the framework automatically generates these from the Elm type.
+
+ProTip: To change the backend state, send a HTTP POST request to [/elm-fullstack-admin/api/process/state](/elm-fullstack-admin/api/process/state)
+
+To learn more, have a look at the guide at [https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md](https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md)
+"""
+
+
+viewNavigation : Html.Html Event
 viewNavigation =
     [ NavigateToHome, NavigateToAbout ]
         |> List.map
@@ -216,7 +249,7 @@ viewNavigation =
         |> Html.div []
 
 
-htmlLinkToPage : OfferedPage -> (List (Html.Html Msg) -> Html.Html Msg)
+htmlLinkToPage : OfferedPage -> (List (Html.Html Event) -> Html.Html Event)
 htmlLinkToPage page =
     let
         url =
@@ -239,7 +272,7 @@ htmlLinkToPage page =
                     ]
     in
     Html.a
-        ([ HA.href url ] ++ inputAttributes)
+        (HA.href url :: inputAttributes)
 
 
 titleAndUrlFromOfferedPage : OfferedPage -> ( String, String )
@@ -250,3 +283,16 @@ titleAndUrlFromOfferedPage offeredPage =
 
         NavigateToAbout ->
             ( "About", "/about" )
+
+
+globalStylesHtmlElement : Html.Html a
+globalStylesHtmlElement =
+    """
+body {
+font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+margin: 1em;
+}
+"""
+        |> Html.text
+        |> List.singleton
+        |> Html.node "style" []
