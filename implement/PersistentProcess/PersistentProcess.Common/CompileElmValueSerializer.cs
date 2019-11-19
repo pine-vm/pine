@@ -20,6 +20,8 @@ namespace Kalmit
 
         static string jsonCodeDictFunctionNameCommonPart => "_generic_Dict";
 
+        static string jsonCodeResultFunctionNameCommonPart => "_generic_Result";
+
         static ImmutableDictionary<string, (string encodeExpression, string decodeExpression)> LeafExpressions =>
             ImmutableDictionary<string, (string encodeExpression, string decodeExpression)>.Empty
             .Add("String", ("Json.Encode.string " + encodeParamName, "Json.Decode.string"))
@@ -240,6 +242,26 @@ namespace Kalmit
 
                         encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
                         decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
+
+                        dependencies = parameters.ToImmutableDictionary(
+                            parameter => parameter.dependencies.canonicalTypeText,
+                            parameter => parameter.dependencies),
+
+                        referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
+                    };
+                }
+
+                if (rootType.Instance.Value.genericType == "Result")
+                {
+                    if (parameters.Count != 2)
+                        throw new Exception("Unexpected number of parameters for 'Result': got " + parameters.Count + " instead of 2.");
+
+                    return new CompileSerializingExpressionsResult
+                    {
+                        canonicalTypeText = "Result " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
+
+                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
+                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
 
                         dependencies = parameters.ToImmutableDictionary(
                             parameter => parameter.dependencies.canonicalTypeText,
@@ -615,6 +637,20 @@ namespace Kalmit
         (Json.Decode.field ""value"" decodeValue)
         |> Json.Decode.list
         |> Json.Decode.map Dict.fromList
+",
+            jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + $@" encodeErr encodeOk valueToEncode =
+    case valueToEncode of
+        Err valueToEncodeError ->
+            [ ( ""Err"", valueToEncodeError |> encodeErr ) ] |> Json.Encode.object
+
+        Ok valueToEncodeOk ->
+            [ ( ""Ok"", valueToEncodeOk |> encodeOk ) ] |> Json.Encode.object
+",
+            jsonDecodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + $@" decodeErr decodeOk =
+    Json.Decode.oneOf
+        [ Json.Decode.field ""Err"" decodeErr |> Json.Decode.map Err
+        , Json.Decode.field ""Ok"" decodeOk |> Json.Decode.map Ok
+        ]
 "
         }.ToImmutableList();
     }
