@@ -347,7 +347,71 @@ namespace Kalmit
 
             if (rootType.Custom != null)
             {
-                throw new NotImplementedException("Custom type is not implemented yet.");
+                var tags = rootType.Custom.Value.tags.Select(typeTag =>
+                    {
+                        if (typeTag.Value.Count != 1)
+                            throw new NotImplementedException("Support for tags with parameter count " + typeTag.Value.Count + " (like '" + typeTag.Key + "') is not implemented.");
+
+                        var typeTagCanonicalName = sourceModuleName + "." + typeTag.Key;
+
+                        var tagParameterType = typeTag.Value.Single();
+
+                        var tagParameterTypeExpressions = CompileSerializingExpressions(
+                            tagParameterType,
+                            sourceModuleName,
+                            getModuleText);
+
+                        var tagParameterTypeFunctionNames =
+                            GetFunctionNamesFromTypeText(tagParameterTypeExpressions.canonicalTypeText);
+
+                        var tagEncodeCase =
+                            typeTagCanonicalName + " tagArgument ->";
+
+                        var tagEncodeExpression =
+                            @"Json.Encode.object [ ( """ + typeTag.Key + @""", tagArgument |> " + tagParameterTypeFunctionNames.encodeFunctionName + " ) ]";
+
+                        var tagDecodeExpression =
+                            @"Json.Decode.field """ + typeTag.Key + @""" " + tagParameterTypeFunctionNames.decodeFunctionName + " |> Json.Decode.map " + typeTagCanonicalName;
+
+                        var dependencies =
+                            tagParameterTypeExpressions.dependencies
+                            .SetItem(tagParameterTypeExpressions.canonicalTypeText, tagParameterTypeExpressions);
+
+                        return new
+                        {
+                            encodeCase = tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression),
+                            decodeExpression = tagDecodeExpression,
+                            dependencies = dependencies,
+                        };
+                    })
+                    .ToImmutableList();
+
+                var encodeCases =
+                    String.Join("\n\n", tags.Select(tag => tag.encodeCase));
+
+                var encodeExpression =
+                    "case " + encodeParamName + " of\n" +
+                    IndentElmCodeLines(1, encodeCases);
+
+                var decodeArrayExpression = "[ " + String.Join("\n, ", tags.Select(tag => tag.decodeExpression)) + "\n]";
+
+                var decodeExpression =
+                    "Json.Decode.oneOf\n" +
+                    IndentElmCodeLines(1, decodeArrayExpression);
+
+                var allTagsDependencies =
+                    tags
+                    .Select(field => field.dependencies)
+                    .Aggregate((a, b) => a.SetItems(b));
+
+                return new CompileSerializingExpressionsResult
+                {
+                    canonicalTypeText = sourceModuleName + "." + rootTypeText,
+                    encodeExpression = encodeExpression,
+                    decodeExpression = decodeExpression,
+                    dependencies = allTagsDependencies,
+                    referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
+                };
             }
 
             throw new Exception("Parsed invalid case for type '" + rootTypeText + "'");
