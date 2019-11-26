@@ -28,6 +28,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
 
+            var frontendWebElmMakeCommandAppendix = argumentValueFromParameterName("--frontend-web-elm-make-appendix");
+
             var currentDirectory = Environment.CurrentDirectory;
 
             Console.WriteLine(
@@ -88,7 +90,10 @@ namespace Kalmit.PersistentProcess.WebHost
                 var pathToEntryPointFile =
                     Path.GetRelativePath(frontendWebElmAppRootDirectory, frontendWebElmSearchBegin);
 
-                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(frontendWebElmCodeFiles, pathToEntryPointFile);
+                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
+                    frontendWebElmCodeFiles,
+                    pathToEntryPointFile,
+                    frontendWebElmMakeCommandAppendix);
 
                 frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);
             }

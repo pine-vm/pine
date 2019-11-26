@@ -130,18 +130,21 @@ namespace Kalmit
 
         static string CompileElmToJavascript(
             IEnumerable<(string, byte[])> elmCodeFiles,
-            string pathToFileWithElmEntryPoint) =>
-            CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js");
+            string pathToFileWithElmEntryPoint,
+            string elmMakeCommandAppendix = null) =>
+            CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
 
         static public string CompileElmToHtml(
             IEnumerable<(string, byte[])> elmCodeFiles,
-            string pathToFileWithElmEntryPoint) =>
-            CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html");
+            string pathToFileWithElmEntryPoint,
+            string elmMakeCommandAppendix = null) =>
+            CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
 
         static string CompileElm(
             IEnumerable<(string name, byte[] content)> elmCodeFiles,
             string pathToFileWithElmEntryPoint,
-            string outputFileName)
+            string outputFileName,
+            string elmMakeCommandAppendix = null)
         {
             /*
             Unify directory separator symbols in file names to avoid this problem observed 2019-07-31:
@@ -166,7 +169,7 @@ namespace Kalmit
                 .Select(elmCodeFile => (elmCodeFile.name.Replace('\\', '/'), elmCodeFile.content))
                 .ToList();
 
-            var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\"";
+            var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
             var commandResults = ExecutableFile.ExecuteFileWithArguments(
                 elmCodeFilesWithUnifiedDirectorySeparatorChars,
