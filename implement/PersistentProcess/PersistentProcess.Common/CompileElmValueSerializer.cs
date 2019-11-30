@@ -300,7 +300,7 @@ namespace Kalmit
                         {
                             fieldType,
                             encodeExpression = "( \"" + field.Key + "\", " + encodeFieldValueExpression + " )",
-                            decodeExpression = "( Json.Decode.field \"" + field.Key + "\" " + fieldFunctionNames.decodeFunctionName + " )",
+                            decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + field.Key + "\" " + fieldFunctionNames.decodeFunctionName + " )",
                             dependencies = dependencies,
                         };
                     }).ToImmutableList();
@@ -332,7 +332,7 @@ namespace Kalmit
                     + " })";
 
                 var decodeExpression =
-                    "Json.Decode.map" + (1 < fields.Count ? fields.Count.ToString() : "") + " " + decodeMapFunction + "\n" +
+                    "Json.Decode.succeed " + decodeMapFunction + "\n" +
                     IndentElmCodeLines(1, dencodeListExpression);
 
                 return new CompileSerializingExpressionsResult
@@ -715,6 +715,12 @@ namespace Kalmit
         [ Json.Decode.field ""Err"" decodeErr |> Json.Decode.map Err
         , Json.Decode.field ""Ok"" decodeOk |> Json.Decode.map Ok
         ]
+",
+            $@"{{-| As found at <https://github.com/elm-community/json-extra/blob/14b45543fb85531385eb9ac9adca2c054f73e624/src/Json/Decode/Extra.elm#L144-L146>
+-}}
+jsonDecode_andMap : Json.Decode.Decoder a -> Json.Decode.Decoder (a -> b) -> Json.Decode.Decoder b
+jsonDecode_andMap =
+    Json.Decode.map2 (|>)
 "
         }.ToImmutableList();
     }
