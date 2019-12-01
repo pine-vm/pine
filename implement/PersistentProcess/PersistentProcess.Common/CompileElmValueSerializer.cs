@@ -22,6 +22,8 @@ namespace Kalmit
 
         static string jsonCodeResultFunctionNameCommonPart => "_generic_Result";
 
+        static string jsonCodeTupleFunctionNameCommonPart => "_tuple_";
+
         static ImmutableDictionary<string, (string encodeExpression, string decodeExpression)> LeafExpressions =>
             ImmutableDictionary<string, (string encodeExpression, string decodeExpression)>.Empty
             .Add("String", ("Json.Encode.string " + encodeParamName, "Json.Decode.string"))
@@ -414,6 +416,51 @@ namespace Kalmit
                 };
             }
 
+            if (rootType.Tuple != null)
+            {
+                var tupleElementResults = rootType.Tuple.Select(tupleElementType =>
+                    {
+                        var tupleElementTypeExpressions = CompileSerializingExpressions(
+                            tupleElementType,
+                            sourceModuleName,
+                            getModuleText);
+
+                        var dependencies =
+                            tupleElementTypeExpressions.dependencies
+                            .SetItem(tupleElementTypeExpressions.canonicalTypeText, tupleElementTypeExpressions);
+
+                        return new
+                        {
+                            tupleElementType,
+                            functionNames = GetFunctionNamesFromTypeText(tupleElementTypeExpressions.canonicalTypeText),
+                            dependencies = dependencies,
+                        };
+                    }).ToImmutableList();
+
+                var allElementsDependencies =
+                    tupleElementResults
+                    .Select(element => element.dependencies)
+                    .Aggregate((a, b) => a.SetItems(b));
+
+                var encodeExpression =
+                    jsonEncodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString() + " " +
+                    String.Join(" ", tupleElementResults.Select(elem => elem.functionNames.encodeFunctionName)) + " " +
+                    encodeParamName;
+
+                var decodeExpression =
+                    jsonDecodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString() + " " +
+                    String.Join(" ", tupleElementResults.Select(elem => elem.functionNames.decodeFunctionName));
+
+                return new CompileSerializingExpressionsResult
+                {
+                    canonicalTypeText = sourceModuleName + "." + rootTypeText,
+                    encodeExpression = encodeExpression,
+                    decodeExpression = decodeExpression,
+                    dependencies = allElementsDependencies,
+                    referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
+                };
+            }
+
             throw new Exception("Parsed invalid case for type '" + rootTypeText + "'");
         }
 
@@ -442,6 +489,18 @@ namespace Kalmit
 
                 if (typeDefinitionTextLines.Length == 1)
                 {
+                    {
+                        var tupleMatch = Regex.Match(typeDefinitionTextLines[0].Trim(), @"\(([\w\d_\.\s\,]+)\)");
+
+                        if (tupleMatch.Success)
+                        {
+                            return new ElmType
+                            {
+                                Tuple = tupleMatch.Groups[1].Value.Split(new[] { (',') }).Select(elem => elem.Trim()).ToImmutableList(),
+                            };
+                        }
+                    }
+
                     var instanceComponents = Regex.Split(typeDefinitionTextLines[0].Trim(), @"\s");
 
                     if (1 < instanceComponents.Length)
@@ -643,6 +702,8 @@ namespace Kalmit
 
             public (string genericType, IImmutableList<string> parameters)? Instance;
 
+            public IImmutableList<string> Tuple;
+
             public struct CustomStructure
             {
                 public IImmutableDictionary<string, IImmutableList<string>> tags;
@@ -715,6 +776,25 @@ namespace Kalmit
         [ Json.Decode.field ""Err"" decodeErr |> Json.Decode.map Err
         , Json.Decode.field ""Ok"" decodeOk |> Json.Decode.map Ok
         ]
+",
+            jsonEncodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + $@"2 encodeA encodeB ( a, b ) =
+    [ a |> encodeA, b |> encodeB ]
+        |> Json.Encode.list identity
+",
+            jsonDecodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + $@"2 decodeA decodeB =
+    Json.Decode.map2 (\a b -> ( a, b ))
+        (Json.Decode.index 0 decodeA)
+        (Json.Decode.index 1 decodeB)
+",
+            jsonEncodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + $@"3 encodeA encodeB encodeC ( a, b, c ) =
+    [ a |> encodeA, b |> encodeB, c |> encodeC ]
+        |> Json.Encode.list identity
+",
+            jsonDecodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + $@"3 decodeA decodeB decodeC =
+    Json.Decode.map3 (\a b c -> ( a, b, c ))
+        (Json.Decode.index 0 decodeA)
+        (Json.Decode.index 1 decodeB)
+        (Json.Decode.index 2 decodeC)
 ",
             $@"{{-| As found at <https://github.com/elm-community/json-extra/blob/14b45543fb85531385eb9ac9adca2c054f73e624/src/Json/Decode/Extra.elm#L144-L146>
 -}}
