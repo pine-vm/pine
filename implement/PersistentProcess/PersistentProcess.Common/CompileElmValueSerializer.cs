@@ -738,11 +738,20 @@ namespace Kalmit
         }
 
         static public IImmutableList<string> generalSupportingFunctionsTexts => new[]{
-            jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" encoder =
-    Maybe.map encoder >> Maybe.withDefault Json.Encode.null
+            jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" encoder valueToEncode =
+    case valueToEncode of
+        Nothing ->
+            [ ( ""Nothing"", [] |> Json.Encode.object ) ] |> Json.Encode.object
+
+        Just just ->
+            [ ( ""Just"", just |> encoder ) ] |> Json.Encode.object
 ",
-            jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" =
-    Json.Decode.nullable
+            jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" decoder =
+    Json.Decode.oneOf
+        [ Json.Decode.field ""Nothing"" (Json.Decode.succeed Nothing)
+        , Json.Decode.field ""Just"" (decoder |> Json.Decode.map Just)
+        , Json.Decode.null Nothing -- Temporary backwardscompatibility: Map 'null' to Nothing
+        ]
 ",
 
             jsonEncodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + $@" encoder =
