@@ -33,10 +33,16 @@ Application started. Press Ctrl+C to shut down.
 
 The [main Elm module of the backend](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
-+ `interfaceToHost_processEvent : String -> State -> ( State, String )`
 + `interfaceToHost_initState : State`
-+ `interfaceToHost_serializeState : State -> String`
-+ `interfaceToHost_deserializeState : String -> State`
++ `interfaceToHost_processEvent : String -> State -> ( State, String )`
+
+As we can see in the examples, the `interfaceToHost_processEvent` takes care of deserializing the event coming from the host (the `String` parameter) and serializing the response for this specific event to the host (the `String` in the returned tuple). It delegates the rest of the processing to a function working with the types resulting from this (de)serialization:
+
+```Elm
+processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+```
+
+Analogous to the update function in a client Elm app, this function returns the new state of your app as the first element in the tuple. The web server takes care of saving this state and automatically restores it in case the server restarts. When you stop and restart the docker container, you will find the server still has the state which resulted from processing the last event.
 
 ### `map.json`
 
