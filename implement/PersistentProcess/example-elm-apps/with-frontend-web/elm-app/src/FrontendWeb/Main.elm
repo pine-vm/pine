@@ -181,7 +181,7 @@ view state =
                 Success fullText ->
                     [ [ "I received the following content from the server:" |> Html.text ]
                         |> Html.span []
-                    , Html.pre [] [ Html.text fullText ]
+                    , Html.pre [ HA.style "white-space" "pre-wrap" ] [ Html.text fullText ]
                     ]
                         |> Html.div []
 

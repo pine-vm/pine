@@ -2,6 +2,7 @@ module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 
 import Browser
 import Browser.Navigation as Navigation
+import Common
 import Html
 import Html.Attributes as HA
 import Html.Events
@@ -221,21 +222,7 @@ viewGuide =
 
 guideMarkdown : String
 guideMarkdown =
-    """
-Welcome to the Elm-fullstack example app.
-This app comes as default with the [docker image](https://hub.docker.com/r/elmfullstack/elm-fullstack/tags). You can replace it with your own app.
-
-You can find the source code for this app at [https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/PersistentProcess/example-elm-apps/default-full-stack-app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/PersistentProcess/example-elm-apps/default-full-stack-app)
-
-At [/elm-fullstack-admin/api/process/state](/elm-fullstack-admin/api/process/state), you can see the current state of the backend.
-The username to access that page is '`root`'. The default password is '`notempty`'.
-
-As you can see in the linked app state view, the backend state is represented as a JSON value. The functions to map to and from JSON are not part of the application code, because the framework automatically generates these from the Elm type.
-
-ProTip: To change the backend state, send a HTTP POST request to [/elm-fullstack-admin/api/process/state](/elm-fullstack-admin/api/process/state)
-
-To learn more, have a look at the guide at [https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md](https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md)
-"""
+    Common.describeApp
 
 
 viewNavigation : Html.Html Event
