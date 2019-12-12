@@ -1,16 +1,16 @@
 ## Backlog
 
-### Integration Development
+### Application Development
 
-+ Support hosted app choosing frequency when subscribing to time. (Could be modeled for example with Response of type `Subscriptions`, (Posix time cyclic with distance in ms, Posix time once)).
++ Support hosted application choosing frequency when subscribing to time. (Could be modeled for example with Response of type `Subscriptions`, (Posix time cyclic with distance in ms, Posix time once)).
 
-### Integration Operation
+### Application Operation
 
-+ Support integrating app to configure tradeoff between the cost of persisting and cost of restoring.
++ Support application to configure tradeoff between the cost of persisting and cost of restoring.
 + Reduce load on storage: Provide automation to remove reductions which are not needed anymore from the store.
 + Add information in the admin section on the web host at `/elm-fullstack-admin`. This seems a good place to inform about available options. Illustrate how to set the process state.
 
-### Collaboration
+### Collaboration on Elm-Fullstack
 
 + Simplify modeling of tests: Support modeling Elm app using a string for the main (and only) module contents, using the default `elm.json`.
 
