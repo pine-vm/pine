@@ -33,15 +33,11 @@ namespace Kalmit
             .Add("()", ("Json.Encode.object []", "Json.Decode.succeed ()"))
             .Add("{}", ("Json.Encode.object []", "Json.Decode.succeed {}"));
 
-        public struct CompileSerializingExpressionsResult
+        public struct ResolveTypeResult
         {
             public string canonicalTypeText;
 
-            public string encodeExpression;
-
-            public string decodeExpression;
-
-            public IImmutableDictionary<string, CompileSerializingExpressionsResult> dependencies;
+            public Func<(string encodeExpression, string decodeExpression, IImmutableSet<string> dependencies)> compileExpressions;
 
             public IImmutableSet<string> referencedModules;
         }
@@ -83,12 +79,12 @@ namespace Kalmit
                 (encodeFunction, decodeFunction);
         }
 
-        static public CompileSerializingExpressionsResult CompileSerializingExpressions(
+        static public ResolveTypeResult ResolveType(
             string rootTypeText,
             string sourceModuleName,
             Func<string, string> getModuleText)
         {
-            Console.WriteLine("Begin BuildJsonCodingExpressions for '" + rootTypeText + "' in module '" + sourceModuleName + "'.");
+            Console.WriteLine("Begin ResolveType for '" + rootTypeText + "' in module '" + sourceModuleName + "'.");
 
             var sourceModuleText = getModuleText(sourceModuleName);
 
@@ -98,14 +94,12 @@ namespace Kalmit
 
                 var functionNames = GetFunctionNamesFromTypeText(rootTypeText);
 
-                return new CompileSerializingExpressionsResult
+                return new ResolveTypeResult
                 {
                     canonicalTypeText = rootTypeText,
 
-                    encodeExpression = leafExpressions.encodeExpression,
-                    decodeExpression = leafExpressions.decodeExpression,
+                    compileExpressions = () => (leafExpressions.encodeExpression, leafExpressions.decodeExpression, ImmutableHashSet<string>.Empty),
 
-                    dependencies = ImmutableDictionary<string, CompileSerializingExpressionsResult>.Empty,
                     referencedModules = ImmutableHashSet<string>.Empty,
                 };
             }
@@ -137,7 +131,7 @@ namespace Kalmit
                 {
                     Console.WriteLine("Type '" + rootTypeText + "' in '" + sourceModuleName + "' refers to '" + referencedModuleName + "." + typeNameInReferencedModule + "'.");
 
-                    return CompileSerializingExpressions(
+                    return ResolveType(
                         typeNameInReferencedModule,
                         referencedModuleName,
                         getModuleText);
@@ -151,7 +145,7 @@ namespace Kalmit
                     throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
 
                 var supportingExpressions =
-                    CompileSerializingExpressions(
+                    ResolveType(
                         referencedTypeText,
                         sourceModuleName,
                         getModuleText);
@@ -159,13 +153,11 @@ namespace Kalmit
                 var fullyQualifiedTypeName = sourceModuleName + "." + rootTypeText;
 
                 return
-                    new CompileSerializingExpressionsResult
+                    new ResolveTypeResult
                     {
                         canonicalTypeText = fullyQualifiedTypeName,
-                        encodeExpression = supportingExpressions.encodeExpression,
-                        decodeExpression = supportingExpressions.decodeExpression,
-                        dependencies = supportingExpressions.dependencies,
-                        referencedModules = supportingExpressions.referencedModules.Add(referencedModuleName),
+                        compileExpressions = supportingExpressions.compileExpressions,
+                        referencedModules = ImmutableHashSet.Create(sourceModuleName),
                     };
             }
 
@@ -175,7 +167,7 @@ namespace Kalmit
             {
                 Console.WriteLine("Type '" + rootTypeText + "' is alias for '" + rootType.Alias + "'.");
 
-                return CompileSerializingExpressions(
+                return ResolveType(
                     rootType.Alias,
                     sourceModuleName,
                     getModuleText);
@@ -189,7 +181,7 @@ namespace Kalmit
                     rootType.Instance.Value.parameters
                     .Select(parameter =>
                     {
-                        var dependencies = CompileSerializingExpressions(parameter, sourceModuleName, getModuleText);
+                        var dependencies = ResolveType(parameter, sourceModuleName, getModuleText);
 
                         var functionNames = GetFunctionNamesFromTypeText(dependencies.canonicalTypeText);
 
@@ -201,16 +193,14 @@ namespace Kalmit
 
                 if (rootType.Instance.Value.genericType == "Maybe")
                 {
-                    return new CompileSerializingExpressionsResult
+                    return new ResolveTypeResult
                     {
                         canonicalTypeText = "Maybe " + parameters.Single().dependencies.canonicalTypeText,
 
-                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
-                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
-
-                        dependencies = parameters.ToImmutableDictionary(
-                            parameter => parameter.dependencies.canonicalTypeText,
-                            parameter => parameter.dependencies),
+                        compileExpressions = () =>
+                            (jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
+                            jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
+                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
 
                         referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
                     };
@@ -218,16 +208,14 @@ namespace Kalmit
 
                 if (rootType.Instance.Value.genericType == "List")
                 {
-                    return new CompileSerializingExpressionsResult
+                    return new ResolveTypeResult
                     {
                         canonicalTypeText = "List " + parameters.Single().dependencies.canonicalTypeText,
 
-                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
-                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
-
-                        dependencies = parameters.ToImmutableDictionary(
-                            parameter => parameter.dependencies.canonicalTypeText,
-                            parameter => parameter.dependencies),
+                        compileExpressions = () =>
+                            (jsonEncodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
+                            jsonDecodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
+                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
 
                         referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
                     };
@@ -238,16 +226,14 @@ namespace Kalmit
                     if (parameters.Count != 2)
                         throw new Exception("Unexpected number of parameters for 'Dict.Dict': got " + parameters.Count + " instead of 2.");
 
-                    return new CompileSerializingExpressionsResult
+                    return new ResolveTypeResult
                     {
                         canonicalTypeText = "Dict.Dict " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
 
-                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
-                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
-
-                        dependencies = parameters.ToImmutableDictionary(
-                            parameter => parameter.dependencies.canonicalTypeText,
-                            parameter => parameter.dependencies),
+                        compileExpressions = () =>
+                            (jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
+                            jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
+                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
 
                         referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
                     };
@@ -258,16 +244,14 @@ namespace Kalmit
                     if (parameters.Count != 2)
                         throw new Exception("Unexpected number of parameters for 'Result': got " + parameters.Count + " instead of 2.");
 
-                    return new CompileSerializingExpressionsResult
+                    return new ResolveTypeResult
                     {
                         canonicalTypeText = "Result " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
 
-                        encodeExpression = jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
-                        decodeExpression = jsonDecodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
-
-                        dependencies = parameters.ToImmutableDictionary(
-                            parameter => parameter.dependencies.canonicalTypeText,
-                            parameter => parameter.dependencies),
+                        compileExpressions = () =>
+                            (jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
+                            jsonDecodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
+                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
 
                         referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
                     };
@@ -284,7 +268,7 @@ namespace Kalmit
                     {
                         var fieldType = field.Value;
 
-                        var fieldTypeExpressions = CompileSerializingExpressions(
+                        var fieldTypeExpressions = ResolveType(
                             fieldType,
                             sourceModuleName,
                             getModuleText);
@@ -294,16 +278,12 @@ namespace Kalmit
                         var encodeFieldValueExpression =
                             encodeParamName + "." + field.Key + " |> " + fieldFunctionNames.encodeFunctionName;
 
-                        var dependencies =
-                            fieldTypeExpressions.dependencies
-                            .SetItem(fieldTypeExpressions.canonicalTypeText, fieldTypeExpressions);
-
                         return new
                         {
                             fieldType,
                             encodeExpression = "( \"" + field.Key + "\", " + encodeFieldValueExpression + " )",
                             decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + field.Key + "\" " + fieldFunctionNames.decodeFunctionName + " )",
-                            dependencies = dependencies,
+                            dependencies = ImmutableHashSet.Create(fieldTypeExpressions.canonicalTypeText),
                         };
                     }).ToImmutableList();
 
@@ -320,7 +300,7 @@ namespace Kalmit
                 var allFieldsDependencies =
                     fields
                     .Select(field => field.dependencies)
-                    .Aggregate((a, b) => a.SetItems(b));
+                    .Aggregate((a, b) => a.Union(b));
 
                 var encodeExpression =
                     "Json.Encode.object\n" +
@@ -337,126 +317,121 @@ namespace Kalmit
                     "Json.Decode.succeed " + decodeMapFunction + "\n" +
                     IndentElmCodeLines(1, dencodeListExpression);
 
-                return new CompileSerializingExpressionsResult
+                return new ResolveTypeResult
                 {
                     canonicalTypeText = sourceModuleName + "." + rootTypeText,
-                    encodeExpression = encodeExpression,
-                    decodeExpression = decodeExpression,
-                    dependencies = allFieldsDependencies,
+
+                    compileExpressions = () => (encodeExpression, decodeExpression, allFieldsDependencies),
+
                     referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
                 };
             }
 
             if (rootType.Custom != null)
             {
-                var tags = rootType.Custom.Value.tags.Select(typeTag =>
-                    {
-                        if (typeTag.Value.Count != 1)
-                            throw new NotImplementedException("Support for tags with parameter count " + typeTag.Value.Count + " (like '" + typeTag.Key + "') is not implemented.");
-
-                        var typeTagCanonicalName = sourceModuleName + "." + typeTag.Key;
-
-                        var tagParameterType = typeTag.Value.Single();
-
-                        var tagParameterTypeExpressions = CompileSerializingExpressions(
-                            tagParameterType,
-                            sourceModuleName,
-                            getModuleText);
-
-                        var tagParameterTypeFunctionNames =
-                            GetFunctionNamesFromTypeText(tagParameterTypeExpressions.canonicalTypeText);
-
-                        var tagEncodeCase =
-                            typeTagCanonicalName + " tagArgument ->";
-
-                        var tagEncodeExpression =
-                            @"Json.Encode.object [ ( """ + typeTag.Key + @""", tagArgument |> " + tagParameterTypeFunctionNames.encodeFunctionName + " ) ]";
-
-                        var tagDecodeExpression =
-                            @"Json.Decode.field """ + typeTag.Key + @""" " + tagParameterTypeFunctionNames.decodeFunctionName + " |> Json.Decode.map " + typeTagCanonicalName;
-
-                        var dependencies =
-                            tagParameterTypeExpressions.dependencies
-                            .SetItem(tagParameterTypeExpressions.canonicalTypeText, tagParameterTypeExpressions);
-
-                        return new
+                (string encodeExpression, string decodeExpression, IImmutableSet<string> dependencies) compileExpressions()
+                {
+                    var tags = rootType.Custom.Value.tags.Select(typeTag =>
                         {
-                            encodeCase = tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression),
-                            decodeExpression = tagDecodeExpression,
-                            dependencies = dependencies,
-                        };
-                    })
-                    .ToImmutableList();
+                            if (typeTag.Value.Count != 1)
+                                throw new NotImplementedException("Support for tags with parameter count " + typeTag.Value.Count + " (like '" + typeTag.Key + "') is not implemented.");
 
-                var encodeCases =
-                    String.Join("\n\n", tags.Select(tag => tag.encodeCase));
+                            var typeTagCanonicalName = sourceModuleName + "." + typeTag.Key;
 
-                var encodeExpression =
-                    "case " + encodeParamName + " of\n" +
-                    IndentElmCodeLines(1, encodeCases);
+                            var tagParameterType = typeTag.Value.Single();
 
-                var decodeArrayExpression = "[ " + String.Join("\n, ", tags.Select(tag => tag.decodeExpression)) + "\n]";
+                            var tagParameterTypeExpressions = ResolveType(
+                                tagParameterType,
+                                sourceModuleName,
+                                getModuleText);
 
-                var decodeExpression =
-                    "Json.Decode.oneOf\n" +
-                    IndentElmCodeLines(1, decodeArrayExpression);
+                            var tagParameterTypeFunctionNames =
+                                GetFunctionNamesFromTypeText(tagParameterTypeExpressions.canonicalTypeText);
 
-                var allTagsDependencies =
-                    tags
-                    .Select(field => field.dependencies)
-                    .Aggregate((a, b) => a.SetItems(b));
+                            var tagEncodeCase =
+                                typeTagCanonicalName + " tagArgument ->";
 
-                return new CompileSerializingExpressionsResult
+                            var tagEncodeExpression =
+                                @"Json.Encode.object [ ( """ + typeTag.Key + @""", tagArgument |> " + tagParameterTypeFunctionNames.encodeFunctionName + " ) ]";
+
+                            var tagDecodeExpression =
+                                @"Json.Decode.field """ + typeTag.Key + @""" (Json.Decode.lazy (\_ -> " +
+                                tagParameterTypeFunctionNames.decodeFunctionName + " |> Json.Decode.map " + typeTagCanonicalName +
+                                " ) )";
+
+                            return new
+                            {
+                                encodeCase = tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression),
+                                decodeExpression = tagDecodeExpression,
+                                tagParameterTypeCanonicalName = tagParameterTypeExpressions.canonicalTypeText,
+                            };
+                        })
+                        .ToImmutableList();
+
+                    var encodeCases =
+                        String.Join("\n\n", tags.Select(tag => tag.encodeCase));
+
+                    var encodeExpression =
+                        "case " + encodeParamName + " of\n" +
+                        IndentElmCodeLines(1, encodeCases);
+
+                    var decodeArrayExpression = "[ " + String.Join("\n, ", tags.Select(tag => tag.decodeExpression)) + "\n]";
+
+                    var decodeExpression =
+                        "Json.Decode.oneOf\n" +
+                        IndentElmCodeLines(1, decodeArrayExpression);
+
+                    var allTagsDependencies =
+                        tags
+                        .Select(field => field.tagParameterTypeCanonicalName)
+                        .ToImmutableHashSet();
+
+                    return (encodeExpression, decodeExpression, allTagsDependencies);
+                }
+
+                return new ResolveTypeResult
                 {
                     canonicalTypeText = sourceModuleName + "." + rootTypeText,
-                    encodeExpression = encodeExpression,
-                    decodeExpression = decodeExpression,
-                    dependencies = allTagsDependencies,
+
+                    compileExpressions = compileExpressions,
+
                     referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
                 };
             }
 
             if (rootType.Tuple != null)
             {
-                var tupleElementResults = rootType.Tuple.Select(tupleElementType =>
-                    {
-                        var tupleElementTypeExpressions = CompileSerializingExpressions(
-                            tupleElementType,
-                            sourceModuleName,
-                            getModuleText);
-
-                        var dependencies =
-                            tupleElementTypeExpressions.dependencies
-                            .SetItem(tupleElementTypeExpressions.canonicalTypeText, tupleElementTypeExpressions);
-
-                        return new
-                        {
-                            tupleElementType,
-                            functionNames = GetFunctionNamesFromTypeText(tupleElementTypeExpressions.canonicalTypeText),
-                            dependencies = dependencies,
-                        };
-                    }).ToImmutableList();
+                var tupleElementsCanonicalTypeName =
+                    rootType.Tuple
+                    .Select(tupleElementType => ResolveType(tupleElementType, sourceModuleName, getModuleText).canonicalTypeText)
+                    .ToImmutableList();
 
                 var allElementsDependencies =
-                    tupleElementResults
-                    .Select(element => element.dependencies)
-                    .Aggregate((a, b) => a.SetItems(b));
+                    tupleElementsCanonicalTypeName
+                    .ToImmutableHashSet();
+
+                var tupleElementsFunctionName =
+                    tupleElementsCanonicalTypeName
+                    .Select(GetFunctionNamesFromTypeText)
+                    .ToImmutableList();
+
+                var functionNameCommonPart = jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString();
 
                 var encodeExpression =
-                    jsonEncodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString() + " " +
-                    String.Join(" ", tupleElementResults.Select(elem => elem.functionNames.encodeFunctionName)) + " " +
+                    jsonEncodeFunctionNamePrefix + functionNameCommonPart + " " +
+                    String.Join(" ", tupleElementsFunctionName.Select(functionNames => functionNames.encodeFunctionName)) + " " +
                     encodeParamName;
 
                 var decodeExpression =
-                    jsonDecodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString() + " " +
-                    String.Join(" ", tupleElementResults.Select(elem => elem.functionNames.decodeFunctionName));
+                    jsonDecodeFunctionNamePrefix + functionNameCommonPart + " " +
+                    String.Join(" ", tupleElementsFunctionName.Select(functionNames => functionNames.decodeFunctionName));
 
-                return new CompileSerializingExpressionsResult
+                return new ResolveTypeResult
                 {
                     canonicalTypeText = sourceModuleName + "." + rootTypeText,
-                    encodeExpression = encodeExpression,
-                    decodeExpression = decodeExpression,
-                    dependencies = allElementsDependencies,
+
+                    compileExpressions = () => (encodeExpression, decodeExpression, allElementsDependencies),
+
                     referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
                 };
             }
@@ -573,6 +548,7 @@ namespace Kalmit
                             var tagParameters =
                                 Regex.Split(parametersText, @"\s+")
                                 .Select(parameterText => parameterText.Trim())
+                                .Where(parameterText => 0 < parameterText.Length)
                                 .ToImmutableList();
 
                             return (tagName: overallMatch.Groups[2].Value, tagParameters: (IImmutableList<string>)tagParameters);
@@ -719,20 +695,37 @@ namespace Kalmit
             (IImmutableDictionary<string, (string encodeExpression, string decodeExpression)> expressions,
             IImmutableSet<string> referencedModules)
             GetAllExpressionsFromTreeTransitive(
-            CompileSerializingExpressionsResult tree)
+                Func<string, ResolveTypeResult> getExpressionsAndDependenciesForType,
+                string currentType,
+                IImmutableSet<string> typesToSkip)
         {
-            var children =
-                tree.dependencies.Select(child => GetAllExpressionsFromTreeTransitive(child.Value)).ToImmutableList();
+            if (typesToSkip.Contains(currentType))
+            {
+                return
+                    (ImmutableDictionary<string, (string encodeExpression, string decodeExpression)>.Empty,
+                    ImmutableHashSet<string>.Empty);
+            }
+
+            var typesToSkipForDependencies = typesToSkip.Add(currentType);
+
+            var currentTypeResults = getExpressionsAndDependenciesForType(currentType);
+
+            var currentTypeExpressions = currentTypeResults.compileExpressions();
+
+            var dependenciesResults =
+                currentTypeExpressions.dependencies
+                .Select(dependency => GetAllExpressionsFromTreeTransitive(getExpressionsAndDependenciesForType, dependency, typesToSkipForDependencies))
+                .ToImmutableList();
 
             var referencedModules =
-                children.SelectMany(child => child.referencedModules)
-                .Concat(tree.referencedModules)
-                .ToImmutableHashSet();
+                dependenciesResults.SelectMany(child => child.referencedModules)
+                .ToImmutableHashSet()
+                .Union(currentTypeResults.referencedModules);
 
             var expressions =
-                children.SelectMany(child => child.expressions)
+                dependenciesResults.SelectMany(child => child.expressions)
                 .ToImmutableDictionary(epressionForType => epressionForType.Key, epressionForType => epressionForType.Value)
-                .SetItem(tree.canonicalTypeText, (tree.encodeExpression, tree.decodeExpression));
+                .SetItem(currentTypeResults.canonicalTypeText, (currentTypeExpressions.encodeExpression, currentTypeExpressions.decodeExpression));
 
             return (expressions, referencedModules);
         }

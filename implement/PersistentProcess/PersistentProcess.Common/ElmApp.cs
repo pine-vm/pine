@@ -83,13 +83,51 @@ namespace Kalmit
 
             var stateCodingFunctionNames = CompileElmValueSerializer.GetFunctionNamesFromTypeText(canonicalStateTypeName);
 
-            var stateCodingExpressions = CompileElmValueSerializer.CompileSerializingExpressions(
-                stateTypeNameInModule,
-                interfaceConfig.RootModuleName,
-                getModuleText);
+            var allOriginalElmModules =
+                originalAppFiles
+                .Select(originalAppFilePathAndContent =>
+                {
+                    var fileName = originalAppFilePathAndContent.Key.Last();
+
+                    if (originalAppFilePathAndContent.Key.First() != "src" || !fileName.EndsWith(".elm"))
+                        return null;
+
+                    return
+                        (IImmutableList<string>)
+                        originalAppFilePathAndContent.Key.Skip(1).Reverse().Skip(1).Reverse()
+                        .Concat(new[] { fileName.Substring(0, fileName.Length - 4) })
+                        .ToImmutableList();
+                })
+                .Where(module => module != null)
+                .OrderBy(module => string.Join(".", module))
+                .ToImmutableList();
+
+            var getExpressionsAndDependenciesForType = new Func<string, CompileElmValueSerializer.ResolveTypeResult>(canonicalTypeName =>
+            {
+                return
+                    CompileElmValueSerializer.ResolveType(
+                        canonicalTypeName,
+                        InterfaceToHostRootModuleName,
+                        moduleName =>
+                        {
+                            if (moduleName == InterfaceToHostRootModuleName)
+                            {
+                                var newRootModuleNameImportStatements =
+                                    String.Join("\n",
+                                        allOriginalElmModules.Select(elmModule => "import " + String.Join(".", elmModule)));
+
+                                return "module " + InterfaceToHostRootModuleName + "\n\n" + newRootModuleNameImportStatements;
+                            }
+
+                            return getModuleText(moduleName);
+                        });
+            });
 
             var allStateCodingExpressions =
-                CompileElmValueSerializer.GetAllExpressionsFromTreeTransitive(stateCodingExpressions);
+                CompileElmValueSerializer.GetAllExpressionsFromTreeTransitive(
+                    getExpressionsAndDependenciesForType,
+                    getExpressionsAndDependenciesForType(canonicalStateTypeName).canonicalTypeText,
+                    ImmutableHashSet.Create<string>());
 
             Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.expressions.Count);
 
@@ -111,7 +149,7 @@ namespace Kalmit
                         stateCodingJsonFunctionsText,
                         stateCodingFunctionNames.encodeFunctionName,
                         stateCodingFunctionNames.decodeFunctionName,
-                        allStateCodingExpressions.referencedModules)));
+                        allOriginalElmModules)));
         }
 
         static IEnumerable<string> FilePathFromModuleName(string moduleName)
@@ -148,7 +186,7 @@ namespace Kalmit
             string stateCodingFunctions,
             string stateEncodingFunctionName,
             string stateDecodingFunctionName,
-            IImmutableSet<string> modulesToImport) =>
+            IImmutableList<IImmutableList<string>> modulesToImport) =>
             $@"
 module " + InterfaceToHostRootModuleName + $@" exposing
     (State
@@ -164,7 +202,7 @@ import Dict
 import Platform
 import Json.Encode
 import Json.Decode
-" + String.Join("\n", modulesToImport.Select(moduleName => "import " + moduleName))
+" + String.Join("\n", modulesToImport.Select(moduleName => "import " + String.Join(".", moduleName)))
 + $@"
 
 type alias DeserializedState = " + rootModuleNameBeforeLowering + "." + stateTypeNameInRootModuleBeforeLowering + $@"
