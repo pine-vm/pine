@@ -715,15 +715,18 @@ namespace Kalmit
     Json.Decode.list decoder |> Json.Decode.map Set.fromList
 ",
             jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + $@" encodeKey encodeValue =
-    Dict.toList
-        >> Json.Encode.list
-            (\( key, value ) -> [ ( ""key"", key |> encodeKey ), ( ""value"", value |> encodeValue ) ] |> Json.Encode.object)
-",
+    Dict.toList >> Json.Encode.list (" + jsonEncodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + "2 encodeKey encodeValue)",
+
             jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + $@" decodeKey decodeValue =
-    Json.Decode.map2 Tuple.pair
-        (Json.Decode.field ""key"" decodeKey)
-        (Json.Decode.field ""value"" decodeValue)
-        |> Json.Decode.list
+    let
+        -- Support migrate applications automatically from older framework versions:
+
+        oldElementDecoder =
+            Json.Decode.map2 Tuple.pair
+                (Json.Decode.field ""key"" decodeKey)
+                (Json.Decode.field ""value"" decodeValue)
+    in
+    Json.Decode.list (Json.Decode.oneOf [ " + jsonDecodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + $@"2 decodeKey decodeValue, oldElementDecoder ])
         |> Json.Decode.map Dict.fromList
 ",
             jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + $@" encodeErr encodeOk valueToEncode =
