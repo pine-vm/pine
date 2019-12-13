@@ -30,7 +30,7 @@ namespace Kalmit
             .Add("Int", ("Json.Encode.int " + encodeParamName, "Json.Decode.int"))
             .Add("Bool", ("Json.Encode.bool " + encodeParamName, "Json.Decode.bool"))
             .Add("Float", ("Json.Encode.float " + encodeParamName, "Json.Decode.float"))
-            .Add("()", ("Json.Encode.object []", "Json.Decode.succeed ()"))
+            .Add("()", ("Json.Encode.list (always (Json.Encode.object [])) []", "Json.Decode.succeed ()"))
             .Add("{}", ("Json.Encode.object []", "Json.Decode.succeed {}"));
 
         public struct ResolveTypeResult
