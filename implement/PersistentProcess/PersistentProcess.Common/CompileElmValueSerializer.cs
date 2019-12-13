@@ -264,25 +264,23 @@ namespace Kalmit
             {
                 Console.WriteLine("'" + rootTypeText + "' is a record type.");
 
-                var fields = rootType.Record.Value.fields.Select(field =>
+                var fields = rootType.Record.Value.fields.Select(recordField =>
                     {
-                        var fieldType = field.Value;
-
                         var fieldTypeExpressions = ResolveType(
-                            fieldType,
+                            recordField.type,
                             sourceModuleName,
                             getModuleText);
 
                         var fieldFunctionNames = GetFunctionNamesFromTypeText(fieldTypeExpressions.canonicalTypeText);
 
                         var encodeFieldValueExpression =
-                            encodeParamName + "." + field.Key + " |> " + fieldFunctionNames.encodeFunctionName;
+                            encodeParamName + "." + recordField.name + " |> " + fieldFunctionNames.encodeFunctionName;
 
                         return new
                         {
-                            fieldType,
-                            encodeExpression = "( \"" + field.Key + "\", " + encodeFieldValueExpression + " )",
-                            decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + field.Key + "\" " + fieldFunctionNames.decodeFunctionName + " )",
+                            recordField.type,
+                            encodeExpression = "( \"" + recordField.name + "\", " + encodeFieldValueExpression + " )",
+                            decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + recordField.name + "\" " + fieldFunctionNames.decodeFunctionName + " )",
                             dependencies = ImmutableHashSet.Create(fieldTypeExpressions.canonicalTypeText),
                         };
                     }).ToImmutableList();
@@ -306,7 +304,7 @@ namespace Kalmit
                     "Json.Encode.object\n" +
                     IndentElmCodeLines(1, encodeListExpression);
 
-                var recordFieldsNames = rootType.Record.Value.fields.Keys;
+                var recordFieldsNames = rootType.Record.Value.fields.Select(field => field.name);
 
                 var decodeMapFunction =
                     "(\\" + String.Join(" ", recordFieldsNames) + " -> { " +
@@ -516,10 +514,9 @@ namespace Kalmit
 
                             var fieldType = match.Groups[3].Value.Trim();
 
-                            return (fieldName, fieldType);
+                            return (name: fieldName, type: fieldType);
                         })
-                        .ToImmutableDictionary(field => field.fieldName, field => field.fieldType);
-                    ;
+                        .ToImmutableList();
 
                     return new ElmType
                     {
@@ -687,7 +684,7 @@ namespace Kalmit
 
             public struct RecordStructure
             {
-                public IImmutableDictionary<string, string> fields;
+                public IImmutableList<(string name, string type)> fields;
             }
         }
 
