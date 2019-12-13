@@ -18,13 +18,15 @@ namespace Kalmit
 
         static string jsonCodeListFunctionNameCommonPart => "_generic_List";
 
+        static string jsonCodeSetFunctionNameCommonPart => "_generic_Set";
+
         static string jsonCodeDictFunctionNameCommonPart => "_generic_Dict";
 
         static string jsonCodeResultFunctionNameCommonPart => "_generic_Result";
 
         static string jsonCodeTupleFunctionNameCommonPart => "_tuple_";
 
-        static ImmutableDictionary<string, (string encodeExpression, string decodeExpression)> LeafExpressions =>
+        static IImmutableDictionary<string, (string encodeExpression, string decodeExpression)> LeafExpressions =>
             ImmutableDictionary<string, (string encodeExpression, string decodeExpression)>.Empty
             .Add("String", ("Json.Encode.string " + encodeParamName, "Json.Decode.string"))
             .Add("Int", ("Json.Encode.int " + encodeParamName, "Json.Decode.int"))
@@ -32,6 +34,14 @@ namespace Kalmit
             .Add("Float", ("Json.Encode.float " + encodeParamName, "Json.Decode.float"))
             .Add("()", ("Json.Encode.list (always (Json.Encode.object [])) []", "Json.Decode.succeed ()"))
             .Add("{}", ("Json.Encode.object []", "Json.Decode.succeed {}"));
+
+        static IImmutableDictionary<string, string> InstantiationSpecialCases =>
+            ImmutableDictionary<string, string>.Empty
+            .Add("List", jsonCodeListFunctionNameCommonPart)
+            .Add("Set.Set", jsonCodeSetFunctionNameCommonPart)
+            .Add("Maybe", jsonCodeMaybeFunctionNameCommonPart)
+            .Add("Result", jsonCodeResultFunctionNameCommonPart)
+            .Add("Dict.Dict", jsonCodeDictFunctionNameCommonPart);
 
         public struct ResolveTypeResult
         {
@@ -189,75 +199,22 @@ namespace Kalmit
                     })
                     .ToImmutableList();
 
-                //  TODO: Consolidate 'Maybe' and 'List'
-
-                if (rootType.Instance.Value.genericType == "Maybe")
+                if (InstantiationSpecialCases.TryGetValue(rootType.Instance.Value.genericType, out var specialCaseFunctionNameCommonPart))
                 {
                     return new ResolveTypeResult
                     {
-                        canonicalTypeText = "Maybe " + parameters.Single().dependencies.canonicalTypeText,
+                        canonicalTypeText = rootType.Instance.Value.genericType + " " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
 
                         compileExpressions = () =>
-                            (jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
-                            jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
+                            (jsonEncodeFunctionNamePrefix + specialCaseFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
+                            jsonDecodeFunctionNamePrefix + specialCaseFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
                             parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
 
-                        referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
+                        referencedModules = ImmutableHashSet<string>.Empty,
                     };
                 }
 
-                if (rootType.Instance.Value.genericType == "List")
-                {
-                    return new ResolveTypeResult
-                    {
-                        canonicalTypeText = "List " + parameters.Single().dependencies.canonicalTypeText,
-
-                        compileExpressions = () =>
-                            (jsonEncodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.encodeFunctionName + " " + encodeParamName,
-                            jsonDecodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + " " + parameters.Single().functionNames.decodeFunctionName,
-                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
-
-                        referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
-                    };
-                }
-
-                if (rootType.Instance.Value.genericType == "Dict.Dict")
-                {
-                    if (parameters.Count != 2)
-                        throw new Exception("Unexpected number of parameters for 'Dict.Dict': got " + parameters.Count + " instead of 2.");
-
-                    return new ResolveTypeResult
-                    {
-                        canonicalTypeText = "Dict.Dict " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
-
-                        compileExpressions = () =>
-                            (jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
-                            jsonDecodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
-                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
-
-                        referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
-                    };
-                }
-
-                if (rootType.Instance.Value.genericType == "Result")
-                {
-                    if (parameters.Count != 2)
-                        throw new Exception("Unexpected number of parameters for 'Result': got " + parameters.Count + " instead of 2.");
-
-                    return new ResolveTypeResult
-                    {
-                        canonicalTypeText = "Result " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
-
-                        compileExpressions = () =>
-                            (jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
-                            jsonDecodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
-                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
-
-                        referencedModules = parameters.SelectMany(parameter => parameter.dependencies.referencedModules).ToImmutableHashSet()
-                    };
-                }
-
-                throw new NotImplementedException("Instantation is not implemented yet. (The type is '" + rootTypeText + "').");
+                throw new NotImplementedException("Instantiation is not implemented yet. (The type is '" + rootTypeText + "').");
             }
 
             if (rootType.Record != null)
@@ -749,6 +706,13 @@ namespace Kalmit
 ",
             jsonDecodeFunctionNamePrefix + jsonCodeListFunctionNameCommonPart + $@" decoder =
     Json.Decode.list decoder
+",
+
+            jsonEncodeFunctionNamePrefix + jsonCodeSetFunctionNameCommonPart + $@" encoder =
+    Set.toList >> Json.Encode.list encoder
+",
+            jsonDecodeFunctionNamePrefix + jsonCodeSetFunctionNameCommonPart + $@" decoder =
+    Json.Decode.list decoder |> Json.Decode.map Set.fromList
 ",
             jsonEncodeFunctionNamePrefix + jsonCodeDictFunctionNameCommonPart + $@" encodeKey encodeValue =
     Dict.toList

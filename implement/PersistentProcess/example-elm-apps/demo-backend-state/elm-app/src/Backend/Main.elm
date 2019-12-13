@@ -12,6 +12,7 @@ module Backend.Main exposing
 import Backend.InterfaceToHost as InterfaceToHost
 import Common
 import Dict
+import Set
 
 
 type alias State =
@@ -24,6 +25,7 @@ type alias State =
     , bool : Bool
     , maybe : Maybe String
     , result : Result String Int
+    , set : Set.Set Int
     , dict : Dict.Dict Int String
     , empty_record : {}
     , empty_tuple : ()
@@ -97,6 +99,7 @@ interfaceToHost_initState =
     , bool = True
     , maybe = Just "Hello"
     , result = Ok 42
+    , set = [ 1, 3, 3, 3, 4, 5 ] |> Set.fromList
     , dict = [ ( 100, "A" ), ( 101, "B" ) ] |> Dict.fromList
     , empty_record = {}
     , empty_tuple = ()
