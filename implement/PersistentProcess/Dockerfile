@@ -1,5 +1,5 @@
 # Build dotnet build image
-FROM mcr.microsoft.com/dotnet/core/sdk:3.0 AS build-env
+FROM mcr.microsoft.com/dotnet/core/sdk:3.1 AS build-env
 WORKDIR /app
 
 # Copy everything and build
@@ -8,7 +8,7 @@ WORKDIR /app/PersistentProcess.WebHost
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
-FROM mcr.microsoft.com/dotnet/core/aspnet:3.0 AS binaries
+FROM mcr.microsoft.com/dotnet/core/aspnet:3.1 AS binaries
 
 COPY --from=build-env /app/PersistentProcess.WebHost/out /elm-fullstack/dotnet/
 
