@@ -289,37 +289,58 @@ namespace Kalmit
                 {
                     var tags = rootType.Custom.Value.tags.Select(typeTag =>
                         {
-                            if (typeTag.Value.Count != 1)
-                                throw new NotImplementedException("Support for tags with parameter count " + typeTag.Value.Count + " (like '" + typeTag.Key + "') is not implemented.");
-
                             var typeTagCanonicalName = sourceModuleName + "." + typeTag.Key;
+
+                            string encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(string argumentSyntax, string objectContentSyntax)
+                            {
+                                var tagEncodeCase =
+                                    typeTagCanonicalName + " " + argumentSyntax + " ->";
+
+                                var tagEncodeExpression =
+                                    @"Json.Encode.object [ ( """ + typeTag.Key + @""", " + objectContentSyntax + " ) ]";
+
+                                return tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression);
+                            }
+
+                            var decodeSyntaxCommonPart = @"Json.Decode.field """ + typeTag.Key + @"""";
+
+                            if (typeTag.Value.Count == 0)
+                            {
+                                return new
+                                {
+                                    encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax("", "Json.Encode.object []"),
+                                    decodeExpression = decodeSyntaxCommonPart + " (Json.Decode.succeed " + typeTagCanonicalName + ")",
+                                    dependencies = ImmutableHashSet<string>.Empty,
+                                };
+                            }
+
+                            if (1 < typeTag.Value.Count)
+                                throw new NotSupportedException("Problem with '" + typeTagCanonicalName + "': Support for tags with more than one parameter is not supported.");
 
                             var tagParameterType = typeTag.Value.Single();
 
-                            var tagParameterTypeExpressions = ResolveType(
+                            var tagParameterTypeResolution = ResolveType(
                                 tagParameterType,
                                 sourceModuleName,
                                 getModuleText);
 
                             var tagParameterTypeFunctionNames =
-                                GetFunctionNamesFromTypeText(tagParameterTypeExpressions.canonicalTypeText);
+                                GetFunctionNamesFromTypeText(tagParameterTypeResolution.canonicalTypeText);
 
-                            var tagEncodeCase =
-                                typeTagCanonicalName + " tagArgument ->";
-
-                            var tagEncodeExpression =
-                                @"Json.Encode.object [ ( """ + typeTag.Key + @""", tagArgument |> " + tagParameterTypeFunctionNames.encodeFunctionName + " ) ]";
+                            var argumentName = "tagArgument";
 
                             var tagDecodeExpression =
-                                @"Json.Decode.field """ + typeTag.Key + @""" (Json.Decode.lazy (\_ -> " +
+                                decodeSyntaxCommonPart + @" (Json.Decode.lazy (\_ -> " +
                                 tagParameterTypeFunctionNames.decodeFunctionName + " |> Json.Decode.map " + typeTagCanonicalName +
                                 " ) )";
 
                             return new
                             {
-                                encodeCase = tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression),
+                                encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(
+                                    argumentName,
+                                    argumentName + " |> " + tagParameterTypeFunctionNames.encodeFunctionName),
                                 decodeExpression = tagDecodeExpression,
-                                tagParameterTypeCanonicalName = tagParameterTypeExpressions.canonicalTypeText,
+                                dependencies = ImmutableHashSet.Create(tagParameterTypeResolution.canonicalTypeText),
                             };
                         })
                         .ToImmutableList();
@@ -338,8 +359,7 @@ namespace Kalmit
                         IndentElmCodeLines(1, decodeArrayExpression);
 
                     var allTagsDependencies =
-                        tags
-                        .Select(field => field.tagParameterTypeCanonicalName)
+                        tags.SelectMany(field => field.dependencies)
                         .ToImmutableHashSet();
 
                     return (encodeExpression, decodeExpression, allTagsDependencies);

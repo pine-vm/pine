@@ -46,8 +46,8 @@ type alias Tuple3 =
 
 
 type CustomType
-    = CustomTagA String
-    | CustomTagB Int
+    = CustomTagWithoutParameter
+    | CustomTagWithParameter Int
 
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
@@ -94,7 +94,7 @@ interfaceToHost_initState =
     , lastHttpRequests = []
     , tuple2 = ( 123, "second element in tuple A" )
     , tuple3 = ( 456, "second element in tuple B", 789 )
-    , custom_type = CustomTagA "tag A"
+    , custom_type = CustomTagWithoutParameter
     , recursive_type = TagRecurse (TagRecurse (TagRecurse (TagTerminate 4)))
     , bool = True
     , maybe = Just "Hello"
