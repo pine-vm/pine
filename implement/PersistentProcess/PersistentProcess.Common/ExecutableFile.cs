@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using Mono.Unix;
 
@@ -20,7 +20,7 @@ namespace Kalmit
         }
 
         static public (ProcessOutput processOutput, IReadOnlyCollection<(string name, byte[] content)> resultingFiles) ExecuteFileWithArguments(
-            IReadOnlyCollection<(string name, byte[] content)> environmentFiles,
+            IImmutableList<(string name, byte[] content)> environmentFiles,
             byte[] executableFile,
             string arguments,
             IDictionary<string, string> environmentStrings)

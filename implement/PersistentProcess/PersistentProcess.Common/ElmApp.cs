@@ -42,18 +42,21 @@ namespace Kalmit
             files
             .Where(file => 0 < file.filePath?.Length && FilePathMatchesPatternOfFilesInElmApp(file.filePath));
 
-        static public IImmutableDictionary<IEnumerable<string>, byte[]> ToFlatDictionaryWithPathComparer(
+        static public IImmutableDictionary<IImmutableList<string>, byte[]> ToFlatDictionaryWithPathComparer(
           IEnumerable<(string filePath, byte[] fileContent)> fileList) =>
           fileList.ToImmutableDictionary(
-              entry => (IEnumerable<string>)entry.filePath.Split(new[] { '/', '\\' }), entry => entry.fileContent)
+              entry => (IImmutableList<string>)ImmutableList.Create(entry.filePath.Split(new[] { '/', '\\' })), entry => entry.fileContent)
           .WithComparers(EnumerableExtension.EqualityComparer<string>());
 
-        static public IImmutableDictionary<IEnumerable<string>, byte[]> AsCompletelyLoweredElmApp(
+        static public IImmutableDictionary<IImmutableList<string>, byte[]> AsCompletelyLoweredElmApp(
             IEnumerable<(string filePath, byte[] fileContent)> originalAppFilesList,
+            ElmAppInterfaceConfig interfaceConfig) =>
+            AsCompletelyLoweredElmApp(ToFlatDictionaryWithPathComparer(originalAppFilesList), interfaceConfig);
+
+        static public IImmutableDictionary<IImmutableList<string>, byte[]> AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, byte[]> originalAppFiles,
             ElmAppInterfaceConfig interfaceConfig)
         {
-            var originalAppFiles = ToFlatDictionaryWithPathComparer(originalAppFilesList);
-
             if (originalAppFiles.ContainsKey(InterfaceToHostRootModuleFilePath))
             {
                 //  Support integrating applications supplying their own lowered version.
@@ -153,14 +156,14 @@ namespace Kalmit
                         allOriginalElmModules)));
         }
 
-        static IEnumerable<string> FilePathFromModuleName(string moduleName)
+        static IImmutableList<string> FilePathFromModuleName(string moduleName)
         {
             var pathComponents = moduleName.Split(new[] { '.' });
 
             var fileName = pathComponents.Last() + ".elm";
             var directoryNames = pathComponents.Reverse().Skip(1).Reverse();
 
-            return new[] { "src" }.Concat(directoryNames).Concat(new[] { fileName });
+            return new[] { "src" }.Concat(directoryNames).Concat(new[] { fileName }).ToImmutableList();
         }
 
         static public string StateTypeNameFromRootElmModule(string elmModuleText)
@@ -179,7 +182,7 @@ namespace Kalmit
 
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
-        static public IEnumerable<string> InterfaceToHostRootModuleFilePath => FilePathFromModuleName(InterfaceToHostRootModuleName);
+        static public IImmutableList<string> InterfaceToHostRootModuleFilePath => FilePathFromModuleName(InterfaceToHostRootModuleName);
 
         static public string LoweredRootElmModuleCode(
             string rootModuleNameBeforeLowering,

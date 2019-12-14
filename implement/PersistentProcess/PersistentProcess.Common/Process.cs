@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -106,12 +107,11 @@ namespace Kalmit
             var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
             var loweredElmCodeFiles =
-                ElmApp.AsCompletelyLoweredElmApp(elmCodeFiles, elmAppInterfaceConfig)
-                .Select(entry => (name: string.Join("/", entry.Key), entry.Value));
+                ElmApp.AsCompletelyLoweredElmApp(elmCodeFiles, elmAppInterfaceConfig);
 
             var javascriptFromElmMake = CompileElmToJavascript(
                 loweredElmCodeFiles,
-                string.Join("/", ElmApp.InterfaceToHostRootModuleFilePath));
+                ElmApp.InterfaceToHostRootModuleFilePath);
 
             var pathToFunctionCommonStart = ElmApp.InterfaceToHostRootModuleName + ".";
 
@@ -129,50 +129,47 @@ namespace Kalmit
         }
 
         static string CompileElmToJavascript(
-            IEnumerable<(string, byte[])> elmCodeFiles,
-            string pathToFileWithElmEntryPoint,
+            IImmutableDictionary<IImmutableList<string>, byte[]> elmCodeFiles,
+            IImmutableList<string> pathToFileWithElmEntryPoint,
             string elmMakeCommandAppendix = null) =>
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
 
         static public string CompileElmToHtml(
-            IEnumerable<(string, byte[])> elmCodeFiles,
-            string pathToFileWithElmEntryPoint,
+            IImmutableDictionary<IImmutableList<string>, byte[]> elmCodeFiles,
+            IImmutableList<string> pathToFileWithElmEntryPoint,
             string elmMakeCommandAppendix = null) =>
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
 
+        /*
+        2019-12-14: Switch to modeling file paths as a list of string instead of a string, to avoid that problem reported earlier and described below:
+
+        Unify directory separator symbols in file names to avoid this problem observed 2019-07-31:
+        I had built web-app-config.zip on a Windows system. Starting the webserver with this worked as expected in Windows. But in a Docker container it failed, with an error as below:
+        ----
+        Output file not found. Maybe the output from the Elm make process helps to find the cause:
+        Exit Code: 1
+        Standard Output:
+        ''
+        Standard Error:
+        '-- BAD JSON ----------------------------------------------------------- elm.json
+
+        The "source-directories" in your elm.json lists the following directory:
+
+            src
+
+        I cannot find that directory though! Is it missing? Is there a typo?
+        [...]
+        */
         static string CompileElm(
-            IEnumerable<(string name, byte[] content)> elmCodeFiles,
-            string pathToFileWithElmEntryPoint,
+            IImmutableDictionary<IImmutableList<string>, byte[]> elmCodeFiles,
+            IImmutableList<string> pathToFileWithElmEntryPoint,
             string outputFileName,
             string elmMakeCommandAppendix = null)
         {
-            /*
-            Unify directory separator symbols in file names to avoid this problem observed 2019-07-31:
-            I had built web-app-config.zip on a Windows system. Starting the webserver with this worked as expected in Windows. But in a Docker container it failed, with an error as below:
-            ----
-            Output file not found. Maybe the output from the Elm make process helps to find the cause:
-            Exit Code: 1
-            Standard Output:
-            ''
-            Standard Error:
-            '-- BAD JSON ----------------------------------------------------------- elm.json
-
-            The "source-directories" in your elm.json lists the following directory:
-
-                src
-
-            I cannot find that directory though! Is it missing? Is there a typo?
-            [...]
-            */
-            var elmCodeFilesWithUnifiedDirectorySeparatorChars =
-                elmCodeFiles
-                .Select(elmCodeFile => (elmCodeFile.name.Replace('\\', '/'), elmCodeFile.content))
-                .ToList();
-
-            var command = "make " + pathToFileWithElmEntryPoint + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
+            var command = "make " + makePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
             var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                elmCodeFilesWithUnifiedDirectorySeparatorChars,
+                elmCodeFiles.Select(elmCodeFile => (makePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value)).ToImmutableList(),
                 GetElmExecutableFile,
                 command,
                 new Dictionary<string, string>()
@@ -216,6 +213,9 @@ namespace Kalmit
 
             return Encoding.UTF8.GetString(outputFileContent);
         }
+
+        static string makePlatformSpecificPath(IImmutableList<string> path) =>
+            string.Join(Path.DirectorySeparatorChar.ToString(), path);
 
         static byte[] GetElmExecutableFile =>
             CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);

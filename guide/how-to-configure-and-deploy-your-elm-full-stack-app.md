@@ -7,12 +7,13 @@ Following is the easiest way to build and deploy your Elm full-stack app:
 + Run the script at [`/implement/PersistentProcess/start-server.ps1`](/implement/PersistentProcess/start-server.ps1). This script takes the example app from [/implement/PersistentProcess/example-elm-apps/default-full-stack-app](/implement/PersistentProcess/example-elm-apps/default-full-stack-app) and builds a docker image running this app.
 This script also contains a `docker run` command to start the app. Docker will then forward you logs like these:
 ```shell
+I start a server.
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Loaded configuration 007D0AC91D2AAD9E07993E9B770F02486229799610BDE7F8FDBFE36C52B69E57
+      Loaded configuration 6D03BE6E6A5762B51668C20DDBAFAC4E973D3341359E19F89E9998259C3FF124
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Begin to build the persistent process for Elm app 33DFBE7941E4D3146F7B1EFBC58A74E67F2DB7DD661A918C765CE3A8B9AB386B
+      Begin to build the persistent process for Elm app 83F9055AF5DAA4EE5D09F2E8450C7CF2292E1DBBFEBEE0CF3047A0512F94508B
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
       Begin to restore the process state using the storeReader.
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
@@ -20,7 +21,7 @@ info: Kalmit.PersistentProcess.WebHost.Startup[0]
 info: Kalmit.PersistentProcess.WebHost.Startup[0]
       Completed building the persistent process.
 Hosting environment: Production
-Content root path: /kalmit
+Content root path: /elm-fullstack
 Now listening on: http://[::]:80
 Now listening on: https://[::]:443
 Application started. Press Ctrl+C to shut down.
@@ -29,7 +30,7 @@ Application started. Press Ctrl+C to shut down.
 
 ## Full Stack App File Structure
 
-### `Backend/Main.elm`
+### `elm-app/src/Backend/Main.elm`
 
 The [main Elm module of the backend](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
@@ -44,10 +45,28 @@ processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceT
 
 Analogous to the update function in a client Elm app, this function returns the new state of your app as the first element in the tuple. The web server takes care of saving this state and automatically restores it in case the server restarts. When you stop and restart the docker container, you will find the server still has the state which resulted from processing the last event.
 
+### `elm-app/src/FrontendWeb/Main.elm`
+
+This file is optional. If it exists in your app, the build process compiles it to an HTML file and adds it to the static files as `FrontendWeb.html`.
+
 ### `map.json`
 
 The `map.json` file is where you can add configuration for Let's Encrypt, rate-limiting, and other features.
 Since all of these features are optional to use, in the simplest case, this file is not present at all.
+
+If your app includes a frontend, you need to decide on which paths the server should serve the HTML document containing the frontend.
+
+Below is an example which directs HTTP requests to the static file of the frontend if the path does not start with `/api/` or `/elm-fullstack-admin/`:
+```JSON
+{
+    "mapsFromRequestUrlToStaticFileName": [
+        {
+            "matchingRegexPattern": "^.*//[^/]+(|/(?!(api/|elm-fullstack-admin/)).*)$",
+            "resultString": "FrontendWeb.html"
+        }
+    ]
+}
+```
 
 ## Support HTTPS
 

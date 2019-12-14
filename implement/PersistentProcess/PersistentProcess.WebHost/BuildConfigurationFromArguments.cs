@@ -14,6 +14,9 @@ namespace Kalmit.PersistentProcess.WebHost
 
         public const string ElmAppSubdirectoryName = "elm-app";
 
+        public static IImmutableList<string> FrontendElmAppRootFilePath =>
+            ImmutableList.Create("src", "FrontendWeb", "Main.elm");
+
         static public void BuildConfiguration(string[] args)
         {
             string argumentValueFromParameterName(string parameterName) =>
@@ -26,21 +29,21 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var loweredElmOutputArgument = argumentValueFromParameterName("--lowered-elm-output");
 
-            var frontendWebElmSource = argumentValueFromParameterName("--frontend-web-elm-source");
-
             var frontendWebElmMakeCommandAppendix = argumentValueFromParameterName("--frontend-web-elm-make-appendix");
 
             var currentDirectory = Environment.CurrentDirectory;
 
-            Console.WriteLine(
-                "The currentDirectory is '" + currentDirectory + "', frontendWebElmSource is '" + frontendWebElmSource + "'.");
+            Console.WriteLine("The currentDirectory is '" + currentDirectory + "'.");
 
             var elmAppFilesBeforeLowering =
-                ElmApp
-                .FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName)))
-                .ToImmutableList();
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    ElmApp.FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName))));
 
             Console.WriteLine("I found " + elmAppFilesBeforeLowering.Count + " files to build the Elm app.");
+
+            var elmAppContainsFrontend = elmAppFilesBeforeLowering.ContainsKey(FrontendElmAppRootFilePath);
+
+            Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", FrontendElmAppRootFilePath) + "'.");
 
             var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
                 elmAppFilesBeforeLowering, ElmAppInterfaceConfig.Default);
@@ -59,40 +62,11 @@ namespace Kalmit.PersistentProcess.WebHost
 
             byte[] frontendWebFile = null;
 
-            if (0 < frontendWebElmSource?.Length)
+            if (elmAppContainsFrontend)
             {
-                var frontendWebElmSearchBegin =
-                    Path.IsPathRooted(frontendWebElmSource) ? frontendWebElmSource :
-                    Path.Combine(currentDirectory, frontendWebElmSource);
-
-                Console.WriteLine("I begin to search for an Elm app at '" + frontendWebElmSearchBegin + "'.");
-
-                var frontendWebElmAppRootDirectory = FindDirectoryUpwardContainingElmJson(frontendWebElmSearchBegin);
-
-                if (frontendWebElmAppRootDirectory == null)
-                {
-                    var errorMessage = "I did not find a directory containing the frontend Elm app.";
-                    Console.WriteLine(errorMessage);
-                    throw new ArgumentException(errorMessage);
-                }
-
-                Console.WriteLine("I found an Elm app in directory '" + frontendWebElmAppRootDirectory + "'.");
-
-                var frontendWebElmSourceFileName = Path.GetFileName(frontendWebElmSource);
-
-                var frontendWebElmCodeFiles =
-                    ElmApp
-                    .FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(frontendWebElmAppRootDirectory))
-                    .ToImmutableList();
-
-                Console.WriteLine("I found " + frontendWebElmCodeFiles.Count + " files to build the frontend Elm app.");
-
-                var pathToEntryPointFile =
-                    Path.GetRelativePath(frontendWebElmAppRootDirectory, frontendWebElmSearchBegin);
-
                 var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
-                    frontendWebElmCodeFiles,
-                    pathToEntryPointFile,
+                    loweredElmAppFiles,
+                    FrontendElmAppRootFilePath,
                     frontendWebElmMakeCommandAppendix);
 
                 frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);

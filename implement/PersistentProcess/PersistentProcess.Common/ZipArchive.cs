@@ -21,7 +21,7 @@ namespace Kalmit
                 compressionLevel);
 
         static public byte[] ZipArchiveFromEntries(
-            IReadOnlyDictionary<IEnumerable<string>, byte[]> entries,
+            IReadOnlyDictionary<IImmutableList<string>, byte[]> entries,
             System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
             ZipArchiveFromEntries(
                 entries.Select(entry => (name: String.Join("/", entry.Key), content: entry.Value)),
