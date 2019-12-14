@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -645,43 +646,33 @@ namespace Kalmit
             }
         }
 
-        static public
-            (IImmutableDictionary<string, (string encodeExpression, string decodeExpression)> expressions,
-            IImmutableSet<string> referencedModules)
-            GetAllExpressionsFromTreeTransitive(
+        static public IEnumerable<(string elmType, (string encodeExpression, string decodeExpression, IImmutableSet<string> referencedModules) result)>
+            EnumerateExpressionsResolvingAllDependencies(
                 Func<string, ResolveTypeResult> getExpressionsAndDependenciesForType,
-                string currentType,
-                IImmutableSet<string> typesToSkip)
+                IImmutableSet<string> rootTypes)
         {
-            if (typesToSkip.Contains(currentType))
+            var remainingDependencies = new Queue<string>(rootTypes);
+
+            var alreadyResolved = new HashSet<string>();
+
+            while (0 < remainingDependencies.Count)
             {
-                return
-                    (ImmutableDictionary<string, (string encodeExpression, string decodeExpression)>.Empty,
-                    ImmutableHashSet<string>.Empty);
+                var currentType = remainingDependencies.Dequeue();
+
+                if (alreadyResolved.Contains(currentType))
+                    continue;
+
+                alreadyResolved.Add(currentType);
+
+                var currentTypeResults = getExpressionsAndDependenciesForType(currentType);
+
+                var currentTypeExpressions = currentTypeResults.compileExpressions();
+
+                foreach (var dependency in currentTypeExpressions.dependencies)
+                    remainingDependencies.Enqueue(dependency);
+
+                yield return (currentType, (currentTypeExpressions.encodeExpression, currentTypeExpressions.decodeExpression, currentTypeResults.referencedModules));
             }
-
-            var typesToSkipForDependencies = typesToSkip.Add(currentType);
-
-            var currentTypeResults = getExpressionsAndDependenciesForType(currentType);
-
-            var currentTypeExpressions = currentTypeResults.compileExpressions();
-
-            var dependenciesResults =
-                currentTypeExpressions.dependencies
-                .Select(dependency => GetAllExpressionsFromTreeTransitive(getExpressionsAndDependenciesForType, dependency, typesToSkipForDependencies))
-                .ToImmutableList();
-
-            var referencedModules =
-                dependenciesResults.SelectMany(child => child.referencedModules)
-                .ToImmutableHashSet()
-                .Union(currentTypeResults.referencedModules);
-
-            var expressions =
-                dependenciesResults.SelectMany(child => child.expressions)
-                .ToImmutableDictionary(epressionForType => epressionForType.Key, epressionForType => epressionForType.Value)
-                .SetItem(currentTypeResults.canonicalTypeText, (currentTypeExpressions.encodeExpression, currentTypeExpressions.decodeExpression));
-
-            return (expressions, referencedModules);
         }
 
         static public IImmutableList<string> generalSupportingFunctionsTexts => new[]{

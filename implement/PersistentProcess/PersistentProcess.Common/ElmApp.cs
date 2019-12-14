@@ -124,20 +124,21 @@ namespace Kalmit
             });
 
             var allStateCodingExpressions =
-                CompileElmValueSerializer.GetAllExpressionsFromTreeTransitive(
+                CompileElmValueSerializer.EnumerateExpressionsResolvingAllDependencies(
                     getExpressionsAndDependenciesForType,
-                    getExpressionsAndDependenciesForType(canonicalStateTypeName).canonicalTypeText,
-                    ImmutableHashSet.Create<string>());
+                    ImmutableHashSet.Create(
+                        getExpressionsAndDependenciesForType(canonicalStateTypeName).canonicalTypeText))
+                .ToImmutableList();
 
-            Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.expressions.Count);
+            Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.Count);
 
             var stateCodingJsonFunctionsText =
                 String.Join("\n\n",
-                allStateCodingExpressions.expressions
-                .Select(function => CompileElmValueSerializer.BuildFunctionTextsFromExpressions(
-                    function.Key,
-                    function.Value.encodeExpression,
-                    function.Value.decodeExpression))
+                allStateCodingExpressions
+                .Select(typeResult => CompileElmValueSerializer.BuildFunctionTextsFromExpressions(
+                    typeResult.elmType,
+                    typeResult.result.encodeExpression,
+                    typeResult.result.decodeExpression))
                 .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
 
             return
