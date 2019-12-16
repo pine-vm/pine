@@ -1,7 +1,5 @@
 module Backend.Main exposing
-    ( CustomType(..)
-    , RecursiveType(..)
-    , State
+    ( State
     , Tuple2
     , Tuple3
     , interfaceToHost_initState
@@ -20,7 +18,8 @@ type alias State =
     , lastHttpRequests : List InterfaceToHost.HttpRequestEvent
     , tuple2 : Tuple2
     , tuple3 : Tuple3
-    , custom_type : CustomType
+    , list_custom_type : List CustomType
+    , opaque_custom_type : OpaqueCustomType
     , recursive_type : RecursiveType
     , bool : Bool
     , maybe : Maybe String
@@ -35,6 +34,10 @@ type alias State =
 type RecursiveType
     = TagTerminate Int
     | TagRecurse RecursiveType
+
+
+type OpaqueCustomType
+    = OpaqueCustomType String
 
 
 type alias Tuple2 =
@@ -94,7 +97,8 @@ interfaceToHost_initState =
     , lastHttpRequests = []
     , tuple2 = ( 123, "second element in tuple A" )
     , tuple3 = ( 456, "second element in tuple B", 789 )
-    , custom_type = CustomTagWithoutParameter
+    , list_custom_type = [ CustomTagWithoutParameter, CustomTagWithParameter 4 ]
+    , opaque_custom_type = OpaqueCustomType "content"
     , recursive_type = TagRecurse (TagRecurse (TagRecurse (TagTerminate 4)))
     , bool = True
     , maybe = Just "Hello"

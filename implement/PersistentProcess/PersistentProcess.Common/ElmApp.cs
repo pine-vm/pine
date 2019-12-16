@@ -135,6 +135,42 @@ namespace Kalmit
 
             Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.Count);
 
+            var appFilesAfterExposingCustomTypesInModules =
+                allStateCodingExpressions
+                .Select(exprResult => exprResult.elmType)
+                .Aggregate(
+                    originalAppFiles,
+                    (partiallyUpdatedAppFiles, elmType) =>
+                    {
+                        var qualifiedMatch = Regex.Match(elmType, @"(.+)\.(.+)");
+
+                        if (!qualifiedMatch.Success)
+                            return partiallyUpdatedAppFiles;
+
+                        var moduleName = qualifiedMatch.Groups[1].Value;
+                        var localTypeName = qualifiedMatch.Groups[2].Value;
+
+                        var expectedFilePath = FilePathFromModuleName(moduleName);
+
+                        var moduleBefore =
+                            partiallyUpdatedAppFiles
+                            .FirstOrDefault(candidate => candidate.Key.SequenceEqual(expectedFilePath));
+
+                        if (moduleBefore.Value == null)
+                            return partiallyUpdatedAppFiles;
+
+                        var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value);
+
+                        var isCustomTypeMatch = Regex.Match(moduleTextBefore, @"^type\s+" + localTypeName + @"\s*=", RegexOptions.Multiline);
+
+                        if (!isCustomTypeMatch.Success)
+                            return partiallyUpdatedAppFiles;
+
+                        var moduleText = CompileElm.ExposeCustomTypeAllTagsInElmModule(moduleTextBefore, localTypeName);
+
+                        return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText));
+                    });
+
             var stateCodingJsonFunctionsText =
                 String.Join("\n\n",
                 allStateCodingExpressions
@@ -145,7 +181,7 @@ namespace Kalmit
                 .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
 
             return
-                originalAppFiles.SetItem(
+                appFilesAfterExposingCustomTypesInModules.SetItem(
                     InterfaceToHostRootModuleFilePath,
                     Encoding.UTF8.GetBytes(LoweredRootElmModuleCode(
                         interfaceConfig.RootModuleName,
