@@ -66,7 +66,7 @@ namespace Kalmit
                 var responseContent = response.Content.ReadAsByteArrayAsync().Result;
 
                 if (!blobHasExpectedSHA256(responseContent))
-                    throw new NotImplementedException("Received unexpected blob.");
+                    throw new NotImplementedException("Received unexpected blob for '" + fileName + "'.");
 
                 Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
 
