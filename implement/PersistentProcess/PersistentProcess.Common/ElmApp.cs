@@ -82,10 +82,6 @@ namespace Kalmit
                 return Encoding.UTF8.GetString(moduleFile);
             }
 
-            var canonicalStateTypeName = interfaceConfig.RootModuleName + "." + stateTypeNameInModule;
-
-            var stateCodingFunctionNames = CompileElmValueSerializer.GetFunctionNamesFromTypeText(canonicalStateTypeName);
-
             var allOriginalElmModules =
                 originalAppFiles
                 .Select(originalAppFilePathAndContent =>
@@ -126,11 +122,13 @@ namespace Kalmit
                         });
             });
 
+            var canonicalStateTypeName =
+                getExpressionsAndDependenciesForType(interfaceConfig.RootModuleName + "." + stateTypeNameInModule).canonicalTypeText;
+
             var allStateCodingExpressions =
                 CompileElmValueSerializer.EnumerateExpressionsResolvingAllDependencies(
                     getExpressionsAndDependenciesForType,
-                    ImmutableHashSet.Create(
-                        getExpressionsAndDependenciesForType(canonicalStateTypeName).canonicalTypeText))
+                    ImmutableHashSet.Create(canonicalStateTypeName))
                 .ToImmutableList();
 
             Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.Count);
@@ -179,6 +177,8 @@ namespace Kalmit
                     typeResult.result.encodeExpression,
                     typeResult.result.decodeExpression))
                 .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
+
+            var stateCodingFunctionNames = CompileElmValueSerializer.GetFunctionNamesFromTypeText(canonicalStateTypeName);
 
             return
                 appFilesAfterExposingCustomTypesInModules.SetItem(

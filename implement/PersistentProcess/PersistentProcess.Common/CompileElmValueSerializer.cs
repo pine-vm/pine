@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace Kalmit
 {
-    class CompileElmValueSerializer
+    public class CompileElmValueSerializer
     {
         static string encodeParamName => "valueToEncode";
 
@@ -95,6 +95,8 @@ namespace Kalmit
             string sourceModuleName,
             Func<string, string> getModuleText)
         {
+            rootTypeText = rootTypeText.Trim();
+
             Console.WriteLine("Begin ResolveType for '" + rootTypeText + "' in module '" + sourceModuleName + "'.");
 
             var sourceModuleText = getModuleText(sourceModuleName);
@@ -129,50 +131,7 @@ namespace Kalmit
                 return (sourceModuleName, nameInThisModule);
             }
 
-            if (!Regex.IsMatch(rootTypeText, @"\s"))
-            {
-                //  If the type text does not contain any whitespaces, assume it is a name.
-
-                //  Look what this name references to.
-
-                var (referencedModuleName, typeNameInReferencedModule) =
-                    GetCanonicalModuleNameAndLocalTypeNameFromNameInSourceModule(rootTypeText);
-
-                if (referencedModuleName != sourceModuleName)
-                {
-                    Console.WriteLine("Type '" + rootTypeText + "' in '" + sourceModuleName + "' refers to '" + referencedModuleName + "." + typeNameInReferencedModule + "'.");
-
-                    return ResolveType(
-                        typeNameInReferencedModule,
-                        referencedModuleName,
-                        getModuleText);
-                }
-
-                Console.WriteLine("Resolve type text for '" + rootTypeText + "' in '" + sourceModuleName + "'.");
-
-                var referencedTypeText = GetTypeDefinitionTextFromModuleText(rootTypeText, sourceModuleText);
-
-                if (!(0 < referencedTypeText?.Length))
-                    throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
-
-                var supportingExpressions =
-                    ResolveType(
-                        referencedTypeText,
-                        sourceModuleName,
-                        getModuleText);
-
-                var fullyQualifiedTypeName = sourceModuleName + "." + rootTypeText;
-
-                return
-                    new ResolveTypeResult
-                    {
-                        canonicalTypeText = fullyQualifiedTypeName,
-                        compileExpressions = supportingExpressions.compileExpressions,
-                        referencedModules = ImmutableHashSet.Create(sourceModuleName),
-                    };
-            }
-
-            var rootType = ParseElmTypeText(rootTypeText);
+            var rootType = ParseElmTypeText(rootTypeText).parsedType;
 
             if (rootType.Alias != null)
             {
@@ -186,7 +145,46 @@ namespace Kalmit
 
             if (rootType.Instance != null)
             {
-                Console.WriteLine("Type '" + rootTypeText + "' is instance of '" + rootType.Instance.Value.genericType + "'.");
+                if (rootType.Instance.Value.parameters.Count == 0)
+                {
+                    var (referencedModuleName, typeNameInReferencedModule) =
+                        GetCanonicalModuleNameAndLocalTypeNameFromNameInSourceModule(rootTypeText);
+
+                    if (referencedModuleName != sourceModuleName)
+                    {
+                        Console.WriteLine("Type '" + rootTypeText + "' in '" + sourceModuleName + "' refers to '" + referencedModuleName + "." + typeNameInReferencedModule + "'.");
+
+                        return ResolveType(
+                            typeNameInReferencedModule,
+                            referencedModuleName,
+                            getModuleText);
+                    }
+
+                    Console.WriteLine("Resolve type text for '" + rootTypeText + "' in '" + sourceModuleName + "'.");
+
+                    var referencedTypeText = GetTypeDefinitionTextFromModuleText(rootTypeText, sourceModuleText);
+
+                    if (!(0 < referencedTypeText?.Length))
+                        throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
+
+                    var supportingExpressions =
+                        ResolveType(
+                            referencedTypeText,
+                            sourceModuleName,
+                            getModuleText);
+
+                    return
+                        new ResolveTypeResult
+                        {
+                            canonicalTypeText = supportingExpressions.canonicalTypeText,
+                            compileExpressions = supportingExpressions.compileExpressions,
+                            referencedModules = ImmutableHashSet.Create(sourceModuleName),
+                        };
+                }
+
+                Console.WriteLine("Type '" + rootTypeText + "' is instance of '" +
+                    rootType.Instance.Value.typeName + "' with " +
+                    rootType.Instance.Value.parameters.Count + " parameters.");
 
                 var parameters =
                     rootType.Instance.Value.parameters
@@ -200,11 +198,25 @@ namespace Kalmit
                     })
                     .ToImmutableList();
 
-                if (InstantiationSpecialCases.TryGetValue(rootType.Instance.Value.genericType, out var specialCaseFunctionNameCommonPart))
+                if (InstantiationSpecialCases.TryGetValue(rootType.Instance.Value.typeName, out var specialCaseFunctionNameCommonPart))
                 {
+                    var parametersTextsForComposition =
+                        parameters.Select(param =>
+                        {
+                            var needsParentheses =
+                                param.dependencies.canonicalTypeText.Contains(" ") &&
+                                !param.dependencies.canonicalTypeText.StartsWith("(") &&
+                                !param.dependencies.canonicalTypeText.StartsWith("{");
+
+                            if (needsParentheses)
+                                return "(" + param.dependencies.canonicalTypeText + ")";
+
+                            return param.dependencies.canonicalTypeText;
+                        });
+
                     return new ResolveTypeResult
                     {
-                        canonicalTypeText = rootType.Instance.Value.genericType + " " + String.Join(" ", parameters.Select(param => param.dependencies.canonicalTypeText)),
+                        canonicalTypeText = rootType.Instance.Value.typeName + " " + String.Join(" ", parametersTextsForComposition),
 
                         compileExpressions = () =>
                             (jsonEncodeFunctionNamePrefix + specialCaseFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
@@ -225,7 +237,7 @@ namespace Kalmit
                 var fields = rootType.Record.Value.fields.Select(recordField =>
                     {
                         var fieldTypeExpressions = ResolveType(
-                            recordField.type,
+                            recordField.typeText,
                             sourceModuleName,
                             getModuleText);
 
@@ -236,7 +248,8 @@ namespace Kalmit
 
                         return new
                         {
-                            recordField.type,
+                            fieldName = recordField.name,
+                            fieldCanonicalType = fieldTypeExpressions.canonicalTypeText,
                             encodeExpression = "( \"" + recordField.name + "\", " + encodeFieldValueExpression + " )",
                             decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + recordField.name + "\" " + fieldFunctionNames.decodeFunctionName + " )",
                             dependencies = ImmutableHashSet.Create(fieldTypeExpressions.canonicalTypeText),
@@ -256,7 +269,7 @@ namespace Kalmit
                 var allFieldsDependencies =
                     fields
                     .Select(field => field.dependencies)
-                    .Aggregate((a, b) => a.Union(b));
+                    .Aggregate(ImmutableHashSet<string>.Empty, (a, b) => a.Union(b));
 
                 var encodeExpression =
                     "Json.Encode.object\n" +
@@ -273,9 +286,14 @@ namespace Kalmit
                     "Json.Decode.succeed " + decodeMapFunction + "\n" +
                     IndentElmCodeLines(1, dencodeListExpression);
 
+                var canonicalTypeText =
+                    "{" +
+                    string.Join(",", fields.Select(field => field.fieldName + ":" + field.fieldCanonicalType)) +
+                    "}";
+
                 return new ResolveTypeResult
                 {
-                    canonicalTypeText = sourceModuleName + "." + rootTypeText,
+                    canonicalTypeText = canonicalTypeText,
 
                     compileExpressions = () => (encodeExpression, decodeExpression, allFieldsDependencies),
 
@@ -285,6 +303,8 @@ namespace Kalmit
 
             if (rootType.Custom != null)
             {
+                Console.WriteLine("'" + rootTypeText + "' is a custom type.");
+
                 (string encodeExpression, string decodeExpression, IImmutableSet<string> dependencies) compileExpressions()
                 {
                     var tags = rootType.Custom.Value.tags.Select(typeTag =>
@@ -367,7 +387,7 @@ namespace Kalmit
 
                 return new ResolveTypeResult
                 {
-                    canonicalTypeText = sourceModuleName + "." + rootTypeText,
+                    canonicalTypeText = sourceModuleName + "." + rootType.Custom.Value.typeLocalName,
 
                     compileExpressions = compileExpressions,
 
@@ -377,6 +397,8 @@ namespace Kalmit
 
             if (rootType.Tuple != null)
             {
+                Console.WriteLine("'" + rootTypeText + "' is a " + rootType.Tuple.Count + "-tuple.");
+
                 var tupleElementsCanonicalTypeName =
                     rootType.Tuple
                     .Select(tupleElementType => ResolveType(tupleElementType, sourceModuleName, getModuleText).canonicalTypeText)
@@ -402,9 +424,11 @@ namespace Kalmit
                     jsonDecodeFunctionNamePrefix + functionNameCommonPart + " " +
                     String.Join(" ", tupleElementsFunctionName.Select(functionNames => functionNames.decodeFunctionName));
 
+                var canonicalTypeText = "(" + string.Join(",", tupleElementsCanonicalTypeName) + ")";
+
                 return new ResolveTypeResult
                 {
-                    canonicalTypeText = sourceModuleName + "." + rootTypeText,
+                    canonicalTypeText = canonicalTypeText,
 
                     compileExpressions = () => (encodeExpression, decodeExpression, allElementsDependencies),
 
@@ -426,85 +450,28 @@ namespace Kalmit
             return indentString + textBeforeIndent.Replace("\n", "\n" + indentString);
         }
 
-        static public ElmType ParseElmTypeText(
+        static public (ElmType parsedType, string remainingString) ParseElmTypeText(
             string elmTypeText)
         {
-            //  Assume: elm-format was applied.
-            //  Assume: Record fields are all on their own line.
             //  Assume: Custom type tags are all on their own line.
-            //  Assume: Generic type instances (e.g. `List Int`) are on a single line.
 
             try
             {
                 var typeDefinitionTextLines = elmTypeText.Split(new char[] { '\n' });
 
-                if (typeDefinitionTextLines.Length == 1)
-                {
-                    {
-                        var tupleMatch = Regex.Match(typeDefinitionTextLines[0].Trim(), @"\(([\w\d_\.\s\,]+)\)");
-
-                        if (tupleMatch.Success)
-                        {
-                            return new ElmType
-                            {
-                                Tuple = tupleMatch.Groups[1].Value.Split(new[] { (',') }).Select(elem => elem.Trim()).ToImmutableList(),
-                            };
-                        }
-                    }
-
-                    var instanceComponents = Regex.Split(typeDefinitionTextLines[0].Trim(), @"\s");
-
-                    if (1 < instanceComponents.Length)
-                    {
-                        //  Cases like: `Maybe String`, `List Int`, `Dict.Dict Int String`.
-
-                        return new ElmType
-                        {
-                            Instance = (instanceComponents[0], instanceComponents.Skip(1).ToImmutableList())
-                        };
-                    }
-                }
-
                 var isAlias = Regex.IsMatch(typeDefinitionTextLines[0], @"^type(\s+)alias");
 
                 if (isAlias)
                 {
-                    var isRecord = Regex.IsMatch(typeDefinitionTextLines[1], @"^\s+\{");
-
-                    if (!isRecord)
+                    return (parsedType: new ElmType
                     {
-                        return new ElmType
-                        {
-                            Alias = typeDefinitionTextLines[1].Trim(),
-                        };
-                    }
-
-                    var fieldsCandidatesLines =
-                        typeDefinitionTextLines.Skip(1).ToImmutableList();
-
-                    var fields =
-                        fieldsCandidatesLines
-                        .Select(line => Regex.Match(line, @"^\s+({|,)\s*([\w\d_]+)\s*\:(.+)"))
-                        .Where(match => match.Success)
-                        .Select(match =>
-                        {
-                            var fieldName = match.Groups[2].Value;
-
-                            var fieldType = match.Groups[3].Value.Trim();
-
-                            return (name: fieldName, type: fieldType);
-                        })
-                        .ToImmutableList();
-
-                    return new ElmType
-                    {
-                        Record = new ElmType.RecordStructure
-                        {
-                            fields = fields
-                        }
-                    };
+                        Alias = string.Join("\n", typeDefinitionTextLines.Skip(1).ToArray()),
+                    }, "");
                 }
-                else
+
+                var customTypeMatch = Regex.Match(string.Join("", typeDefinitionTextLines), @"^type\s+([^\s]+)\s*=");
+
+                if (customTypeMatch.Success)
                 {
                     var tags =
                         typeDefinitionTextLines.Skip(1)
@@ -530,19 +497,170 @@ namespace Kalmit
                         })
                         .ToImmutableDictionary(tag => tag.tagName, tag => tag.tagParameters);
 
-                    return new ElmType
+                    return (parsedType: new ElmType
                     {
                         Custom = new ElmType.CustomStructure
                         {
+                            typeLocalName = customTypeMatch.Groups[1].Value,
                             tags = tags
                         },
-                    };
+                    }, "");
                 }
+
+                var withoutLeadingWhitespace = elmTypeText.TrimStart();
+
+                switch (withoutLeadingWhitespace[0])
+                {
+                    case '(':
+                        var parenthesesRest = withoutLeadingWhitespace.Substring(1);
+
+                        var elements = new List<string>();
+
+                        while (true)
+                        {
+                            var (_, restWithoutLeadingWhitespace) = parseRegexPattern(parenthesesRest, @"\s*");
+
+                            if (restWithoutLeadingWhitespace.Length < 1)
+                                throw new Exception("Missing terminating parenthesis.");
+
+                            var (termination, restAfterTermination) = parseRegexPattern(restWithoutLeadingWhitespace, @"\)");
+
+                            if (0 < termination.Length)
+                            {
+                                var parsedType =
+                                    1 == elements.Count ?
+                                    ParseElmTypeText(elements.Single()).parsedType
+                                    :
+                                    new ElmType
+                                    {
+                                        Tuple = elements.ToImmutableList()
+                                    };
+
+                                return (parsedType, restAfterTermination);
+                            }
+
+                            if (0 < elements.Count)
+                            {
+                                var (separator, restAfterSeparator) = parseRegexPattern(restWithoutLeadingWhitespace, @",\s*");
+
+                                if (!(0 < separator.Length))
+                                    throw new Exception("Missing separator.");
+
+                                restWithoutLeadingWhitespace = restAfterSeparator.TrimStart();
+                            }
+
+                            var parsedElement = ParseElmTypeText(restWithoutLeadingWhitespace);
+
+                            var parsedElementText = restWithoutLeadingWhitespace.Substring(0, restWithoutLeadingWhitespace.Length - parsedElement.remainingString.Length);
+
+                            elements.Add(parsedElementText);
+                            parenthesesRest = parsedElement.remainingString;
+                        }
+
+                    case '{':
+                        var recordRest = withoutLeadingWhitespace.Substring(1);
+
+                        var fields = new List<(string fieldName, string fieldTypeText, ElmType fieldType)>();
+
+                        while (true)
+                        {
+                            var recordRestWithoutLeadingWhitespace = recordRest.TrimStart();
+
+                            if (recordRestWithoutLeadingWhitespace[0] == '}')
+                            {
+                                return (parsedType: new ElmType
+                                {
+                                    Record = new ElmType.RecordStructure
+                                    {
+                                        fields = fields.ToImmutableList(),
+                                    }
+                                }, remainingString: recordRestWithoutLeadingWhitespace.Substring(1));
+                            }
+
+                            var (_, restAfterFieldSeparator) = parseRegexPattern(recordRestWithoutLeadingWhitespace, @"\s*,\s*");
+
+                            var (fieldName, restAfterFieldName) = parseFieldName(restAfterFieldSeparator);
+
+                            var (_, restAfterFieldColon) = parseRegexPattern(restAfterFieldName, @"\s*:\s*");
+
+                            var (fieldType, restAfterFieldType) = ParseElmTypeText(restAfterFieldColon);
+
+                            recordRest = restAfterFieldType;
+
+                            var fieldTypeTextLength = restAfterFieldColon.Length - recordRest.Length;
+
+                            if (fieldName.Length < 1)
+                                throw new Exception("Missing termination token.");
+
+                            fields.Add((fieldName, fieldTypeText: restAfterFieldColon.Substring(0, fieldTypeTextLength), fieldType));
+                        }
+
+                    case char firstCharacter when Char.IsLetter(firstCharacter) || firstCharacter == '_':
+
+                        var nameInInstanceRegexPattern = @"[\w\d_\.]+";
+
+                        var (firstName, restAfterFirstName) = parseRegexPattern(withoutLeadingWhitespace, nameInInstanceRegexPattern);
+
+                        var parametersTexts = new List<string>();
+
+                        var instanceRest = restAfterFirstName;
+
+                        while (true)
+                        {
+                            var (_, instanceRestWithoutWhitespace) = parseRegexPattern(instanceRest, @"\s*");
+
+                            var (parameterName, restAfterParameterName) = parseRegexPattern(
+                                instanceRestWithoutWhitespace, nameInInstanceRegexPattern);
+
+                            if (0 < parameterName.Length)
+                            {
+                                parametersTexts.Add(parameterName);
+                                instanceRest = restAfterParameterName;
+                                continue;
+                            }
+
+                            var (parameterTypeBegin, _) = parseRegexPattern(instanceRestWithoutWhitespace, @"[\(\{]");
+
+                            if (0 < parameterTypeBegin.Length)
+                            {
+                                var parameterParsed = ParseElmTypeText(instanceRestWithoutWhitespace);
+
+                                var parameterTypeText = instanceRestWithoutWhitespace.Substring(0, instanceRestWithoutWhitespace.Length - parameterParsed.remainingString.Length);
+
+                                parametersTexts.Add(parameterTypeText);
+                                instanceRest = parameterParsed.remainingString;
+                                continue;
+                            }
+
+                            return (parsedType: new ElmType
+                            {
+                                Instance = (typeName: firstName, parametersTexts.ToImmutableList()),
+                            },
+                            remainingString: instanceRest);
+                        }
+
+                    case char other:
+                        throw new NotSupportedException("Unexpected first character in type text: '" + other.ToString() + "'.");
+                }
+
+                throw new NotImplementedException("Type text did not match any supported pattern.");
             }
             catch (Exception e)
             {
                 throw new Exception("Failed to parse type '" + elmTypeText + "'.", e);
             }
+        }
+
+        static (string fieldName, string remainingString) parseFieldName(string originalString)
+        {
+            return parseRegexPattern(originalString, @"[\w\d_]+");
+        }
+
+        static (string matchValue, string remainingString) parseRegexPattern(string originalString, string regexPattern)
+        {
+            var match = Regex.Match(originalString, "^" + regexPattern);
+
+            return (matchValue: match.Value, remainingString: originalString.Substring(match.Length));
         }
 
         /*
@@ -651,18 +769,20 @@ namespace Kalmit
 
             public string Alias;
 
-            public (string genericType, IImmutableList<string> parameters)? Instance;
+            public (string typeName, IImmutableList<string> parameters)? Instance;
 
             public IImmutableList<string> Tuple;
 
             public struct CustomStructure
             {
+                public string typeLocalName;
+
                 public IImmutableDictionary<string, IImmutableList<string>> tags;
             }
 
             public struct RecordStructure
             {
-                public IImmutableList<(string name, string type)> fields;
+                public IImmutableList<(string name, string typeText, ElmType parsedType)> fields;
             }
         }
 
