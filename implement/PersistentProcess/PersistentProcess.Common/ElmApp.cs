@@ -140,7 +140,14 @@ namespace Kalmit
                     originalAppFiles,
                     (partiallyUpdatedAppFiles, elmType) =>
                     {
-                        var qualifiedMatch = Regex.Match(elmType, @"(.+)\.(.+)");
+                        {
+                            var enclosingParenthesesMatch = Regex.Match(elmType.Trim(), @"^\(([^,^\)]+)\)$");
+
+                            if (enclosingParenthesesMatch.Success)
+                                elmType = enclosingParenthesesMatch.Groups[1].Value;
+                        }
+
+                        var qualifiedMatch = Regex.Match(elmType.Trim(), @"^(.+)\.([^\s^\.]+)(\s+[a-z][^\s^\.]*)*$");
 
                         if (!qualifiedMatch.Success)
                             return partiallyUpdatedAppFiles;
@@ -159,7 +166,9 @@ namespace Kalmit
 
                         var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value);
 
-                        var isCustomTypeMatch = Regex.Match(moduleTextBefore, @"^type\s+" + localTypeName + @"\s*=", RegexOptions.Multiline);
+                        var isCustomTypeMatch = Regex.Match(
+                            moduleTextBefore,
+                            @"^type\s+" + localTypeName + @"(\s+[a-z][^\s]*){0,}\s*=", RegexOptions.Multiline);
 
                         if (!isCustomTypeMatch.Success)
                             return partiallyUpdatedAppFiles;
@@ -172,7 +181,7 @@ namespace Kalmit
             var stateCodingJsonFunctionsText =
                 String.Join("\n\n",
                 allStateCodingExpressions
-                .Select(typeResult => CompileElmValueSerializer.BuildFunctionTextsFromExpressions(
+                .Select(typeResult => CompileElmValueSerializer.BuildJsonCodingFunctionTexts(
                     typeResult.elmType,
                     typeResult.result.encodeExpression,
                     typeResult.result.decodeExpression))

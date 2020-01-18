@@ -28,6 +28,7 @@ type alias State =
     , dict : Dict.Dict Int String
     , empty_record : {}
     , empty_tuple : ()
+    , customTypeInstance : CustomTypeWithTypeParameter Int
     }
 
 
@@ -51,6 +52,10 @@ type alias Tuple3 =
 type CustomType
     = CustomTagWithoutParameter
     | CustomTagWithParameter Int
+
+
+type CustomTypeWithTypeParameter a
+    = CustomTypeWithTypeParameter a
 
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
@@ -107,4 +112,5 @@ interfaceToHost_initState =
     , dict = [ ( 100, "A" ), ( 101, "B" ) ] |> Dict.fromList
     , empty_record = {}
     , empty_tuple = ()
+    , customTypeInstance = CustomTypeWithTypeParameter 4
     }

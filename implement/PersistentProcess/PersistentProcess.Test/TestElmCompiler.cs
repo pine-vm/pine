@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -107,7 +109,7 @@ module Module exposing ( somethingElse, nameToExpose)",
         }
 
         [TestMethod]
-        public void Canonicalize_Elm_type_text()
+        public void Canonicalize_Elm_type_text_and_compile_lowered_Elm_app()
         {
             var testCases = new[]
             {
@@ -115,21 +117,21 @@ module Module exposing ( somethingElse, nameToExpose)",
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     {}
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{}"
                 },
                 new
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     { a : Int
@@ -137,56 +139,56 @@ type alias Record =
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int}"
                 },
                 new
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     { a : Int, b : String }
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int,b:String}"
                 },
                 new
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     { a : Int, b : (String, Int) }
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int,b:(String,Int)}"
                 },
                 new
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     { a : Int, b : Result String Int, c : String }
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int,b:Result String Int,c:String}"
                 },
                 new
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     { a : Int
@@ -197,14 +199,14 @@ type alias Record =
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int,b:Result String Int,c:(String,Int),d:List {daa:String,dab:List String}}"
                 },
                 new
                 {
                     elmModules = new[]
                     {
-                        (moduleName: "Module",
+                        (moduleName: "RootModule",
                         moduleText: @"
 type alias Record =
     { a : Int
@@ -213,7 +215,7 @@ type alias Record =
 ")
                     },
                     typeToResolve = @"Record",
-                    typeToResolveModule = @"Module",
+                    typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int,b:Result (Maybe String) (Result String Int)}"
                 },
                 new
@@ -245,24 +247,96 @@ type CustomType
                     typeToResolveModule = @"RootModule",
                     expectedCanonicalText = "{a:Int,custom:OtherModule.CustomType,record:{fieldFromOtherModule:Int}}"
                 },
+                new
+                {
+                    elmModules = new[]
+                    {
+                        (moduleName: "RootModule",
+                        moduleText: @"
+type alias Record =
+    { customTypeInstance : CustomTypeWithTypeParameter Int }
+
+type CustomTypeWithTypeParameter a
+    = CustomTypeWithTypeParameter a
+
+")
+                    },
+                    typeToResolve = @"Record",
+                    typeToResolveModule = @"RootModule",
+                    expectedCanonicalText = "{customTypeInstance:RootModule.CustomTypeWithTypeParameter Int}"
+                },
+                new
+                {
+                    elmModules = new[]
+                    {
+                        (moduleName: "RootModule",
+                        moduleText: @"
+import ListDict exposing (..)
+
+type alias DictionaryInstance =
+    ListDict.Dict LinkDirection LinkProperties
+
+type alias LinkDirection =
+    { a : Int
+    , b : Int
+    }
+
+type alias LinkProperties =
+    { linkProperty : Int }
+"),
+                        (moduleName: "ListDict",
+                        moduleText: @"
+type Dict key value
+    = Dict (List ( key, value ))
+")
+                    },
+                    typeToResolve = @"DictionaryInstance",
+                    typeToResolveModule = @"RootModule",
+                    expectedCanonicalText = "ListDict.Dict {a:Int,b:Int} {linkProperty:Int}"
+                },
             };
 
             foreach (var testCase in testCases)
             {
+                var elmModules =
+                    testCase.elmModules
+                    .ToImmutableDictionary(module => module.moduleName,
+                    module =>
+                    "module " + module.moduleName + " exposing (..)\n\n" +
+                    "interfaceToHost_processEvent : String -> " + testCase.typeToResolve + " -> ( " + testCase.typeToResolve + ", String )\n\n" +
+                    module.moduleText);
+
+                string getModuleText(string moduleName)
+                {
+                    if (elmModules.TryGetValue(moduleName, out var moduleText))
+                        return moduleText;
+
+                    return null;
+                }
+
                 var resolvedType = Kalmit.CompileElmValueSerializer.ResolveType(
                     testCase.typeToResolve,
                     testCase.typeToResolveModule,
-                    moduleName =>
-                    {
-                        var matchingModuleEntry = testCase.elmModules.FirstOrDefault(c => c.moduleName == moduleName);
-
-                        if (matchingModuleEntry.moduleName == null)
-                            return null;
-
-                        return "module " + moduleName + " exposing (..)\n\n" + matchingModuleEntry.moduleText;
-                    });
+                    getModuleText);
 
                 Assert.AreEqual(testCase.expectedCanonicalText, resolvedType.canonicalTypeText);
+
+                try
+                {
+                    var originalAppFilesList =
+                        elmModules
+                        .Select(module => ("src/" + module.Key + ".elm", System.Text.Encoding.UTF8.GetBytes(module.Value)))
+                        .ToImmutableList();
+
+                    var loweredElmApp =
+                        ElmApp.AsCompletelyLoweredElmApp(
+                        originalAppFilesList,
+                        new ElmAppInterfaceConfig { RootModuleName = "RootModule" });
+                }
+                catch (Exception e)
+                {
+                    throw new Exception("Building lowered Elm app failed for test case with expected canonical text of '" + testCase.expectedCanonicalText + "'.", e);
+                }
             }
         }
     }

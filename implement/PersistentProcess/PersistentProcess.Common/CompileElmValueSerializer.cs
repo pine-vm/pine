@@ -48,46 +48,96 @@ namespace Kalmit
         {
             public string canonicalTypeText;
 
+            public string canonicalTypeTextWithParameters;
+
             public Func<(string encodeExpression, string decodeExpression, IImmutableSet<string> dependencies)> compileExpressions;
 
             public IImmutableSet<string> referencedModules;
         }
 
-        static public (string encodeFunctionName, string decodeFunctionName) GetFunctionNamesFromTypeText(
+        static bool StartsWithLowercaseLetter(string text) =>
+            text.Length < 1 ? false : Char.IsLower(text[0]);
+
+        static public (string encodeFunctionName, string decodeFunctionName, string commonPart) GetFunctionNamesFromTypeText(
             string typeText)
         {
             var rootTypeTextHash = CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(typeText));
 
             var functionNameCommonPart =
-                Regex.IsMatch(typeText, @"^[\w\d_\.]+$") ?
+                StartsWithLowercaseLetter(typeText.Trim())
+                ?
+                "type_parameter_" + typeText
+                :
+                (Regex.IsMatch(typeText, @"^[\w\d_\.]+$") ?
                 "named_" + typeText.Replace(".", "_dot_")
                 :
-                "anonymous_" + CommonConversion.StringBase16FromByteArray(rootTypeTextHash).Substring(0, 10);
+                "anonymous_" + CommonConversion.StringBase16FromByteArray(rootTypeTextHash).Substring(0, 10));
 
             return
                 (jsonEncodeFunctionNamePrefix + functionNameCommonPart,
-                jsonDecodeFunctionNamePrefix + functionNameCommonPart);
+                jsonDecodeFunctionNamePrefix + functionNameCommonPart,
+                functionNameCommonPart);
         }
 
-        static public (string encodeFunction, string decodeFunction) BuildFunctionTextsFromExpressions(
+        static public (string encodeFunction, string decodeFunction) BuildJsonCodingFunctionTexts(
             string typeText,
             string encodeExpression,
             string decodeExpression)
         {
-            var functionNames = GetFunctionNamesFromTypeText(typeText);
+            var typeTextWithParametersMatch = Regex.Match(typeText.Trim(), @"^\((.+?)((\s+[a-z][^\s]*){1,})\)$");
+
+            var (typeTextMinusParameters, typeParametersNames) =
+                typeTextWithParametersMatch.Success
+                ?
+                (typeTextWithParametersMatch.Groups[1].Value,
+                Regex.Split(typeTextWithParametersMatch.Groups[2].Value.Trim(), @"\s+").ToImmutableList())
+                :
+                (typeText, ImmutableList<string>.Empty);
+
+            var typeParameters =
+                typeParametersNames
+                .Select(typeParameterName =>
+                {
+                    var parameterNameCommonPart = "type_parameter_" + typeParameterName;
+
+                    return
+                    new
+                    {
+                        encodeAnnotation = typeParameterName + " -> Json.Encode.Value",
+                        encodeParameter = jsonEncodeFunctionNamePrefix + parameterNameCommonPart,
+
+                        decodeAnnotation = "Json.Decode.Decoder " + typeParameterName,
+                        decodeParameter = jsonDecodeFunctionNamePrefix + parameterNameCommonPart,
+                    };
+                })
+                .ToImmutableList();
+
+            string annotationsFromTypeList(IEnumerable<string> types) =>
+                string.Join(" -> ", types.Select(@type => "(" + @type + ")"));
+
+            var functionNames = GetFunctionNamesFromTypeText(typeTextMinusParameters);
 
             var encodeFunction =
-                functionNames.encodeFunctionName + " : " + typeText + " -> Json.Encode.Value\n" +
-                functionNames.encodeFunctionName + " " + encodeParamName + " =\n" +
+                functionNames.encodeFunctionName + " : " +
+                annotationsFromTypeList(
+                    typeParameters.Select(typeParam => typeParam.encodeAnnotation).Concat(
+                        new[] { typeText, "Json.Encode.Value" })) + "\n" +
+                functionNames.encodeFunctionName + " " +
+                string.Join(" ", typeParameters.Select(typeParam => typeParam.encodeParameter)) +
+                " " + encodeParamName + " =\n" +
                 IndentElmCodeLines(1, encodeExpression);
 
             var decodeFunction =
-                functionNames.decodeFunctionName + " : Json.Decode.Decoder (" + typeText + ")\n" +
-                functionNames.decodeFunctionName + " =\n" +
+                functionNames.decodeFunctionName + " : " +
+                annotationsFromTypeList(
+                    typeParameters.Select(typeParam => typeParam.decodeAnnotation).Concat(
+                        new[] { "Json.Decode.Decoder (" + typeText + ")" })) + "\n" +
+                functionNames.decodeFunctionName + " " +
+                string.Join(" ", typeParameters.Select(typeParam => typeParam.decodeParameter)) +
+                " =\n" +
                 IndentElmCodeLines(1, decodeExpression);
 
-            return
-                (encodeFunction, decodeFunction);
+            return (encodeFunction, decodeFunction);
         }
 
         static public ResolveTypeResult ResolveType(
@@ -131,14 +181,24 @@ namespace Kalmit
                 return (sourceModuleName, nameInThisModule);
             }
 
+            (string canonicalTypeText, IImmutableSet<string> dependencies) ResolveLocalTypeText(string typeText)
+            {
+                if (StartsWithLowercaseLetter(typeText))
+                    return (typeText, ImmutableHashSet<string>.Empty);
+
+                var canonicalTypeText = ResolveType(typeText, sourceModuleName, getModuleText).canonicalTypeText;
+
+                return (canonicalTypeText, ImmutableHashSet.Create(canonicalTypeText));
+            }
+
             var rootType = ParseElmTypeText(rootTypeText).parsedType;
 
             if (rootType.Alias != null)
             {
-                Console.WriteLine("Type '" + rootTypeText + "' is alias for '" + rootType.Alias + "'.");
+                Console.WriteLine("Type '" + rootTypeText + "' is alias for '" + rootType.Alias.Value.aliasedText + "'.");
 
                 return ResolveType(
-                    rootType.Alias,
+                    rootType.Alias.Value.aliasedText,
                     sourceModuleName,
                     getModuleText);
             }
@@ -167,19 +227,7 @@ namespace Kalmit
                     if (!(0 < referencedTypeText?.Length))
                         throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
 
-                    var supportingExpressions =
-                        ResolveType(
-                            referencedTypeText,
-                            sourceModuleName,
-                            getModuleText);
-
-                    return
-                        new ResolveTypeResult
-                        {
-                            canonicalTypeText = supportingExpressions.canonicalTypeText,
-                            compileExpressions = supportingExpressions.compileExpressions,
-                            referencedModules = ImmutableHashSet.Create(sourceModuleName),
-                        };
+                    return ResolveType(referencedTypeText, sourceModuleName, getModuleText);
                 }
 
                 Console.WriteLine("Type '" + rootTypeText + "' is instance of '" +
@@ -198,36 +246,48 @@ namespace Kalmit
                     })
                     .ToImmutableList();
 
+                string instantiatedTypeCanonicalName = null;
+                string instantiatedTypeFunctionNameCommonPart = null;
+                IImmutableSet<string> dependenciesFromInstantiatedType = ImmutableHashSet<string>.Empty;
+
                 if (InstantiationSpecialCases.TryGetValue(rootType.Instance.Value.typeName, out var specialCaseFunctionNameCommonPart))
                 {
-                    var parametersTextsForComposition =
-                        parameters.Select(param =>
-                        {
-                            var needsParentheses =
-                                param.dependencies.canonicalTypeText.Contains(" ") &&
-                                !param.dependencies.canonicalTypeText.StartsWith("(") &&
-                                !param.dependencies.canonicalTypeText.StartsWith("{");
-
-                            if (needsParentheses)
-                                return "(" + param.dependencies.canonicalTypeText + ")";
-
-                            return param.dependencies.canonicalTypeText;
-                        });
-
-                    return new ResolveTypeResult
-                    {
-                        canonicalTypeText = rootType.Instance.Value.typeName + " " + String.Join(" ", parametersTextsForComposition),
-
-                        compileExpressions = () =>
-                            (jsonEncodeFunctionNamePrefix + specialCaseFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
-                            jsonDecodeFunctionNamePrefix + specialCaseFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
-                            parameters.Select(parameter => parameter.dependencies.canonicalTypeText).ToImmutableHashSet()),
-
-                        referencedModules = ImmutableHashSet<string>.Empty,
-                    };
+                    instantiatedTypeCanonicalName = rootType.Instance.Value.typeName;
+                    instantiatedTypeFunctionNameCommonPart = specialCaseFunctionNameCommonPart;
+                }
+                else
+                {
+                    var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, getModuleText);
+                    instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText;
+                    instantiatedTypeFunctionNameCommonPart = GetFunctionNamesFromTypeText(instantiatedTypeCanonicalName).commonPart;
+                    dependenciesFromInstantiatedType = ImmutableHashSet.Create(instantiatedTypeResolution.canonicalTypeText);
                 }
 
-                throw new NotImplementedException("Instantiation is not implemented yet. (The type is '" + rootTypeText + "').");
+                var parametersTextsForComposition =
+                    parameters.Select(param =>
+                    {
+                        var needsParentheses =
+                            param.dependencies.canonicalTypeText.Contains(" ") &&
+                            !param.dependencies.canonicalTypeText.StartsWith("(") &&
+                            !param.dependencies.canonicalTypeText.StartsWith("{");
+
+                        if (needsParentheses)
+                            return "(" + param.dependencies.canonicalTypeText + ")";
+
+                        return param.dependencies.canonicalTypeText;
+                    });
+
+                return new ResolveTypeResult
+                {
+                    canonicalTypeText = instantiatedTypeCanonicalName + " " + String.Join(" ", parametersTextsForComposition),
+
+                    compileExpressions = () =>
+                        (jsonEncodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
+                        jsonDecodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
+                        dependenciesFromInstantiatedType.Union(parameters.Select(parameter => parameter.dependencies.canonicalTypeText))),
+
+                    referencedModules = ImmutableHashSet<string>.Empty,
+                };
             }
 
             if (rootType.Record != null)
@@ -236,12 +296,9 @@ namespace Kalmit
 
                 var fields = rootType.Record.Value.fields.Select(recordField =>
                     {
-                        var fieldTypeExpressions = ResolveType(
-                            recordField.typeText,
-                            sourceModuleName,
-                            getModuleText);
+                        var fieldTypeResolution = ResolveLocalTypeText(recordField.typeText);
 
-                        var fieldFunctionNames = GetFunctionNamesFromTypeText(fieldTypeExpressions.canonicalTypeText);
+                        var fieldFunctionNames = GetFunctionNamesFromTypeText(fieldTypeResolution.canonicalTypeText);
 
                         var encodeFieldValueExpression =
                             encodeParamName + "." + recordField.name + " |> " + fieldFunctionNames.encodeFunctionName;
@@ -249,10 +306,10 @@ namespace Kalmit
                         return new
                         {
                             fieldName = recordField.name,
-                            fieldCanonicalType = fieldTypeExpressions.canonicalTypeText,
+                            fieldCanonicalType = fieldTypeResolution.canonicalTypeText,
                             encodeExpression = "( \"" + recordField.name + "\", " + encodeFieldValueExpression + " )",
                             decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + recordField.name + "\" " + fieldFunctionNames.decodeFunctionName + " )",
-                            dependencies = ImmutableHashSet.Create(fieldTypeExpressions.canonicalTypeText),
+                            dependencies = fieldTypeResolution.dependencies,
                         };
                     }).ToImmutableList();
 
@@ -335,17 +392,14 @@ namespace Kalmit
                             }
 
                             if (1 < typeTag.Value.Count)
-                                throw new NotSupportedException("Problem with '" + typeTagCanonicalName + "': Support for tags with more than one parameter is not supported.");
+                                throw new NotSupportedException("Problem with '" + typeTagCanonicalName + "': Tags with more than one parameter are not supported.");
 
                             var tagParameterType = typeTag.Value.Single();
 
-                            var tagParameterTypeResolution = ResolveType(
-                                tagParameterType,
-                                sourceModuleName,
-                                getModuleText);
+                            var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
 
                             var tagParameterTypeFunctionNames =
-                                GetFunctionNamesFromTypeText(tagParameterTypeResolution.canonicalTypeText);
+                                GetFunctionNamesFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
 
                             var argumentName = "tagArgument";
 
@@ -360,7 +414,7 @@ namespace Kalmit
                                     argumentName,
                                     argumentName + " |> " + tagParameterTypeFunctionNames.encodeFunctionName),
                                 decodeExpression = tagDecodeExpression,
-                                dependencies = ImmutableHashSet.Create(tagParameterTypeResolution.canonicalTypeText),
+                                dependencies = tagParameterCanonicalTypeTextAndDependencies.dependencies.ToImmutableHashSet(),
                             };
                         })
                         .ToImmutableList();
@@ -385,9 +439,19 @@ namespace Kalmit
                     return (encodeExpression, decodeExpression, allTagsDependencies);
                 }
 
+                var canonicalTypeText = sourceModuleName + "." + rootType.Custom.Value.typeLocalName;
+
+                var canonicalTypeTextWithParameters =
+                    rootType.Custom.Value.parameters.Count < 1
+                    ?
+                    canonicalTypeText
+                    :
+                    "(" + canonicalTypeText + " " + string.Join(" ", rootType.Custom.Value.parameters) + ")";
+
                 return new ResolveTypeResult
                 {
-                    canonicalTypeText = sourceModuleName + "." + rootType.Custom.Value.typeLocalName,
+                    canonicalTypeText = canonicalTypeText,
+                    canonicalTypeTextWithParameters = canonicalTypeTextWithParameters,
 
                     compileExpressions = compileExpressions,
 
@@ -399,13 +463,18 @@ namespace Kalmit
             {
                 Console.WriteLine("'" + rootTypeText + "' is a " + rootType.Tuple.Count + "-tuple.");
 
-                var tupleElementsCanonicalTypeName =
+                var tupleElementsResults =
                     rootType.Tuple
-                    .Select(tupleElementType => ResolveType(tupleElementType, sourceModuleName, getModuleText).canonicalTypeText)
+                    .Select(tupleElementType => ResolveLocalTypeText(tupleElementType))
+                    .ToImmutableList();
+
+                var tupleElementsCanonicalTypeName =
+                    tupleElementsResults
+                    .Select(elementResult => elementResult.canonicalTypeText)
                     .ToImmutableList();
 
                 var allElementsDependencies =
-                    tupleElementsCanonicalTypeName
+                    tupleElementsResults.SelectMany(elementResult => elementResult.dependencies)
                     .ToImmutableHashSet();
 
                 var tupleElementsFunctionName =
@@ -459,20 +528,35 @@ namespace Kalmit
             {
                 var typeDefinitionTextLines = elmTypeText.Split(new char[] { '\n' });
 
-                var isAlias = Regex.IsMatch(typeDefinitionTextLines[0], @"^type(\s+)alias");
+                var aliasMatch = Regex.Match(typeDefinitionTextLines[0], @"^type\s+alias\s+([A-Z][^\s]*(\s+[a-z][^\s]*){0,})\s*=");
 
-                if (isAlias)
+                if (aliasMatch.Success)
                 {
+                    var aliasNameAndParameters = Regex.Split(aliasMatch.Groups[1].Value.Trim(), @"\s+");
+
+                    var aliasLocalName = aliasNameAndParameters.First();
+                    var parameters = aliasNameAndParameters.Skip(1).ToImmutableList();
+
                     return (parsedType: new ElmType
                     {
-                        Alias = string.Join("\n", typeDefinitionTextLines.Skip(1).ToArray()),
+                        Alias = new ElmType.AliasStructure
+                        {
+                            aliasLocalName = aliasLocalName,
+                            parameters = parameters,
+                            aliasedText = string.Join("\n", typeDefinitionTextLines.Skip(1).ToArray()),
+                        },
                     }, "");
                 }
 
-                var customTypeMatch = Regex.Match(string.Join("", typeDefinitionTextLines), @"^type\s+([^\s]+)\s*=");
+                var customTypeMatch = Regex.Match(string.Join("", typeDefinitionTextLines), @"^type\s+([A-Z][^\s]*(\s+[a-z][^\s]*){0,})\s*=");
 
                 if (customTypeMatch.Success)
                 {
+                    var typeNameAndParameters = Regex.Split(customTypeMatch.Groups[1].Value, @"\s+");
+
+                    var typeLocalName = typeNameAndParameters.First();
+                    var parameters = typeNameAndParameters.Skip(1).ToImmutableList();
+
                     var tags =
                         typeDefinitionTextLines.Skip(1)
                         .Select(tagLine =>
@@ -484,24 +568,34 @@ namespace Kalmit
 
                             var parametersText = overallMatch.Groups[3].Value.Trim();
 
-                            if (parametersText.Contains('{') || parametersText.Contains('('))
-                                throw new NotImplementedException("Type structures in custom type tag parameters are not supported yet. You can work around this limitation by using type aliases when describing the tag parameter.");
+                            var tagParametersTexts = new List<string>();
 
-                            var tagParameters =
-                                Regex.Split(parametersText, @"\s+")
-                                .Select(parameterText => parameterText.Trim())
-                                .Where(parameterText => 0 < parameterText.Length)
-                                .ToImmutableList();
+                            var tagParametersTextRemaining = parametersText;
 
-                            return (tagName: overallMatch.Groups[2].Value, tagParameters: (IImmutableList<string>)tagParameters);
+                            while (0 < tagParametersTextRemaining?.Length)
+                            {
+                                var (parameter, remainingAfterParameter) = ParseElmTypeText(tagParametersTextRemaining);
+
+                                var tagParameterText =
+                                    tagParametersTextRemaining
+                                    .Substring(0, tagParametersTextRemaining.Length - remainingAfterParameter.Length)
+                                    .Trim();
+
+                                tagParametersTexts.Add(tagParameterText);
+
+                                tagParametersTextRemaining = remainingAfterParameter.TrimStart();
+                            }
+
+                            return (tagName: overallMatch.Groups[2].Value, tagParameters: (IImmutableList<string>)tagParametersTexts.ToImmutableList());
                         })
-                        .ToImmutableDictionary(tag => tag.tagName, tag => tag.tagParameters);
+                    .ToImmutableDictionary(tag => tag.tagName, tag => tag.tagParameters);
 
                     return (parsedType: new ElmType
                     {
                         Custom = new ElmType.CustomStructure
                         {
-                            typeLocalName = customTypeMatch.Groups[1].Value,
+                            typeLocalName = typeLocalName,
+                            parameters = parameters,
                             tags = tags
                         },
                     }, "");
@@ -767,15 +861,26 @@ namespace Kalmit
 
             public RecordStructure? Record;
 
-            public string Alias;
+            public AliasStructure? Alias;
 
             public (string typeName, IImmutableList<string> parameters)? Instance;
 
             public IImmutableList<string> Tuple;
 
+            public struct AliasStructure
+            {
+                public string aliasLocalName;
+
+                public IImmutableList<string> parameters;
+
+                public string aliasedText;
+            }
+
             public struct CustomStructure
             {
                 public string typeLocalName;
+
+                public IImmutableList<string> parameters;
 
                 public IImmutableDictionary<string, IImmutableList<string>> tags;
             }
@@ -811,7 +916,9 @@ namespace Kalmit
                 foreach (var dependency in currentTypeExpressions.dependencies)
                     remainingDependencies.Enqueue(dependency);
 
-                yield return (currentType, (currentTypeExpressions.encodeExpression, currentTypeExpressions.decodeExpression, currentTypeResults.referencedModules));
+                yield return
+                    (currentTypeResults.canonicalTypeTextWithParameters ?? currentTypeResults.canonicalTypeText,
+                    (currentTypeExpressions.encodeExpression, currentTypeExpressions.decodeExpression, currentTypeResults.referencedModules));
             }
         }
 
