@@ -187,7 +187,8 @@ namespace Kalmit
                     typeResult.result.decodeExpression))
                 .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
 
-            var stateCodingFunctionNames = CompileElmValueSerializer.GetFunctionNamesFromTypeText(canonicalStateTypeName);
+            var stateCodingFunctionNames =
+                CompileElmValueSerializer.GetFunctionNamesAndTypeParametersFromTypeText(canonicalStateTypeName).functionNames;
 
             return
                 appFilesAfterExposingCustomTypesInModules.SetItem(

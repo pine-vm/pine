@@ -58,25 +58,28 @@ namespace Kalmit
         static bool StartsWithLowercaseLetter(string text) =>
             text.Length < 1 ? false : Char.IsLower(text[0]);
 
-        static public (string encodeFunctionName, string decodeFunctionName, string commonPart) GetFunctionNamesFromTypeText(
-            string typeText)
+        static public ((string encodeFunctionName, string decodeFunctionName, string commonPart) functionNames,
+            IImmutableList<string> typeParameterNames)
+            GetFunctionNamesAndTypeParametersFromTypeText(string typeText)
         {
-            var rootTypeTextHash = CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(typeText));
+            var (typeTextMinusTypeParameters, typeParametersNames) = parseForTypeParameters(typeText);
+
+            var rootTypeTextHash = CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(typeTextMinusTypeParameters));
 
             var functionNameCommonPart =
-                StartsWithLowercaseLetter(typeText.Trim())
+                StartsWithLowercaseLetter(typeTextMinusTypeParameters.Trim())
                 ?
-                "type_parameter_" + typeText
+                "type_parameter_" + typeTextMinusTypeParameters
                 :
-                (Regex.IsMatch(typeText, @"^[\w\d_\.]+$") ?
-                "named_" + typeText.Replace(".", "_dot_")
+                (Regex.IsMatch(typeTextMinusTypeParameters, @"^[\w\d_\.]+$") ?
+                "named_" + typeTextMinusTypeParameters.Replace(".", "_dot_")
                 :
                 "anonymous_" + CommonConversion.StringBase16FromByteArray(rootTypeTextHash).Substring(0, 10));
 
             return
-                (jsonEncodeFunctionNamePrefix + functionNameCommonPart,
+                ((jsonEncodeFunctionNamePrefix + functionNameCommonPart,
                 jsonDecodeFunctionNamePrefix + functionNameCommonPart,
-                functionNameCommonPart);
+                functionNameCommonPart), typeParametersNames);
         }
 
         static public (string encodeFunction, string decodeFunction) BuildJsonCodingFunctionTexts(
@@ -84,15 +87,7 @@ namespace Kalmit
             string encodeExpression,
             string decodeExpression)
         {
-            var typeTextWithParametersMatch = Regex.Match(typeText.Trim(), @"^\((.+?)((\s+[a-z][^\s]*){1,})\)$");
-
-            var (typeTextMinusParameters, typeParametersNames) =
-                typeTextWithParametersMatch.Success
-                ?
-                (typeTextWithParametersMatch.Groups[1].Value,
-                Regex.Split(typeTextWithParametersMatch.Groups[2].Value.Trim(), @"\s+").ToImmutableList())
-                :
-                (typeText, ImmutableList<string>.Empty);
+            var (functionNames, typeParametersNames) = GetFunctionNamesAndTypeParametersFromTypeText(typeText);
 
             var typeParameters =
                 typeParametersNames
@@ -114,8 +109,6 @@ namespace Kalmit
 
             string annotationsFromTypeList(IEnumerable<string> types) =>
                 string.Join(" -> ", types.Select(@type => "(" + @type + ")"));
-
-            var functionNames = GetFunctionNamesFromTypeText(typeTextMinusParameters);
 
             var encodeFunction =
                 functionNames.encodeFunctionName + " : " +
@@ -140,6 +133,65 @@ namespace Kalmit
             return (encodeFunction, decodeFunction);
         }
 
+        static (string typeTextMinusTypeParameters, ImmutableList<string> typeParametersNames) parseForTypeParameters(string typeText)
+        {
+            var instanceTypeTextWithParametersMatch = Regex.Match(typeText.Trim(), @"^\((.+?)((\s+[a-z][^\s]*){1,})\)$");
+
+            if (instanceTypeTextWithParametersMatch.Success)
+                return
+                (instanceTypeTextWithParametersMatch.Groups[1].Value,
+                Regex.Split(instanceTypeTextWithParametersMatch.Groups[2].Value.Trim(), @"\s+").ToImmutableList());
+
+            var parseTypeResult = ParseElmTypeText(typeText);
+
+            var parsedType = parseTypeResult.parsedType;
+
+            if (parsedType.Instance != null)
+            {
+                var typeParametersNames =
+                    parsedType.Instance.Value.parameters
+                    .SelectMany(EnumerateAllTypeNamesFromTypeText)
+                    .Where(typeName => Char.IsLower(typeName[0])).ToImmutableList();
+
+                return (typeText, typeParametersNames);
+            }
+
+            {
+                var typeParametersNames =
+                    EnumerateAllTypeNamesFromTypeText(typeText).Where(typeName => Char.IsLower(typeName[0])).ToImmutableList();
+
+                return (typeText, typeParametersNames);
+            }
+        }
+
+        static IEnumerable<string> EnumerateAllTypeNamesFromTypeText(string typeText)
+        {
+            var parseTypeResult = ParseElmTypeText(typeText);
+
+            if (0 < parseTypeResult.remainingString?.Trim()?.Length)
+                throw new NotSupportedException("Unexpected remaining string after parsing type: '" + parseTypeResult.remainingString + "'.");
+
+            var parsedType = parseTypeResult.parsedType;
+
+            if (parsedType.Instance != null)
+            {
+                var instancedTypes = new[] { parsedType.Instance.Value.typeName };
+
+                if (parsedType.Instance.Value.parameters.Count < 1)
+                    return instancedTypes;
+
+                return instancedTypes.Concat(parsedType.Instance.Value.parameters.SelectMany(EnumerateAllTypeNamesFromTypeText));
+            }
+
+            if (parsedType.Tuple != null)
+                return parsedType.Tuple.SelectMany(EnumerateAllTypeNamesFromTypeText);
+
+            if (parsedType.Record != null)
+                return parsedType.Record.Value.fields.SelectMany(field => EnumerateAllTypeNamesFromTypeText(field.typeText));
+
+            throw new NotImplementedException();
+        }
+
         static public ResolveTypeResult ResolveType(
             string rootTypeText,
             string sourceModuleName,
@@ -154,8 +206,6 @@ namespace Kalmit
             if (LeafExpressions.TryGetValue(rootTypeText, out var leafExpressions))
             {
                 Console.WriteLine("Found a leaf for type '" + rootTypeText + "'.");
-
-                var functionNames = GetFunctionNamesFromTypeText(rootTypeText);
 
                 return new ResolveTypeResult
                 {
@@ -240,9 +290,15 @@ namespace Kalmit
                     {
                         var dependencies = ResolveType(parameter, sourceModuleName, getModuleText);
 
-                        var functionNames = GetFunctionNamesFromTypeText(dependencies.canonicalTypeText);
+                        var (functionNames, typeParametersNames) = GetFunctionNamesAndTypeParametersFromTypeText(dependencies.canonicalTypeText);
 
-                        return new { functionNames, dependencies };
+                        var encodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
+                            functionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, typeParametersNames);
+
+                        var decodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
+                            functionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, typeParametersNames);
+
+                        return new { encodeFunction, decodeFunction, dependencies };
                     })
                     .ToImmutableList();
 
@@ -259,11 +315,11 @@ namespace Kalmit
                 {
                     var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, getModuleText);
                     instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText;
-                    instantiatedTypeFunctionNameCommonPart = GetFunctionNamesFromTypeText(instantiatedTypeCanonicalName).commonPart;
+                    instantiatedTypeFunctionNameCommonPart = GetFunctionNamesAndTypeParametersFromTypeText(instantiatedTypeCanonicalName).functionNames.commonPart;
                     dependenciesFromInstantiatedType = ImmutableHashSet.Create(instantiatedTypeResolution.canonicalTypeText);
                 }
 
-                var parametersTextsForComposition =
+                var parametersTypeTextsForComposition =
                     parameters.Select(param =>
                     {
                         var needsParentheses =
@@ -271,19 +327,22 @@ namespace Kalmit
                             !param.dependencies.canonicalTypeText.StartsWith("(") &&
                             !param.dependencies.canonicalTypeText.StartsWith("{");
 
-                        if (needsParentheses)
-                            return "(" + param.dependencies.canonicalTypeText + ")";
+                        var beforeParentheses =
+                            param.dependencies.canonicalTypeText;
 
-                        return param.dependencies.canonicalTypeText;
+                        if (needsParentheses)
+                            return "(" + beforeParentheses + ")";
+
+                        return beforeParentheses;
                     });
 
                 return new ResolveTypeResult
                 {
-                    canonicalTypeText = instantiatedTypeCanonicalName + " " + String.Join(" ", parametersTextsForComposition),
+                    canonicalTypeText = instantiatedTypeCanonicalName + " " + String.Join(" ", parametersTypeTextsForComposition),
 
                     compileExpressions = () =>
-                        (jsonEncodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.encodeFunctionName)) + " " + encodeParamName,
-                        jsonDecodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.functionNames.decodeFunctionName)),
+                        (jsonEncodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.encodeFunction)) + " " + encodeParamName,
+                        jsonDecodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.decodeFunction)),
                         dependenciesFromInstantiatedType.Union(parameters.Select(parameter => parameter.dependencies.canonicalTypeText))),
 
                     referencedModules = ImmutableHashSet<string>.Empty,
@@ -298,17 +357,24 @@ namespace Kalmit
                     {
                         var fieldTypeResolution = ResolveLocalTypeText(recordField.typeText);
 
-                        var fieldFunctionNames = GetFunctionNamesFromTypeText(fieldTypeResolution.canonicalTypeText);
+                        var (fieldFunctionNames, fieldTypeParametersNames) =
+                            GetFunctionNamesAndTypeParametersFromTypeText(fieldTypeResolution.canonicalTypeText);
+
+                        var encodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
+                            fieldFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, fieldTypeParametersNames);
+
+                        var decodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
+                            fieldFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, fieldTypeParametersNames);
 
                         var encodeFieldValueExpression =
-                            encodeParamName + "." + recordField.name + " |> " + fieldFunctionNames.encodeFunctionName;
+                            encodeParamName + "." + recordField.name + " |> " + encodeFunction;
 
                         return new
                         {
                             fieldName = recordField.name,
                             fieldCanonicalType = fieldTypeResolution.canonicalTypeText,
                             encodeExpression = "( \"" + recordField.name + "\", " + encodeFieldValueExpression + " )",
-                            decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + recordField.name + "\" " + fieldFunctionNames.decodeFunctionName + " )",
+                            decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + recordField.name + "\" " + decodeFunction + " )",
                             dependencies = fieldTypeResolution.dependencies,
                         };
                     }).ToImmutableList();
@@ -398,21 +464,29 @@ namespace Kalmit
 
                             var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
 
-                            var tagParameterTypeFunctionNames =
-                                GetFunctionNamesFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
+                            var (tagParameterTypeFunctionNames, tagParameterTypeParametersNames) =
+                                GetFunctionNamesAndTypeParametersFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
+
+                            var tagParameterEncodeFunction =
+                                expressionTextForFunctionWithOptionalTypeParameters(
+                                    tagParameterTypeFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, tagParameterTypeParametersNames);
+
+                            var tagParameterDecodeFunction =
+                                expressionTextForFunctionWithOptionalTypeParameters(
+                                    tagParameterTypeFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, tagParameterTypeParametersNames);
 
                             var argumentName = "tagArgument";
 
                             var tagDecodeExpression =
                                 decodeSyntaxCommonPart + @" (Json.Decode.lazy (\_ -> " +
-                                tagParameterTypeFunctionNames.decodeFunctionName + " |> Json.Decode.map " + typeTagCanonicalName +
+                                tagParameterDecodeFunction + " |> Json.Decode.map " + typeTagCanonicalName +
                                 " ) )";
 
                             return new
                             {
                                 encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(
                                     argumentName,
-                                    argumentName + " |> " + tagParameterTypeFunctionNames.encodeFunctionName),
+                                    argumentName + " |> " + tagParameterEncodeFunction),
                                 decodeExpression = tagDecodeExpression,
                                 dependencies = tagParameterCanonicalTypeTextAndDependencies.dependencies.ToImmutableHashSet(),
                             };
@@ -477,21 +551,23 @@ namespace Kalmit
                     tupleElementsResults.SelectMany(elementResult => elementResult.dependencies)
                     .ToImmutableHashSet();
 
-                var tupleElementsFunctionName =
+                var tupleElementsFunctionNames =
                     tupleElementsCanonicalTypeName
-                    .Select(GetFunctionNamesFromTypeText)
+                    .Select(tupleElement => GetFunctionNamesAndTypeParametersFromTypeText(tupleElement).functionNames)
                     .ToImmutableList();
 
                 var functionNameCommonPart = jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString();
 
                 var encodeExpression =
                     jsonEncodeFunctionNamePrefix + functionNameCommonPart + " " +
-                    String.Join(" ", tupleElementsFunctionName.Select(functionNames => functionNames.encodeFunctionName)) + " " +
+                    String.Join(" ", tupleElementsFunctionNames.Select(functionNamesAndTypeParams =>
+                        functionNamesAndTypeParams.encodeFunctionName)) + " " +
                     encodeParamName;
 
                 var decodeExpression =
                     jsonDecodeFunctionNamePrefix + functionNameCommonPart + " " +
-                    String.Join(" ", tupleElementsFunctionName.Select(functionNames => functionNames.decodeFunctionName));
+                    String.Join(" ", tupleElementsFunctionNames.Select(functionNamesAndTypeParams =>
+                        functionNamesAndTypeParams.decodeFunctionName));
 
                 var canonicalTypeText = "(" + string.Join(",", tupleElementsCanonicalTypeName) + ")";
 
@@ -506,6 +582,21 @@ namespace Kalmit
             }
 
             throw new Exception("Parsed invalid case for type '" + rootTypeText + "'");
+        }
+
+        static string expressionTextForFunctionWithOptionalTypeParameters(
+            string functionName, string typeParametersFunctionsCommonPrefix, IImmutableList<string> typeParametersNames)
+        {
+            var needsParentheses = 0 < typeParametersNames.Count;
+
+            var beforeParentheses =
+                functionName +
+                String.Join("", typeParametersNames.Select(typeParameterName => " " + typeParametersFunctionsCommonPrefix + "type_parameter_" + typeParameterName));
+
+            if (needsParentheses)
+                return "(" + beforeParentheses + ")";
+
+            return beforeParentheses;
         }
 
 

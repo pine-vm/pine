@@ -10,6 +10,7 @@ module Backend.Main exposing
 import Backend.InterfaceToHost as InterfaceToHost
 import Common
 import Dict
+import ListDict
 import Set
 
 
@@ -29,6 +30,7 @@ type alias State =
     , empty_record : {}
     , empty_tuple : ()
     , customTypeInstance : CustomTypeWithTypeParameter Int
+    , listDict : ListDict.Dict { orig : Int, dest : Int } String
     }
 
 
@@ -113,4 +115,9 @@ interfaceToHost_initState =
     , empty_record = {}
     , empty_tuple = ()
     , customTypeInstance = CustomTypeWithTypeParameter 4
+    , listDict =
+        [ ( { orig = 1, dest = 3 }, "Edge A" )
+        , ( { orig = 3, dest = 4 }, "Edge B" )
+        ]
+            |> ListDict.fromList
     }
