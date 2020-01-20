@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace Kalmit.PersistentProcess
 {
-    public class WebAppConfigurationMap
+    public class WebAppConfigurationJsonStructure
     {
         public ConditionalMapFromStringToString[] mapsFromRequestUrlToStaticFileName;
 
@@ -32,7 +32,7 @@ namespace Kalmit.PersistentProcess
 
     public class WebAppConfiguration
     {
-        public WebAppConfigurationMap Map;
+        public WebAppConfigurationJsonStructure JsonStructure;
 
         public IReadOnlyCollection<(string staticFileName, byte[] staticFileContent)> StaticFiles;
 
@@ -40,21 +40,21 @@ namespace Kalmit.PersistentProcess
 
         static string staticFilesDirectoryName => "static-files";
 
-        static string mapFileName => "map.json";
+        static string jsonFileName => "elm-fullstack.json";
 
         static string elmAppFileName => "elm-app.zip";
 
         static public WebAppConfiguration FromFiles(IReadOnlyCollection<(string name, byte[] content)> files)
         {
-            var mapFile =
-                files.FirstOrDefault(file => String.Equals(file.name, mapFileName, StringComparison.InvariantCultureIgnoreCase));
+            var jsonStructureFile =
+                files.FirstOrDefault(file => String.Equals(file.name, jsonFileName, StringComparison.InvariantCultureIgnoreCase));
 
             var elmAppFile =
                 files.FirstOrDefault(file => String.Equals(file.name, elmAppFileName, StringComparison.InvariantCultureIgnoreCase));
 
-            var map =
-                mapFile.content == null ? (WebAppConfigurationMap)null
-                : JsonConvert.DeserializeObject<WebAppConfigurationMap>(Encoding.UTF8.GetString(mapFile.content));
+            var jsonStructure =
+                jsonStructureFile.content == null ? (WebAppConfigurationJsonStructure)null
+                : JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonStructureFile.content));
 
             var staticFiles =
                 files.Select(file =>
@@ -71,7 +71,7 @@ namespace Kalmit.PersistentProcess
 
             return new WebAppConfiguration
             {
-                Map = map,
+                JsonStructure = jsonStructure,
                 StaticFiles = staticFiles,
                 ElmAppFile = elmAppFile.content,
             };
@@ -79,10 +79,10 @@ namespace Kalmit.PersistentProcess
 
         public IReadOnlyCollection<(string name, byte[] content)> AsFiles()
         {
-            var mapFileEntries =
-                new[] { Map }
+            var jsonStructureFileEntries =
+                new[] { JsonStructure }
                 .WhereNotNull()
-                .Select(map => (mapFileName, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(map)))).ToList();
+                .Select(map => (jsonFileName, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(map)))).ToList();
 
             var staticFilesEntries =
                 StaticFiles
@@ -96,15 +96,15 @@ namespace Kalmit.PersistentProcess
                 .Select(elmAppFile => (elmAppFileName, elmAppFile)).ToList();
 
             return
-                (mapFileEntries.EmptyIfNull())
+                (jsonStructureFileEntries.EmptyIfNull())
                 .Concat(staticFilesEntries.EmptyIfNull())
                 .Concat(elmAppFilesEntries).ToList();
         }
 
-        public WebAppConfiguration WithMap(WebAppConfigurationMap map) =>
+        public WebAppConfiguration WithJsonStructure(WebAppConfigurationJsonStructure jsonStructure) =>
             new WebAppConfiguration
             {
-                Map = map,
+                JsonStructure = jsonStructure,
                 StaticFiles = StaticFiles,
                 ElmAppFile = ElmAppFile,
             };
@@ -112,7 +112,7 @@ namespace Kalmit.PersistentProcess
         public WebAppConfiguration WithStaticFiles(IReadOnlyCollection<(string staticFileName, byte[] staticFileContent)> staticFiles) =>
             new WebAppConfiguration
             {
-                Map = Map,
+                JsonStructure = JsonStructure,
                 StaticFiles = staticFiles,
                 ElmAppFile = ElmAppFile,
             };
@@ -120,7 +120,7 @@ namespace Kalmit.PersistentProcess
         public WebAppConfiguration WithElmApp(byte[] elmAppFile) =>
             new WebAppConfiguration
             {
-                Map = Map,
+                JsonStructure = JsonStructure,
                 StaticFiles = StaticFiles,
                 ElmAppFile = elmAppFile,
             };

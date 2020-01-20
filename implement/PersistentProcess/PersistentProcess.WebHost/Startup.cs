@@ -59,7 +59,7 @@ namespace Kalmit.PersistentProcess.WebHost
             services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);
             services.AddSingleton<IPersistentProcess>(BuildPersistentProcess);
 
-            var letsEncryptOptions = webAppConfig?.Map?.letsEncryptOptions;
+            var letsEncryptOptions = webAppConfig?.JsonStructure?.letsEncryptOptions;
             if (letsEncryptOptions == null)
             {
                 _logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
@@ -67,7 +67,7 @@ namespace Kalmit.PersistentProcess.WebHost
             else
             {
                 _logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
-                services.AddFluffySpoonLetsEncryptRenewalService(webAppConfig?.Map?.letsEncryptOptions);
+                services.AddFluffySpoonLetsEncryptRenewalService(letsEncryptOptions);
                 services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
                 services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
             }
@@ -118,7 +118,7 @@ namespace Kalmit.PersistentProcess.WebHost
             DateTimeOffset? cyclicReductionStoreLastTime = null;
             var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
 
-            if (webAppConfig?.Map?.letsEncryptOptions != null)
+            if (webAppConfig?.JsonStructure?.letsEncryptOptions != null)
                 app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
             var createVolatileHostAttempts = 0;

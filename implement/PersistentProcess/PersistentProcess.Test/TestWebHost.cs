@@ -222,17 +222,17 @@ namespace Kalmit.PersistentProcess.Test
 
             var webAppConfig =
                 TestElmWebAppHttpServer.CounterWebApp
-                .WithMap(
-                    new WebAppConfigurationMap
+                .WithJsonStructure(
+                    new WebAppConfigurationJsonStructure
                     {
                         mapsFromRequestUrlToStaticFileName = new[]
                         {
-                            new WebAppConfigurationMap.ConditionalMapFromStringToString
+                            new WebAppConfigurationJsonStructure.ConditionalMapFromStringToString
                             {
                                 matchingRegexPattern = "^.+/subdirectory/(.+)$",
                                 resultString = nameof(defaultStaticFileInSubdirectory),
                             },
-                            new WebAppConfigurationMap.ConditionalMapFromStringToString
+                            new WebAppConfigurationJsonStructure.ConditionalMapFromStringToString
                             {
                                 matchingRegexPattern = "^(?!.+/" + processEventPath + "$).*",
                                 resultString = nameof(defaultStaticFile),
@@ -343,12 +343,12 @@ namespace Kalmit.PersistentProcess.Test
 
             var webAppConfig =
                 new WebAppConfiguration()
-                .WithMap(
-                    new WebAppConfigurationMap
+                .WithJsonStructure(
+                    new WebAppConfigurationJsonStructure
                     {
                         mapsFromRequestUrlToStaticFileName = new[]
                         {
-                            new WebAppConfigurationMap.ConditionalMapFromStringToString
+                            new WebAppConfigurationJsonStructure.ConditionalMapFromStringToString
                             {
                                 matchingRegexPattern = ".*",
                                 resultString = nameof(defaultStaticFile),
@@ -403,10 +403,10 @@ namespace Kalmit.PersistentProcess.Test
 
             var webAppConfig =
                 TestElmWebAppHttpServer.CounterWebApp
-                .WithMap(
-                    new WebAppConfigurationMap
+                .WithJsonStructure(
+                    new WebAppConfigurationJsonStructure
                     {
-                        singleRateLimitWindowPerClientIPv4Address = new WebAppConfigurationMap.RateLimitWindow
+                        singleRateLimitWindowPerClientIPv4Address = new WebAppConfigurationJsonStructure.RateLimitWindow
                         {
                             windowSizeInMs = 1000 * rateLimitWindowSize,
                             limit = rateLimitWindowSize,

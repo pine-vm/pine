@@ -49,9 +49,9 @@ Analogous to the update function in a client Elm app, this function returns the 
 
 This file is optional. If it exists in your app, the build process compiles it to an HTML file and adds it to the static files as `FrontendWeb.html`.
 
-### `map.json`
+### `elm-fullstack.json`
 
-The `map.json` file is where you can add configuration for Let's Encrypt, rate-limiting, and other features.
+The `elm-fullstack.json` file is where you can configure the acquisition of SSL certificates, rate-limiting, and other features.
 Since all of these features are optional to use, in the simplest case, this file is not present at all.
 
 If your app includes a frontend, you need to decide on which paths the server should serve the HTML document containing the frontend.
@@ -70,7 +70,7 @@ Below is an example which directs HTTP requests to the static file of the fronte
 
 ## Support HTTPS
 
-The Elm-fullstack web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from Let's Encrypt. To configure this, add a `letsEncryptOptions` property to the `map.json` file as follows:
+The Elm-fullstack web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from Let's Encrypt. To configure this, add a `letsEncryptOptions` property to the `elm-fullstack.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {

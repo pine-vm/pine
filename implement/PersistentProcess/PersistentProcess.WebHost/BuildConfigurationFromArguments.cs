@@ -72,21 +72,21 @@ namespace Kalmit.PersistentProcess.WebHost
                 frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);
             }
 
-            WebAppConfigurationMap map = null;
+            WebAppConfigurationJsonStructure jsonStructure = null;
 
-            var mapFileSearchPath = Path.Combine(currentDirectory, "map.json");
+            var jsonFileSearchPath = Path.Combine(currentDirectory, "elm-fullstack.json");
 
-            if (File.Exists(mapFileSearchPath))
+            if (File.Exists(jsonFileSearchPath))
             {
-                Console.WriteLine("I found a file at '" + mapFileSearchPath + "'. I use this to build the configuration.");
+                Console.WriteLine("I found a file at '" + jsonFileSearchPath + "'. I use this to build the configuration.");
 
-                var mapFile = File.ReadAllBytes(mapFileSearchPath);
+                var jsonFile = File.ReadAllBytes(jsonFileSearchPath);
 
-                map = JsonConvert.DeserializeObject<WebAppConfigurationMap>(Encoding.UTF8.GetString(mapFile));
+                jsonStructure = JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonFile));
             }
             else
             {
-                Console.WriteLine("I did not find a file at '" + mapFileSearchPath + "'. I build the configuration without the 'map.json'.");
+                Console.WriteLine("I did not find a file at '" + jsonFileSearchPath + "'. I build the configuration without the 'elm-fullstack.json'.");
             }
 
             var staticFiles =
@@ -98,7 +98,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 new WebAppConfiguration()
                 .WithElmApp(ZipArchive.ZipArchiveFromEntries(loweredElmAppFiles))
                 .WithStaticFiles(staticFiles)
-                .WithMap(map);
+                .WithJsonStructure(jsonStructure);
 
             var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles());
 

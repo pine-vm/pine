@@ -36,7 +36,7 @@ namespace Kalmit.PersistentProcess.WebHost
             WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next)
         {
             var matchingUrlMapToStaticFile =
-                webAppConfig?.Map?.mapsFromRequestUrlToStaticFileName
+                webAppConfig?.JsonStructure?.mapsFromRequestUrlToStaticFileName
                 ?.FirstOrDefault(conditionalMap =>
                     Regex.IsMatch(context.Request.GetDisplayUrl(), conditionalMap.matchingRegexPattern));
 
@@ -89,7 +89,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var clientRateLimitState =
                 rateLimitFromClientId.GetOrAdd(
-                    ClientId(), _ => BuildRateLimitContainerForClient(webAppConfig?.Map));
+                    ClientId(), _ => BuildRateLimitContainerForClient(webAppConfig?.JsonStructure));
 
             if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
             {
@@ -102,15 +102,15 @@ namespace Kalmit.PersistentProcess.WebHost
             return;
         }
 
-        static RateLimitMutableContainer BuildRateLimitContainerForClient(WebAppConfigurationMap map)
+        static RateLimitMutableContainer BuildRateLimitContainerForClient(WebAppConfigurationJsonStructure jsonStructure)
         {
-            if (map?.singleRateLimitWindowPerClientIPv4Address == null)
+            if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
                 return null;
 
             return new RateLimitMutableContainer(new RateLimitStateSingleWindow
             {
-                limit = map.singleRateLimitWindowPerClientIPv4Address.limit,
-                windowSize = map.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
+                limit = jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
+                windowSize = jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
             });
         }
 
