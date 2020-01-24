@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
@@ -16,11 +17,15 @@ namespace Kalmit
 
         ScriptState<object> scriptState;
 
+        readonly MetadataReferenceResolver metadataResolver;
+
         Func<byte[], byte[]> getFileFromHashSHA256;
 
         public CSharpScriptContext(Func<byte[], byte[]> getFileFromHashSHA256)
         {
             this.getFileFromHashSHA256 = getFileFromHashSHA256;
+
+            metadataResolver = new MetadataResolver(getFileFromHashSHA256);
         }
 
         /// <summary>
@@ -34,7 +39,7 @@ namespace Kalmit
                 {
                     var scriptOptions =
                         ScriptOptions.Default
-                        .WithMetadataResolver(new MetadataResolver(getFileFromHashSHA256));
+                        .WithMetadataResolver(metadataResolver);
 
                     scriptState =
                         scriptState == null
@@ -75,6 +80,10 @@ namespace Kalmit
                 new ConcurrentBag<(AssemblyMetadata, byte[])>();
 
             static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new ConcurrentDictionary<string, Assembly>();
+
+            static readonly ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>> resolveReferenceCache =
+                new ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>>(
+                    new ResolveReferenceRequestEqualityComparer());
 
             public MetadataResolver(Func<byte[], byte[]> getFileFromHashSHA256)
             {
@@ -124,17 +133,56 @@ namespace Kalmit
                 return null;
             }
 
-            public override bool Equals(object other) => false;
+            public override bool Equals(object other) => this == other;
 
             public override int GetHashCode() => 0;
 
+
+            struct ResolveReferenceRequest
+            {
+                public string reference;
+                public string baseFilePath;
+                public MetadataReferenceProperties properties;
+            }
+
+            class ResolveReferenceRequestEqualityComparer : IEqualityComparer<ResolveReferenceRequest>
+            {
+                public bool Equals(ResolveReferenceRequest x, ResolveReferenceRequest y) =>
+                    x.reference == y.reference &&
+                    x.baseFilePath == y.baseFilePath &&
+                    x.properties.Equals(y.properties);
+
+                public int GetHashCode(ResolveReferenceRequest obj) => 0;
+            }
+
             public override ImmutableArray<PortableExecutableReference> ResolveReference(string reference, string baseFilePath, MetadataReferenceProperties properties)
+            {
+                //  Implement cache to avoid more memory usage (https://github.com/dotnet/roslyn/issues/33304)
+
+                var request = new ResolveReferenceRequest
+                {
+                    reference = reference,
+                    baseFilePath = baseFilePath,
+                    properties = properties
+                };
+
+                if (resolveReferenceCache.TryGetValue(request, out var resolvedReferences))
+                    return resolvedReferences;
+
+                resolvedReferences = ResolveReferenceWithoutCache(request);
+
+                resolveReferenceCache[request] = resolvedReferences;
+
+                return resolvedReferences;
+            }
+
+            ImmutableArray<PortableExecutableReference> ResolveReferenceWithoutCache(ResolveReferenceRequest request)
             {
                 lock (@lock)
                 {
                     //  System.Console.WriteLine("ResolveReference: " + reference);
 
-                    var sha256Match = Regex.Match(reference, "sha256:([\\d\\w]+)", RegexOptions.IgnoreCase);
+                    var sha256Match = Regex.Match(request.reference, "sha256:([\\d\\w]+)", RegexOptions.IgnoreCase);
 
                     if (sha256Match.Success)
                     {
@@ -160,9 +208,9 @@ namespace Kalmit
 
                 return
                     ScriptMetadataResolver.Default.ResolveReference(
-                            reference,
-                            baseFilePath,
-                            properties);
+                        request.reference,
+                        request.baseFilePath,
+                        request.properties);
             }
         }
 
