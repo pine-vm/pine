@@ -4,7 +4,7 @@ Following is the easiest way to build and deploy your Elm full-stack app:
 
 + Make sure you have [Docker](https://www.docker.com) installed.
 + Clone this repository.
-+ Run the script at [`/implement/PersistentProcess/start-server.ps1`](/implement/PersistentProcess/start-server.ps1). This script takes the example app from [/implement/PersistentProcess/example-elm-apps/default-full-stack-app](/implement/PersistentProcess/example-elm-apps/default-full-stack-app) and builds a docker image running this app.
++ Run the script at [`/implement/PersistentProcess/run-server.ps1`](/implement/run-server.ps1). This script takes the example app from [/implement/PersistentProcess/example-elm-apps/default-full-stack-app](/implement/PersistentProcess/example-elm-apps/default-full-stack-app) and builds a docker image running this app.
 This script also contains a `docker run` command to start the app. Docker will then forward you logs like these:
 ```shell
 I start a server.
