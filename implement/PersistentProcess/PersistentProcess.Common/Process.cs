@@ -60,11 +60,21 @@ namespace Kalmit
 
         public string ProcessEvent(string serializedEvent)
         {
+            /*
+            Avoid high memory usage as described in exploration 2020-02-02:
+            Use specialized implementation based on `CallFunction` instead of `Evaluate`.
+
             var eventExpression = AsJavascriptExpression(serializedEvent);
 
             var expressionJavascript = ProcessFromElm019Code.processEventSyncronousJsFunctionName + "(" + eventExpression + ")";
 
             return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
+            */
+
+            var evalResult = javascriptEngine.CallFunction(
+                ProcessFromElm019Code.processEventSyncronousJsFunctionName, serializedEvent);
+
+            return evalResult?.ToString();
         }
 
         public string GetSerializedState()
@@ -218,23 +228,23 @@ namespace Kalmit
             string.Join(Path.DirectorySeparatorChar.ToString(), path);
 
         static byte[] GetElmExecutableFile =>
-            CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
+        CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
 
         static byte[] GetElmExecutableFileCompressedGzip =>
-            BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
-                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                ?
-                /*
-                Loaded 2019-10-29 from
-                https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
-                */
-                "E44AF52BB27F725A973478E589D990A6428E115FE1BB14F03833134D6C0F155C"
-                :
-                /*
-                Loaded 2019-10-29 from
-                https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
-                */
-                "D1BF666298CBE3C5447B9CA0EA608552D750E5D232F9845C2AF11907B654903B"));
+        BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            ?
+            /*
+            Loaded 2019-10-29 from
+            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
+            */
+            "E44AF52BB27F725A973478E589D990A6428E115FE1BB14F03833134D6C0F155C"
+            :
+            /*
+            Loaded 2019-10-29 from
+            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
+            */
+            "D1BF666298CBE3C5447B9CA0EA608552D750E5D232F9845C2AF11907B654903B"));
 
         public const string appStateJsVarName = "app_state";
 
@@ -348,7 +358,7 @@ namespace Kalmit
                 processEventAndUpdateStateFunctionJavascript;
         }
 
-        public const string processEventSyncronousJsFunctionName = "processEvent";
+        public const string processEventSyncronousJsFunctionName = "processEventAndUpdateState";
 
         static string BuildElmFunctionPublicationExpression(string functionToCallName, int arity)
         {
