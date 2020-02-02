@@ -23,6 +23,8 @@ namespace elm_fullstack
             {
                 runServerCmd.Description = "Run a web server with your Elm app.";
 
+                runServerCmd.ThrowOnUnexpectedArgument = false;
+
                 runServerCmd.OnExecute(() =>
                 {
                     var webHostBuilder = Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(runServerCmd.RemainingArguments.ToArray());
@@ -33,6 +35,8 @@ namespace elm_fullstack
             app.Command("build-config", buildConfigCmd =>
             {
                 buildConfigCmd.Description = "Build a configuration file that can be used to run a server.";
+
+                buildConfigCmd.ThrowOnUnexpectedArgument = false;
 
                 buildConfigCmd.OnExecute(() =>
                 {

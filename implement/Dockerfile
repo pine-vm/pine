@@ -15,7 +15,7 @@ COPY --from=build-env /app/elm-fullstack/out /elm-fullstack/dotnet/
 # Build the `web-app-config.zip` for the default app.
 FROM binaries AS build-default-config
 
-COPY ./example-elm-apps/default-full-stack-app /default-app/
+COPY ./PersistentProcess/example-elm-apps/default-full-stack-app /default-app/
 
 WORKDIR /default-app
 RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll" build-config --frontend-web-elm-make-appendix="--debug" --output="/build-output/web-app-config.zip"
