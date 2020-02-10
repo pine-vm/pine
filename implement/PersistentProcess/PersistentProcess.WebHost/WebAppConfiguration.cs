@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -77,28 +78,34 @@ namespace Kalmit.PersistentProcess
             };
         }
 
-        public IReadOnlyCollection<(string name, byte[] content)> AsFiles()
+        public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsFiles()
         {
             var jsonStructureFileEntries =
                 new[] { JsonStructure }
                 .WhereNotNull()
-                .Select(map => (jsonFileName, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(map)))).ToList();
+                .Select(map => ((IImmutableList<string>)ImmutableList.Create(jsonFileName), Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(map))))
+                .ToList();
 
             var staticFilesEntries =
                 StaticFiles
                 ?.Select(fileNameAndContent =>
-                    (staticFilesDirectoryName + @"\" + fileNameAndContent.staticFileName, fileNameAndContent.staticFileContent))
+                    ((IImmutableList<string>)ImmutableList.Create(staticFilesDirectoryName, fileNameAndContent.staticFileName), fileNameAndContent.staticFileContent))
                 .ToList();
 
             var elmAppFilesEntries =
                 new[] { ElmAppFile }
                 .WhereNotNull()
-                .Select(elmAppFile => (elmAppFileName, elmAppFile)).ToList();
+                .Select(elmAppFile => ((IImmutableList<string>)ImmutableList.Create(elmAppFileName), elmAppFile))
+                .ToList();
 
             return
-                (jsonStructureFileEntries.EmptyIfNull())
+                jsonStructureFileEntries.EmptyIfNull()
                 .Concat(staticFilesEntries.EmptyIfNull())
-                .Concat(elmAppFilesEntries).ToList();
+                .Concat(elmAppFilesEntries.EmptyIfNull())
+                .ToImmutableDictionary(
+                    filePathAndContent => (IImmutableList<string>)filePathAndContent.Item1,
+                    filePathAndContent => (IImmutableList<byte>)filePathAndContent.Item2.ToImmutableList())
+                .WithComparers(EnumerableExtension.EqualityComparer<string>());
         }
 
         public WebAppConfiguration WithJsonStructure(WebAppConfigurationJsonStructure jsonStructure) =>

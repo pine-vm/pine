@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -8,35 +9,29 @@ namespace Kalmit
     {
         public class Component : IEquatable<Component>
         {
-            public IImmutableList<byte> Literal;
+            public IImmutableList<byte> BlobContent;
 
-            public IImmutableList<Component> Composition;
+            public IImmutableList<Component> ListContent;
 
             public bool Equals(Component other)
             {
-                if (Literal != null || other.Literal != null)
+                if (BlobContent != null || other.BlobContent != null)
                 {
-                    if (Literal == null || other.Literal == null)
+                    if (BlobContent == null || other.BlobContent == null)
                         return false;
 
-                    return Literal.SequenceEqual(other.Literal);
+                    return BlobContent.SequenceEqual(other.BlobContent);
                 }
 
-                if (Composition == null || other.Composition == null)
+                if (ListContent == null || other.ListContent == null)
                     return false;
 
-                if (Composition.Count != other.Composition.Count)
+                if (ListContent.Count != other.ListContent.Count)
                     return false;
 
                 return
-                    Enumerable.Range(0, Composition.Count)
-                    .All(i =>
-                    {
-                        var thisElement = Composition.ElementAt(i);
-                        var otherElement = other.Composition.ElementAt(i);
-
-                        return thisElement.Equals(otherElement);
-                    });
+                    Enumerable.Range(0, ListContent.Count)
+                    .All(i => ListContent.ElementAt(i).Equals(other.ListContent.ElementAt(i)));
             }
 
             override public bool Equals(object obj) => Equals(obj as Component);
@@ -44,32 +39,55 @@ namespace Kalmit
 
         public class TreeComponent : IEquatable<TreeComponent>
         {
-            public IImmutableList<byte> Literal;
+            public IImmutableList<byte> BlobContent;
 
-            public IImmutableList<(IImmutableList<byte> name, TreeComponent component)> Composition;
+            public IImmutableList<(IImmutableList<byte> name, TreeComponent component)> TreeContent;
+
+            public IImmutableList<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> EnumerateBlobsTransitive() =>
+                TreeContent == null ? null :
+                EnumerateBlobsRecursive(TreeContent)
+                .ToImmutableList();
+
+            static IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> content)> EnumerateBlobsRecursive(
+                IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> tree)
+            {
+                foreach (var treeEntry in tree)
+                {
+                    if (treeEntry.obj.BlobContent != null)
+                        yield return (ImmutableList.Create(treeEntry.name), treeEntry.obj.BlobContent);
+
+                    if (treeEntry.obj.TreeContent != null)
+                    {
+                        foreach (var subTreeEntry in EnumerateBlobsRecursive(treeEntry.obj.TreeContent))
+                        {
+                            yield return (subTreeEntry.path.Insert(0, treeEntry.name), subTreeEntry.content);
+                        }
+                    }
+                }
+            }
 
             public bool Equals(TreeComponent other)
             {
-                if (Literal != null || other.Literal != null)
+                if (BlobContent != null || other.BlobContent != null)
                 {
-                    if (Literal == null || other.Literal == null)
+                    if (BlobContent == null || other.BlobContent == null)
                         return false;
 
-                    return Literal.SequenceEqual(other.Literal);
+                    return BlobContent.SequenceEqual(other.BlobContent);
                 }
 
-                if (Composition == null || other.Composition == null)
+                if (TreeContent == null || other.TreeContent == null)
                     return false;
 
-                if (Composition.Count != other.Composition.Count)
+                if (TreeContent.Count != other.TreeContent.Count)
                     return false;
 
                 return
-                    Enumerable.Range(0, Composition.Count)
+                    Enumerable.Range(0, TreeContent.Count)
                     .All(i =>
                     {
-                        var thisElement = Composition.ElementAt(i);
-                        var otherElement = other.Composition.ElementAt(i);
+                        var thisElement = TreeContent.ElementAt(i);
+                        var otherElement = other.TreeContent.ElementAt(i);
 
                         return thisElement.name.SequenceEqual(otherElement.name) &&
                             thisElement.component.Equals(otherElement.component);
@@ -85,19 +103,19 @@ namespace Kalmit
             if (composition == null)
                 return null;
 
-            if (composition.Literal != null)
+            if (composition.BlobContent != null)
             {
                 return new ParseAsTreeResult
                 {
-                    ok = new TreeComponent { Literal = composition.Literal }
+                    ok = new TreeComponent { BlobContent = composition.BlobContent }
                 };
             }
 
             var compositionResults =
-                composition.Composition
+                composition.ListContent
                 .Select((component, componentIndex) =>
                 {
-                    if (!(component.Composition?.Count == 2) || component.Composition.ElementAt(0).Literal == null)
+                    if (!(component.ListContent?.Count == 2) || component.ListContent.ElementAt(0).BlobContent == null)
                     {
                         return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
                         {
@@ -105,9 +123,9 @@ namespace Kalmit
                         };
                     }
 
-                    var currentIndexAndName = (index: componentIndex, name: component.Composition.ElementAt(0).Literal);
+                    var currentIndexAndName = (index: componentIndex, name: component.ListContent.ElementAt(0).BlobContent);
 
-                    var parseResult = ParseAsTree(component.Composition.ElementAt(1));
+                    var parseResult = ParseAsTree(component.ListContent.ElementAt(1));
 
                     if (parseResult.ok == null)
                     {
@@ -137,7 +155,7 @@ namespace Kalmit
                 new ParseAsTreeResult
                 {
                     ok = new TreeComponent
-                    { Composition = compositionResults.Select(compositionResult => compositionResult.ok).ToImmutableList() }
+                    { TreeContent = compositionResults.Select(compositionResult => compositionResult.ok).ToImmutableList() }
                 };
         }
 
@@ -146,38 +164,122 @@ namespace Kalmit
             if (tree == null)
                 return null;
 
-            if (tree.Literal != null)
-                return new Component { Literal = tree.Literal };
+            if (tree.BlobContent != null)
+                return new Component { BlobContent = tree.BlobContent };
 
-            var composition =
-                tree.Composition
+            var listContent =
+                tree.TreeContent
                 .Select(treeComponent =>
                     new Component
                     {
-                        Composition = ImmutableList.Create(
-                            new Component { Literal = treeComponent.name },
+                        ListContent = ImmutableList.Create(
+                            new Component { BlobContent = treeComponent.name },
                             FromTree(treeComponent.component))
                     })
                 .ToImmutableList();
 
             return new Component
             {
-                Composition = composition
+                ListContent = listContent
             };
+        }
+
+        static public TreeComponent TreeFromSetOfBlobsWithCommonOSPath(
+            IEnumerable<(string path, IImmutableList<byte> blobContent)> blobsWithPath,
+            System.Text.Encoding stringEncoding) =>
+            TreeFromSetOfBlobs(
+                blobsWithPath.Select(blobWithPath =>
+                {
+                    var pathComponents =
+                        blobWithPath.path.Split("/").SelectMany(pathComponent => pathComponent.Split(@"\"))
+                        .Select(pathComponent => (IImmutableList<byte>)stringEncoding.GetBytes(pathComponent).ToImmutableList())
+                        .ToImmutableList();
+
+                    return (path: (IImmutableList<IImmutableList<byte>>)pathComponents, blobContent: blobWithPath.blobContent);
+                })
+            );
+
+        static public TreeComponent TreeFromSetOfBlobsWithCommonOSPath(
+            IEnumerable<(string path, byte[] blobContent)> blobsWithPath,
+            System.Text.Encoding stringEncoding) =>
+            TreeFromSetOfBlobsWithCommonOSPath(
+                blobsWithPath.Select(blobWithPath => (blobWithPath.path, (IImmutableList<byte>)blobWithPath.blobContent.ToImmutableList())),
+                stringEncoding);
+
+        static public TreeComponent TreeFromSetOfBlobs<PathT>(
+            IEnumerable<(IImmutableList<PathT> path, IImmutableList<byte> blobContent)> blobsWithPath,
+            Func<PathT, IImmutableList<byte>> mapPathComponent) =>
+            TreeFromSetOfBlobs(
+                blobsWithPath.Select(blobWithPath =>
+                    (path: (IImmutableList<IImmutableList<byte>>)blobWithPath.path.Select(mapPathComponent).ToImmutableList(),
+                    blobContent: blobWithPath.blobContent)));
+
+        static public TreeComponent TreeFromSetOfBlobsWithStringPath(
+            IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath,
+            System.Text.Encoding stringEncoding) =>
+            TreeFromSetOfBlobs(
+                blobsWithPath, pathComponent => stringEncoding.GetBytes(pathComponent).ToImmutableList());
+
+        static public TreeComponent TreeFromSetOfBlobs(
+            IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
+            new TreeComponent
+            {
+                TreeContent = TreeContentFromSetOfBlobs(blobsWithPath)
+            };
+
+        static public IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> TreeContentFromSetOfBlobs(
+            IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath)
+        {
+            var groupedByDirectory =
+                blobsWithPath
+                .GroupBy(
+                    pathAndContent => 1 < pathAndContent.path.Count ? pathAndContent.path.First() : null,
+                    new ByteListComparer())
+                .ToImmutableList();
+
+            var currentLevelBlobs =
+                groupedByDirectory
+                .FirstOrDefault(group => group.Key == null)
+                .EmptyIfNull()
+                .Select(pathAndContent =>
+                    (name: pathAndContent.path.First(),
+                    blobContent: new TreeComponent { BlobContent = pathAndContent.blobContent }))
+                .OrderBy(nameAndContent => nameAndContent.name, new ByteListComparer())
+                .ToImmutableList();
+
+            var subTrees =
+                groupedByDirectory
+                .Where(group => group.Key != null)
+                .Select(directoryGroup =>
+                {
+                    var blobsWithRelativePaths =
+                        directoryGroup.Select(pathAndContent =>
+                            (path: (IImmutableList<IImmutableList<byte>>)pathAndContent.path.Skip(1).ToImmutableList(),
+                            blobContent: pathAndContent.blobContent));
+
+                    return (name: (IImmutableList<byte>)directoryGroup.Key.ToImmutableList(), content: new TreeComponent
+                    {
+                        TreeContent = TreeContentFromSetOfBlobs(blobsWithRelativePaths)
+                    });
+                })
+                .OrderBy(nameAndContent => nameAndContent.name, new ByteListComparer())
+                .ToImmutableList();
+
+            return currentLevelBlobs.AddRange(subTrees).ToImmutableList();
         }
 
         static public byte[] GetHash(Component component)
         {
-            if (component.Literal != null)
+            if (component.BlobContent != null)
             {
-                var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.Literal.Count.ToString() + "\0");
+                var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.BlobContent.Count.ToString() + "\0");
 
-                return CommonConversion.HashSHA256(prefix.Concat(component.Literal).ToArray());
+                return CommonConversion.HashSHA256(prefix.Concat(component.BlobContent).ToArray());
             }
 
             {
                 var componentsHashes =
-                    component.Composition.Select(GetHash).ToList();
+                    component.ListContent.Select(GetHash).ToList();
 
                 var prefix = System.Text.Encoding.ASCII.GetBytes("list " + componentsHashes.Count.ToString() + "\0");
 
@@ -212,6 +314,34 @@ namespace Kalmit
 
         public class ParseAsTreeResult : Result<IImmutableList<(int index, IImmutableList<byte> name)>, TreeComponent>
         {
+        }
+
+        public class ByteListComparer : IComparer<IReadOnlyList<byte>>, IEqualityComparer<IReadOnlyList<byte>>
+        {
+            public int Compare(IReadOnlyList<byte> x, IReadOnlyList<byte> y)
+            {
+                if (x == null && y == null)
+                    return 0;
+
+                if (x == null)
+                    return -1;
+
+                if (y == null)
+                    return 1;
+
+                int result;
+                for (int index = 0; index < Math.Min(x.Count, y.Count); index++)
+                {
+                    result = x[index].CompareTo(y[index]);
+                    if (result != 0) return result;
+                }
+                return x.Count.CompareTo(y.Count);
+            }
+
+            public bool Equals(IReadOnlyList<byte> x, IReadOnlyList<byte> y) =>
+                Compare(x, y) == 0;
+
+            public int GetHashCode(IReadOnlyList<byte> obj) => obj.Count;
         }
     }
 }

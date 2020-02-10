@@ -100,9 +100,16 @@ namespace Kalmit.PersistentProcess.WebHost
                 .WithStaticFiles(staticFiles)
                 .WithJsonStructure(jsonStructure);
 
-            var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles());
+            var webAppConfigFiles =
+                webAppConfig.AsFiles();
 
-            var webAppConfigFileId = CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigFile));
+            var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
+
+            var webAppConfigFileId =
+                Composition.GetHash(Composition.FromTree(
+                    Composition.TreeFromSetOfBlobsWithStringPath(
+                            webAppConfigFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
+                            Encoding.UTF8)));
 
             Console.WriteLine("I built web app config " + webAppConfigFileId + ".");
 

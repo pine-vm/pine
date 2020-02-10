@@ -29,13 +29,25 @@ namespace Kalmit.PersistentProcess.WebHost
             var serviceProvider = services.BuildServiceProvider();
             var config = serviceProvider.GetService<IConfiguration>();
 
-            var webAppConfigFile = System.IO.File.ReadAllBytes(config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey));
+            Composition.Component webAppConfig = null;
+
+            {
+                var webAppConfigFile = System.IO.File.ReadAllBytes(config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey));
+
+                webAppConfig = Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonOSPath(
+                        ZipArchive.EntriesFromZipArchive(webAppConfigFile), System.Text.Encoding.UTF8));
+            }
 
             _logger.LogInformation("Loaded configuration " +
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigFile)));
+                CommonConversion.StringBase16FromByteArray(Composition.GetHash(webAppConfig)));
 
-            var webAppConfig = WebAppConfiguration.FromFiles(ZipArchive.EntriesFromZipArchive(webAppConfigFile).ToList());
-            services.AddSingleton<WebAppConfiguration>(webAppConfig);
+            var webAppConfigObject = WebAppConfiguration.FromFiles(
+                Composition.ParseAsTree(webAppConfig).ok.EnumerateBlobsTransitive()
+                .Select(blobWithPath =>
+                    (name: string.Join("/", blobWithPath.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray()))),
+                    content: blobWithPath.blobContent.ToArray()))
+                    .ToList());
+            services.AddSingleton<WebAppConfiguration>(webAppConfigObject);
 
             var getDateTimeOffset = serviceProvider.GetService<Func<DateTimeOffset>>();
 
@@ -59,7 +71,7 @@ namespace Kalmit.PersistentProcess.WebHost
             services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);
             services.AddSingleton<IPersistentProcess>(BuildPersistentProcess);
 
-            var letsEncryptOptions = webAppConfig?.JsonStructure?.letsEncryptOptions;
+            var letsEncryptOptions = webAppConfigObject?.JsonStructure?.letsEncryptOptions;
             if (letsEncryptOptions == null)
             {
                 _logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");

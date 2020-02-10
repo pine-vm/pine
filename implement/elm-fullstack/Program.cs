@@ -5,7 +5,7 @@ namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-02-02";
+        static string AppVersionId => "2020-02-10";
 
         static int Main(string[] args)
         {
