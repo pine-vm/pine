@@ -35,46 +35,44 @@ namespace Kalmit.PersistentProcess
     {
         public WebAppConfigurationJsonStructure JsonStructure;
 
-        public IReadOnlyCollection<(string staticFileName, byte[] staticFileContent)> StaticFiles;
+        public IReadOnlyCollection<(IImmutableList<string> staticFilePath, IImmutableList<byte> staticFileContent)> StaticFiles;
 
-        public byte[] ElmAppFile;
-
-        static string staticFilesDirectoryName => "static-files";
+        public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> ElmAppFiles;
 
         static string jsonFileName => "elm-fullstack.json";
 
-        static string elmAppFileName => "elm-app.zip";
+        static string staticFilesDirectoryName => "static-files";
 
-        static public WebAppConfiguration FromFiles(IReadOnlyCollection<(string name, byte[] content)> files)
+        static string elmAppDirectoryName => "elm-app";
+
+        static public WebAppConfiguration FromFiles(IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> files)
         {
             var jsonStructureFile =
-                files.FirstOrDefault(file => String.Equals(file.name, jsonFileName, StringComparison.InvariantCultureIgnoreCase));
+                files.FirstOrDefault(file => file.path.Count == 1 && String.Equals(file.path[0], jsonFileName, StringComparison.InvariantCultureIgnoreCase));
 
-            var elmAppFile =
-                files.FirstOrDefault(file => String.Equals(file.name, elmAppFileName, StringComparison.InvariantCultureIgnoreCase));
+            IEnumerable<(IImmutableList<string> relativePath, IImmutableList<byte> fileContent)> GetFilesFromDirectory(
+                IImmutableList<string> directoryPath) =>
+                files
+                .Where(file => file.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                .Select(file => (relativePath: (IImmutableList<string>)file.path.Skip(directoryPath.Count).ToImmutableList(), fileContent: file.content));
+
+            var elmAppFiles =
+                GetFilesFromDirectory(ImmutableList.Create(elmAppDirectoryName))
+                .ToImmutableList();
 
             var jsonStructure =
                 jsonStructureFile.content == null ? (WebAppConfigurationJsonStructure)null
-                : JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonStructureFile.content));
+                : JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonStructureFile.content.ToArray()));
 
             var staticFiles =
-                files.Select(file =>
-                {
-                    var staticFilePathMatch = Regex.Match(file.name, staticFilesDirectoryName + @"(\\|\/)(.+)", RegexOptions.IgnoreCase);
-
-                    if (!staticFilePathMatch.Success)
-                        return (null, null);
-
-                    return (name: staticFilePathMatch.Groups[2].Value, file.content);
-                })
-                .Where(file => 0 < file.name?.Length)
-                .ToList();
+                GetFilesFromDirectory(ImmutableList.Create(staticFilesDirectoryName))
+                .ToImmutableList();
 
             return new WebAppConfiguration
             {
                 JsonStructure = jsonStructure,
                 StaticFiles = staticFiles,
-                ElmAppFile = elmAppFile.content,
+                ElmAppFiles = elmAppFiles,
             };
         }
 
@@ -83,19 +81,22 @@ namespace Kalmit.PersistentProcess
             var jsonStructureFileEntries =
                 new[] { JsonStructure }
                 .WhereNotNull()
-                .Select(map => ((IImmutableList<string>)ImmutableList.Create(jsonFileName), Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(map))))
+                .Select(map => ((IImmutableList<string>)ImmutableList.Create(jsonFileName),
+                    (IImmutableList<byte>)Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(map)).ToImmutableList()))
                 .ToList();
 
             var staticFilesEntries =
                 StaticFiles
                 ?.Select(fileNameAndContent =>
-                    ((IImmutableList<string>)ImmutableList.Create(staticFilesDirectoryName, fileNameAndContent.staticFileName), fileNameAndContent.staticFileContent))
+                    ((IImmutableList<string>)ImmutableList.Create(staticFilesDirectoryName).AddRange(fileNameAndContent.staticFilePath),
+                    (IImmutableList<byte>)fileNameAndContent.staticFileContent.ToImmutableList()))
                 .ToList();
 
             var elmAppFilesEntries =
-                new[] { ElmAppFile }
-                .WhereNotNull()
-                .Select(elmAppFile => ((IImmutableList<string>)ImmutableList.Create(elmAppFileName), elmAppFile))
+                ElmAppFiles.EmptyIfNull()
+                .Select(elmAppFilePathAndContent =>
+                    ((IImmutableList<string>)ImmutableList.Create(elmAppDirectoryName).AddRange(elmAppFilePathAndContent.filePath),
+                    elmAppFilePathAndContent.fileContent))
                 .ToList();
 
             return
@@ -104,7 +105,7 @@ namespace Kalmit.PersistentProcess
                 .Concat(elmAppFilesEntries.EmptyIfNull())
                 .ToImmutableDictionary(
                     filePathAndContent => (IImmutableList<string>)filePathAndContent.Item1,
-                    filePathAndContent => (IImmutableList<byte>)filePathAndContent.Item2.ToImmutableList())
+                    filePathAndContent => filePathAndContent.Item2)
                 .WithComparers(EnumerableExtension.EqualityComparer<string>());
         }
 
@@ -113,23 +114,26 @@ namespace Kalmit.PersistentProcess
             {
                 JsonStructure = jsonStructure,
                 StaticFiles = StaticFiles,
-                ElmAppFile = ElmAppFile,
+                ElmAppFiles = ElmAppFiles,
             };
 
-        public WebAppConfiguration WithStaticFiles(IReadOnlyCollection<(string staticFileName, byte[] staticFileContent)> staticFiles) =>
+        public WebAppConfiguration WithStaticFiles(IReadOnlyCollection<(IImmutableList<string> staticFilePath, IImmutableList<byte> staticFileContent)> staticFiles) =>
             new WebAppConfiguration
             {
                 JsonStructure = JsonStructure,
                 StaticFiles = staticFiles,
-                ElmAppFile = ElmAppFile,
+                ElmAppFiles = ElmAppFiles,
             };
 
-        public WebAppConfiguration WithElmApp(byte[] elmAppFile) =>
+        public WebAppConfiguration WithElmApp(IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> elmAppFiles) =>
             new WebAppConfiguration
             {
                 JsonStructure = JsonStructure,
                 StaticFiles = StaticFiles,
-                ElmAppFile = elmAppFile,
+                ElmAppFiles = elmAppFiles,
             };
+
+        public WebAppConfiguration WithElmApp(IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles) =>
+            WithElmApp(elmAppFiles.Select(entry => (entry.Key, entry.Value)).ToImmutableList());
     }
 }

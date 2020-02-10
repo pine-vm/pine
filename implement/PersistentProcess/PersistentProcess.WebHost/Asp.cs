@@ -49,10 +49,12 @@ namespace Kalmit.PersistentProcess.WebHost
                     return;
                 }
 
+                var staticFilePath = matchingUrlMapToStaticFile.resultString.Split('/');
+
                 var staticFile =
                     webAppConfig?.StaticFiles
                     ?.FirstOrDefault(staticFileNameAndContent =>
-                        string.Equals(staticFileNameAndContent.staticFileName, matchingUrlMapToStaticFile.resultString));
+                        staticFilePath.SequenceEqual(staticFileNameAndContent.staticFilePath));
 
                 if (staticFile?.staticFileContent == null)
                 {
@@ -61,7 +63,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 }
 
                 context.Response.StatusCode = 200;
-                await context.Response.Body.WriteAsync(staticFile?.staticFileContent, 0, staticFile.Value.staticFileContent.Length);
+                await context.Response.Body.WriteAsync(staticFile?.staticFileContent.ToArray(), 0, staticFile.Value.staticFileContent.Count);
                 return;
             }
 

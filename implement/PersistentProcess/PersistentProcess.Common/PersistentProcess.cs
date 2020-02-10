@@ -35,13 +35,10 @@ namespace Kalmit.PersistentProcess
 
         public PersistentProcessWithHistoryOnFileFromElm019Code(
             IProcessStoreReader storeReader,
-            byte[] elmAppFile,
+            IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> elmAppFiles,
             Action<string> logger,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
-            var elmAppFiles =
-                ElmApp.FilesFilteredForElmApp(ZipArchive.EntriesFromZipArchive(elmAppFile)).ToImmutableList();
-
             (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles, overrideElmAppInterfaceConfig);
 

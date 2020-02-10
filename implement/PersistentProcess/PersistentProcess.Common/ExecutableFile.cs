@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Mono.Unix;
 
@@ -19,8 +20,8 @@ namespace Kalmit
             public int ExitCode;
         }
 
-        static public (ProcessOutput processOutput, IReadOnlyCollection<(string name, byte[] content)> resultingFiles) ExecuteFileWithArguments(
-            IImmutableList<(string name, byte[] content)> environmentFiles,
+        static public (ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles) ExecuteFileWithArguments(
+            IImmutableList<(string name, IImmutableList<byte> content)> environmentFiles,
             byte[] executableFile,
             string arguments,
             IDictionary<string, string> environmentStrings)
@@ -36,7 +37,7 @@ namespace Kalmit
 
                 Directory.CreateDirectory(environmentFileDirectory);
 
-                File.WriteAllBytes(environmentFilePath, environmentFile.content);
+                File.WriteAllBytes(environmentFilePath, environmentFile.content.ToArray());
             }
 
             var executableFilePath = Path.Combine(workingDirectory, executableFileName);

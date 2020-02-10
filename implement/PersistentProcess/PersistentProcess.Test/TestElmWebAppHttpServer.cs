@@ -9,19 +9,19 @@ namespace Kalmit.PersistentProcess.Test
     {
         static public WebAppConfiguration CounterWebApp =>
             new WebAppConfiguration()
-            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp));
+            .WithElmApp(TestSetup.CounterElmWebApp);
 
         static public WebAppConfiguration StringBuilderWebApp =>
             new WebAppConfiguration()
-            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.StringBuilderElmWebApp));
+            .WithElmApp(TestSetup.StringBuilderElmWebApp);
 
         static public WebAppConfiguration CrossPropagateHttpHeadersToAndFromBody =>
             new WebAppConfiguration()
-            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp));
+            .WithElmApp(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
 
         static public WebAppConfiguration HttpProxyWebApp =>
             new WebAppConfiguration()
-            .WithElmApp(ZipArchive.ZipArchiveFromEntries(TestSetup.HttpProxyWebApp));
+            .WithElmApp(TestSetup.HttpProxyWebApp);
 
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()

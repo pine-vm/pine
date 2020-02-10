@@ -243,7 +243,7 @@ namespace Kalmit
                 .EmptyIfNull()
                 .Select(pathAndContent =>
                     (name: pathAndContent.path.First(),
-                    blobContent: new TreeComponent { BlobContent = pathAndContent.blobContent }))
+                    blobContent: new TreeComponent { BlobContent = pathAndContent.blobContent.ToImmutableList() }))
                 .OrderBy(nameAndContent => nameAndContent.name, new ByteListComparer())
                 .ToImmutableList();
 

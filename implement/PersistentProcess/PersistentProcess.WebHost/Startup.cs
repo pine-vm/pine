@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace Kalmit.PersistentProcess.WebHost
@@ -32,10 +33,29 @@ namespace Kalmit.PersistentProcess.WebHost
             Composition.Component webAppConfig = null;
 
             {
-                var webAppConfigFile = System.IO.File.ReadAllBytes(config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey));
+                byte[] webAppConfigFileZipArchive = null;
+
+                var webAppConfigurationFilePath = config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey);
+
+                if (0 < webAppConfigurationFilePath?.Length)
+                {
+                    _logger.LogInformation(
+                        "Loading configuration from single file '" + webAppConfigurationFilePath + "'.");
+
+                    webAppConfigFileZipArchive = System.IO.File.ReadAllBytes(webAppConfigurationFilePath);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Loading configuration from current directory.");
+
+                    var (configZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(null);
+
+                    webAppConfigFileZipArchive = configZipArchive;
+                }
 
                 webAppConfig = Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonOSPath(
-                        ZipArchive.EntriesFromZipArchive(webAppConfigFile), System.Text.Encoding.UTF8));
+                        ZipArchive.EntriesFromZipArchive(webAppConfigFileZipArchive), System.Text.Encoding.UTF8));
             }
 
             _logger.LogInformation("Loaded configuration " +
@@ -44,8 +64,8 @@ namespace Kalmit.PersistentProcess.WebHost
             var webAppConfigObject = WebAppConfiguration.FromFiles(
                 Composition.ParseAsTree(webAppConfig).ok.EnumerateBlobsTransitive()
                 .Select(blobWithPath =>
-                    (name: string.Join("/", blobWithPath.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray()))),
-                    content: blobWithPath.blobContent.ToArray()))
+                    (path: (IImmutableList<string>)blobWithPath.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
+                    content: blobWithPath.blobContent))
                     .ToList());
             services.AddSingleton<WebAppConfiguration>(webAppConfigObject);
 
@@ -90,21 +110,25 @@ namespace Kalmit.PersistentProcess.WebHost
         static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
         {
             var logger = services.GetService<ILogger<Startup>>();
-            var elmAppFile = services.GetService<WebAppConfiguration>()?.ElmAppFile;
+            var elmAppFiles = services.GetService<WebAppConfiguration>()?.ElmAppFiles;
 
-            if (elmAppFile == null)
+            if (!(0 < elmAppFiles?.Count))
             {
                 logger.LogInformation("Found no ElmAppFile in configuration.");
                 return null;
             }
 
+            var elmAppComposition =
+                Composition.FromTree(
+                    Composition.TreeFromSetOfBlobsWithStringPath(elmAppFiles, System.Text.Encoding.UTF8));
+
             logger.LogInformation("Begin to build the persistent process for Elm app " +
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(elmAppFile)));
+                CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppComposition)));
 
             var persistentProcess =
                 new PersistentProcessWithHistoryOnFileFromElm019Code(
                     services.GetService<ProcessStore.IProcessStoreReader>(),
-                    elmAppFile,
+                    elmAppFiles,
                     logger: logEntry => logger.LogInformation(logEntry));
 
             logger.LogInformation("Completed building the persistent process.");

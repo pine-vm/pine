@@ -111,13 +111,15 @@ namespace Kalmit
         static public (IDisposableProcessWithStringInterface process,
             (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
             ProcessFromElmCodeFiles(
-            IReadOnlyCollection<(string, byte[])> elmCodeFiles,
+            IReadOnlyCollection<(IImmutableList<string>, IImmutableList<byte>)> elmCodeFiles,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
             var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
             var loweredElmCodeFiles =
-                ElmApp.AsCompletelyLoweredElmApp(elmCodeFiles, elmAppInterfaceConfig);
+                ElmApp.AsCompletelyLoweredElmApp(
+                    ElmApp.ToFlatDictionaryWithPathComparer(elmCodeFiles),
+                    elmAppInterfaceConfig);
 
             var javascriptFromElmMake = CompileElmToJavascript(
                 loweredElmCodeFiles,
@@ -139,13 +141,13 @@ namespace Kalmit
         }
 
         static string CompileElmToJavascript(
-            IImmutableDictionary<IImmutableList<string>, byte[]> elmCodeFiles,
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
             IImmutableList<string> pathToFileWithElmEntryPoint,
             string elmMakeCommandAppendix = null) =>
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
 
         static public string CompileElmToHtml(
-            IImmutableDictionary<IImmutableList<string>, byte[]> elmCodeFiles,
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
             IImmutableList<string> pathToFileWithElmEntryPoint,
             string elmMakeCommandAppendix = null) =>
             CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
@@ -171,7 +173,7 @@ namespace Kalmit
         [...]
         */
         static string CompileElm(
-            IImmutableDictionary<IImmutableList<string>, byte[]> elmCodeFiles,
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
             IImmutableList<string> pathToFileWithElmEntryPoint,
             string outputFileName,
             string elmMakeCommandAppendix = null)
@@ -221,7 +223,7 @@ namespace Kalmit
                     "\nStandard Output:\n'" + commandResults.processOutput.StandardOutput + "'" +
                     "\nStandard Error:\n'" + commandResults.processOutput.StandardError + "'");
 
-            return Encoding.UTF8.GetString(outputFileContent);
+            return Encoding.UTF8.GetString(outputFileContent.ToArray());
         }
 
         static string makePlatformSpecificPath(IImmutableList<string> path) =>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -15,9 +16,9 @@ namespace Kalmit
                     RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME"),
                 "kalmit", ".cache");
 
-        static public IReadOnlyCollection<(string name, byte[] content)> GetAllFilesFromDirectory(string directoryPath) =>
+        static public IReadOnlyCollection<(string name, IImmutableList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
                 Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
-                .Select(filePath => (GetRelativePath(directoryPath, filePath), File.ReadAllBytes(filePath)))
+                .Select(filePath => (GetRelativePath(directoryPath, filePath), (IImmutableList<byte>)File.ReadAllBytes(filePath).ToImmutableList()))
                 .ToList();
 
         static public string GetRelativePath(

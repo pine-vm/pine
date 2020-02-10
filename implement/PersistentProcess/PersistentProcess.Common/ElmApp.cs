@@ -37,24 +37,19 @@ namespace Kalmit
                 "(^" + Regex.Escape("elm.json") + "|" + Regex.Escape(".elm") + ")$",
                 RegexOptions.IgnoreCase);
 
-        static public IEnumerable<(string filePath, byte[] fileContent)> FilesFilteredForElmApp(
-            IEnumerable<(string filePath, byte[] fileContent)> files) =>
+        static public IEnumerable<(string filePath, IImmutableList<byte> fileContent)> FilesFilteredForElmApp(
+            IEnumerable<(string filePath, IImmutableList<byte> fileContent)> files) =>
             files
             .Where(file => 0 < file.filePath?.Length && FilePathMatchesPatternOfFilesInElmApp(file.filePath));
 
-        static public IImmutableDictionary<IImmutableList<string>, byte[]> ToFlatDictionaryWithPathComparer(
-          IEnumerable<(string filePath, byte[] fileContent)> fileList) =>
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ToFlatDictionaryWithPathComparer(
+          IEnumerable<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> fileList) =>
           fileList.ToImmutableDictionary(
-              entry => (IImmutableList<string>)ImmutableList.Create(entry.filePath.Split(new[] { '/', '\\' })), entry => entry.fileContent)
+              entry => entry.filePath, entry => entry.fileContent)
           .WithComparers(EnumerableExtension.EqualityComparer<string>());
 
-        static public IImmutableDictionary<IImmutableList<string>, byte[]> AsCompletelyLoweredElmApp(
-            IEnumerable<(string filePath, byte[] fileContent)> originalAppFilesList,
-            ElmAppInterfaceConfig interfaceConfig) =>
-            AsCompletelyLoweredElmApp(ToFlatDictionaryWithPathComparer(originalAppFilesList), interfaceConfig);
-
-        static public IImmutableDictionary<IImmutableList<string>, byte[]> AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, byte[]> originalAppFiles,
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             ElmAppInterfaceConfig interfaceConfig)
         {
             if (originalAppFiles.ContainsKey(InterfaceToHostRootModuleFilePath))
@@ -68,7 +63,7 @@ namespace Kalmit
             var backendMainOriginalFile = originalAppFiles[backendMainFilePath];
 
             var stateTypeNameInModule =
-                StateTypeNameFromRootElmModule(Encoding.UTF8.GetString(backendMainOriginalFile));
+                StateTypeNameFromRootElmModule(Encoding.UTF8.GetString(backendMainOriginalFile.ToArray()));
 
             string getModuleText(string moduleName)
             {
@@ -79,7 +74,7 @@ namespace Kalmit
                 if (moduleFile == null)
                     throw new Exception("Did not find the module named '" + moduleFile + "'");
 
-                return Encoding.UTF8.GetString(moduleFile);
+                return Encoding.UTF8.GetString(moduleFile.ToArray());
             }
 
             var allOriginalElmModules =
@@ -164,7 +159,7 @@ namespace Kalmit
                         if (moduleBefore.Value == null)
                             return partiallyUpdatedAppFiles;
 
-                        var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value);
+                        var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value.ToArray());
 
                         var isCustomTypeMatch = Regex.Match(
                             moduleTextBefore,
@@ -175,7 +170,7 @@ namespace Kalmit
 
                         var moduleText = CompileElm.ExposeCustomTypeAllTagsInElmModule(moduleTextBefore, localTypeName);
 
-                        return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText));
+                        return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
                     });
 
             var stateCodingJsonFunctionsText =
@@ -199,7 +194,7 @@ namespace Kalmit
                         stateCodingJsonFunctionsText,
                         stateCodingFunctionNames.encodeFunctionName,
                         stateCodingFunctionNames.decodeFunctionName,
-                        allOriginalElmModules)));
+                        allOriginalElmModules)).ToImmutableList());
         }
 
         static IImmutableList<string> FilePathFromModuleName(string moduleName)
@@ -254,7 +249,7 @@ import Platform
 import Json.Encode
 import Json.Decode
 " + String.Join("\n", modulesToImport.Select(moduleName => "import " + String.Join(".", moduleName)))
-+ $@"
+        + $@"
 
 type alias DeserializedState = " + rootModuleNameBeforeLowering + "." + stateTypeNameInRootModuleBeforeLowering + $@"
 

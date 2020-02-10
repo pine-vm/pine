@@ -31,22 +31,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var frontendWebElmMakeCommandAppendix = argumentValueFromParameterName("--frontend-web-elm-make-appendix");
 
-            var currentDirectory = Environment.CurrentDirectory;
-
-            Console.WriteLine("The currentDirectory is '" + currentDirectory + "'.");
-
-            var elmAppFilesBeforeLowering =
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    ElmApp.FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName))));
-
-            Console.WriteLine("I found " + elmAppFilesBeforeLowering.Count + " files to build the Elm app.");
-
-            var elmAppContainsFrontend = elmAppFilesBeforeLowering.ContainsKey(FrontendElmAppRootFilePath);
-
-            Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", FrontendElmAppRootFilePath) + "'.");
-
-            var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
-                elmAppFilesBeforeLowering, ElmAppInterfaceConfig.Default);
+            var (configZipArchive, loweredElmAppFiles) = BuildConfigurationZipArchive(frontendWebElmMakeCommandAppendix);
 
             if (0 < loweredElmOutputArgument?.Length)
             {
@@ -56,9 +41,57 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     var outputPath = Path.Combine(new[] { loweredElmOutputArgument }.Concat(file.Key).ToArray());
                     Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-                    File.WriteAllBytes(outputPath, file.Value);
+                    File.WriteAllBytes(outputPath, file.Value.ToArray());
                 }
             }
+
+            var configZipArchiveFileId =
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
+
+            var webAppConfigFileId =
+                Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonOSPath(
+                        ZipArchive.EntriesFromZipArchive(configZipArchive), System.Text.Encoding.UTF8)));
+
+            Console.WriteLine(
+                "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
+
+            if (outputArgument == null)
+            {
+                Console.WriteLine("I did not see a path for output, so I don't attempt to save the configuration to a file.");
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(outputArgument));
+                File.WriteAllBytes(outputArgument, configZipArchive);
+
+                Console.WriteLine("I saved zip arcchive " + configZipArchiveFileId + " to '" + outputArgument + "'");
+            }
+        }
+
+        static public (byte[] configZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
+            BuildConfigurationZipArchive(
+            string frontendWebElmMakeCommandAppendix)
+        {
+            var currentDirectory = Environment.CurrentDirectory;
+
+            Console.WriteLine("The currentDirectory is '" + currentDirectory + "'.");
+
+            var elmAppFilesBeforeLowering =
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    ElmApp.FilesFilteredForElmApp(
+                        Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName)))
+                    .Select(filePathAndContent =>
+                        ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(),
+                        filePathAndContent.fileContent)));
+
+            Console.WriteLine("I found " + elmAppFilesBeforeLowering.Count + " files to build the Elm app.");
+
+            var elmAppContainsFrontend = elmAppFilesBeforeLowering.ContainsKey(FrontendElmAppRootFilePath);
+
+            Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", FrontendElmAppRootFilePath) + "'.");
+
+            var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                elmAppFilesBeforeLowering, ElmAppInterfaceConfig.Default);
 
             byte[] frontendWebFile = null;
 
@@ -91,12 +124,12 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var staticFiles =
                 frontendWebFile == null ?
-                Array.Empty<(string name, byte[] content)>() :
-                new[] { (name: FrontendWebStaticFileName, frontendWebFile) };
+                Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :
+                new[] { (name: (IImmutableList<string>)ImmutableList.Create(FrontendWebStaticFileName), (IImmutableList<byte>)frontendWebFile.ToImmutableList()) };
 
             var webAppConfig =
                 new WebAppConfiguration()
-                .WithElmApp(ZipArchive.ZipArchiveFromEntries(loweredElmAppFiles))
+                .WithElmApp(loweredElmAppFiles)
                 .WithStaticFiles(staticFiles)
                 .WithJsonStructure(jsonStructure);
 
@@ -105,25 +138,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
 
-            var webAppConfigFileId =
-                Composition.GetHash(Composition.FromTree(
-                    Composition.TreeFromSetOfBlobsWithStringPath(
-                            webAppConfigFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
-                            Encoding.UTF8)));
-
-            Console.WriteLine("I built web app config " + webAppConfigFileId + ".");
-
-            if (outputArgument == null)
-            {
-                Console.WriteLine("I did not see a path for output, so I don't attempt to save the configuration to a file.");
-            }
-            else
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(outputArgument));
-                File.WriteAllBytes(outputArgument, webAppConfigFile);
-
-                Console.WriteLine("I saved web app config " + webAppConfigFileId + " to '" + outputArgument + "'");
-            }
+            return (webAppConfigFile, loweredElmAppFiles);
         }
 
         static string FindDirectoryUpwardContainingElmJson(string searchBeginDirectory)

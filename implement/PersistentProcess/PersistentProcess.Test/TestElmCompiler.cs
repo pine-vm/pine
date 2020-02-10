@@ -325,12 +325,13 @@ type Dict key value
                 {
                     var originalAppFilesList =
                         elmModules
-                        .Select(module => ("src/" + module.Key + ".elm", System.Text.Encoding.UTF8.GetBytes(module.Value)))
+                        .Select(module => ((IImmutableList<string>)ImmutableList.Create("src", module.Key + ".elm"),
+                            (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(module.Value).ToImmutableList()))
                         .ToImmutableList();
 
                     var loweredElmApp =
                         ElmApp.AsCompletelyLoweredElmApp(
-                        originalAppFilesList,
+                            ElmApp.ToFlatDictionaryWithPathComparer(originalAppFilesList),
                         new ElmAppInterfaceConfig { RootModuleName = "RootModule" });
                 }
                 catch (Exception e)

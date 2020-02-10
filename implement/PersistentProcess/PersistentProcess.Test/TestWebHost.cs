@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -242,8 +243,8 @@ namespace Kalmit.PersistentProcess.Test
                 .WithStaticFiles(
                     new[]
                     {
-                        (nameof(defaultStaticFile), defaultStaticFile),
-                        (nameof(defaultStaticFileInSubdirectory), defaultStaticFileInSubdirectory),
+                        ((IImmutableList<string>)ImmutableList.Create(nameof(defaultStaticFile)), (IImmutableList<byte>)defaultStaticFile.ToImmutableList()),
+                        (ImmutableList.Create(nameof(defaultStaticFileInSubdirectory)), defaultStaticFileInSubdirectory.ToImmutableList()),
                     });
 
             var allEventsAndExpectedResponses =
@@ -358,7 +359,7 @@ namespace Kalmit.PersistentProcess.Test
                 .WithStaticFiles(
                     new[]
                     {
-                        (nameof(defaultStaticFile), defaultStaticFile),
+                        ((IImmutableList<string>)ImmutableList.Create(nameof(defaultStaticFile)), (IImmutableList<byte>)defaultStaticFile.ToImmutableList()),
                     });
 
             using (var testSetup = WebHostTestSetup.Setup(webAppConfig))
