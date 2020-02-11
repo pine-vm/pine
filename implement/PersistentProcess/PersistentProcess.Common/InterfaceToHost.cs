@@ -73,11 +73,11 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public HttpHeader[] headersToAdd;
     }
 
-    public class Result<Err, Ok>
+    public class Result<ErrT, OkT>
     {
-        public Err err;
+        public ErrT Err;
 
-        public Ok ok;
+        public OkT Ok;
     }
 
     public class ResultFromTaskWithId
@@ -89,23 +89,28 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
 
     public class TaskResult
     {
-        public Result<object, CreateVolatileHostComplete> createVolatileHostResponse;
+        public Result<CreateVolatileHostErrorStructure, CreateVolatileHostComplete> CreateVolatileHostResponse;
 
-        public Result<RunInVolatileHostError, RunInVolatileHostComplete> runInVolatileHostResponse;
+        public Result<RequestToVolatileHostError, RequestToVolatileHostComplete> RequestToVolatileHostResponse;
 
-        public object completeWithoutResult;
+        public object CompleteWithoutResult;
+
+        public class CreateVolatileHostErrorStructure
+        {
+            public string exceptionToString;
+        }
 
         public class CreateVolatileHostComplete
         {
             public string hostId;
         }
 
-        public class RunInVolatileHostError
+        public class RequestToVolatileHostError
         {
-            public object hostNotFound;
+            public object HostNotFound;
         }
 
-        public class RunInVolatileHostComplete
+        public class RequestToVolatileHostComplete
         {
             public string exceptionToString;
 
@@ -124,20 +129,25 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
 
     public class Task
     {
-        public object createVolatileHost;
+        public CreateVolatileHostStructure CreateVolatileHost;
 
-        public RunInVolatileHost runInVolatileHost;
+        public RequestToVolatileHostStructure RequestToVolatileHost;
 
-        public ReleaseVolatileHost releaseVolatileHost;
+        public ReleaseVolatileHostStructure ReleaseVolatileHost;
 
-        public class RunInVolatileHost
+        public class CreateVolatileHostStructure
         {
-            public string hostId;
-
             public string script;
         }
 
-        public class ReleaseVolatileHost
+        public class RequestToVolatileHostStructure
+        {
+            public string hostId;
+
+            public string request;
+        }
+
+        public class ReleaseVolatileHostStructure
         {
             public string hostId;
         }

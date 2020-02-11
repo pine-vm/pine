@@ -2,7 +2,8 @@ module Backend.HttpViaVolatileHost exposing
     ( HttpRequestProperties
     , HttpResponseProperties
     , decodeVolatileHostHttpResponse
-    , scriptToGetResponseFromHttpRequest
+    , requestToVolatileHost
+    , volatileHostScript
     )
 
 import Json.Decode
@@ -73,17 +74,13 @@ jsonDecodeNullAsMaybeNothing =
     Json.Decode.nullable
 
 
-scriptToGetResponseFromHttpRequest : HttpRequestProperties -> String
-scriptToGetResponseFromHttpRequest httpRequest =
-    let
-        httpRequestExpression =
-            httpRequest |> encodeHttpRequestProperties |> Json.Encode.encode 0
+requestToVolatileHost : HttpRequestProperties -> String
+requestToVolatileHost =
+    encodeHttpRequestProperties >> Json.Encode.encode 0
 
-        expression =
-            "GetResponseFromHttpRequestSerial("
-                ++ (httpRequestExpression |> Json.Encode.string |> Json.Encode.encode 0)
-                ++ ")"
-    in
+
+volatileHostScript : String
+volatileHostScript =
     """
 #r "netstandard"
 #r "System"
@@ -185,4 +182,10 @@ string GetResponseFromHttpRequestSerial(string serializedRequest)
 
     return Newtonsoft.Json.JsonConvert.SerializeObject(response);
 }
-""" ++ expression
+
+string InterfaceToHost_Request(string request)
+{
+    return GetResponseFromHttpRequestSerial(request);
+}
+
+"""

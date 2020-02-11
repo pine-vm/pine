@@ -159,32 +159,32 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var createVolatileHostAttempts = 0;
 
-            var volatileHosts = new ConcurrentDictionary<string, CSharpScriptContext>();
+            var volatileHosts = new ConcurrentDictionary<string, VolatileHost>();
 
-            InterfaceToHost.Result<InterfaceToHost.TaskResult.RunInVolatileHostError, InterfaceToHost.TaskResult.RunInVolatileHostComplete>
-                performProcessTaskRunInVolatileHost(
-                InterfaceToHost.Task.RunInVolatileHost runInVolatileHost)
+            InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
+                performProcessTaskRequestToVolatileHost(
+                InterfaceToHost.Task.RequestToVolatileHostStructure requestToVolatileHost)
             {
-                if (!volatileHosts.TryGetValue(runInVolatileHost.hostId, out var volatileHost))
+                if (!volatileHosts.TryGetValue(requestToVolatileHost.hostId, out var volatileHost))
                 {
-                    return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RunInVolatileHostError, InterfaceToHost.TaskResult.RunInVolatileHostComplete>
+                    return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
                     {
-                        err = new InterfaceToHost.TaskResult.RunInVolatileHostError
+                        Err = new InterfaceToHost.TaskResult.RequestToVolatileHostError
                         {
-                            hostNotFound = new object(),
+                            HostNotFound = new object(),
                         }
                     };
                 }
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                var fromVolatileHostResult = volatileHost.RunScript(runInVolatileHost.script);
+                var fromVolatileHostResult = volatileHost.ProcessRequest(requestToVolatileHost.request);
 
                 stopwatch.Stop();
 
-                return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RunInVolatileHostError, InterfaceToHost.TaskResult.RunInVolatileHostComplete>
+                return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
                 {
-                    ok = new InterfaceToHost.TaskResult.RunInVolatileHostComplete
+                    Ok = new InterfaceToHost.TaskResult.RequestToVolatileHostComplete
                     {
                         exceptionToString = fromVolatileHostResult.Exception?.ToString(),
                         returnValueToString = fromVolatileHostResult.ReturnValue?.ToString(),
@@ -195,39 +195,57 @@ namespace Kalmit.PersistentProcess.WebHost
 
             InterfaceToHost.TaskResult performProcessTask(InterfaceToHost.Task task)
             {
-                if (task?.createVolatileHost != null)
+                if (task?.CreateVolatileHost != null)
                 {
-                    var volatileHostId = System.Threading.Interlocked.Increment(ref createVolatileHostAttempts).ToString();
-
-                    volatileHosts[volatileHostId] = new CSharpScriptContext(BlobLibrary.GetBlobWithSHA256);
-
-                    return new InterfaceToHost.TaskResult
+                    try
                     {
-                        createVolatileHostResponse = new InterfaceToHost.Result<object, InterfaceToHost.TaskResult.CreateVolatileHostComplete>
+                        var volatileHost = new VolatileHost(BlobLibrary.GetBlobWithSHA256, task?.CreateVolatileHost.script);
+
+                        var volatileHostId = System.Threading.Interlocked.Increment(ref createVolatileHostAttempts).ToString();
+
+                        volatileHosts[volatileHostId] = volatileHost;
+
+                        return new InterfaceToHost.TaskResult
                         {
-                            ok = new InterfaceToHost.TaskResult.CreateVolatileHostComplete
+                            CreateVolatileHostResponse = new InterfaceToHost.Result<InterfaceToHost.TaskResult.CreateVolatileHostErrorStructure, InterfaceToHost.TaskResult.CreateVolatileHostComplete>
                             {
-                                hostId = volatileHostId,
+                                Ok = new InterfaceToHost.TaskResult.CreateVolatileHostComplete
+                                {
+                                    hostId = volatileHostId,
+                                },
                             },
-                        },
-                    };
+                        };
+                    }
+                    catch (Exception createVolatileHostException)
+                    {
+                        return new InterfaceToHost.TaskResult
+                        {
+                            CreateVolatileHostResponse = new InterfaceToHost.Result<InterfaceToHost.TaskResult.CreateVolatileHostErrorStructure, InterfaceToHost.TaskResult.CreateVolatileHostComplete>
+                            {
+                                Err = new InterfaceToHost.TaskResult.CreateVolatileHostErrorStructure
+                                {
+                                    exceptionToString = createVolatileHostException.ToString(),
+                                },
+                            },
+                        };
+                    }
                 }
 
-                if (task?.releaseVolatileHost != null)
+                if (task?.ReleaseVolatileHost != null)
                 {
-                    volatileHosts.TryRemove(task?.releaseVolatileHost.hostId, out var volatileHost);
+                    volatileHosts.TryRemove(task?.ReleaseVolatileHost.hostId, out var volatileHost);
 
                     return new InterfaceToHost.TaskResult
                     {
-                        completeWithoutResult = new object(),
+                        CompleteWithoutResult = new object(),
                     };
                 }
 
-                if (task?.runInVolatileHost != null)
+                if (task?.RequestToVolatileHost != null)
                 {
                     return new InterfaceToHost.TaskResult
                     {
-                        runInVolatileHostResponse = performProcessTaskRunInVolatileHost(task?.runInVolatileHost),
+                        RequestToVolatileHostResponse = performProcessTaskRequestToVolatileHost(task?.RequestToVolatileHost),
                     };
                 }
 

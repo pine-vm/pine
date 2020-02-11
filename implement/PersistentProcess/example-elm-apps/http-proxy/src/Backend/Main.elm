@@ -40,7 +40,7 @@ processEvent hostEvent stateBefore =
                             in
                             ( state, state |> httpRequestForwardRequestsFromState )
 
-                InterfaceToHost.RunInVolatileHostResponse runInVolatileHostResponse ->
+                InterfaceToHost.RequestToVolatileHostResponse requestToVolatileHostResponse ->
                     case stateBefore.httpRequestToForward of
                         Nothing ->
                             ( stateBefore, [] )
@@ -48,15 +48,15 @@ processEvent hostEvent stateBefore =
                         Just httpRequestToForward ->
                             let
                                 httpResponse =
-                                    case runInVolatileHostResponse of
+                                    case requestToVolatileHostResponse of
                                         Err _ ->
                                             { statusCode = 500
                                             , bodyAsString = Just "Error running in volatile host."
                                             , headersToAdd = []
                                             }
 
-                                        Ok runInVolatileHostComplete ->
-                                            case runInVolatileHostComplete.exceptionToString of
+                                        Ok requestToVolatileHostComplete ->
+                                            case requestToVolatileHostComplete.exceptionToString of
                                                 Just exceptionToString ->
                                                     { statusCode = 500
                                                     , bodyAsString = Just ("Exception in volatile host: " ++ exceptionToString)
@@ -66,7 +66,7 @@ processEvent hostEvent stateBefore =
                                                 Nothing ->
                                                     let
                                                         returnValueAsHttpResponseResult =
-                                                            runInVolatileHostComplete.returnValueToString
+                                                            requestToVolatileHostComplete.returnValueToString
                                                                 |> Maybe.withDefault ""
                                                                 |> Json.Decode.decodeString HttpViaVolatileHost.decodeVolatileHostHttpResponse
                                                     in
@@ -123,7 +123,9 @@ httpRequestForwardRequestsFromState state =
             case state.volatileHostId of
                 Nothing ->
                     [ InterfaceToHost.StartTask
-                        { taskId = "create-vhost", task = InterfaceToHost.CreateVolatileHost }
+                        { taskId = "create-vhost"
+                        , task = InterfaceToHost.CreateVolatileHost { script = HttpViaVolatileHost.volatileHostScript }
+                        }
                     ]
 
                 Just volatileHostId ->
@@ -163,10 +165,10 @@ httpRequestForwardRequestsFromState state =
 
                                 task =
                                     { hostId = volatileHostId
-                                    , script =
-                                        HttpViaVolatileHost.scriptToGetResponseFromHttpRequest httpRequest
+                                    , request =
+                                        HttpViaVolatileHost.requestToVolatileHost httpRequest
                                     }
-                                        |> InterfaceToHost.RunInVolatileHost
+                                        |> InterfaceToHost.RequestToVolatileHost
                             in
                             [ InterfaceToHost.StartTask
                                 { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId

@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 
 namespace Kalmit
 {
-    public class CSharpScriptContext
+    public class VolatileHost
     {
         readonly object @lock = new object();
 
@@ -21,17 +21,24 @@ namespace Kalmit
 
         Func<byte[], byte[]> getFileFromHashSHA256;
 
-        public CSharpScriptContext(Func<byte[], byte[]> getFileFromHashSHA256)
+        public VolatileHost(
+            Func<byte[], byte[]> getFileFromHashSHA256,
+            string csharpScript)
         {
             this.getFileFromHashSHA256 = getFileFromHashSHA256;
 
             metadataResolver = new MetadataResolver(getFileFromHashSHA256);
+
+            var runSetupScriptResult = RunScript(csharpScript);
+
+            if (runSetupScriptResult.Exception != null)
+                throw new Exception("Failed to setup the volatile host:" + runSetupScriptResult.Exception.ToString());
         }
 
         /// <summary>
         /// Based on example from https://github.com/dotnet/roslyn/wiki/Scripting-API-Samples#-continue-script-execution-from-a-previous-state
         /// </summary>
-        public RunResult RunScript(string script)
+        private RunResult RunScript(string script)
         {
             lock (@lock)
             {
@@ -66,6 +73,16 @@ namespace Kalmit
                     ReturnValue = scriptState.ReturnValue,
                 };
             }
+        }
+
+        public RunResult ProcessRequest(string request)
+        {
+            return RunScript(requestExpression(request));
+        }
+
+        static string requestExpression(string request)
+        {
+            return "InterfaceToHost_Request(\"" + request.Replace(@"\", @"\\").Replace("\"", "\\\"") + "\")";
         }
 
         class MetadataResolver : MetadataReferenceResolver
