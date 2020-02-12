@@ -37,7 +37,9 @@ namespace elm_fullstack
                     if (deletePreviousBackendStateOption.HasValue())
                     {
                         Console.WriteLine("Deleting the previous backend state from '" + processStoreDirectoryPath + "'");
-                        System.IO.Directory.Delete(processStoreDirectoryPath, true);
+
+                        if (System.IO.Directory.Exists(processStoreDirectoryPath))
+                            System.IO.Directory.Delete(processStoreDirectoryPath, true);
                     }
 
                     var webHostBuilder = Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(runServerCmd.RemainingArguments.ToArray());
