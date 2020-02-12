@@ -27,9 +27,6 @@ COPY --from=build-default-config /build-output/web-app-config.zip /elm-fullstack
 
 WORKDIR /elm-fullstack
 
-ENV APPSETTING_webAppConfigurationFilePath="/elm-fullstack/web-app-config.zip"
-ENV APPSETTING_processStoreDirectoryPath="/elm-fullstack/process-store"
-
-ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server"]
+ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store", "--web-app-configuration-file-path=/elm-fullstack/web-app-config.zip"]
 
 # ENV APPSETTING_adminRootPassword="password-for-elm-fullstack-root"
