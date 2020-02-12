@@ -29,6 +29,7 @@ namespace elm_fullstack
                 var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the backend process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
                 var webAppConfigurationFilePathOption = runServerCmd.Option("--web-app-configuration-file-path", "Path to a file containing the complete configuration in a zip-archive. If you don't use this option, the server uses the current directory as the source.", CommandOptionType.SingleValue);
                 var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
+                var frontendWebElmMakeAppendixOption = runServerCmd.Option("--frontend-web-elm-make-appendix", "Arguments to add when using elm make to build the frontend app.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -46,10 +47,9 @@ namespace elm_fullstack
 
                     webHostBuilder.WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
 
-                    if (webAppConfigurationFilePathOption.HasValue())
-                    {
-                        webHostBuilder.WithSettingWebAppConfigurationFilePath(webAppConfigurationFilePathOption.Value());
-                    }
+                    webHostBuilder.WithSettingWebAppConfigurationFilePath(webAppConfigurationFilePathOption.Value());
+
+                    webHostBuilder.WithSettingFrontendWebElmMakeAppendix(frontendWebElmMakeAppendixOption.Value());
 
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.Run(webHostBuilder.Build());
                 });

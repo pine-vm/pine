@@ -29,6 +29,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var loweredElmOutputArgument = argumentValueFromParameterName("--lowered-elm-output");
 
+            //  TODO: Remove redundancy: Probably move these arguments towards integrating app into the CLI project.
+
             var frontendWebElmMakeCommandAppendix = argumentValueFromParameterName("--frontend-web-elm-make-appendix");
 
             var (configZipArchive, loweredElmAppFiles) = BuildConfigurationZipArchive(frontendWebElmMakeCommandAppendix);
