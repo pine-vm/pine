@@ -32,7 +32,7 @@ namespace Kalmit.PersistentProcess.Test
             var loadedFilesNamesAndContents =
                 loadFromGithubResult.Success.EnumerateBlobsTransitive()
                 .Select(blobPathAndContent => (
-                    fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray()))),
+                    fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.BigEndianUnicode.GetString(name.ToArray()))),
                     fileContent: blobPathAndContent.blobContent))
                 .ToImmutableList();
 
@@ -67,7 +67,7 @@ namespace Kalmit.PersistentProcess.Test
             var loadedFilesNamesAndContents =
                 loadFromGithubResult.Success.EnumerateBlobsTransitive()
                 .Select(blobPathAndContent => (
-                    fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray()))),
+                    fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.BigEndianUnicode.GetString(name.ToArray()))),
                     fileContent: blobPathAndContent.blobContent))
                 .ToImmutableList();
 

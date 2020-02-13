@@ -184,27 +184,24 @@ namespace Kalmit
             };
         }
 
-        static public TreeComponent TreeFromSetOfBlobsWithCommonOSPath(
-            IEnumerable<(string path, IImmutableList<byte> blobContent)> blobsWithPath,
-            System.Text.Encoding stringEncoding) =>
+        static public TreeComponent TreeFromSetOfBlobsWithCommonFilePath(
+            IEnumerable<(string path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             TreeFromSetOfBlobs(
                 blobsWithPath.Select(blobWithPath =>
                 {
                     var pathComponents =
                         blobWithPath.path.Split("/").SelectMany(pathComponent => pathComponent.Split(@"\"))
-                        .Select(pathComponent => (IImmutableList<byte>)stringEncoding.GetBytes(pathComponent).ToImmutableList())
+                        .Select(pathComponent => (IImmutableList<byte>)System.Text.Encoding.BigEndianUnicode.GetBytes(pathComponent).ToImmutableList())
                         .ToImmutableList();
 
                     return (path: (IImmutableList<IImmutableList<byte>>)pathComponents, blobContent: blobWithPath.blobContent);
                 })
             );
 
-        static public TreeComponent TreeFromSetOfBlobsWithCommonOSPath(
-            IEnumerable<(string path, byte[] blobContent)> blobsWithPath,
-            System.Text.Encoding stringEncoding) =>
-            TreeFromSetOfBlobsWithCommonOSPath(
-                blobsWithPath.Select(blobWithPath => (blobWithPath.path, (IImmutableList<byte>)blobWithPath.blobContent.ToImmutableList())),
-                stringEncoding);
+        static public TreeComponent TreeFromSetOfBlobsWithCommonFilePath(
+            IEnumerable<(string path, byte[] blobContent)> blobsWithPath) =>
+            TreeFromSetOfBlobsWithCommonFilePath(
+                blobsWithPath.Select(blobWithPath => (blobWithPath.path, (IImmutableList<byte>)blobWithPath.blobContent.ToImmutableList())));
 
         static public TreeComponent TreeFromSetOfBlobs<PathT>(
             IEnumerable<(IImmutableList<PathT> path, IImmutableList<byte> blobContent)> blobsWithPath,
@@ -215,10 +212,9 @@ namespace Kalmit
                     blobContent: blobWithPath.blobContent)));
 
         static public TreeComponent TreeFromSetOfBlobsWithStringPath(
-            IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath,
-            System.Text.Encoding stringEncoding) =>
+            IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             TreeFromSetOfBlobs(
-                blobsWithPath, pathComponent => stringEncoding.GetBytes(pathComponent).ToImmutableList());
+                blobsWithPath, pathComponent => System.Text.Encoding.BigEndianUnicode.GetBytes(pathComponent).ToImmutableList());
 
         static public TreeComponent TreeFromSetOfBlobs(
             IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>

@@ -127,7 +127,7 @@ namespace Kalmit
                         {
                             TreeContent =
                                 gitTree.Select(treeEntry =>
-                                    ((IImmutableList<byte>)Encoding.UTF8.GetBytes(treeEntry.Name).ToImmutableList(),
+                                    ((IImmutableList<byte>)Encoding.BigEndianUnicode.GetBytes(treeEntry.Name).ToImmutableList(),
                                     convertToLiteralNodeObjectRecursive(treeEntry.Target)))
                                 .ToImmutableList(),
                         };

@@ -55,8 +55,8 @@ namespace Kalmit.PersistentProcess.WebHost
                     webAppConfigFileZipArchive = configZipArchive;
                 }
 
-                webAppConfig = Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonOSPath(
-                        ZipArchive.EntriesFromZipArchive(webAppConfigFileZipArchive), System.Text.Encoding.UTF8));
+                webAppConfig = Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                    ZipArchive.EntriesFromZipArchive(webAppConfigFileZipArchive)));
             }
 
             _logger.LogInformation("Loaded configuration " +
@@ -65,7 +65,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var webAppConfigObject = WebAppConfiguration.FromFiles(
                 Composition.ParseAsTree(webAppConfig).ok.EnumerateBlobsTransitive()
                 .Select(blobWithPath =>
-                    (path: (IImmutableList<string>)blobWithPath.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
+                    (path: (IImmutableList<string>)blobWithPath.path.Select(pathComponent => System.Text.Encoding.BigEndianUnicode.GetString(pathComponent.ToArray())).ToImmutableList(),
                     content: blobWithPath.blobContent))
                     .ToList());
             services.AddSingleton<WebAppConfiguration>(webAppConfigObject);
@@ -120,8 +120,7 @@ namespace Kalmit.PersistentProcess.WebHost
             }
 
             var elmAppComposition =
-                Composition.FromTree(
-                    Composition.TreeFromSetOfBlobsWithStringPath(elmAppFiles, System.Text.Encoding.UTF8));
+                Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(elmAppFiles));
 
             logger.LogInformation("Begin to build the persistent process for Elm app " +
                 CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppComposition)));

@@ -51,8 +51,8 @@ namespace Kalmit.PersistentProcess.WebHost
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
 
             var webAppConfigFileId =
-                Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonOSPath(
-                        ZipArchive.EntriesFromZipArchive(configZipArchive), System.Text.Encoding.UTF8)));
+                Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                    ZipArchive.EntriesFromZipArchive(configZipArchive))));
 
             Console.WriteLine(
                 "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
