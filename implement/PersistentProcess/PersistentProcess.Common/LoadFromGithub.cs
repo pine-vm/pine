@@ -176,7 +176,18 @@ namespace Kalmit
                 }
             }
 
-            DeleteLocalDirectoryRecursive(tempWorkingDirectory);
+            try
+            {
+                DeleteLocalDirectoryRecursive(tempWorkingDirectory);
+            }
+            catch
+            {
+                /*
+                Adapt to observations 2020-02-15:
+                A user got a `System.IO.DirectoryNotFoundException` out of `DeleteLocalDirectoryRecursive`.
+                Also, it seems common other software interferring with contents of `Path.GetTempPath()` (https://github.com/dotnet/runtime/issues/3778).
+                */
+            }
 
             return new LoadFromUrlResult { Success = literalNodeObject };
         }
