@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Kalmit.PersistentProcess.WebHost;
 using McMaster.Extensions.CommandLineUtils;
 
@@ -6,7 +8,7 @@ namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-02-15";
+        static string AppVersionId => "2020-02-20";
 
         static int Main(string[] args)
         {
@@ -67,6 +69,19 @@ namespace elm_fullstack
                 });
             });
 
+            app.Command("install-command", installCmd =>
+            {
+                var (commandName, _, registerExecutableDirectoryOnPath) = CheckIfExecutableIsRegisteredOnPath();
+
+                installCmd.Description = "Installs the '" + commandName + "' command for the current user account.";
+                installCmd.ThrowOnUnexpectedArgument = true;
+
+                installCmd.OnExecute(() =>
+                {
+                    registerExecutableDirectoryOnPath();
+                });
+            });
+
             app.OnExecute(() =>
             {
                 Console.WriteLine("Please specify a subcommand.");
@@ -76,6 +91,55 @@ namespace elm_fullstack
             });
 
             return app.Execute(args);
+        }
+
+        static (string commandName, bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)
+            CheckIfExecutableIsRegisteredOnPath()
+        {
+            var environmentVariableName = "PATH";
+
+            var environmentVariableScope = EnvironmentVariableTarget.User;
+
+            string getCurrentValueOfEnvironmentVariable() =>
+                Environment.GetEnvironmentVariable(environmentVariableName, environmentVariableScope);
+
+            var (executableFilePath, executableDirectoryPath, executableFileName) = GetCurrentProcessExecutableFilePathAndComponents();
+
+            var commandName = Regex.Match(executableFileName, @"(.+?)(?=\.exe$|$)").Groups[1].Value;
+
+            var registerExecutableForCurrentUser = new Action(() =>
+            {
+                var newValueForPathEnv =
+                    executableDirectoryPath +
+                    System.IO.Path.PathSeparator +
+                    getCurrentValueOfEnvironmentVariable();
+
+                Environment.SetEnvironmentVariable(environmentVariableName, newValueForPathEnv, environmentVariableScope);
+
+                //  https://stackoverflow.com/questions/32650063/get-environment-variable-out-of-new-process-in-c-sharp/32650213#32650213
+                //  https://devblogs.microsoft.com/oldnewthing/?p=91591
+                //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
+
+                Console.WriteLine(
+                    "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+                    "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+            });
+
+            var executableIsRegisteredOnPath =
+                (getCurrentValueOfEnvironmentVariable() ?? "")
+                .Split(System.IO.Path.PathSeparator).Contains(executableDirectoryPath);
+
+            return (commandName, executableIsRegisteredOnPath, registerExecutableForCurrentUser);
+        }
+
+        static string GetCurrentProcessExecutableFilePath() =>
+            System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+
+        static (string filePath, string directoryPath, string fileName) GetCurrentProcessExecutableFilePathAndComponents()
+        {
+            var filePath = GetCurrentProcessExecutableFilePath();
+
+            return (filePath, System.IO.Path.GetDirectoryName(filePath), System.IO.Path.GetFileName(filePath));
         }
     }
 }
