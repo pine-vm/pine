@@ -25,5 +25,5 @@ jobs:
     - name: Publish artifacts
       uses: actions/upload-artifact@v1
       with:
-        name: executable-files-${{github.sha}}-${{ matrix.environment }}
+        name: elm-fullstack-bin-${{github.sha}}-${{ matrix.environment }}
         path: ./implement/elm-fullstack/bin/Debug/netcoreapp3.1/publish
