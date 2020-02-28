@@ -603,7 +603,7 @@ namespace Kalmit
         static string ElmCodeIndentString(int level) =>
             level <= 0 ? "" : "    " + ElmCodeIndentString(level - 1);
 
-        static string IndentElmCodeLines(int level, string textBeforeIndent)
+        static public string IndentElmCodeLines(int level, string textBeforeIndent)
         {
             var indentString = ElmCodeIndentString(level);
 
@@ -909,7 +909,7 @@ namespace Kalmit
                     {
                         //  resolving 'exposing(..)' in import is not implemented yet.
 
-                        return null;
+                        continue;
                     }
 
                     var exposedNames =
@@ -919,7 +919,9 @@ namespace Kalmit
                         .ToImmutableList();
 
                     if (exposedNames.Contains(importedNameInModule))
+                    {
                         return (import.Key, importedNameInModule);
+                    }
                 }
 
                 return null;

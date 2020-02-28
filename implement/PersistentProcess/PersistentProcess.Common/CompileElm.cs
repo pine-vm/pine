@@ -128,6 +128,51 @@ namespace Kalmit
             return (parseStartLocation, startRemainingText.Length - remainingText.Length, new ModuleExposeSyntax { something = something.ToImmutableList() });
         }
 
+        static public IEnumerable<(int beginIndex, string functionText, string functionName)> ParseAllFunctionsFromModule(string moduleText)
+        {
+            var functionStartMatch = Regex.Match(moduleText, @"^([\w\d_]+)\s*\:", RegexOptions.Multiline);
+
+            if (!functionStartMatch.Success)
+                return new (int beginIndex, string functionText, string functionName)[0];
+
+            var functionBeginIndex = functionStartMatch.Index;
+
+            var remainingTextAfterFunctionBegin = moduleText.Substring(functionBeginIndex);
+
+            (IEnumerable<(int beginIndex, string functionText, string functionName)> followingFunctions, string remainingText)
+                getFollowingFunctionsAndRemainingText()
+            {
+                var functionEndMatch = Regex.Match(remainingTextAfterFunctionBegin, "\n(\r|)\n(\r|)\n");
+
+                if (!functionEndMatch.Success)
+                    return (ImmutableList<(int beginIndex, string functionText, string functionName)>.Empty, "");
+
+                var remainingText = remainingTextAfterFunctionBegin.Substring(functionEndMatch.Index);
+
+                return (ParseAllFunctionsFromModule(remainingText), remainingText);
+            }
+
+            var (followingFunctions, remainingText) = getFollowingFunctionsAndRemainingText();
+
+            var functionTextLength = remainingTextAfterFunctionBegin.Length - remainingText.Length;
+
+            var functionText = moduleText.Substring(functionBeginIndex, functionTextLength);
+
+            var followingFunctionsInModule =
+                followingFunctions
+                .Select(followingFunction =>
+                    (beginIndex: followingFunction.beginIndex + functionBeginIndex + functionTextLength,
+                    functionText: followingFunction.functionText,
+                    functionName: followingFunction.functionName))
+                .ToImmutableList();
+
+            return ImmutableList.Create(
+                (beginIndex: functionBeginIndex,
+                functionText: functionText,
+                functionName: functionStartMatch.Groups[1].Value))
+                .AddRange(followingFunctionsInModule);
+        }
+
         static public string ExposeValueInElmModule(string originalElmModuleText, string nameToExpose)
         {
             return AdaptModuleExposeSyntax(originalElmModuleText, originalExposeSyntax =>

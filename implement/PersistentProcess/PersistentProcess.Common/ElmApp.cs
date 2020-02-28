@@ -50,6 +50,12 @@ namespace Kalmit
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
+            ElmAppInterfaceConfig interfaceConfig) =>
+            LoweredElmAppForBackendStateSerializer(
+                LoweredElmAppToGenerateJsonCoders(originalAppFiles), interfaceConfig);
+
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForBackendStateSerializer(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             ElmAppInterfaceConfig interfaceConfig)
         {
             if (originalAppFiles.ContainsKey(InterfaceToHostRootModuleFilePath))
@@ -195,6 +201,260 @@ namespace Kalmit
                         stateCodingFunctionNames.encodeFunctionName,
                         stateCodingFunctionNames.decodeFunctionName,
                         allOriginalElmModules)).ToImmutableList());
+        }
+
+        /*
+        TODO: Add lowering for exposing types in defining modules, analogous to lowering for the backend state serializer (`appFilesAfterExposingCustomTypesInModules`).
+        */
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppToGenerateJsonCoders(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles)
+        {
+            var generateSerializerInterfaceModuleName = "ElmFullstackLoweringInterface.GenerateJsonCoders";
+
+            var interfaceModuleFilePath = FilePathFromModuleName(generateSerializerInterfaceModuleName);
+
+            if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
+            {
+                return originalAppFiles;
+            }
+
+            var interfaceModuleOriginalFile = originalAppFiles[interfaceModuleFilePath];
+
+            var interfaceModuleOriginalFileText =
+                Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
+
+            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
+
+            var intermediateModuleText = interfaceModuleOriginalFileText;
+
+            var functionsReplacements =
+                originalFunctions
+                .Select(originalFunction =>
+                {
+                    var functionType = parseFunctionType(originalFunction.functionText);
+
+                    var replacement = computeFunctionReplacement(functionType.typeCanonicalName, functionType.isDecoder);
+
+                    var originalFunctionTextLines =
+                        originalFunction.functionText.Replace("\r", "").Split("\n");
+
+                    var newFunctionText =
+                        String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { replacement.functionBody }));
+
+                    return new
+                    {
+                        functionName = originalFunction.functionName,
+                        newFunctionText = newFunctionText,
+                        supportingCodingExpressions = replacement.supportingCodingExpressions,
+                    };
+                })
+                .ToImmutableList();
+
+            static (string typeCanonicalName, bool isDecoder) parseFunctionType(string functionText)
+            {
+                //  Assume all are on one line:
+                var parametersTextMatch = Regex.Match(functionText, @"^[^\s]+\s*\:(.*)$", RegexOptions.Multiline);
+
+                if (!parametersTextMatch.Success)
+                    throw new NotImplementedException("Did not find parametersTextMatch");
+
+                var parameterTexts = parametersTextMatch.Groups[1].Value;
+
+                var parametersTexts =
+                    parameterTexts.Split("->").Select(paramText => paramText.Trim())
+                    .ToImmutableList();
+
+                if (parametersTexts.Count == 1)
+                {
+                    var decoderMatch = Regex.Match(parametersTexts[0], Regex.Escape("Json.Decode.Decoder") + @"\s+([\w\d_\.]+)");
+
+                    if (!decoderMatch.Success)
+                        throw new NotImplementedException("Did not match Decoder pattern: " + parameterTexts);
+
+                    return (typeCanonicalName: decoderMatch.Groups[1].Value, isDecoder: true);
+                }
+
+                if (parametersTexts.Count == 2)
+                {
+                    if (parametersTexts[1] != "Json.Encode.Value")
+                        throw new NotImplementedException("Did not match Encode pattern: " + parameterTexts);
+
+                    return (typeCanonicalName: parametersTexts[0], isDecoder: false);
+                }
+
+                throw new NotImplementedException("Unexpected number of parameters: " + parameterTexts);
+            }
+
+            (string functionBody,
+            IImmutableDictionary<string, (string encodeExpression, string decodeExpression, IImmutableSet<string> referencedModules)> supportingCodingExpressions)
+                computeFunctionReplacement(
+                string serializedTypeName, bool isDecoder)
+            {
+                string getModuleText(string moduleName)
+                {
+                    var filePath = FilePathFromModuleName(moduleName);
+
+                    originalAppFiles.TryGetValue(filePath, out var moduleFile);
+
+                    if (moduleFile == null)
+                        throw new Exception("Did not find the module named '" + moduleFile + "'");
+
+                    return Encoding.UTF8.GetString(moduleFile.ToArray());
+                }
+
+                var allOriginalElmModules =
+                    originalAppFiles
+                    .Select(originalAppFilePathAndContent =>
+                    {
+                        var fileName = originalAppFilePathAndContent.Key.Last();
+
+                        if (originalAppFilePathAndContent.Key.First() != "src" || !fileName.EndsWith(".elm"))
+                            return null;
+
+                        return
+                            (IImmutableList<string>)
+                            originalAppFilePathAndContent.Key.Skip(1).Reverse().Skip(1).Reverse()
+                            .Concat(new[] { fileName.Substring(0, fileName.Length - 4) })
+                            .ToImmutableList();
+                    })
+                    .Where(module => module != null)
+                    .OrderBy(module => string.Join(".", module))
+                    .ToImmutableList();
+
+                var getExpressionsAndDependenciesForType = new Func<string, CompileElmValueSerializer.ResolveTypeResult>(canonicalTypeName =>
+                {
+                    return
+                        CompileElmValueSerializer.ResolveType(
+                            canonicalTypeName,
+                            InterfaceToHostRootModuleName,
+                            moduleName =>
+                            {
+                                if (moduleName == InterfaceToHostRootModuleName)
+                                {
+                                    var newRootModuleNameImportStatements =
+                                        String.Join("\n",
+                                            allOriginalElmModules.Select(elmModule => "import " + String.Join(".", elmModule)));
+
+                                    return "module " + InterfaceToHostRootModuleName + "\n\n" + newRootModuleNameImportStatements;
+                                }
+
+                                return getModuleText(moduleName);
+                            });
+                });
+
+                var currentFunctionCodingExpressions =
+                    CompileElmValueSerializer.EnumerateExpressionsResolvingAllDependencies(
+                        getExpressionsAndDependenciesForType,
+                        ImmutableHashSet.Create(serializedTypeName))
+                    .ToImmutableList();
+
+                var serializedTypeCanonicalText = getExpressionsAndDependenciesForType(serializedTypeName).canonicalTypeText;
+
+                var currentFunctionCodingExpressionsDict =
+                    currentFunctionCodingExpressions
+                    .ToImmutableDictionary(entry => entry.elmType, entry => entry.result);
+
+                var resultForCurrentFunction = currentFunctionCodingExpressionsDict[serializedTypeCanonicalText];
+
+                var codingFunctionNames =
+                    CompileElmValueSerializer.GetFunctionNamesAndTypeParametersFromTypeText(serializedTypeCanonicalText);
+
+                var codeTypeExpression =
+                    isDecoder
+                    ?
+                    codingFunctionNames.functionNames.decodeFunctionName
+                    :
+                    codingFunctionNames.functionNames.encodeFunctionName;
+
+                return (CompileElmValueSerializer.IndentElmCodeLines(1, codeTypeExpression), currentFunctionCodingExpressionsDict);
+            }
+
+            string replaceFunctionInModule(string moduleText, string functionName, string newFunctionText)
+            {
+                var allFunctions = CompileElm.ParseAllFunctionsFromModule(moduleText).ToImmutableList();
+
+                var originalFunction = allFunctions.FirstOrDefault(fun => fun.functionName == functionName);
+
+                if (originalFunction.functionText == null)
+                    throw new NotImplementedException("Did not find function '" + functionName + "' in module text.");
+
+                return moduleText.Replace(originalFunction.functionText, newFunctionText);
+            }
+
+            var interfaceModuleWithReplacedFunctions =
+                functionsReplacements
+                .Aggregate(interfaceModuleOriginalFileText, (intermediateModuleText, replacement) =>
+                    replaceFunctionInModule(intermediateModuleText, replacement.functionName, replacement.newFunctionText));
+
+            var allSupportingCodingExpressions =
+                functionsReplacements
+                .Select(functionReplacement => functionReplacement.supportingCodingExpressions)
+                .Aggregate(ImmutableDictionary<string, (string encodeExpression, string decodeExpression, IImmutableSet<string> referencedModules)>.Empty,
+                (a, b) => a.SetItems(b));
+
+            var appFilesAfterExposingCustomTypesInModules =
+                allSupportingCodingExpressions
+                .Select(exprResult => exprResult.Key)
+                .Aggregate(
+                    originalAppFiles,
+                    (partiallyUpdatedAppFiles, elmType) =>
+                    {
+                        {
+                            var enclosingParenthesesMatch = Regex.Match(elmType.Trim(), @"^\(([^,^\)]+)\)$");
+
+                            if (enclosingParenthesesMatch.Success)
+                                elmType = enclosingParenthesesMatch.Groups[1].Value;
+                        }
+
+                        var qualifiedMatch = Regex.Match(elmType.Trim(), @"^(.+)\.([^\s^\.]+)(\s+[a-z][^\s^\.]*)*$");
+
+                        if (!qualifiedMatch.Success)
+                            return partiallyUpdatedAppFiles;
+
+                        var moduleName = qualifiedMatch.Groups[1].Value;
+                        var localTypeName = qualifiedMatch.Groups[2].Value;
+
+                        var expectedFilePath = FilePathFromModuleName(moduleName);
+
+                        var moduleBefore =
+                            partiallyUpdatedAppFiles
+                            .FirstOrDefault(candidate => candidate.Key.SequenceEqual(expectedFilePath));
+
+                        if (moduleBefore.Value == null)
+                            return partiallyUpdatedAppFiles;
+
+                        var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value.ToArray());
+
+                        var isCustomTypeMatch = Regex.Match(
+                            moduleTextBefore,
+                            @"^type\s+" + localTypeName + @"(\s+[a-z][^\s]*){0,}\s*=", RegexOptions.Multiline);
+
+                        if (!isCustomTypeMatch.Success)
+                            return partiallyUpdatedAppFiles;
+
+                        var moduleText = CompileElm.ExposeCustomTypeAllTagsInElmModule(moduleTextBefore, localTypeName);
+
+                        return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
+                    });
+
+            var supportingCodingFunctionsText =
+                String.Join("\n\n",
+                allSupportingCodingExpressions
+                .Select(typeResult => CompileElmValueSerializer.BuildJsonCodingFunctionTexts(
+                    typeResult.Key,
+                    typeResult.Value.encodeExpression,
+                    typeResult.Value.decodeExpression))
+                .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
+
+            var interfaceModuleText =
+                interfaceModuleWithReplacedFunctions + "\n\n\n" +
+                supportingCodingFunctionsText + "\n\n\n" +
+                String.Join("\n\n", CompileElmValueSerializer.generalSupportingFunctionsTexts) + "\n";
+
+            return
+                appFilesAfterExposingCustomTypesInModules.SetItem(
+                    interfaceModuleFilePath,
+                    Encoding.UTF8.GetBytes(interfaceModuleText).ToImmutableList());
         }
 
         static IImmutableList<string> FilePathFromModuleName(string moduleName)

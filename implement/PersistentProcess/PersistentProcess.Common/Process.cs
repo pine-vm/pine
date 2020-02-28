@@ -112,17 +112,19 @@ namespace Kalmit
             (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
             ProcessFromElmCodeFiles(
             IReadOnlyCollection<(IImmutableList<string>, IImmutableList<byte>)> elmCodeFiles,
+            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null) =>
+            ProcessFromElmCodeFiles(ElmApp.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
+
+        static public (IDisposableProcessWithStringInterface process,
+            (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
+            ProcessFromElmCodeFiles(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
             var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
-            var loweredElmCodeFiles =
-                ElmApp.AsCompletelyLoweredElmApp(
-                    ElmApp.ToFlatDictionaryWithPathComparer(elmCodeFiles),
-                    elmAppInterfaceConfig);
-
             var javascriptFromElmMake = CompileElmToJavascript(
-                loweredElmCodeFiles,
+                elmCodeFiles,
                 ElmApp.InterfaceToHostRootModuleFilePath);
 
             var pathToFunctionCommonStart = ElmApp.InterfaceToHostRootModuleName + ".";

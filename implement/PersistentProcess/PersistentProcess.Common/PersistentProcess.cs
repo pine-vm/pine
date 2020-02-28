@@ -35,7 +35,7 @@ namespace Kalmit.PersistentProcess
 
         public PersistentProcessWithHistoryOnFileFromElm019Code(
             IProcessStoreReader storeReader,
-            IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> elmAppFiles,
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles,
             Action<string> logger,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {

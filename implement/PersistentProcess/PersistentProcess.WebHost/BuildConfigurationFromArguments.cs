@@ -33,7 +33,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var frontendWebElmMakeCommandAppendix = argumentValueFromParameterName("--frontend-web-elm-make-appendix");
 
-            var (configZipArchive, loweredElmAppFiles) = BuildConfigurationZipArchive(frontendWebElmMakeCommandAppendix);
+            var (compileConfigZipArchive, loweredElmAppFiles) = BuildConfigurationZipArchive(frontendWebElmMakeCommandAppendix);
 
             if (0 < loweredElmOutputArgument?.Length)
             {
@@ -46,6 +46,8 @@ namespace Kalmit.PersistentProcess.WebHost
                     File.WriteAllBytes(outputPath, file.Value.ToArray());
                 }
             }
+
+            var configZipArchive = compileConfigZipArchive();
 
             var configZipArchiveFileId =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
@@ -70,7 +72,7 @@ namespace Kalmit.PersistentProcess.WebHost
             }
         }
 
-        static public (byte[] configZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
+        static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
             BuildConfigurationZipArchive(
             string frontendWebElmMakeCommandAppendix)
         {
@@ -95,52 +97,57 @@ namespace Kalmit.PersistentProcess.WebHost
             var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
                 elmAppFilesBeforeLowering, ElmAppInterfaceConfig.Default);
 
-            byte[] frontendWebFile = null;
-
-            if (elmAppContainsFrontend)
+            var compileConfigFile = new Func<byte[]>(() =>
             {
-                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
-                    loweredElmAppFiles,
-                    FrontendElmAppRootFilePath,
-                    frontendWebElmMakeCommandAppendix);
+                byte[] frontendWebFile = null;
 
-                frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);
-            }
+                if (elmAppContainsFrontend)
+                {
+                    var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
+                        loweredElmAppFiles,
+                        FrontendElmAppRootFilePath,
+                        frontendWebElmMakeCommandAppendix);
 
-            WebAppConfigurationJsonStructure jsonStructure = null;
+                    frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);
+                }
 
-            var jsonFileSearchPath = Path.Combine(currentDirectory, "elm-fullstack.json");
+                WebAppConfigurationJsonStructure jsonStructure = null;
 
-            if (File.Exists(jsonFileSearchPath))
-            {
-                Console.WriteLine("I found a file at '" + jsonFileSearchPath + "'. I use this to build the configuration.");
+                var jsonFileSearchPath = Path.Combine(currentDirectory, "elm-fullstack.json");
 
-                var jsonFile = File.ReadAllBytes(jsonFileSearchPath);
+                if (File.Exists(jsonFileSearchPath))
+                {
+                    Console.WriteLine("I found a file at '" + jsonFileSearchPath + "'. I use this to build the configuration.");
 
-                jsonStructure = JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonFile));
-            }
-            else
-            {
-                Console.WriteLine("I did not find a file at '" + jsonFileSearchPath + "'. I build the configuration without the 'elm-fullstack.json'.");
-            }
+                    var jsonFile = File.ReadAllBytes(jsonFileSearchPath);
 
-            var staticFiles =
-                frontendWebFile == null ?
-                Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :
-                new[] { (name: (IImmutableList<string>)ImmutableList.Create(FrontendWebStaticFileName), (IImmutableList<byte>)frontendWebFile.ToImmutableList()) };
+                    jsonStructure = JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonFile));
+                }
+                else
+                {
+                    Console.WriteLine("I did not find a file at '" + jsonFileSearchPath + "'. I build the configuration without the 'elm-fullstack.json'.");
+                }
 
-            var webAppConfig =
-                new WebAppConfiguration()
-                .WithElmApp(loweredElmAppFiles)
-                .WithStaticFiles(staticFiles)
-                .WithJsonStructure(jsonStructure);
+                var staticFiles =
+                    frontendWebFile == null ?
+                    Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :
+                    new[] { (name: (IImmutableList<string>)ImmutableList.Create(FrontendWebStaticFileName), (IImmutableList<byte>)frontendWebFile.ToImmutableList()) };
 
-            var webAppConfigFiles =
-                webAppConfig.AsFiles();
+                var webAppConfig =
+                    new WebAppConfiguration()
+                    .WithElmApp(loweredElmAppFiles)
+                    .WithStaticFiles(staticFiles)
+                    .WithJsonStructure(jsonStructure);
 
-            var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
+                var webAppConfigFiles =
+                    webAppConfig.AsFiles();
 
-            return (webAppConfigFile, loweredElmAppFiles);
+                var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
+
+                return webAppConfigFile;
+            });
+
+            return (compileConfigFile, loweredElmAppFiles);
         }
 
         static string FindDirectoryUpwardContainingElmJson(string searchBeginDirectory)

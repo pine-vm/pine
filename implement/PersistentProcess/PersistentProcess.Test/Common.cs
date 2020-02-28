@@ -39,27 +39,29 @@ namespace Kalmit.PersistentProcess.Test
         static public Kalmit.IDisposableProcessWithStringInterface BuildInstanceOfCounterProcess() =>
             Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(CounterElmApp).process;
 
-        static public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> CounterElmApp =
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CounterElmApp =
             GetElmAppFromExampleName("counter");
 
-        static public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> CounterElmWebApp =
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CounterElmWebApp =
             GetElmAppFromExampleName("counter-webapp");
 
-        static public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> StringBuilderElmWebApp =
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> StringBuilderElmWebApp =
             GetElmAppFromExampleName("string-builder-webapp");
 
-        static public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
            GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
 
-        static public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> HttpProxyWebApp =
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> HttpProxyWebApp =
            GetElmAppFromExampleName("http-proxy");
 
-        static public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> GetElmAppFromExampleName(
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromExampleName(
             string exampleName) =>
-            ElmApp.FilesFilteredForElmApp(
-                Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
-            .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent))
-            .ToImmutableList();
+            ElmApp.AsCompletelyLoweredElmApp(
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    ElmApp.FilesFilteredForElmApp(
+                        Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
+                    .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent))),
+                    ElmAppInterfaceConfig.Default);
 
         static public IProcessStoreReader EmptyProcessStoreReader() =>
             new ProcessStoreReaderFromDelegates

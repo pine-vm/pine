@@ -49,10 +49,10 @@ namespace Kalmit.PersistentProcess.WebHost
                     _logger.LogInformation(
                         "Loading configuration from current directory.");
 
-                    var (configZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                    var (compileConfigZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(
                         frontendWebElmMakeCommandAppendix: config.GetValue<string>(Configuration.WithSettingFrontendWebElmMakeAppendixSettingKey));
 
-                    webAppConfigFileZipArchive = configZipArchive;
+                    webAppConfigFileZipArchive = compileConfigZipArchive();
                 }
 
                 webAppConfig = Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
@@ -128,7 +128,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var persistentProcess =
                 new PersistentProcessWithHistoryOnFileFromElm019Code(
                     services.GetService<ProcessStore.IProcessStoreReader>(),
-                    elmAppFiles,
+                    ElmApp.ToFlatDictionaryWithPathComparer(elmAppFiles),
                     logger: logEntry => logger.LogInformation(logEntry));
 
             logger.LogInformation("Completed building the persistent process.");
