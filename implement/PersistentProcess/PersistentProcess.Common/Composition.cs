@@ -35,6 +35,11 @@ namespace Kalmit
             }
 
             override public bool Equals(object obj) => Equals(obj as Component);
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(BlobContent, ListContent);
+            }
         }
 
         public class TreeComponent : IEquatable<TreeComponent>
@@ -95,6 +100,11 @@ namespace Kalmit
             }
 
             override public bool Equals(object obj) => Equals(obj as TreeComponent);
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(BlobContent, TreeContent);
+            }
         }
 
         static public ParseAsTreeResult ParseAsTree(
@@ -306,6 +316,11 @@ namespace Kalmit
             }
 
             override public bool Equals(object obj) => Equals(obj as Result<Err, Ok>);
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(err, ok);
+            }
         }
 
         public class ParseAsTreeResult : Result<IImmutableList<(int index, IImmutableList<byte> name)>, TreeComponent>

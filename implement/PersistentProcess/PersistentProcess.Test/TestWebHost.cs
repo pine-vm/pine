@@ -722,9 +722,9 @@ namespace Kalmit.PersistentProcess.Test
 
         class Web_host_propagates_HTTP_headers_Response_Entry
         {
-            public string name;
+            public string name = null;
 
-            public string[] values;
+            public string[] values = null;
         }
 
         static HttpResponseMessage HttpGetAtRoot(
