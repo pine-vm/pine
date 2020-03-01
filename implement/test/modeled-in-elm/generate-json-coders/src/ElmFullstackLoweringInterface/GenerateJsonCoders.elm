@@ -4,11 +4,8 @@ module ElmFullstackLoweringInterface.GenerateJsonCoders exposing
     , testsValueToInterface
     )
 
-import Dict
 import Json.Decode
 import Json.Encode
-import OpaqueCustomType
-import Set
 import Structures
 
 

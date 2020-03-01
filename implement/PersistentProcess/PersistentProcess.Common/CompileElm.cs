@@ -173,6 +173,17 @@ namespace Kalmit
                 .AddRange(followingFunctionsInModule);
         }
 
+        static public string WithImportsAdded(
+            string originalElmModuleText, IImmutableSet<IEnumerable<string>> modulesToImport)
+        {
+            var importsText =
+                String.Join("", modulesToImport.Select(moduleName => "\nimport " + String.Join(".", moduleName)));
+
+            var firstImportMatch = Regex.Match(originalElmModuleText, @"^import\s", RegexOptions.Multiline);
+
+            return originalElmModuleText.Insert(firstImportMatch.Index, importsText + "\n");
+        }
+
         static public string ExposeValueInElmModule(string originalElmModuleText, string nameToExpose)
         {
             return AdaptModuleExposeSyntax(originalElmModuleText, originalExposeSyntax =>

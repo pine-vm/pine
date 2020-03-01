@@ -207,9 +207,6 @@ namespace Kalmit
                         allOriginalElmModules)).ToImmutableList());
         }
 
-        /*
-        TODO: Add lowering for exposing types in defining modules, analogous to lowering for the backend state serializer (`appFilesAfterExposingCustomTypesInModules`).
-        */
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppToGenerateJsonCoders(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles)
         {
@@ -330,16 +327,16 @@ namespace Kalmit
                     return
                         CompileElmValueSerializer.ResolveType(
                             canonicalTypeName,
-                            InterfaceToHostRootModuleName,
+                            generateSerializerInterfaceModuleName,
                             moduleName =>
                             {
-                                if (moduleName == InterfaceToHostRootModuleName)
+                                if (moduleName == generateSerializerInterfaceModuleName)
                                 {
                                     var newRootModuleNameImportStatements =
                                         String.Join("\n",
                                             allOriginalElmModules.Select(elmModule => "import " + String.Join(".", elmModule)));
 
-                                    return "module " + InterfaceToHostRootModuleName + "\n\n" + newRootModuleNameImportStatements;
+                                    return "module " + generateSerializerInterfaceModuleName + "\n\n" + newRootModuleNameImportStatements;
                                 }
 
                                 return getModuleText(moduleName);
@@ -385,9 +382,22 @@ namespace Kalmit
                 return moduleText.Replace(originalFunction.functionText, newFunctionText);
             }
 
+            var modulesToImport =
+                functionsReplacements
+                .SelectMany(functionReplacement =>
+                    functionReplacement.supportingCodingExpressions
+                    .SelectMany(support => support.Value.referencedModules.Select(moduleName => moduleName.Split("."))))
+                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>())
+                .Remove(generateSerializerInterfaceModuleName.Split("."))
+                .Add(new[] { "Set" })
+                .Add(new[] { "Dict" });
+
+            var interfaceModuleWithImports =
+                CompileElm.WithImportsAdded(interfaceModuleOriginalFileText, modulesToImport);
+
             var interfaceModuleWithReplacedFunctions =
                 functionsReplacements
-                .Aggregate(interfaceModuleOriginalFileText, (intermediateModuleText, replacement) =>
+                .Aggregate(interfaceModuleWithImports, (intermediateModuleText, replacement) =>
                     replaceFunctionInModule(intermediateModuleText, replacement.functionName, replacement.newFunctionText));
 
             var allSupportingCodingExpressions =
