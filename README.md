@@ -7,10 +7,11 @@ In these applications, backend and frontend share an understanding of game mecha
 Common, non-application specific functionality is implemented in the Elm-fullstack framework. This includes:
 
 + Persisting each `update` in the backend and automatically restore the app state when necessary. To learn more about this functionality, see the [guide on persistence in Elm-fullstack](./guide/persistence-in-elm-fullstack.md).
-+ HTTP requests and responses are mapped to Elm types so that we can work with a strongly typed interface.
-+ Admin interface to read and set the app state, in case you want to manually intervene or monitor.
++ Mapping HTTP requests to Elm types in the backend so that we can work with a strongly typed interface.
++ Generating the functions to serialize and deserialize the messages exchanged between frontend and backend.
++ Admin interface to read and set the app state, for cases when you want to manually intervene or monitor.
 + [HTTPS support](./guide/how-to-configure-and-deploy-your-elm-full-stack-app.md#support-https): The web host automatically gets and renews SSL certificates from Let's Encrypt.
-+ Rate-limit client HTTP requests which result in updates of the app.
++ Rate-limit client HTTP requests which result in updates in the backend app.
 + Serve static files on selected paths.
 
 For how to build from Elm code and configure optional features, see the guide on [how to configure and deploy your Elm full-stack app](guide/how-to-configure-and-deploy-your-elm-full-stack-app.md).
