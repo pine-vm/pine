@@ -66,7 +66,11 @@ namespace Kalmit
 
             var backendMainFilePath = FilePathFromModuleName(interfaceConfig.RootModuleName);
 
-            var backendMainOriginalFile = originalAppFiles[backendMainFilePath];
+            if (!originalAppFiles.TryGetValue(backendMainFilePath, out var backendMainOriginalFile))
+            {
+                //  App contains no backend.
+                return originalAppFiles;
+            }
 
             var stateTypeNameInModule =
                 StateTypeNameFromRootElmModule(Encoding.UTF8.GetString(backendMainOriginalFile.ToArray()));

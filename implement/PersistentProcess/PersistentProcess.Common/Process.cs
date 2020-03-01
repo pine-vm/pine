@@ -142,7 +142,7 @@ namespace Kalmit
                 (javascriptFromElmMake, javascriptPreparedToRun));
         }
 
-        static string CompileElmToJavascript(
+        static public string CompileElmToJavascript(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
             IImmutableList<string> pathToFileWithElmEntryPoint,
             string elmMakeCommandAppendix = null) =>
@@ -274,75 +274,27 @@ namespace Kalmit
             string pathToSerializeStateFunction,
             string pathToDeserializeStateFunction)
         {
-            /*
-            Work around runtime exception with javascript from Elm make:
-            > "Script threw an exception. 'console' is not defined"
-
-            2018-12-02 Observed problematic statements in output from elm make, causing running the script to fail:
-            console.warn('Compiled in DEV mode. Follow the advice at https://elm-lang.org/0.19.0/optimize for better performance and smaller assets.');
-            [...]
-            console.log(tag + ': ' + _Debug_toString(value));
-
-            For some applications collecting the arguments to those functions might be interesting,
-            to implement this, have a look at https://github.com/Microsoft/ChakraCore/wiki/JavaScript-Runtime-(JSRT)-Overview
-            */
-            var javascriptMinusExceptions =
-                Regex.Replace(
-                    javascriptFromElmMake,
-                    "^\\s*console\\.\\w+\\(.+$", "",
-                    RegexOptions.Multiline);
-
-            var invokeExportStatementMatch =
-                Regex.Matches(javascriptMinusExceptions, Regex.Escape("_Platform_export(")).OfType<Match>().LastOrDefault();
+            var javascriptMinusCrashes = JavascriptMinusCrashes(javascriptFromElmMake);
 
             var listFunctionToPublish =
                 new[]
                 {
-                    new
-                    {
-                        name = pathToSerializedEventFunction,
-                        publicName = serializedEventFunctionPublishedSymbol,
-                        arity = 2,
-                    },
-                    new
-                    {
-                        name = pathToInitialStateFunction,
-                        publicName = initStateJsFunctionPublishedSymbol,
-                        arity = 0,
-                    },
-                    new
-                    {
-                        name = pathToSerializeStateFunction,
-                        publicName = serializeStateJsFunctionPublishedSymbol,
-                        arity = 1,
-                    },
-                    new
-                    {
-                        name = pathToDeserializeStateFunction,
-                        publicName = deserializeStateJsFunctionPublishedSymbol,
-                        arity = 1,
-                    },
-                }
-                .Select(
-                    functionToPublish =>
-                    new
-                    {
-                        publicName = functionToPublish.publicName,
-                        expression =
-                            BuildElmFunctionPublicationExpression(
-                                appFunctionSymbolMap(functionToPublish.name), functionToPublish.arity)
-                    })
-                .ToList();
+                    (functionNameInElm: pathToSerializedEventFunction,
+                    publicName: serializedEventFunctionPublishedSymbol,
+                    arity: 2),
 
-            var publishStatements =
-                listFunctionToPublish
-                .Select(functionToPublish => "scope['" + functionToPublish.publicName + "'] = " + functionToPublish.expression + ";")
-                .ToList();
+                    (functionNameInElm: pathToInitialStateFunction,
+                    publicName: initStateJsFunctionPublishedSymbol,
+                    arity: 0),
 
-            var publicationInsertLocation = invokeExportStatementMatch.Index;
+                    (functionNameInElm: pathToSerializeStateFunction,
+                    publicName: serializeStateJsFunctionPublishedSymbol,
+                    arity: 1),
 
-            var publicationInsertString =
-                string.Join(Environment.NewLine, new[] { "" }.Concat(publishStatements).Concat(new[] { "" }));
+                    (functionNameInElm: pathToDeserializeStateFunction,
+                    publicName: deserializeStateJsFunctionPublishedSymbol,
+                    arity: 1),
+                };
 
             var processEventAndUpdateStateFunctionJavascriptLines = new[]
             {
@@ -357,10 +309,64 @@ namespace Kalmit
                 String.Join(Environment.NewLine, processEventAndUpdateStateFunctionJavascriptLines);
 
             return
-                javascriptMinusExceptions.Insert(publicationInsertLocation, publicationInsertString) +
+                PublishFunctionsFromJavascriptFromElmMake(
+                    javascriptMinusCrashes,
+                    listFunctionToPublish) +
                 Environment.NewLine +
                 processEventAndUpdateStateFunctionJavascript;
         }
+
+        static public string PublishFunctionsFromJavascriptFromElmMake(
+            string javascriptFromElmMake,
+            IEnumerable<(string functionNameInElm, string publicName, int arity)> functions)
+        {
+            var invokeExportStatementMatch =
+                Regex.Matches(javascriptFromElmMake, Regex.Escape("_Platform_export(")).OfType<Match>().LastOrDefault();
+
+            var listFunctionToPublish =
+                functions
+                .Select(
+                    functionToPublish =>
+                    new
+                    {
+                        publicName = functionToPublish.publicName,
+                        expression =
+                            BuildElmFunctionPublicationExpression(
+                                appFunctionSymbolMap(functionToPublish.functionNameInElm), functionToPublish.arity)
+                    })
+                .ToList();
+
+            var publishStatements =
+                listFunctionToPublish
+                .Select(functionToPublish => "scope['" + functionToPublish.publicName + "'] = " + functionToPublish.expression + ";")
+                .ToList();
+
+            var publicationInsertLocation = invokeExportStatementMatch.Index;
+
+            var publicationInsertString =
+                string.Join(Environment.NewLine, new[] { "" }.Concat(publishStatements).Concat(new[] { "" }));
+
+            return
+                javascriptFromElmMake.Insert(publicationInsertLocation, publicationInsertString);
+        }
+
+        /*
+        Work around runtime exception with javascript from Elm make:
+        > "Script threw an exception. 'console' is not defined"
+
+        2018-12-02 Observed problematic statements in output from elm make, causing running the script to fail:
+        console.warn('Compiled in DEV mode. Follow the advice at https://elm-lang.org/0.19.0/optimize for better performance and smaller assets.');
+        [...]
+        console.log(tag + ': ' + _Debug_toString(value));
+
+        For some applications collecting the arguments to those functions might be interesting,
+        to implement this, have a look at https://github.com/Microsoft/ChakraCore/wiki/JavaScript-Runtime-(JSRT)-Overview
+        */
+        static public string JavascriptMinusCrashes(string javascriptFromElmMake) =>
+            Regex.Replace(
+                javascriptFromElmMake,
+                "^\\s*console\\.\\w+\\(.+$", "",
+                RegexOptions.Multiline);
 
         public const string processEventSyncronousJsFunctionName = "processEventAndUpdateState";
 
