@@ -35,7 +35,8 @@ namespace Kalmit
             Regex.IsMatch(
                 Path.GetFileName(filePath),
                 "(^" + Regex.Escape("elm.json") + "|" + Regex.Escape(".elm") + ")$",
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase) &&
+            !filePath.Replace("\\", "/").Contains("elm-stuff/generated-code/");
 
         static public IEnumerable<(string filePath, IImmutableList<byte> fileContent)> FilesFilteredForElmApp(
             IEnumerable<(string filePath, IImmutableList<byte> fileContent)> files) =>
