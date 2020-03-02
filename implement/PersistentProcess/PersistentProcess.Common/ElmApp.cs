@@ -75,136 +75,35 @@ namespace Kalmit
             var stateTypeNameInModule =
                 StateTypeNameFromRootElmModule(Encoding.UTF8.GetString(backendMainOriginalFile.ToArray()));
 
-            string getModuleText(string moduleName)
-            {
-                var filePath = FilePathFromModuleName(moduleName);
+            var initialRootModuleText = InitialRootElmModuleText(
+                interfaceConfig.RootModuleName, stateTypeNameInModule);
 
-                originalAppFiles.TryGetValue(filePath, out var moduleFile);
-
-                if (moduleFile == null)
-                    throw new Exception("Did not find the module named '" + moduleFile + "'");
-
-                return Encoding.UTF8.GetString(moduleFile.ToArray());
-            }
-
-            var allOriginalElmModules =
+            var appFilesWithInitialRootModule =
                 originalAppFiles
-                .Select(originalAppFilePathAndContent =>
+                .SetItem(InterfaceToHostRootModuleFilePath, Encoding.UTF8.GetBytes(initialRootModuleText).ToImmutableList());
+
+            var appFilesWithSupportAdded =
+                WithSupportForCodingElmType(
+                    appFilesWithInitialRootModule,
+                    interfaceConfig.RootModuleName + "." + stateTypeNameInModule,
+                    InterfaceToHostRootModuleName,
+                    out var functionNames);
+
+            var rootModuleTextWithSupportAdded =
+                Encoding.UTF8.GetString(appFilesWithSupportAdded[InterfaceToHostRootModuleFilePath].ToArray());
+
+            var rootModuleText =
+                new[]
                 {
-                    var fileName = originalAppFilePathAndContent.Key.Last();
+                    "jsonEncodeDeserializedState = " + functionNames.encodeFunctionName,
+                    "jsonDecodeDeserializedState = " + functionNames.decodeFunctionName
+                }
+                .Aggregate(rootModuleTextWithSupportAdded, (intermediateModuleText, functionToAdd) =>
+                    CompileElm.WithFunctionAdded(intermediateModuleText, functionToAdd));
 
-                    if (originalAppFilePathAndContent.Key.First() != "src" || !fileName.EndsWith(".elm"))
-                        return null;
-
-                    return
-                        (IImmutableList<string>)
-                        originalAppFilePathAndContent.Key.Skip(1).Reverse().Skip(1).Reverse()
-                        .Concat(new[] { fileName.Substring(0, fileName.Length - 4) })
-                        .ToImmutableList();
-                })
-                .Where(module => module != null)
-                .OrderBy(module => string.Join(".", module))
-                .ToImmutableList();
-
-            var getExpressionsAndDependenciesForType = new Func<string, CompileElmValueSerializer.ResolveTypeResult>(canonicalTypeName =>
-            {
-                return
-                    CompileElmValueSerializer.ResolveType(
-                        canonicalTypeName,
-                        InterfaceToHostRootModuleName,
-                        moduleName =>
-                        {
-                            if (moduleName == InterfaceToHostRootModuleName)
-                            {
-                                var newRootModuleNameImportStatements =
-                                    String.Join("\n",
-                                        allOriginalElmModules.Select(elmModule => "import " + String.Join(".", elmModule)));
-
-                                return "module " + InterfaceToHostRootModuleName + "\n\n" + newRootModuleNameImportStatements;
-                            }
-
-                            return getModuleText(moduleName);
-                        });
-            });
-
-            var canonicalStateTypeName =
-                getExpressionsAndDependenciesForType(interfaceConfig.RootModuleName + "." + stateTypeNameInModule).canonicalTypeText;
-
-            var allStateCodingExpressions =
-                CompileElmValueSerializer.EnumerateExpressionsResolvingAllDependencies(
-                    getExpressionsAndDependenciesForType,
-                    ImmutableHashSet.Create(canonicalStateTypeName))
-                .ToImmutableList();
-
-            Console.WriteLine("allStateCodingExpressions.expressions.Count: " + allStateCodingExpressions.Count);
-
-            var appFilesAfterExposingCustomTypesInModules =
-                allStateCodingExpressions
-                .Select(exprResult => exprResult.elmType)
-                .Aggregate(
-                    originalAppFiles,
-                    (partiallyUpdatedAppFiles, elmType) =>
-                    {
-                        {
-                            var enclosingParenthesesMatch = Regex.Match(elmType.Trim(), @"^\(([^,^\)]+)\)$");
-
-                            if (enclosingParenthesesMatch.Success)
-                                elmType = enclosingParenthesesMatch.Groups[1].Value;
-                        }
-
-                        var qualifiedMatch = Regex.Match(elmType.Trim(), @"^(.+)\.([^\s^\.]+)(\s+[a-z][^\s^\.]*)*$");
-
-                        if (!qualifiedMatch.Success)
-                            return partiallyUpdatedAppFiles;
-
-                        var moduleName = qualifiedMatch.Groups[1].Value;
-                        var localTypeName = qualifiedMatch.Groups[2].Value;
-
-                        var expectedFilePath = FilePathFromModuleName(moduleName);
-
-                        var moduleBefore =
-                            partiallyUpdatedAppFiles
-                            .FirstOrDefault(candidate => candidate.Key.SequenceEqual(expectedFilePath));
-
-                        if (moduleBefore.Value == null)
-                            return partiallyUpdatedAppFiles;
-
-                        var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value.ToArray());
-
-                        var isCustomTypeMatch = Regex.Match(
-                            moduleTextBefore,
-                            @"^type\s+" + localTypeName + @"(\s+[a-z][^\s]*){0,}\s*=", RegexOptions.Multiline);
-
-                        if (!isCustomTypeMatch.Success)
-                            return partiallyUpdatedAppFiles;
-
-                        var moduleText = CompileElm.ExposeCustomTypeAllTagsInElmModule(moduleTextBefore, localTypeName);
-
-                        return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
-                    });
-
-            var stateCodingJsonFunctionsText =
-                String.Join("\n\n",
-                allStateCodingExpressions
-                .Select(typeResult => CompileElmValueSerializer.BuildJsonCodingFunctionTexts(
-                    typeResult.elmType,
-                    typeResult.result.encodeExpression,
-                    typeResult.result.decodeExpression))
-                .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
-
-            var stateCodingFunctionNames =
-                CompileElmValueSerializer.GetFunctionNamesAndTypeParametersFromTypeText(canonicalStateTypeName).functionNames;
-
-            return
-                appFilesAfterExposingCustomTypesInModules.SetItem(
-                    InterfaceToHostRootModuleFilePath,
-                    Encoding.UTF8.GetBytes(LoweredRootElmModuleCode(
-                        interfaceConfig.RootModuleName,
-                        stateTypeNameInModule,
-                        stateCodingJsonFunctionsText,
-                        stateCodingFunctionNames.encodeFunctionName,
-                        stateCodingFunctionNames.decodeFunctionName,
-                        allOriginalElmModules)).ToImmutableList());
+            return appFilesWithSupportAdded.SetItem(
+                InterfaceToHostRootModuleFilePath,
+                Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
         }
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppToGenerateJsonCoders(
@@ -225,31 +124,6 @@ namespace Kalmit
                 Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
 
             var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
-
-            var intermediateModuleText = interfaceModuleOriginalFileText;
-
-            var functionsReplacements =
-                originalFunctions
-                .Select(originalFunction =>
-                {
-                    var functionType = parseFunctionType(originalFunction.functionText);
-
-                    var replacement = computeFunctionReplacement(functionType.typeCanonicalName, functionType.isDecoder);
-
-                    var originalFunctionTextLines =
-                        originalFunction.functionText.Replace("\r", "").Split("\n");
-
-                    var newFunctionText =
-                        String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { replacement.functionBody }));
-
-                    return new
-                    {
-                        functionName = originalFunction.functionName,
-                        newFunctionText = newFunctionText,
-                        supportingCodingExpressions = replacement.supportingCodingExpressions,
-                    };
-                })
-                .ToImmutableList();
 
             static (string typeCanonicalName, bool isDecoder) parseFunctionType(string functionText)
             {
@@ -286,91 +160,7 @@ namespace Kalmit
                 throw new NotImplementedException("Unexpected number of parameters: " + parameterTexts);
             }
 
-            (string functionBody,
-            IImmutableDictionary<string, (string encodeExpression, string decodeExpression, IImmutableSet<string> referencedModules)> supportingCodingExpressions)
-                computeFunctionReplacement(
-                string serializedTypeName, bool isDecoder)
-            {
-                string getModuleText(string moduleName)
-                {
-                    var filePath = FilePathFromModuleName(moduleName);
-
-                    originalAppFiles.TryGetValue(filePath, out var moduleFile);
-
-                    if (moduleFile == null)
-                        throw new Exception("Did not find the module named '" + moduleFile + "'");
-
-                    return Encoding.UTF8.GetString(moduleFile.ToArray());
-                }
-
-                var allOriginalElmModules =
-                    originalAppFiles
-                    .Select(originalAppFilePathAndContent =>
-                    {
-                        var fileName = originalAppFilePathAndContent.Key.Last();
-
-                        if (originalAppFilePathAndContent.Key.First() != "src" || !fileName.EndsWith(".elm"))
-                            return null;
-
-                        return
-                            (IImmutableList<string>)
-                            originalAppFilePathAndContent.Key.Skip(1).Reverse().Skip(1).Reverse()
-                            .Concat(new[] { fileName.Substring(0, fileName.Length - 4) })
-                            .ToImmutableList();
-                    })
-                    .Where(module => module != null)
-                    .OrderBy(module => string.Join(".", module))
-                    .ToImmutableList();
-
-                var getExpressionsAndDependenciesForType = new Func<string, CompileElmValueSerializer.ResolveTypeResult>(canonicalTypeName =>
-                {
-                    return
-                        CompileElmValueSerializer.ResolveType(
-                            canonicalTypeName,
-                            generateSerializerInterfaceModuleName,
-                            moduleName =>
-                            {
-                                if (moduleName == generateSerializerInterfaceModuleName)
-                                {
-                                    var newRootModuleNameImportStatements =
-                                        String.Join("\n",
-                                            allOriginalElmModules.Select(elmModule => "import " + String.Join(".", elmModule)));
-
-                                    return "module " + generateSerializerInterfaceModuleName + "\n\n" + newRootModuleNameImportStatements;
-                                }
-
-                                return getModuleText(moduleName);
-                            });
-                });
-
-                var currentFunctionCodingExpressions =
-                    CompileElmValueSerializer.EnumerateExpressionsResolvingAllDependencies(
-                        getExpressionsAndDependenciesForType,
-                        ImmutableHashSet.Create(serializedTypeName))
-                    .ToImmutableList();
-
-                var serializedTypeCanonicalText = getExpressionsAndDependenciesForType(serializedTypeName).canonicalTypeText;
-
-                var currentFunctionCodingExpressionsDict =
-                    currentFunctionCodingExpressions
-                    .ToImmutableDictionary(entry => entry.elmType, entry => entry.result);
-
-                var resultForCurrentFunction = currentFunctionCodingExpressionsDict[serializedTypeCanonicalText];
-
-                var codingFunctionNames =
-                    CompileElmValueSerializer.GetFunctionNamesAndTypeParametersFromTypeText(serializedTypeCanonicalText);
-
-                var codeTypeExpression =
-                    isDecoder
-                    ?
-                    codingFunctionNames.functionNames.decodeFunctionName
-                    :
-                    codingFunctionNames.functionNames.encodeFunctionName;
-
-                return (CompileElmValueSerializer.IndentElmCodeLines(1, codeTypeExpression), currentFunctionCodingExpressionsDict);
-            }
-
-            string replaceFunctionInModule(string moduleText, string functionName, string newFunctionText)
+            static string replaceFunctionInModuleText(string moduleText, string functionName, string newFunctionText)
             {
                 var allFunctions = CompileElm.ParseAllFunctionsFromModule(moduleText).ToImmutableList();
 
@@ -382,32 +172,148 @@ namespace Kalmit
                 return moduleText.Replace(originalFunction.functionText, newFunctionText);
             }
 
-            var modulesToImport =
-                functionsReplacements
-                .SelectMany(functionReplacement =>
-                    functionReplacement.supportingCodingExpressions
-                    .SelectMany(support => support.Value.referencedModules.Select(moduleName => moduleName.Split("."))))
-                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>())
-                .Remove(generateSerializerInterfaceModuleName.Split("."))
-                .Add(new[] { "Set" })
-                .Add(new[] { "Dict" });
+            static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunctionInModule(
+                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
+                string moduleName, string functionName, string newFunctionText)
+            {
+                var moduleFilePath = FilePathFromModuleName(moduleName);
 
-            var interfaceModuleWithImports =
-                CompileElm.WithImportsAdded(interfaceModuleOriginalFileText, modulesToImport);
+                var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
 
-            var interfaceModuleWithReplacedFunctions =
-                functionsReplacements
-                .Aggregate(interfaceModuleWithImports, (intermediateModuleText, replacement) =>
-                    replaceFunctionInModule(intermediateModuleText, replacement.functionName, replacement.newFunctionText));
+                var moduleText = replaceFunctionInModuleText(moduleTextBefore, functionName, newFunctionText);
 
-            var allSupportingCodingExpressions =
-                functionsReplacements
-                .Select(functionReplacement => functionReplacement.supportingCodingExpressions)
-                .Aggregate(ImmutableDictionary<string, (string encodeExpression, string decodeExpression, IImmutableSet<string> referencedModules)>.Empty,
-                (a, b) => a.SetItems(b));
+                return
+                    previousAppFiles
+                    .SetItem(moduleFilePath, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
+            }
+
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceCodingFunctionAndAddSupportingSyntax(
+                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
+                string codingFunctionName,
+                string originalFunctionText)
+            {
+                var parseFunctionTypeResult = parseFunctionType(originalFunctionText);
+
+                var appFilesWithSupportingFunctions =
+                    WithSupportForCodingElmType(
+                        previousAppFiles,
+                        parseFunctionTypeResult.typeCanonicalName,
+                        generateSerializerInterfaceModuleName,
+                        out var codingFunctionNames);
+
+                var codeTypeExpression =
+                    parseFunctionTypeResult.isDecoder
+                    ?
+                    codingFunctionNames.decodeFunctionName
+                    :
+                    codingFunctionNames.encodeFunctionName;
+
+                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, codeTypeExpression);
+
+                var originalFunctionTextLines =
+                    originalFunctionText.Replace("\r", "").Split("\n");
+
+                var newFunctionText =
+                    String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { newFunctionBody }));
+
+                return
+                    replaceFunctionInModule(
+                        appFilesWithSupportingFunctions,
+                        moduleName: generateSerializerInterfaceModuleName,
+                        functionName: codingFunctionName,
+                        newFunctionText: newFunctionText);
+            }
+
+            return
+                originalFunctions
+                .Aggregate(originalAppFiles, (intermediateAppFiles, originalFunction) =>
+                    replaceCodingFunctionAndAddSupportingSyntax(
+                        intermediateAppFiles,
+                        originalFunction.functionName,
+                        originalFunction.functionText));
+        }
+
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> WithSupportForCodingElmType(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
+            string elmTypeName,
+            string elmModuleToAddFunctionsIn,
+            out (string encodeFunctionName, string decodeFunctionName) functionNames)
+        {
+            var interfaceModuleFilePath = FilePathFromModuleName(elmModuleToAddFunctionsIn);
+
+            if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
+            {
+                throw new ArgumentException("Did not find the module '" + elmModuleToAddFunctionsIn + "'.");
+            }
+
+            var interfaceModuleOriginalFile = originalAppFiles[interfaceModuleFilePath];
+
+            var interfaceModuleOriginalFileText =
+                Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
+
+            string getOriginalModuleText(string moduleName)
+            {
+                var filePath = FilePathFromModuleName(moduleName);
+
+                originalAppFiles.TryGetValue(filePath, out var moduleFile);
+
+                if (moduleFile == null)
+                    throw new Exception("Did not find the module named '" + moduleFile + "'");
+
+                return Encoding.UTF8.GetString(moduleFile.ToArray());
+            }
+
+            var allOriginalElmModulesNames =
+                originalAppFiles
+                .Select(originalAppFilePathAndContent =>
+                {
+                    var fileName = originalAppFilePathAndContent.Key.Last();
+
+                    if (originalAppFilePathAndContent.Key.First() != "src" || !fileName.EndsWith(".elm"))
+                        return null;
+
+                    return
+                        (IEnumerable<string>)
+                        originalAppFilePathAndContent.Key.Skip(1).Reverse().Skip(1).Reverse()
+                        .Concat(new[] { fileName.Substring(0, fileName.Length - 4) })
+                        .ToImmutableList();
+                })
+                .Where(module => module != null)
+                .OrderBy(module => string.Join(".", module))
+                .ToImmutableHashSet();
+
+            var getExpressionsAndDependenciesForType = new Func<string, CompileElmValueSerializer.ResolveTypeResult>(canonicalTypeName =>
+            {
+                return
+                    CompileElmValueSerializer.ResolveType(
+                        canonicalTypeName,
+                        elmModuleToAddFunctionsIn,
+                        moduleName =>
+                        {
+                            var originalModuleText = getOriginalModuleText(moduleName);
+
+                            if (moduleName == elmModuleToAddFunctionsIn)
+                            {
+                                return
+                                    CompileElm.WithImportsAdded(originalModuleText, allOriginalElmModulesNames);
+                            }
+
+                            return originalModuleText;
+                        });
+            });
+
+            var functionCodingExpressions =
+                CompileElmValueSerializer.EnumerateExpressionsResolvingAllDependencies(
+                    getExpressionsAndDependenciesForType,
+                    ImmutableHashSet.Create(elmTypeName))
+                .ToImmutableList();
+
+            var functionCodingExpressionsDict =
+                functionCodingExpressions
+                .ToImmutableDictionary(entry => entry.elmType, entry => entry.result);
 
             var appFilesAfterExposingCustomTypesInModules =
-                allSupportingCodingExpressions
+                functionCodingExpressionsDict
                 .Select(exprResult => exprResult.Key)
                 .Aggregate(
                     originalAppFiles,
@@ -451,24 +357,48 @@ namespace Kalmit
                         return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
                     });
 
-            var supportingCodingFunctionsText =
-                String.Join("\n\n",
-                allSupportingCodingExpressions
+            var supportingCodingFunctions =
+                functionCodingExpressionsDict
                 .Select(typeResult => CompileElmValueSerializer.BuildJsonCodingFunctionTexts(
                     typeResult.Key,
                     typeResult.Value.encodeExpression,
                     typeResult.Value.decodeExpression))
-                .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction }));
+                .SelectMany(encodeAndDecodeFunctions => new[] { encodeAndDecodeFunctions.encodeFunction, encodeAndDecodeFunctions.decodeFunction })
+                .ToImmutableHashSet()
+                .Union(CompileElmValueSerializer.generalSupportingFunctionsTexts);
 
-            var interfaceModuleText =
-                interfaceModuleWithReplacedFunctions + "\n\n\n" +
-                supportingCodingFunctionsText + "\n\n\n" +
-                String.Join("\n\n", CompileElmValueSerializer.generalSupportingFunctionsTexts) + "\n";
+            var modulesToImport =
+                functionCodingExpressions
+                .SelectMany(functionReplacement =>
+                    functionReplacement.result.referencedModules.Select(moduleName => moduleName.Split(".")))
+                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>())
+                .Remove(elmModuleToAddFunctionsIn.Split("."))
+                .Add(new[] { "Set" })
+                .Add(new[] { "Dict" })
+                .Add(new[] { "Json.Decode" })
+                .Add(new[] { "Json.Encode" });
+
+            var interfaceModuleWithImports =
+                CompileElm.WithImportsAdded(interfaceModuleOriginalFileText, modulesToImport);
+
+            var interfaceModuleWithSupportingFunctions =
+                supportingCodingFunctions
+                .Aggregate(
+                    interfaceModuleWithImports,
+                    (intermediateModuleText, supportingFunction) => CompileElm.WithFunctionAdded(intermediateModuleText, supportingFunction));
+
+            var elmTypeCodingFunctionNames =
+                CompileElmValueSerializer.GetFunctionNamesAndTypeParametersFromTypeText(
+                    getExpressionsAndDependenciesForType(elmTypeName).canonicalTypeText);
+
+            functionNames =
+                (encodeFunctionName: elmTypeCodingFunctionNames.functionNames.encodeFunctionName,
+                decodeFunctionName: elmTypeCodingFunctionNames.functionNames.decodeFunctionName);
 
             return
                 appFilesAfterExposingCustomTypesInModules.SetItem(
                     interfaceModuleFilePath,
-                    Encoding.UTF8.GetBytes(interfaceModuleText).ToImmutableList());
+                    Encoding.UTF8.GetBytes(interfaceModuleWithSupportingFunctions).ToImmutableList());
         }
 
         static IImmutableList<string> FilePathFromModuleName(string moduleName)
@@ -499,16 +429,12 @@ namespace Kalmit
 
         static public IImmutableList<string> InterfaceToHostRootModuleFilePath => FilePathFromModuleName(InterfaceToHostRootModuleName);
 
-        static public string LoweredRootElmModuleCode(
+        static public string InitialRootElmModuleText(
             string rootModuleNameBeforeLowering,
-            string stateTypeNameInRootModuleBeforeLowering,
-            string stateCodingFunctions,
-            string stateEncodingFunctionName,
-            string stateDecodingFunctionName,
-            IImmutableList<IImmutableList<string>> modulesToImport) =>
+            string stateTypeNameInRootModuleBeforeLowering) =>
             $@"
 module " + InterfaceToHostRootModuleName + $@" exposing
-    (State
+    ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
     , interfaceToHost_processEvent
@@ -517,13 +443,7 @@ module " + InterfaceToHostRootModuleName + $@" exposing
     )
 
 import " + rootModuleNameBeforeLowering + $@"
-import Set
-import Dict
 import Platform
-import Json.Encode
-import Json.Decode
-" + String.Join("\n", modulesToImport.Select(moduleName => "import " + String.Join(".", moduleName)))
-        + $@"
 
 type alias DeserializedState = " + rootModuleNameBeforeLowering + "." + stateTypeNameInRootModuleBeforeLowering + $@"
 
@@ -596,10 +516,6 @@ jsonEncodeState state =
             deserializedState |> jsonEncodeDeserializedState
 
 
-jsonEncodeDeserializedState =
-    " + stateEncodingFunctionName + $@"
-
-
 deserializeState : String -> State
 deserializeState serializedState =
     serializedState
@@ -615,14 +531,6 @@ jsonDecodeState =
         , jsonDecodeDeserializedState |> Json.Decode.map DeserializeSuccessful
         ]
 
-
-jsonDecodeDeserializedState : Json.Decode.Decoder DeserializedState
-jsonDecodeDeserializedState =
-    " + stateDecodingFunctionName + $@"
-
-
--- State encoding and decoding functions -->
-
-" + stateCodingFunctions + "\n\n\n" + String.Join("\n\n", CompileElmValueSerializer.generalSupportingFunctionsTexts) + "\n";
+";
     }
 }

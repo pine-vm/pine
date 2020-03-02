@@ -184,6 +184,15 @@ namespace Kalmit
             return originalElmModuleText.Insert(firstImportMatch.Index, importsText + "\n");
         }
 
+        static public string WithFunctionAdded(
+            string originalElmModuleText, string functionText)
+        {
+            if (originalElmModuleText.Contains("\n" + functionText))
+                return originalElmModuleText;
+
+            return originalElmModuleText + "\n\n" + functionText + "\n";
+        }
+
         static public string ExposeValueInElmModule(string originalElmModuleText, string nameToExpose)
         {
             return AdaptModuleExposeSyntax(originalElmModuleText, originalExposeSyntax =>
