@@ -195,17 +195,18 @@ namespace Kalmit
         static public ResolveTypeResult ResolveType(
             string rootTypeText,
             string sourceModuleName,
-            Func<string, string> getModuleText)
+            Func<string, string> getModuleText,
+            Action<string> logWriteLine)
         {
             rootTypeText = rootTypeText.Trim();
 
-            Console.WriteLine("Begin ResolveType for '" + rootTypeText + "' in module '" + sourceModuleName + "'.");
+            logWriteLine?.Invoke("Begin ResolveType for '" + rootTypeText + "' in module '" + sourceModuleName + "'.");
 
             var sourceModuleText = getModuleText(sourceModuleName);
 
             if (LeafExpressions.TryGetValue(rootTypeText, out var leafExpressions))
             {
-                Console.WriteLine("Found a leaf for type '" + rootTypeText + "'.");
+                logWriteLine?.Invoke("Found a leaf for type '" + rootTypeText + "'.");
 
                 return new ResolveTypeResult
                 {
@@ -236,7 +237,7 @@ namespace Kalmit
                 if (StartsWithLowercaseLetter(typeText))
                     return (typeText, ImmutableHashSet<string>.Empty);
 
-                var canonicalTypeText = ResolveType(typeText, sourceModuleName, getModuleText).canonicalTypeText;
+                var canonicalTypeText = ResolveType(typeText, sourceModuleName, getModuleText, logWriteLine).canonicalTypeText;
 
                 return (canonicalTypeText, ImmutableHashSet.Create(canonicalTypeText));
             }
@@ -245,12 +246,13 @@ namespace Kalmit
 
             if (rootType.Alias != null)
             {
-                Console.WriteLine("Type '" + rootTypeText + "' is alias for '" + rootType.Alias.Value.aliasedText + "'.");
+                logWriteLine?.Invoke("Type '" + rootTypeText + "' is alias for '" + rootType.Alias.Value.aliasedText + "'.");
 
                 return ResolveType(
                     rootType.Alias.Value.aliasedText,
                     sourceModuleName,
-                    getModuleText);
+                    getModuleText,
+                    logWriteLine);
             }
 
             if (rootType.Instance != null)
@@ -262,25 +264,26 @@ namespace Kalmit
 
                     if (referencedModuleName != sourceModuleName)
                     {
-                        Console.WriteLine("Type '" + rootTypeText + "' in '" + sourceModuleName + "' refers to '" + referencedModuleName + "." + typeNameInReferencedModule + "'.");
+                        logWriteLine?.Invoke("Type '" + rootTypeText + "' in '" + sourceModuleName + "' refers to '" + referencedModuleName + "." + typeNameInReferencedModule + "'.");
 
                         return ResolveType(
                             typeNameInReferencedModule,
                             referencedModuleName,
-                            getModuleText);
+                            getModuleText,
+                            logWriteLine);
                     }
 
-                    Console.WriteLine("Resolve type text for '" + rootTypeText + "' in '" + sourceModuleName + "'.");
+                    logWriteLine?.Invoke("Resolve type text for '" + rootTypeText + "' in '" + sourceModuleName + "'.");
 
                     var referencedTypeText = GetTypeDefinitionTextFromModuleText(rootTypeText, sourceModuleText);
 
                     if (!(0 < referencedTypeText?.Length))
                         throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
 
-                    return ResolveType(referencedTypeText, sourceModuleName, getModuleText);
+                    return ResolveType(referencedTypeText, sourceModuleName, getModuleText, logWriteLine);
                 }
 
-                Console.WriteLine("Type '" + rootTypeText + "' is instance of '" +
+                logWriteLine?.Invoke("Type '" + rootTypeText + "' is instance of '" +
                     rootType.Instance.Value.typeName + "' with " +
                     rootType.Instance.Value.parameters.Count + " parameters.");
 
@@ -288,7 +291,7 @@ namespace Kalmit
                     rootType.Instance.Value.parameters
                     .Select(parameter =>
                     {
-                        var dependencies = ResolveType(parameter, sourceModuleName, getModuleText);
+                        var dependencies = ResolveType(parameter, sourceModuleName, getModuleText, logWriteLine);
 
                         var (functionNames, typeParametersNames) = GetFunctionNamesAndTypeParametersFromTypeText(dependencies.canonicalTypeText);
 
@@ -313,7 +316,7 @@ namespace Kalmit
                 }
                 else
                 {
-                    var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, getModuleText);
+                    var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, getModuleText, logWriteLine);
                     instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText;
                     instantiatedTypeFunctionNameCommonPart = GetFunctionNamesAndTypeParametersFromTypeText(instantiatedTypeCanonicalName).functionNames.commonPart;
                     dependenciesFromInstantiatedType = ImmutableHashSet.Create(instantiatedTypeResolution.canonicalTypeText);
@@ -351,7 +354,7 @@ namespace Kalmit
 
             if (rootType.Record != null)
             {
-                Console.WriteLine("'" + rootTypeText + "' is a record type.");
+                logWriteLine?.Invoke("'" + rootTypeText + "' is a record type.");
 
                 var fields = rootType.Record.Value.fields.Select(recordField =>
                     {
@@ -426,7 +429,7 @@ namespace Kalmit
 
             if (rootType.Custom != null)
             {
-                Console.WriteLine("'" + rootTypeText + "' is a custom type.");
+                logWriteLine?.Invoke("'" + rootTypeText + "' is a custom type.");
 
                 (string encodeExpression, string decodeExpression, IImmutableSet<string> dependencies) compileExpressions()
                 {
@@ -535,7 +538,7 @@ namespace Kalmit
 
             if (rootType.Tuple != null)
             {
-                Console.WriteLine("'" + rootTypeText + "' is a " + rootType.Tuple.Count + "-tuple.");
+                logWriteLine?.Invoke("'" + rootTypeText + "' is a " + rootType.Tuple.Count + "-tuple.");
 
                 var tupleElementsResults =
                     rootType.Tuple

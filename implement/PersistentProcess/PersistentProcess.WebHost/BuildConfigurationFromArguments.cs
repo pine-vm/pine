@@ -17,64 +17,10 @@ namespace Kalmit.PersistentProcess.WebHost
         public static IImmutableList<string> FrontendElmAppRootFilePath =>
             ImmutableList.Create("src", "FrontendWeb", "Main.elm");
 
-        static public void BuildConfiguration(string[] args)
-        {
-            string argumentValueFromParameterName(string parameterName) =>
-                args
-                .Select(arg => Regex.Match(arg, parameterName + "=(.*)", RegexOptions.IgnoreCase))
-                .FirstOrDefault(match => match.Success)
-                ?.Groups[1].Value;
-
-            var outputArgument = argumentValueFromParameterName("--output");
-
-            var loweredElmOutputArgument = argumentValueFromParameterName("--lowered-elm-output");
-
-            //  TODO: Remove redundancy: Probably move these arguments towards integrating app into the CLI project.
-
-            var frontendWebElmMakeCommandAppendix = argumentValueFromParameterName("--frontend-web-elm-make-appendix");
-
-            var (compileConfigZipArchive, loweredElmAppFiles) = BuildConfigurationZipArchive(frontendWebElmMakeCommandAppendix);
-
-            if (0 < loweredElmOutputArgument?.Length)
-            {
-                Console.WriteLine("I write the lowered Elm app to '" + loweredElmOutputArgument + "'.");
-
-                foreach (var file in loweredElmAppFiles)
-                {
-                    var outputPath = Path.Combine(new[] { loweredElmOutputArgument }.Concat(file.Key).ToArray());
-                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-                    File.WriteAllBytes(outputPath, file.Value.ToArray());
-                }
-            }
-
-            var configZipArchive = compileConfigZipArchive();
-
-            var configZipArchiveFileId =
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
-
-            var webAppConfigFileId =
-                Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
-                    ZipArchive.EntriesFromZipArchive(configZipArchive))));
-
-            Console.WriteLine(
-                "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
-
-            if (outputArgument == null)
-            {
-                Console.WriteLine("I did not see a path for output, so I don't attempt to save the configuration to a file.");
-            }
-            else
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(outputArgument));
-                File.WriteAllBytes(outputArgument, configZipArchive);
-
-                Console.WriteLine("I saved zip arcchive " + configZipArchiveFileId + " to '" + outputArgument + "'");
-            }
-        }
-
         static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
             BuildConfigurationZipArchive(
-            string frontendWebElmMakeCommandAppendix)
+            string frontendWebElmMakeCommandAppendix,
+            Action<string> verboseLogWriteLine)
         {
             var currentDirectory = Environment.CurrentDirectory;
 
@@ -95,7 +41,9 @@ namespace Kalmit.PersistentProcess.WebHost
             Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", FrontendElmAppRootFilePath) + "'.");
 
             var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
-                elmAppFilesBeforeLowering, ElmAppInterfaceConfig.Default);
+                elmAppFilesBeforeLowering,
+                ElmAppInterfaceConfig.Default,
+                verboseLogWriteLine);
 
             var compileConfigFile = new Func<byte[]>(() =>
             {

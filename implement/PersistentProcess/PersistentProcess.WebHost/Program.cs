@@ -8,24 +8,6 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class Program
     {
-        public static void Main(string[] args)
-        {
-            if (args.Contains("build-config"))
-            {
-                Console.WriteLine("I build the configuration.");
-                BuildConfigurationFromArguments.BuildConfiguration(args);
-                return;
-            }
-
-            if (args.Contains("start-server"))
-            {
-                Console.WriteLine("I start a server.");
-                var webHostBuilder = CreateWebHostBuilder(args);
-                webHostBuilder.Build().Run();
-                return;
-            }
-        }
-
         public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((hostingContext, config) =>

@@ -61,7 +61,8 @@ namespace Kalmit.PersistentProcess.Test
                     ElmApp.FilesFilteredForElmApp(
                         Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
                     .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent))),
-                    ElmAppInterfaceConfig.Default);
+                    ElmAppInterfaceConfig.Default,
+                    Console.WriteLine);
 
         static public IProcessStoreReader EmptyProcessStoreReader() =>
             new ProcessStoreReaderFromDelegates

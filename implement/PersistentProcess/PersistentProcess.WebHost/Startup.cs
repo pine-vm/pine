@@ -50,7 +50,8 @@ namespace Kalmit.PersistentProcess.WebHost
                         "Loading configuration from current directory.");
 
                     var (compileConfigZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                        frontendWebElmMakeCommandAppendix: config.GetValue<string>(Configuration.WithSettingFrontendWebElmMakeAppendixSettingKey));
+                        frontendWebElmMakeCommandAppendix: config.GetValue<string>(Configuration.WithSettingFrontendWebElmMakeAppendixSettingKey),
+                        verboseLogWriteLine: null);
 
                     webAppConfigFileZipArchive = compileConfigZipArchive();
                 }

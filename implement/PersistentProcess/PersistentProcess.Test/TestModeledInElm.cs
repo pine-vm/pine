@@ -23,7 +23,8 @@ namespace Kalmit.PersistentProcess.Test
                     ElmApp.FilesFilteredForElmApp(
                         Filesystem.GetAllFilesFromDirectory(FilePathStringFromPath(directoryPath)))
                     .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent))),
-                    ElmAppInterfaceConfig.Default);
+                    ElmAppInterfaceConfig.Default,
+                    Console.WriteLine);
 
         /*
         Get the value from `tests` in the Elm module `Main`.

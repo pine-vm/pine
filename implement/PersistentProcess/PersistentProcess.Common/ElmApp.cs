@@ -50,13 +50,15 @@ namespace Kalmit
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
-            ElmAppInterfaceConfig interfaceConfig) =>
+            ElmAppInterfaceConfig interfaceConfig,
+            Action<string> logWriteLine) =>
             LoweredElmAppForBackendStateSerializer(
-                LoweredElmAppToGenerateJsonCoders(originalAppFiles), interfaceConfig);
+                LoweredElmAppToGenerateJsonCoders(originalAppFiles, logWriteLine), interfaceConfig, logWriteLine);
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForBackendStateSerializer(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
-            ElmAppInterfaceConfig interfaceConfig)
+            ElmAppInterfaceConfig interfaceConfig,
+            Action<string> logWriteLine)
         {
             if (originalAppFiles.ContainsKey(InterfaceToHostRootModuleFilePath))
             {
@@ -87,6 +89,7 @@ namespace Kalmit
                     appFilesWithInitialRootModule,
                     interfaceConfig.RootModuleName + "." + stateTypeNameInModule,
                     InterfaceToHostRootModuleName,
+                    logWriteLine,
                     out var functionNames);
 
             var rootModuleTextWithSupportAdded =
@@ -107,7 +110,8 @@ namespace Kalmit
         }
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppToGenerateJsonCoders(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles)
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
+            Action<string> logWriteLine)
         {
             var generateSerializerInterfaceModuleName = "ElmFullstackLoweringInterface.GenerateJsonCoders";
 
@@ -199,6 +203,7 @@ namespace Kalmit
                         previousAppFiles,
                         parseFunctionTypeResult.typeCanonicalName,
                         generateSerializerInterfaceModuleName,
+                        logWriteLine,
                         out var codingFunctionNames);
 
                 var codeTypeExpression =
@@ -237,6 +242,7 @@ namespace Kalmit
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             string elmTypeName,
             string elmModuleToAddFunctionsIn,
+            Action<string> logWriteLine,
             out (string encodeFunctionName, string decodeFunctionName) functionNames)
         {
             var interfaceModuleFilePath = FilePathFromModuleName(elmModuleToAddFunctionsIn);
@@ -299,7 +305,8 @@ namespace Kalmit
                             }
 
                             return originalModuleText;
-                        });
+                        },
+                        logWriteLine);
             });
 
             var functionCodingExpressions =

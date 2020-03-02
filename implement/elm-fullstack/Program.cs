@@ -1,6 +1,8 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Kalmit;
 using Kalmit.PersistentProcess.WebHost;
 using McMaster.Extensions.CommandLineUtils;
 
@@ -21,6 +23,9 @@ namespace elm_fullstack
             app.HelpOption(inherited: true);
 
             app.VersionOption(template: "-v|--version", shortFormVersion: "version " + AppVersionId);
+
+            CommandOption verboseLogOptionFromCommand(CommandLineApplication command) =>
+                command.Option("--verbose-log", "", CommandOptionType.NoValue);
 
             app.Command("run-server", runServerCmd =>
             {
@@ -61,11 +66,26 @@ namespace elm_fullstack
             {
                 buildConfigCmd.Description = "Build a configuration file that can be used to run a server.";
 
+                var verboseLogOption = verboseLogOptionFromCommand(buildConfigCmd);
+                var outputOption = buildConfigCmd.Option("--output", "Path to write the zip-archive to.", CommandOptionType.SingleValue);
+                var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
+                var frontendWebElmMakeCommandAppendixOption = buildConfigCmd.Option("--frontend-web-elm-make-appendix", "Text to append when invoking Elm make.", CommandOptionType.SingleValue);
+
                 buildConfigCmd.ThrowOnUnexpectedArgument = false;
 
                 buildConfigCmd.OnExecute(() =>
                 {
-                    Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfiguration(args);
+                    var verboseLogWriteLine =
+                        verboseLogOption.HasValue() ?
+                        (Action<string>)Console.WriteLine
+                        :
+                        null;
+
+                    BuildConfiguration(
+                        outputOption: outputOption.Value(),
+                        loweredElmOutputOption: loweredElmOutputOption.Value(),
+                        frontendWebElmMakeCommandAppendixOption: frontendWebElmMakeCommandAppendixOption.Value(),
+                        verboseLogWriteLine: verboseLogWriteLine);
                 });
             });
 
@@ -130,6 +150,53 @@ namespace elm_fullstack
                 .Split(System.IO.Path.PathSeparator).Contains(executableDirectoryPath);
 
             return (commandName, executableIsRegisteredOnPath, registerExecutableForCurrentUser);
+        }
+
+        static public void BuildConfiguration(
+            string outputOption,
+            string loweredElmOutputOption,
+            string frontendWebElmMakeCommandAppendixOption,
+            Action<string> verboseLogWriteLine)
+        {
+            var (compileConfigZipArchive, loweredElmAppFiles) =
+                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                    frontendWebElmMakeCommandAppendixOption, verboseLogWriteLine);
+
+            if (0 < loweredElmOutputOption?.Length)
+            {
+                Console.WriteLine("I write the lowered Elm app to '" + loweredElmOutputOption + "'.");
+
+                foreach (var file in loweredElmAppFiles)
+                {
+                    var outputPath = Path.Combine(new[] { loweredElmOutputOption }.Concat(file.Key).ToArray());
+                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                    File.WriteAllBytes(outputPath, file.Value.ToArray());
+                }
+            }
+
+            var configZipArchive = compileConfigZipArchive();
+
+            var configZipArchiveFileId =
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
+
+            var webAppConfigFileId =
+                Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                    Kalmit.ZipArchive.EntriesFromZipArchive(configZipArchive))));
+
+            Console.WriteLine(
+                "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
+
+            if (outputOption == null)
+            {
+                Console.WriteLine("I did not see a path for output, so I don't attempt to save the configuration to a file.");
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(outputOption));
+                File.WriteAllBytes(outputOption, configZipArchive);
+
+                Console.WriteLine("I saved zip archive " + configZipArchiveFileId + " to '" + outputOption + "'");
+            }
         }
 
         static string GetCurrentProcessExecutableFilePath() =>

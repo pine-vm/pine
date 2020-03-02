@@ -317,7 +317,8 @@ type Dict key value
                 var resolvedType = Kalmit.CompileElmValueSerializer.ResolveType(
                     testCase.typeToResolve,
                     testCase.typeToResolveModule,
-                    getModuleText);
+                    getModuleText,
+                    Console.WriteLine);
 
                 Assert.AreEqual(testCase.expectedCanonicalText, resolvedType.canonicalTypeText);
 
@@ -332,7 +333,8 @@ type Dict key value
                     var loweredElmApp =
                         ElmApp.AsCompletelyLoweredElmApp(
                             ElmApp.ToFlatDictionaryWithPathComparer(originalAppFilesList),
-                        new ElmAppInterfaceConfig { RootModuleName = "RootModule" });
+                            new ElmAppInterfaceConfig { RootModuleName = "RootModule" },
+                            Console.WriteLine);
                 }
                 catch (Exception e)
                 {
