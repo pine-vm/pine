@@ -53,7 +53,10 @@ type alias Tuple3 =
 
 type CustomType
     = CustomTagWithoutParameter
-    | CustomTagWithParameter Int
+    | CustomTagWithOneParameter Int
+    | CustomTagWithTwoParameters String Int
+    | CustomTagWithMaybeInstance (Maybe Int)
+    | CustomTagWithResultInstance (Result String Int)
 
 
 type CustomTypeWithTypeParameter a
@@ -104,7 +107,15 @@ interfaceToHost_initState =
     , lastHttpRequests = []
     , tuple2 = ( 123, "second element in tuple A" )
     , tuple3 = ( 456, "second element in tuple B", 789 )
-    , list_custom_type = [ CustomTagWithoutParameter, CustomTagWithParameter 4 ]
+    , list_custom_type =
+        [ CustomTagWithoutParameter
+        , CustomTagWithOneParameter 4
+        , CustomTagWithTwoParameters "test" 11
+        , CustomTagWithMaybeInstance Nothing
+        , CustomTagWithMaybeInstance (Just 123)
+        , CustomTagWithResultInstance (Err "error string")
+        , CustomTagWithResultInstance (Ok 678)
+        ]
     , opaque_custom_type = OpaqueCustomType "content"
     , recursive_type = TagRecurse (TagRecurse (TagRecurse (TagTerminate 4)))
     , bool = True

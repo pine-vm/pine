@@ -142,7 +142,7 @@ namespace Kalmit
                 (instanceTypeTextWithParametersMatch.Groups[1].Value,
                 Regex.Split(instanceTypeTextWithParametersMatch.Groups[2].Value.Trim(), @"\s+").ToImmutableList());
 
-            var parseTypeResult = ParseElmTypeText(typeText);
+            var parseTypeResult = ParseElmTypeText(typeText, canBeInstance: true);
 
             var parsedType = parseTypeResult.parsedType;
 
@@ -166,7 +166,7 @@ namespace Kalmit
 
         static IEnumerable<string> EnumerateAllTypeNamesFromTypeText(string typeText)
         {
-            var parseTypeResult = ParseElmTypeText(typeText);
+            var parseTypeResult = ParseElmTypeText(typeText, canBeInstance: true);
 
             if (0 < parseTypeResult.remainingString?.Trim()?.Length)
                 throw new NotSupportedException("Unexpected remaining string after parsing type: '" + parseTypeResult.remainingString + "'.");
@@ -242,7 +242,7 @@ namespace Kalmit
                 return (canonicalTypeText, ImmutableHashSet.Create(canonicalTypeText));
             }
 
-            var rootType = ParseElmTypeText(rootTypeText).parsedType;
+            var rootType = ParseElmTypeText(rootTypeText, canBeInstance: true).parsedType;
 
             if (rootType.Alias != null)
             {
@@ -454,44 +454,86 @@ namespace Kalmit
                             {
                                 return new
                                 {
-                                    encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax("", "Json.Encode.object []"),
+                                    encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax("", "Json.Encode.list identity []"),
                                     decodeExpression = decodeSyntaxCommonPart + " (Json.Decode.succeed " + typeTagCanonicalName + ")",
                                     dependencies = ImmutableHashSet<string>.Empty,
                                 };
                             }
 
-                            if (1 < typeTag.Value.Count)
-                                throw new NotSupportedException("Problem with '" + typeTagCanonicalName + "': Tags with more than one parameter are not supported.");
+                            var tagParametersExpressions =
+                                typeTag.Value.Select(tagParameterType =>
+                                {
+                                    var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
 
-                            var tagParameterType = typeTag.Value.Single();
+                                    var (tagParameterTypeFunctionNames, tagParameterTypeParametersNames) =
+                                        GetFunctionNamesAndTypeParametersFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
 
-                            var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
+                                    var tagParameterEncodeFunction =
+                                        expressionTextForFunctionWithOptionalTypeParameters(
+                                            tagParameterTypeFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, tagParameterTypeParametersNames);
 
-                            var (tagParameterTypeFunctionNames, tagParameterTypeParametersNames) =
-                                GetFunctionNamesAndTypeParametersFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
+                                    var tagParameterDecodeFunction =
+                                        expressionTextForFunctionWithOptionalTypeParameters(
+                                            tagParameterTypeFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, tagParameterTypeParametersNames);
 
-                            var tagParameterEncodeFunction =
-                                expressionTextForFunctionWithOptionalTypeParameters(
-                                    tagParameterTypeFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, tagParameterTypeParametersNames);
+                                    return new
+                                    {
+                                        encodeFunction = tagParameterEncodeFunction,
+                                        decodeFunction = tagParameterDecodeFunction,
+                                        canonicalTypeTextAndDependencies = tagParameterCanonicalTypeTextAndDependencies,
+                                    };
+                                }).ToImmutableList();
 
-                            var tagParameterDecodeFunction =
-                                expressionTextForFunctionWithOptionalTypeParameters(
-                                    tagParameterTypeFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                            var argumentName = "tagArgument";
+                            var tagDecodeExpressionBeforeLazy =
+                                tagParametersExpressions.Count == 1
+                                /*
+                                2020-03-07: To support easy migration of existing applications, support decoding from the older JSON representation for tags with one parameter.
+                                This branch can be removed when all apps have been migrated.
+                                */
+                                ?
+                                "Json.Decode.map " + typeTagCanonicalName +
+                                " (Json.Decode.oneOf [ " + tagParametersExpressions.Single().decodeFunction + ", " +
+                                "(Json.Decode.index 0 " + tagParametersExpressions.Single().decodeFunction + ")" +
+                                " ])"
+                                :
+                                "Json.Decode.map" + tagParametersExpressions.Count.ToString() + " " + typeTagCanonicalName + " " +
+                                    string.Join(" ", tagParametersExpressions.Select((tagParamExpr, tagParamIndex) =>
+                                        "(Json.Decode.index " + tagParamIndex.ToString() + " " + tagParamExpr.decodeFunction + ")"));
 
                             var tagDecodeExpression =
                                 decodeSyntaxCommonPart + @" (Json.Decode.lazy (\_ -> " +
-                                tagParameterDecodeFunction + " |> Json.Decode.map " + typeTagCanonicalName +
+                                tagDecodeExpressionBeforeLazy +
                                 " ) )";
+
+                            var encodeArgumentsAndExpressions =
+                                tagParametersExpressions
+                                .Select((tagArgumentExpressions, tagParameterIndex) =>
+                                {
+                                    var argumentName = "tagArgument" + tagParameterIndex.ToString();
+
+                                    return (argumentName, encodeExpression: argumentName + " |> " + tagArgumentExpressions.encodeFunction);
+                                }).ToImmutableList();
+
+                            var encodeArgumentSyntax =
+                                string.Join(" ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.argumentName));
+
+                            var encodeObjectContentSyntax =
+                                "[ " +
+                                string.Join(", ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.encodeExpression))
+                                + " ] |> Json.Encode.list identity";
+
+                            var tagParametersDependencies =
+                                tagParametersExpressions
+                                .Select(tagParamResult => tagParamResult.canonicalTypeTextAndDependencies.dependencies)
+                                .Aggregate(ImmutableHashSet<string>.Empty, (a, b) => a.Union(b));
 
                             return new
                             {
                                 encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(
-                                    argumentName,
-                                    argumentName + " |> " + tagParameterEncodeFunction),
+                                    encodeArgumentSyntax,
+                                    encodeObjectContentSyntax),
                                 decodeExpression = tagDecodeExpression,
-                                dependencies = tagParameterCanonicalTypeTextAndDependencies.dependencies.ToImmutableHashSet(),
+                                dependencies = tagParametersDependencies,
                             };
                         })
                         .ToImmutableList();
@@ -614,7 +656,8 @@ namespace Kalmit
         }
 
         static public (ElmType parsedType, string remainingString) ParseElmTypeText(
-            string elmTypeText)
+            string elmTypeText,
+            bool canBeInstance)
         {
             //  Assume: Custom type tags are all on their own line.
 
@@ -668,7 +711,7 @@ namespace Kalmit
 
                             while (0 < tagParametersTextRemaining?.Length)
                             {
-                                var (parameter, remainingAfterParameter) = ParseElmTypeText(tagParametersTextRemaining);
+                                var (parameter, remainingAfterParameter) = ParseElmTypeText(tagParametersTextRemaining, canBeInstance: false);
 
                                 var tagParameterText =
                                     tagParametersTextRemaining
@@ -717,7 +760,7 @@ namespace Kalmit
                             {
                                 var parsedType =
                                     1 == elements.Count ?
-                                    ParseElmTypeText(elements.Single()).parsedType
+                                    ParseElmTypeText(elements.Single(), canBeInstance: true).parsedType
                                     :
                                     new ElmType
                                     {
@@ -737,7 +780,7 @@ namespace Kalmit
                                 restWithoutLeadingWhitespace = restAfterSeparator.TrimStart();
                             }
 
-                            var parsedElement = ParseElmTypeText(restWithoutLeadingWhitespace);
+                            var parsedElement = ParseElmTypeText(restWithoutLeadingWhitespace, canBeInstance: true);
 
                             var parsedElementText = restWithoutLeadingWhitespace.Substring(0, restWithoutLeadingWhitespace.Length - parsedElement.remainingString.Length);
 
@@ -771,7 +814,7 @@ namespace Kalmit
 
                             var (_, restAfterFieldColon) = parseRegexPattern(restAfterFieldName, @"\s*:\s*");
 
-                            var (fieldType, restAfterFieldType) = ParseElmTypeText(restAfterFieldColon);
+                            var (fieldType, restAfterFieldType) = ParseElmTypeText(restAfterFieldColon, canBeInstance: true);
 
                             recordRest = restAfterFieldType;
 
@@ -788,6 +831,15 @@ namespace Kalmit
                         var nameInInstanceRegexPattern = @"[\w\d_\.]+";
 
                         var (firstName, restAfterFirstName) = parseRegexPattern(withoutLeadingWhitespace, nameInInstanceRegexPattern);
+
+                        if (!canBeInstance)
+                        {
+                            return (parsedType: new ElmType
+                            {
+                                Instance = (typeName: firstName, parameters: ImmutableList<string>.Empty),
+                            },
+                            remainingString: restAfterFirstName);
+                        }
 
                         var parametersTexts = new List<string>();
 
@@ -811,7 +863,7 @@ namespace Kalmit
 
                             if (0 < parameterTypeBegin.Length)
                             {
-                                var parameterParsed = ParseElmTypeText(instanceRestWithoutWhitespace);
+                                var parameterParsed = ParseElmTypeText(instanceRestWithoutWhitespace, canBeInstance: false);
 
                                 var parameterTypeText = instanceRestWithoutWhitespace.Substring(0, instanceRestWithoutWhitespace.Length - parameterParsed.remainingString.Length);
 
@@ -1019,18 +1071,19 @@ namespace Kalmit
         }
 
         static public IImmutableList<string> generalSupportingFunctionsTexts => new[]{
-            jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" encoder valueToEncode =
+            jsonEncodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" encodeJust valueToEncode =
     case valueToEncode of
         Nothing ->
-            [ ( ""Nothing"", [] |> Json.Encode.object ) ] |> Json.Encode.object
+            [ ( ""Nothing"", [] |> Json.Encode.list identity ) ] |> Json.Encode.object
 
         Just just ->
-            [ ( ""Just"", just |> encoder ) ] |> Json.Encode.object
+            [ ( ""Just"", [ just ] |> Json.Encode.list encodeJust ) ] |> Json.Encode.object
 ",
             jsonDecodeFunctionNamePrefix + jsonCodeMaybeFunctionNameCommonPart + $@" decoder =
     Json.Decode.oneOf
         [ Json.Decode.field ""Nothing"" (Json.Decode.succeed Nothing)
-        , Json.Decode.field ""Just"" (decoder |> Json.Decode.map Just)
+        , Json.Decode.field ""Just"" ((Json.Decode.index 0 decoder) |> Json.Decode.map Just)
+        , Json.Decode.field ""Just"" (decoder |> Json.Decode.map Just) -- 2020-03-07 Support easy migration of apps: Support decode from older JSON format for now.
         , Json.Decode.null Nothing -- Temporary backwardscompatibility: Map 'null' to Nothing
         ]
 ",
@@ -1066,15 +1119,17 @@ namespace Kalmit
             jsonEncodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + $@" encodeErr encodeOk valueToEncode =
     case valueToEncode of
         Err valueToEncodeError ->
-            [ ( ""Err"", valueToEncodeError |> encodeErr ) ] |> Json.Encode.object
+            [ ( ""Err"", [ valueToEncodeError ] |> Json.Encode.list encodeErr ) ] |> Json.Encode.object
 
         Ok valueToEncodeOk ->
-            [ ( ""Ok"", valueToEncodeOk |> encodeOk ) ] |> Json.Encode.object
+            [ ( ""Ok"", [ valueToEncodeOk ] |> Json.Encode.list encodeOk ) ] |> Json.Encode.object
 ",
             jsonDecodeFunctionNamePrefix + jsonCodeResultFunctionNameCommonPart + $@" decodeErr decodeOk =
     Json.Decode.oneOf
-        [ Json.Decode.field ""Err"" decodeErr |> Json.Decode.map Err
-        , Json.Decode.field ""Ok"" decodeOk |> Json.Decode.map Ok
+        [ Json.Decode.field ""Err"" (Json.Decode.index 0 decodeErr) |> Json.Decode.map Err
+        , Json.Decode.field ""Ok"" (Json.Decode.index 0 decodeOk) |> Json.Decode.map Ok
+        , Json.Decode.field ""Err"" decodeErr |> Json.Decode.map Err -- 2020-03-07 Support easy migration of apps: Support decode from older JSON format for now.
+        , Json.Decode.field ""Ok"" decodeOk |> Json.Decode.map Ok -- 2020-03-07 Support easy migration of apps: Support decode from older JSON format for now.
         ]
 ",
             jsonEncodeFunctionNamePrefix + jsonCodeTupleFunctionNameCommonPart + $@"2 encodeA encodeB ( a, b ) =

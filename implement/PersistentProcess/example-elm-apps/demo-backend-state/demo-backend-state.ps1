@@ -1,4 +1,4 @@
-docker build --tag elm-fullstack-test ./../../
+docker build --tag elm-fullstack-test ./../../../
 
 docker stop fullstack-test-container
 
