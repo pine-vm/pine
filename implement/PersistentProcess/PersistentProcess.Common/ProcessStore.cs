@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
@@ -64,7 +64,15 @@ namespace Kalmit.ProcessStore
         ReductionRecord GetReduction(byte[] reducedCompositionHash);
     }
 
-    public class ProcessStoreInFileDirectory : IProcessStoreWriter, IProcessStoreReader
+    public class ProcessStoreInFileDirectory : ProcessStoreInFileStore
+    {
+        public ProcessStoreInFileDirectory(string directoryPath, Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
+            : base(new FileStoreFromSystemIOFile(directoryPath), getCompositionLogRequestedNextFilePath)
+        {
+        }
+    }
+
+    public class ProcessStoreInFileStore : IProcessStoreWriter, IProcessStoreReader
     {
         private class ReductionRecordInFile
         {
@@ -73,16 +81,16 @@ namespace Kalmit.ProcessStore
             public ValueInFile ReducedValue;
         }
 
-        string directory;
+        IFileStore fileStore;
 
-        Func<string> getCompositionLogRequestedNextFileName;
+        Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath;
 
         readonly object appendSerializedCompositionRecordLock = new object();
-        string appendSerializedCompositionRecordLastFileName = null;
+        IImmutableList<string> appendSerializedCompositionRecordLastFilePath = null;
 
-        string CompositionDirectoryPath => Path.Combine(directory, "composition");
+        IFileStore compositionFileStore => new FileStoreFromSubdirectory(fileStore, "composition");
 
-        string ReductionDirectoryPath => Path.Combine(directory, "reduction");
+        IFileStore reductionFileStore => new FileStoreFromSubdirectory(fileStore, "reduction");
 
         static public Newtonsoft.Json.JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
         {
@@ -91,42 +99,44 @@ namespace Kalmit.ProcessStore
 
         static Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
 
-        public ProcessStoreInFileDirectory(
-            string directory,
-            Func<string> getCompositionLogRequestedNextFileName)
+        public ProcessStoreInFileStore(
+            IFileStore fileStore,
+            Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
         {
-            this.directory = directory;
-            this.getCompositionLogRequestedNextFileName = getCompositionLogRequestedNextFileName;
+            this.fileStore = fileStore;
+            this.getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
         }
 
-        static IEnumerable<string> CompositionLogFileOrder(IEnumerable<string> logFilesNames) =>
-            logFilesNames?.OrderBy(fileName => fileName);
+        static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
+            logFilesNames?.OrderBy(filePath => string.Join("", filePath));
 
-        public IEnumerable<string> EnumerateCompositionsLogFilesNames() =>
-            Directory.Exists(CompositionDirectoryPath) ?
-            CompositionLogFileOrder(Directory.GetFiles(CompositionDirectoryPath, "*", SearchOption.AllDirectories)) :
-            (IEnumerable<string>)Array.Empty<string>();
+        public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
+            CompositionLogFileOrder(
+                compositionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty));
 
         public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
-            EnumerateCompositionsLogFilesNames().Reverse()
+            EnumerateCompositionsLogFilesPaths().Reverse()
             .SelectMany(compositionFilePath =>
-                File.ReadAllLines(compositionFilePath, Encoding.UTF8).Reverse().Select(Encoding.UTF8.GetBytes));
+                Encoding.UTF8.GetString(compositionFileStore.GetFileContent(compositionFilePath))
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
+                .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord)));
 
         public ReductionRecord GetReduction(byte[] reducedCompositionHash)
         {
             var reducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(reducedCompositionHash);
 
-            var filePath = Path.Combine(ReductionDirectoryPath, reducedCompositionHashBase16);
+            var filePath = ImmutableList.Create(reducedCompositionHashBase16);
 
-            if (!File.Exists(filePath))
+            var fileContent = reductionFileStore.GetFileContent(filePath);
+
+            if (fileContent == null)
                 return null;
 
             var reductionRecordFromFile =
-                JsonConvert.DeserializeObject<ReductionRecordInFile>(
-                    File.ReadAllText(filePath, Encoding.UTF8));
+                JsonConvert.DeserializeObject<ReductionRecordInFile>(Encoding.UTF8.GetString(fileContent));
 
             if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
-                throw new Exception("Unexpected content in file " + filePath + ", composition hash does not match.");
+                throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
 
             return new ReductionRecord
             {
@@ -139,31 +149,30 @@ namespace Kalmit.ProcessStore
         {
             lock (appendSerializedCompositionRecordLock)
             {
-                var compositionLogRequestedFileNameInDirectory =
-                    getCompositionLogRequestedNextFileName?.Invoke() ?? appendSerializedCompositionRecordLastFileName ?? "composition";
+                var lastOrDefaultPath = appendSerializedCompositionRecordLastFilePath ?? ImmutableList.Create("composition");
 
-                var compositionLogRequestedFileName =
-                    Path.Combine(CompositionDirectoryPath, compositionLogRequestedFileNameInDirectory);
+                var compositionLogRequestedFilePathInDirectory =
+                    getCompositionLogRequestedNextFilePath?.Invoke() ?? lastOrDefaultPath;
 
-                var compositionLogFileName = appendSerializedCompositionRecordLastFileName;
+                var compositionLogFilePath = lastOrDefaultPath;
 
-                if (!compositionLogRequestedFileName.Equals(compositionLogFileName))
+                if (!compositionLogRequestedFilePathInDirectory.SequenceEqual(compositionLogFilePath))
                 {
                     // When reading the composition log, we depend on file names to determine the order of records.
                     // Therefore, only switch to the requested filename if it will be the last in that order.
 
                     var lastFileNameIfAddRequestedFileName =
                         CompositionLogFileOrder(
-                            EnumerateCompositionsLogFilesNames().Concat(new[] { compositionLogRequestedFileName })).Last();
+                            EnumerateCompositionsLogFilesPaths().Concat(new[] { compositionLogRequestedFilePathInDirectory }))
+                        .Last();
 
-                    if (compositionLogRequestedFileName.Equals(lastFileNameIfAddRequestedFileName))
-                        compositionLogFileName = compositionLogRequestedFileName;
+                    if (compositionLogRequestedFilePathInDirectory.Equals(lastFileNameIfAddRequestedFileName))
+                        compositionLogFilePath = compositionLogRequestedFilePathInDirectory;
                 }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(compositionLogFileName));
-                File.AppendAllLines(compositionLogFileName, new[] { Encoding.UTF8.GetString(record) });
+                compositionFileStore.AppendFileContent(compositionLogFilePath, record.Concat(Encoding.UTF8.GetBytes("\n")).ToArray());
 
-                appendSerializedCompositionRecordLastFileName = compositionLogFileName;
+                appendSerializedCompositionRecordLastFilePath = compositionLogFilePath;
             }
         }
 
@@ -177,15 +186,14 @@ namespace Kalmit.ProcessStore
 
             var fileName = recordInFile.ReducedCompositionHashBase16;
 
-            var filePath = Path.Combine(ReductionDirectoryPath, fileName);
+            var filePath = ImmutableList.Create(fileName);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-            File.WriteAllText(filePath, JsonConvert.SerializeObject(recordInFile, RecordSerializationSettings), Encoding.UTF8);
+            reductionFileStore.SetFileContent(
+                filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(recordInFile, RecordSerializationSettings)));
         }
 
         public IEnumerable<string> ReductionsFilesNames() =>
-            Directory.Exists(ReductionDirectoryPath) ?
-            Directory.EnumerateFiles(ReductionDirectoryPath, "*", SearchOption.AllDirectories) :
-            Array.Empty<string>();
+            reductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
+            .Select(Enumerable.Last);
     }
 }

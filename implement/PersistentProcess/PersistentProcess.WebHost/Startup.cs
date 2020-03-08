@@ -86,7 +86,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     var time = getDateTimeOffset();
                     var directoryName = time.ToString("yyyy-MM-dd");
-                    return System.IO.Path.Combine(directoryName, directoryName + "T" + time.ToString("HH") + ".composition.jsonl");
+                    return ImmutableList.Create(directoryName, directoryName + "T" + time.ToString("HH") + ".composition.jsonl");
                 });
 
             services.AddSingleton<ProcessStore.IProcessStoreReader>(processStore);

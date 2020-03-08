@@ -18,7 +18,7 @@ namespace Kalmit.PersistentProcess.Test
 
         string WebAppConfigFilePath => Path.Combine(testDirectory, "web-app");
 
-        string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
+        public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
         public Microsoft.AspNetCore.TestHost.TestServer BuildServer() =>
             new Microsoft.AspNetCore.TestHost.TestServer(

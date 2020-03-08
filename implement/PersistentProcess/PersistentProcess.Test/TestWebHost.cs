@@ -126,7 +126,8 @@ namespace Kalmit.PersistentProcess.Test
                     testSetup.BuildProcessStoreInFileDirectory();
 
                 IEnumerable<string> ReadCompositionLogFilesNames() =>
-                    BuildProcessStore().EnumerateCompositionsLogFilesNames();
+                    BuildProcessStore().EnumerateCompositionsLogFilesPaths()
+                    .Select(filePath => String.Join(Path.DirectorySeparatorChar, filePath));
 
                 string FirstReductionRecordFile = null;
 
@@ -135,7 +136,12 @@ namespace Kalmit.PersistentProcess.Test
                     var filesNamesExceptTheFirst =
                         BuildProcessStore().ReductionsFilesNames().Except(new[] { FirstReductionRecordFile }).ToList();
 
-                    filesNamesExceptTheFirst.ForEach(File.Delete);
+                    filesNamesExceptTheFirst.ForEach(reductionFileName =>
+                    {
+                        foreach (var matchingFile in Directory.EnumerateFiles(
+                            testSetup.ProcessStoreDirectory, reductionFileName, SearchOption.AllDirectories))
+                            File.Delete(matchingFile);
+                    });
 
                     Assert.IsTrue(BuildProcessStore().ReductionsFilesNames().Count() <= 1);
                 }
