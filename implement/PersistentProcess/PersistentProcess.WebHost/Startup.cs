@@ -79,9 +79,9 @@ namespace Kalmit.PersistentProcess.WebHost
                 services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset);
             }
 
-            var processStoreDirectory = config.GetValue<string>(Configuration.ProcessStoreDirectoryPathSettingKey);
-            var processStore = new Kalmit.ProcessStore.ProcessStoreInFileDirectory(
-                processStoreDirectory,
+            var processStoreFileStore = serviceProvider.GetService<FileStoreForProcessStore>().fileStore;
+            var processStore = new Kalmit.ProcessStore.ProcessStoreInFileStore(
+                processStoreFileStore,
                 () =>
                 {
                     var time = getDateTimeOffset();

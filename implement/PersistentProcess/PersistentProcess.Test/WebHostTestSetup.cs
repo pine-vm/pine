@@ -20,12 +20,18 @@ namespace Kalmit.PersistentProcess.Test
 
         public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
-        public Microsoft.AspNetCore.TestHost.TestServer BuildServer() =>
-            new Microsoft.AspNetCore.TestHost.TestServer(
-                (webHostBuilderMap ?? (builder => builder))
-                (Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(null)
-                .WithSettingProcessStoreDirectoryPath(ProcessStoreDirectory)
-                .WithSettingWebAppConfigurationFilePath(WebAppConfigFilePath)));
+        public Microsoft.AspNetCore.TestHost.TestServer BuildServer(
+             Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
+        {
+            var defaultFileStore = new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+
+            return
+                new Microsoft.AspNetCore.TestHost.TestServer(
+                    (webHostBuilderMap ?? (builder => builder))
+                    (Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(null)
+                    .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore)
+                    .WithSettingWebAppConfigurationFilePath(WebAppConfigFilePath)));
+        }
 
         static public WebHostTestSetup Setup(
             WebAppConfiguration webAppConfig,

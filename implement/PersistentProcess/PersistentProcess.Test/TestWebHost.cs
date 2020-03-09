@@ -726,6 +726,101 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void Web_host_sends_HTTP_response_only_after_write_to_history()
+        {
+            using (var testSetup = WebHostTestSetup.Setup(TestElmWebAppHttpServer.CounterWebApp))
+            {
+                async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToServer(
+                    Microsoft.AspNetCore.TestHost.TestServer server, string requestContent)
+                {
+                    using (var client = server.CreateClient())
+                    {
+                        return await
+                            client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8));
+                    }
+                }
+
+                Action runBeforeMutateInFileStore = null;
+
+                using (var server = testSetup.BuildServer(
+                    processStoreFileStoreMap: originalFileStore =>
+                    {
+                        return new FileStoreFromDelegates(
+                            setFileContent: new Action<IImmutableList<string>, byte[]>((path, fileContent) =>
+                                {
+                                    runBeforeMutateInFileStore?.Invoke();
+                                    originalFileStore.SetFileContent(path, fileContent);
+                                }),
+                            appendFileContent: new Action<IImmutableList<string>, byte[]>((path, fileContent) =>
+                                {
+                                    runBeforeMutateInFileStore?.Invoke();
+                                    originalFileStore.AppendFileContent(path, fileContent);
+                                }),
+                            getFileContent: originalFileStore.GetFileContent,
+                            listFilesInDirectory: originalFileStore.ListFilesInDirectory);
+                    }))
+                {
+                    var delayMutateInFileStore = false;
+
+                    runBeforeMutateInFileStore = new Action(() =>
+                    {
+                        while (!delayMutateInFileStore)
+                        {
+                            System.Threading.Tasks.Task.Delay(11).Wait();
+                        }
+                    });
+
+                    var httpPostTask = PostStringContentToServer(server, "");
+
+                    System.Threading.Tasks.Task.Delay(4000).Wait();
+
+                    Assert.IsFalse(httpPostTask.IsCompleted, "HTTP task is not completed.");
+
+                    delayMutateInFileStore = true;
+
+                    System.Threading.Tasks.Task.Delay(1000).Wait();
+
+                    Assert.IsTrue(httpPostTask.IsCompleted, "HTTP task is completed.");
+                }
+            }
+        }
+
+        class FileStoreFromDelegates : IFileStore
+        {
+            readonly Action<IImmutableList<string>, byte[]> setFileContent;
+
+            readonly Action<IImmutableList<string>, byte[]> appendFileContent;
+
+            readonly Func<IImmutableList<string>, byte[]> getFileContent;
+
+            readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
+
+            public FileStoreFromDelegates(
+                Action<IImmutableList<string>, byte[]> setFileContent,
+                Action<IImmutableList<string>, byte[]> appendFileContent,
+                Func<IImmutableList<string>, byte[]> getFileContent,
+                Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
+            {
+                this.setFileContent = setFileContent;
+                this.appendFileContent = appendFileContent;
+                this.getFileContent = getFileContent;
+                this.listFilesInDirectory = listFilesInDirectory;
+            }
+
+            public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
+                appendFileContent(path, fileContent);
+
+            public byte[] GetFileContent(IImmutableList<string> path) =>
+                getFileContent(path);
+
+            public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
+                listFilesInDirectory(directoryPath);
+
+            public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
+                setFileContent(path, fileContent);
+        }
+
         class Web_host_propagates_HTTP_headers_Response_Entry
         {
             public string name = null;

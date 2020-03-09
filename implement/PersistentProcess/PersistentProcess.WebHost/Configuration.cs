@@ -11,8 +11,6 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string ApiPersistentProcessStatePath => "/api/process/state";
 
-        static public string ProcessStoreDirectoryPathSettingKey => "processStoreDirectoryPath";
-
         static public string WebAppConfigurationFilePathSettingKey => "webAppConfigurationFilePath";
 
         static public string WithSettingFrontendWebElmMakeAppendixSettingKey => "frontendWebElmMakeAppendix";
@@ -25,20 +23,15 @@ namespace Kalmit.PersistentProcess.WebHost
         static public string BasicAuthenticationForAdminRoot(string password) =>
             AdminRootUserName + ":" + password;
 
+        static public IWebHostBuilder WithProcessStoreFileStore(
+            this IWebHostBuilder orig,
+            IFileStore fileStore) =>
+            orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new FileStoreForProcessStore(fileStore)));
+
         static public IWebHostBuilder WithSettingProcessStoreDirectoryPath(
             this IWebHostBuilder orig,
             string processStoreDirectoryPath) =>
-            orig.UseSetting(ProcessStoreDirectoryPathSettingKey, processStoreDirectoryPath);
-
-        static public IWebHostBuilder WithSettingProcessStoreDirectoryPathDefault(
-            this IWebHostBuilder orig,
-            string processStoreDirectoryPathDefault)
-        {
-            if (0 < orig.GetSetting(ProcessStoreDirectoryPathSettingKey)?.Length)
-                return orig;
-
-            return orig.UseSetting(ProcessStoreDirectoryPathSettingKey, processStoreDirectoryPathDefault);
-        }
+            orig.WithProcessStoreFileStore(new FileStoreFromSystemIOFile(processStoreDirectoryPath));
 
         static public IWebHostBuilder WithSettingWebAppConfigurationFilePath(
             this IWebHostBuilder orig,
@@ -62,5 +55,15 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>
             context.RequestServices.GetService<Func<DateTimeOffset>>()();
+    }
+
+    public class FileStoreForProcessStore
+    {
+        readonly public IFileStore fileStore;
+
+        public FileStoreForProcessStore(IFileStore fileStore)
+        {
+            this.fileStore = fileStore;
+        }
     }
 }
