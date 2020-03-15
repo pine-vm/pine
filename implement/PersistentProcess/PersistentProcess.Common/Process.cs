@@ -29,10 +29,11 @@ namespace Kalmit
     {
     }
 
-    class ProcessHostedWithChakraCore : IDisposableProcessWithStringInterface
+    public class ProcessHostedWithChakraCore : IDisposableProcessWithStringInterface
     {
         readonly IJsEngine javascriptEngine;
 
+        static public int? OverrideChakraCoreSettingsMaxStackSize = null;
 
         public ProcessHostedWithChakraCore(string javascriptPreparedToRun)
         {
@@ -40,7 +41,8 @@ namespace Kalmit
                 new ChakraCoreSettings
                 {
                     DisableEval = true,
-                    EnableExperimentalFeatures = true
+                    EnableExperimentalFeatures = true,
+                    MaxStackSize = OverrideChakraCoreSettingsMaxStackSize ?? 10_000_000,
                 }
             );
 
