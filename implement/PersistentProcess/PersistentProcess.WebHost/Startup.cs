@@ -33,21 +33,12 @@ namespace Kalmit.PersistentProcess.WebHost
             Composition.Component webAppConfig = null;
 
             {
-                byte[] webAppConfigFileZipArchive = null;
+                var webAppConfigFileZipArchive = serviceProvider.GetService<WebAppConfigurationZipArchive>()?.zipArchive;
 
-                var webAppConfigurationFilePath = config.GetValue<string>(Configuration.WebAppConfigurationFilePathSettingKey);
-
-                if (0 < webAppConfigurationFilePath?.Length)
+                if (!(0 < webAppConfigFileZipArchive?.Length))
                 {
                     _logger.LogInformation(
-                        "Loading configuration from single file '" + webAppConfigurationFilePath + "'.");
-
-                    webAppConfigFileZipArchive = System.IO.File.ReadAllBytes(webAppConfigurationFilePath);
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "Loading configuration from current directory.");
+                        "I did not find a web app config in the services. I try to build the config from current directory.");
 
                     var (compileConfigZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(
                         frontendWebElmMakeCommandAppendix: config.GetValue<string>(Configuration.WithSettingFrontendWebElmMakeAppendixSettingKey),

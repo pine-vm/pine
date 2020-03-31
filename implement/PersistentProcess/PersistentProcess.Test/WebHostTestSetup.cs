@@ -16,7 +16,7 @@ namespace Kalmit.PersistentProcess.Test
 
         readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
 
-        string WebAppConfigFilePath => Path.Combine(testDirectory, "web-app");
+        readonly WebAppConfiguration webAppConfig;
 
         public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
@@ -30,7 +30,7 @@ namespace Kalmit.PersistentProcess.Test
                     (webHostBuilderMap ?? (builder => builder))
                     (Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(null)
                     .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore)
-                    .WithSettingWebAppConfigurationFilePath(WebAppConfigFilePath)));
+                    .WithWebAppConfigurationZipArchive(ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles()))));
         }
 
         static public WebHostTestSetup Setup(
@@ -46,13 +46,7 @@ namespace Kalmit.PersistentProcess.Test
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-            var setup = new WebHostTestSetup(testDirectory, webHostBuilderMap);
-
-            var webAppConfigFilePath = setup.WebAppConfigFilePath;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(webAppConfigFilePath));
-
-            File.WriteAllBytes(webAppConfigFilePath, ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles()));
+            var setup = new WebHostTestSetup(testDirectory, webAppConfig, webHostBuilderMap);
 
             return setup;
         }
@@ -62,8 +56,9 @@ namespace Kalmit.PersistentProcess.Test
             Directory.Delete(testDirectory, true);
         }
 
-        WebHostTestSetup(string testDirectory, Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)
+        WebHostTestSetup(string testDirectory, WebAppConfiguration webAppConfig, Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)
         {
+            this.webAppConfig = webAppConfig;
             this.testDirectory = testDirectory;
             this.webHostBuilderMap = webHostBuilderMap;
         }

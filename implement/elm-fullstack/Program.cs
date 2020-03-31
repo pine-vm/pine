@@ -5,12 +5,13 @@ using System.Text.RegularExpressions;
 using Kalmit;
 using Kalmit.PersistentProcess.WebHost;
 using McMaster.Extensions.CommandLineUtils;
+using Microsoft.AspNetCore.Hosting;
 
 namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-03-15";
+        static string AppVersionId => "2020-03-30";
 
         static int Main(string[] args)
         {
@@ -54,7 +55,10 @@ namespace elm_fullstack
 
                     webHostBuilder.WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
 
-                    webHostBuilder.WithSettingWebAppConfigurationFilePath(webAppConfigurationFilePathOption.Value());
+                    var webAppConfigurationFilePath = webAppConfigurationFilePathOption.Value();
+
+                    if (webAppConfigurationFilePath != null)
+                        webHostBuilder.WithWebAppConfigurationZipArchiveFromFilePath(webAppConfigurationFilePath);
 
                     webHostBuilder.WithSettingFrontendWebElmMakeAppendix(frontendWebElmMakeAppendixOption.Value());
 
@@ -99,6 +103,43 @@ namespace elm_fullstack
                 installCmd.OnExecute(() =>
                 {
                     registerExecutableDirectoryOnPath();
+                });
+            });
+
+            app.Command("run-server-supporting-migrations", runServerSupportingMigrationsCmd =>
+            {
+                runServerSupportingMigrationsCmd.Description = "Run a web server that supports migrations between Elm apps. This encapsulates the functionality you get with the `run-server` command.";
+
+                var adminInterfaceHttpPortDefault = 4000;
+
+                var processStoreDirectoryPathOption = runServerSupportingMigrationsCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var deletePreviousBackendStateOption = runServerSupportingMigrationsCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
+                var adminInterfaceHttpPortOption = runServerSupportingMigrationsCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
+                var adminRootPasswordOption = runServerSupportingMigrationsCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
+
+                runServerSupportingMigrationsCmd.OnExecute(() =>
+                {
+                    var processStoreDirectoryPath = processStoreDirectoryPathOption.Value();
+
+                    if (deletePreviousBackendStateOption.HasValue())
+                    {
+                        Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'");
+
+                        if (System.IO.Directory.Exists(processStoreDirectoryPath))
+                            System.IO.Directory.Delete(processStoreDirectoryPath, true);
+                    }
+
+                    var adminInterfaceHttpPort =
+                        int.Parse(adminInterfaceHttpPortOption.Value() ?? adminInterfaceHttpPortDefault.ToString());
+
+                    var webHostBuilder =
+                        Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
+                        .UseUrls("http://*:" + adminInterfaceHttpPort.ToString())
+                        .UseStartup<StartupSupportingMigrations>()
+                        .WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath)
+                        .WithSettingAdminRootPassword(adminRootPasswordOption.Value());
+
+                    Microsoft.AspNetCore.Hosting.WebHostExtensions.Run(webHostBuilder.Build());
                 });
             });
 

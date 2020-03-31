@@ -11,6 +11,8 @@ namespace Kalmit
 
         void AppendFileContent(IImmutableList<string> path, byte[] fileContent);
 
+        void DeleteFile(IImmutableList<string> path);
+
         byte[] GetFileContent(IImmutableList<string> path);
 
         IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath);
@@ -38,6 +40,9 @@ namespace Kalmit
 
         static void EnsureDirectoryExists(string directoryPath)
         {
+            if (!(0 < directoryPath?.Length))
+                return;
+
             var parentDirectory = Path.GetDirectoryName(directoryPath);
 
             if (parentDirectory != null)
@@ -94,6 +99,16 @@ namespace Kalmit
                 .OrderBy(filePath => filePath)
                 .Select(filePath => Path.GetRelativePath(fileSystemDirectoryPath, filePath).Split(Path.DirectorySeparatorChar).ToImmutableList());
         }
+
+        public void DeleteFile(IImmutableList<string> path)
+        {
+            var fileSystemPath = CombinePath(path);
+
+            if (!File.Exists(fileSystemPath))
+                return;
+
+            File.Delete(fileSystemPath);
+        }
     }
 
     public class FileStoreWithMappedPath : IFileStore
@@ -116,6 +131,9 @@ namespace Kalmit
 
         public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> path) =>
             originalFileStore.ListFilesInDirectory(pathMap(path));
+
+        public void DeleteFile(IImmutableList<string> path) =>
+            originalFileStore.DeleteFile(pathMap(path));
 
         public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
             originalFileStore.SetFileContent(pathMap(path), fileContent);

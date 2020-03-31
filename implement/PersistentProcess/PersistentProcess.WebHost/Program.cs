@@ -6,7 +6,7 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class Program
     {
-        public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
+        public static IWebHostBuilder CreateWebHostBuilder(string[] args, int? httpPort = null) =>
             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((hostingContext, config) =>
                 {
@@ -26,7 +26,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     });
                 })
                 .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
-                .UseUrls("http://*", "https://*")
+                .UseUrls("http://*:" + (httpPort ?? 80).ToString(), "https://*")
                 .UseStartup<Startup>();
     }
 }

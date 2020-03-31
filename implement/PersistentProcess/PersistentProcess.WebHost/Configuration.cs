@@ -11,11 +11,11 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string ApiPersistentProcessStatePath => "/api/process/state";
 
-        static public string WebAppConfigurationFilePathSettingKey => "webAppConfigurationFilePath";
-
         static public string WithSettingFrontendWebElmMakeAppendixSettingKey => "frontendWebElmMakeAppendix";
 
         static public string AdminRootPasswordSettingKey => "adminRootPassword";
+
+        static public string PublicWebHostHttpPortSettingKey = "publicWebHostHttpPort";
 
         static public string AdminRootUserName => "root";
 
@@ -33,10 +33,15 @@ namespace Kalmit.PersistentProcess.WebHost
             string processStoreDirectoryPath) =>
             orig.WithProcessStoreFileStore(new FileStoreFromSystemIOFile(processStoreDirectoryPath));
 
-        static public IWebHostBuilder WithSettingWebAppConfigurationFilePath(
+        static public IWebHostBuilder WithWebAppConfigurationZipArchive(
+            this IWebHostBuilder orig,
+            byte[] zipArchive) =>
+            orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new WebAppConfigurationZipArchive(zipArchive)));
+
+        static public IWebHostBuilder WithWebAppConfigurationZipArchiveFromFilePath(
             this IWebHostBuilder orig,
             string webAppConfigurationFilePath) =>
-            orig.UseSetting(WebAppConfigurationFilePathSettingKey, webAppConfigurationFilePath);
+            orig.WithWebAppConfigurationZipArchive(System.IO.File.ReadAllBytes(webAppConfigurationFilePath));
 
         static public IWebHostBuilder WithSettingFrontendWebElmMakeAppendix(
             this IWebHostBuilder orig,
@@ -53,6 +58,11 @@ namespace Kalmit.PersistentProcess.WebHost
             Func<DateTimeOffset> getDateTimeOffset) =>
             orig.ConfigureServices(services => services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset));
 
+        static public IWebHostBuilder WithSettingPublicWebHostHttpPort(
+            this IWebHostBuilder orig,
+            int httpPort) =>
+            orig.UseSetting(PublicWebHostHttpPortSettingKey, httpPort.ToString());
+
         static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>
             context.RequestServices.GetService<Func<DateTimeOffset>>()();
     }
@@ -64,6 +74,16 @@ namespace Kalmit.PersistentProcess.WebHost
         public FileStoreForProcessStore(IFileStore fileStore)
         {
             this.fileStore = fileStore;
+        }
+    }
+
+    public class WebAppConfigurationZipArchive
+    {
+        readonly public byte[] zipArchive;
+
+        public WebAppConfigurationZipArchive(byte[] zipArchive)
+        {
+            this.zipArchive = zipArchive;
         }
     }
 }

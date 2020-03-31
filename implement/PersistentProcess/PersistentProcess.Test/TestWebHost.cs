@@ -748,15 +748,20 @@ namespace Kalmit.PersistentProcess.Test
                     {
                         return new FileStoreFromDelegates(
                             setFileContent: new Action<IImmutableList<string>, byte[]>((path, fileContent) =>
-                                {
-                                    runBeforeMutateInFileStore?.Invoke();
-                                    originalFileStore.SetFileContent(path, fileContent);
-                                }),
+                            {
+                                runBeforeMutateInFileStore?.Invoke();
+                                originalFileStore.SetFileContent(path, fileContent);
+                            }),
                             appendFileContent: new Action<IImmutableList<string>, byte[]>((path, fileContent) =>
-                                {
-                                    runBeforeMutateInFileStore?.Invoke();
-                                    originalFileStore.AppendFileContent(path, fileContent);
-                                }),
+                            {
+                                runBeforeMutateInFileStore?.Invoke();
+                                originalFileStore.AppendFileContent(path, fileContent);
+                            }),
+                            deleteFile: new Action<IImmutableList<string>>(path =>
+                            {
+                                runBeforeMutateInFileStore?.Invoke();
+                                originalFileStore.DeleteFile(path);
+                            }),
                             getFileContent: originalFileStore.GetFileContent,
                             listFilesInDirectory: originalFileStore.ListFilesInDirectory);
                     }))
@@ -786,11 +791,128 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void Web_host_supporting_migrations_supports_set_app_config()
+        {
+            const string rootPassword = "Root-Password_1234567";
+
+            var allEventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (3, 4),
+                        (5, 9),
+                        (7, 16),
+                        (11, 27),
+                        (-13, 14),
+                    }).ToList();
+
+            var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
+
+            Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
+
+            var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(
+                TestElmWebAppHttpServer.CounterWebApp.AsFiles());
+
+            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap =
+                builder => builder.WithSettingAdminRootPassword(rootPassword);
+
+            HttpClient createClientWithAuthorizationHeader(Microsoft.AspNetCore.TestHost.TestServer server)
+            {
+                var adminClient = server.CreateClient();
+
+                adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+
+                return adminClient;
+            }
+
+            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(webHostBuilderMap))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var setAppConfigResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            new ByteArrayContent(webAppConfigZipArchive)).Result;
+
+                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
+                    }
+
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var getAppConfigResponse = adminClient.GetAsync(StartupSupportingMigrations.PathApiGetAppConfig).Result;
+
+                        Assert.IsTrue(getAppConfigResponse.IsSuccessStatusCode, "get-app response IsSuccessStatusCode");
+
+                        var getAppResponseContent = getAppConfigResponse.Content.ReadAsByteArrayAsync().Result;
+
+                        CollectionAssert.AreEqual(webAppConfigZipArchive, getAppResponseContent, "Get the same configuration file back.");
+                    }
+
+                    foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatches.First())
+                    {
+                        using (var client = testSetup.BuildPublicAppHttpClient())
+                        {
+                            var httpResponse =
+                                client.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response matches " + expectedResponse);
+                        }
+                    }
+
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var setAppHttpResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            new ByteArrayContent(webAppConfigZipArchive)).Result;
+                    }
+                }
+
+                foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
+                {
+                    using (var server = testSetup.BuildServer())
+                    {
+                        using (var adminClient = createClientWithAuthorizationHeader(server))
+                        {
+                            var setAppHttpResponse = adminClient.PostAsync(
+                                StartupSupportingMigrations.PathApiSetAppConfigAndContinueState,
+                                new ByteArrayContent(webAppConfigZipArchive)).Result;
+
+                            Assert.IsTrue(setAppHttpResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
+                        }
+
+                        foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
+                        {
+                            using (var client = testSetup.BuildPublicAppHttpClient())
+                            {
+                                var httpResponse =
+                                    client.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                                var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                                Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response matches " + expectedResponse);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         class FileStoreFromDelegates : IFileStore
         {
             readonly Action<IImmutableList<string>, byte[]> setFileContent;
 
             readonly Action<IImmutableList<string>, byte[]> appendFileContent;
+
+            readonly Action<IImmutableList<string>> deleteFile;
 
             readonly Func<IImmutableList<string>, byte[]> getFileContent;
 
@@ -799,17 +921,22 @@ namespace Kalmit.PersistentProcess.Test
             public FileStoreFromDelegates(
                 Action<IImmutableList<string>, byte[]> setFileContent,
                 Action<IImmutableList<string>, byte[]> appendFileContent,
+                 Action<IImmutableList<string>> deleteFile,
                 Func<IImmutableList<string>, byte[]> getFileContent,
                 Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
             {
                 this.setFileContent = setFileContent;
                 this.appendFileContent = appendFileContent;
+                this.deleteFile = deleteFile;
                 this.getFileContent = getFileContent;
                 this.listFilesInDirectory = listFilesInDirectory;
             }
 
             public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
                 appendFileContent(path, fileContent);
+
+            public void DeleteFile(IImmutableList<string> path) =>
+                deleteFile(path);
 
             public byte[] GetFileContent(IImmutableList<string> path) =>
                 getFileContent(path);
