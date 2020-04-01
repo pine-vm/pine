@@ -18,7 +18,7 @@ namespace Kalmit.PersistentProcess.WebHost
     {
         static public string PathApiSetAppConfigAndInitState => "/api/set-app-config-and-init-state";
 
-        static public string PathApiSetAppConfigAndContinueState => "/api/set-app-and-continue-state";
+        static public string PathApiSetAppConfigAndContinueState => "/api/set-app-config-and-continue-state";
 
         static public string PathApiGetAppConfig => "/api/get-app-config";
 
