@@ -131,7 +131,7 @@ namespace Kalmit.PersistentProcess.Test
                             {
                                 ListContent = new []
                                 {
-                                    new Composition.Component{ BlobContent = new byte[]{00,97}.ToImmutableList()},
+                                    new Composition.Component{ BlobContent = new byte[]{97}.ToImmutableList()},
                                     new Composition.Component{ BlobContent = new byte[]{0,1,2}.ToImmutableList()},
                                 }.ToImmutableList()
                             },
@@ -139,7 +139,7 @@ namespace Kalmit.PersistentProcess.Test
                             {
                                 ListContent = new []
                                 {
-                                    new Composition.Component{ BlobContent = Encoding.BigEndianUnicode.GetBytes("b").ToImmutableList()},
+                                    new Composition.Component{ BlobContent = new byte[]{98}.ToImmutableList()},
                                     new Composition.Component
                                     {
                                         ListContent = new []
@@ -148,7 +148,7 @@ namespace Kalmit.PersistentProcess.Test
                                             {
                                                 ListContent = new []
                                                 {
-                                                    new Composition.Component{ BlobContent = Encoding.BigEndianUnicode.GetBytes("c").ToImmutableList()},
+                                                    new Composition.Component{ BlobContent = Encoding.UTF8.GetBytes("c").ToImmutableList()},
                                                     new Composition.Component{ BlobContent = new byte[]{3,4,5,6}.ToImmutableList()},
                                                 }.ToImmutableList()
                                             },
@@ -156,7 +156,7 @@ namespace Kalmit.PersistentProcess.Test
                                             {
                                                 ListContent = new []
                                                 {
-                                                    new Composition.Component{ BlobContent = Encoding.BigEndianUnicode.GetBytes("d").ToImmutableList()},
+                                                    new Composition.Component{ BlobContent = Encoding.UTF8.GetBytes("d").ToImmutableList()},
                                                     new Composition.Component{ BlobContent = new byte[]{7,8}.ToImmutableList()},
                                                 }.ToImmutableList()
                                             },

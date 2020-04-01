@@ -57,7 +57,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var webAppConfigObject = WebAppConfiguration.FromFiles(
                 Composition.ParseAsTree(webAppConfig).ok.EnumerateBlobsTransitive()
                 .Select(blobWithPath =>
-                    (path: (IImmutableList<string>)blobWithPath.path.Select(pathComponent => System.Text.Encoding.BigEndianUnicode.GetString(pathComponent.ToArray())).ToImmutableList(),
+                    (path: (IImmutableList<string>)blobWithPath.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
                     content: blobWithPath.blobContent))
                     .ToList());
             services.AddSingleton<WebAppConfiguration>(webAppConfigObject);

@@ -19,7 +19,7 @@ namespace Kalmit
                 Directory.EnumerateFileSystemEntries(path)
                 .Select(fileSystemEntry =>
                 {
-                    var name = (IImmutableList<byte>)Encoding.BigEndianUnicode.GetBytes(Path.GetRelativePath(path, fileSystemEntry)).ToImmutableList();
+                    var name = (IImmutableList<byte>)Encoding.UTF8.GetBytes(Path.GetRelativePath(path, fileSystemEntry)).ToImmutableList();
 
                     return (name, LoadTreeFromPath(fileSystemEntry));
                 })
