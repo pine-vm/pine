@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -11,7 +11,7 @@ namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-03-30";
+        static string AppVersionId => "2020-04-01";
 
         static int Main(string[] args)
         {
