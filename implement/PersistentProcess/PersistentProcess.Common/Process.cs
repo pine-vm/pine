@@ -182,14 +182,25 @@ namespace Kalmit
             string outputFileName,
             string elmMakeCommandAppendix = null)
         {
+            /*
+            2020-04-01: Avoid the sporadic failures as reported at
+            https://github.com/elm-fullstack/elm-fullstack/blob/a206b8095e9f2300f413ef381342db1dca790542/explore/2020-04-01.automate-testing/2020-04-01.automate-testing.md
+            Retry for these class of errors.
+            */
+            var maxRetryCount = 2;
+
             var command = "make " + makePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
-            var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                elmCodeFiles.Select(elmCodeFile => (makePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value)).ToImmutableList(),
-                GetElmExecutableFile,
-                command,
-                new Dictionary<string, string>()
-                {
+            var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles)>();
+
+            do
+            {
+                var commandResults = ExecutableFile.ExecuteFileWithArguments(
+                    elmCodeFiles.Select(elmCodeFile => (makePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value)).ToImmutableList(),
+                    GetElmExecutableFile,
+                    command,
+                    new Dictionary<string, string>()
+                    {
                     //  Avoid elm make failing on `getAppUserDataDirectory`.
                     /* Also, work around problems with elm make like this:
                     -- HTTP PROBLEM ----------------------------------------------------------------
@@ -215,19 +226,29 @@ namespace Kalmit
                     An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
                     */
                     {"ELM_HOME", GetElmHomeDirectory()},
-                });
+                    });
 
-            var outputFileContent =
-                commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
+                var outputFileContent =
+                    commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
 
-            if (outputFileContent == null)
-                throw new NotImplementedException(
-                    "Output file not found. Maybe the output from the Elm make process helps to find the cause:" +
-                    "\nExit Code: " + commandResults.processOutput.ExitCode +
-                    "\nStandard Output:\n'" + commandResults.processOutput.StandardOutput + "'" +
-                    "\nStandard Error:\n'" + commandResults.processOutput.StandardError + "'");
+                if (outputFileContent != null)
+                    return Encoding.UTF8.GetString(outputFileContent.ToArray());
 
-            return Encoding.UTF8.GetString(outputFileContent.ToArray());
+                var errorQualifiesForRetry =
+                    commandResults.processOutput.StandardError?.Contains("openBinaryFile: resource busy (file is locked)") ?? false;
+
+                if (!errorQualifiesForRetry)
+                    break;
+
+            } while (attemptsResults.Count <= maxRetryCount);
+
+            var lastAttemptResults = attemptsResults.Last();
+
+            throw new NotImplementedException(
+                "Failed for " + attemptsResults.Count.ToString() + " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
+                "\nExit Code: " + lastAttemptResults.processOutput.ExitCode +
+                "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
+                "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
         }
 
         static string makePlatformSpecificPath(IImmutableList<string> path) =>
