@@ -7,7 +7,7 @@ namespace Kalmit.PersistentProcess.Test
 {
     public class WebHostSupportingMigrationsTestSetup : IDisposable
     {
-        static int PublicWebHostHttpPort => 53491;
+        static string PublicWebHostUrl => "http://localhost:35491";
 
         readonly string testDirectory;
 
@@ -25,7 +25,7 @@ namespace Kalmit.PersistentProcess.Test
                     (webHostBuilderMap ?? (builder => builder))
                     (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                     .UseUrls("http://*:19372")
-                    .WithSettingPublicWebHostHttpPort(PublicWebHostHttpPort)
+                    .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
                     .UseStartup<StartupSupportingMigrations>()
                     .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore)));
         }
@@ -49,7 +49,7 @@ namespace Kalmit.PersistentProcess.Test
         {
             return new System.Net.Http.HttpClient
             {
-                BaseAddress = new Uri("http://localhost:" + PublicWebHostHttpPort),
+                BaseAddress = new Uri(PublicWebHostUrl),
             };
         }
 

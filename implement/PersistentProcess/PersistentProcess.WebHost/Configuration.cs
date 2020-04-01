@@ -15,7 +15,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string AdminRootPasswordSettingKey => "adminRootPassword";
 
-        static public string PublicWebHostHttpPortSettingKey = "publicWebHostHttpPort";
+        static public string PublicWebHostUrlsSettingKey = "publicWebHostUrls";
 
         static public string AdminRootUserName => "root";
 
@@ -58,10 +58,10 @@ namespace Kalmit.PersistentProcess.WebHost
             Func<DateTimeOffset> getDateTimeOffset) =>
             orig.ConfigureServices(services => services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset));
 
-        static public IWebHostBuilder WithSettingPublicWebHostHttpPort(
+        static public IWebHostBuilder WithSettingPublicWebHostUrls(
             this IWebHostBuilder orig,
-            int httpPort) =>
-            orig.UseSetting(PublicWebHostHttpPortSettingKey, httpPort.ToString());
+            string[] urls) =>
+            orig.UseSetting(PublicWebHostUrlsSettingKey, String.Join(",", urls));
 
         static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>
             context.RequestServices.GetService<Func<DateTimeOffset>>()();

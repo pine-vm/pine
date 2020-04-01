@@ -53,12 +53,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
             var rootPassword = configuration.GetValue<string>(Configuration.AdminRootPasswordSettingKey);
-            var publicWebHostHttpPortString = configuration.GetValue<string>(Configuration.PublicWebHostHttpPortSettingKey);
-
-            int? publicWebHostHttpPort = null;
-
-            if (0 < publicWebHostHttpPortString?.Length)
-                publicWebHostHttpPort = int.Parse(publicWebHostHttpPortString);
+            var publicWebHostUrls = configuration.GetValue<string>(Configuration.PublicWebHostUrlsSettingKey)?.Split(new[] { ',', ';' });
 
             var processStoreFileStore = app.ApplicationServices.GetService<FileStoreForProcessStore>().fileStore;
 
@@ -111,7 +106,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     }
 
                     var webHost =
-                        Program.CreateWebHostBuilder(null, httpPort: publicWebHostHttpPort)
+                        Program.CreateWebHostBuilder(null, overrideDefaultUrls: publicWebHostUrls)
                         .WithSettingAdminRootPassword(rootPassword)
                         .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                         .WithWebAppConfigurationZipArchive(webAppConfigZipArchive)
