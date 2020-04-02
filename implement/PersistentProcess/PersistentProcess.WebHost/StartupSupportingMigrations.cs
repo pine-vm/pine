@@ -19,6 +19,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiSetAppConfigAndContinueState => "/api/set-app-config-and-continue-state";
 
+        static public string PathApiMigrateElmState => "/api/migrate-elm-state";
+
         static public string PathApiGetAppConfig => "/api/get-app-config";
 
         public StartupSupportingMigrations()
@@ -237,6 +239,129 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         context.Response.StatusCode = 200;
                         await context.Response.WriteAsync("Successfully set the app and started the web server.");
+                        return;
+                    }
+
+                    if (context.Request.Path.StartsWithSegments(new PathString(PathApiMigrateElmState)))
+                    {
+                        if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            context.Response.StatusCode = 405;
+                            await context.Response.WriteAsync("Method not supported.");
+                            return;
+                        }
+
+                        var memoryStream = new MemoryStream();
+                        context.Request.Body.CopyTo(memoryStream);
+
+                        var migrateElmAppConfigZipArchive = memoryStream.ToArray();
+
+                        var migrateElmAppFiles =
+                            ZipArchive.EntriesFromZipArchive(migrateElmAppConfigZipArchive)
+                            .Select(entry =>
+                                (filePath: (IImmutableList<string>)entry.name.Split(new[] { '/', '\\' }).ToImmutableList(),
+                                fileContent: (IImmutableList<byte>)entry.content.ToImmutableList()))
+                            .ToImmutableList();
+
+                        if (publicAppWebHost == null)
+                        {
+                            context.Response.StatusCode = 400;
+                            await context.Response.WriteAsync("Migration not possible because there is no app (state).");
+                            return;
+                        }
+
+                        var publicAppWebHostAddresses =
+                            publicAppWebHost.ServerFeatures.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>().Addresses;
+
+                        string elmAppStateSerializedBefore = null;
+
+                        var httpPathToProcessState = Configuration.AdminPath + Configuration.ApiPersistentProcessStatePath;
+
+                        System.Net.Http.HttpClient createPublicHostClientWithAuthorizationHeader()
+                        {
+                            var adminClient = new System.Net.Http.HttpClient()
+                            {
+                                BaseAddress = new Uri(publicAppWebHostAddresses.First())
+                            };
+
+                            adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                                "Basic",
+                                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                                    WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+
+                            return adminClient;
+                        }
+
+                        using (var publicAppClient = createPublicHostClientWithAuthorizationHeader())
+                        {
+                            var getStateResponse = publicAppClient.GetAsync(httpPathToProcessState).Result;
+
+                            elmAppStateSerializedBefore = getStateResponse.Content.ReadAsStringAsync().Result;
+                        }
+
+                        if (!(0 < elmAppStateSerializedBefore?.Length))
+                        {
+                            context.Response.StatusCode = 500;
+                            await context.Response.WriteAsync("Failed to read the current app state.");
+                            return;
+                        }
+
+                        var javascriptFromElmMake = Kalmit.ProcessFromElm019Code.CompileElmToJavascript(
+                            ElmApp.ToFlatDictionaryWithPathComparer(migrateElmAppFiles),
+                            ImmutableList.Create("src", "Main.elm"));
+
+                        var javascriptMinusCrashes = Kalmit.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
+
+                        var listFunctionToPublish =
+                            new[]
+                            {
+                                (functionNameInElm: "Main.migrate",
+                                publicName: "interface_migrate",
+                                arity: 1),
+                            };
+
+                        var javascriptToRun =
+                            Kalmit.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                                javascriptMinusCrashes,
+                                listFunctionToPublish);
+
+                        string migrateResultString = null;
+
+                        //  TODO: For build JS engine, reuse impl from Common.
+
+                        using (var javascriptEngine = new JavaScriptEngineSwitcher.ChakraCore.ChakraCoreJsEngine(
+                            new JavaScriptEngineSwitcher.ChakraCore.ChakraCoreSettings
+                            {
+                                DisableEval = true,
+                                EnableExperimentalFeatures = true,
+                                MaxStackSize = 10_000_000,
+                            }
+                            ))
+                        {
+                            var initAppResult = javascriptEngine.Evaluate(javascriptToRun);
+
+                            var migrateResult = javascriptEngine.CallFunction(
+                                "interface_migrate", elmAppStateSerializedBefore);
+
+                            migrateResultString = migrateResult.ToString();
+                        }
+
+                        using (var publicAppClient = createPublicHostClientWithAuthorizationHeader())
+                        {
+                            var setStateResponse = publicAppClient.PostAsync(
+                                httpPathToProcessState, new System.Net.Http.StringContent(migrateResultString)).Result;
+
+                            if (!setStateResponse.IsSuccessStatusCode)
+                            {
+                                context.Response.StatusCode = 500;
+                                await context.Response.WriteAsync("Failed to set the migrated state.");
+                                return;
+
+                            }
+                        }
+
+                        context.Response.StatusCode = 200;
+                        await context.Response.WriteAsync("Completed migration.");
                         return;
                     }
 

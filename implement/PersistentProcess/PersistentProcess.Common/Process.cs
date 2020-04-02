@@ -228,6 +228,8 @@ namespace Kalmit
                     {"ELM_HOME", GetElmHomeDirectory()},
                     });
 
+                attemptsResults.Add(commandResults);
+
                 var outputFileContent =
                     commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
 

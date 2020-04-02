@@ -906,6 +906,88 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+
+        [TestMethod]
+        public void Web_host_supporting_migrations_supports_migrate_elm_state()
+        {
+            const string rootPassword = "Root-Password_1234567";
+
+            var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(
+                TestElmWebAppHttpServer.StringBuilderWebApp.AsFiles());
+
+            var migrateElmAppZipArchive = ZipArchive.ZipArchiveFromEntries(
+                TestSetup.GetElmAppFromExampleName("migrate-string-append-length"));
+
+            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap =
+                builder => builder.WithSettingAdminRootPassword(rootPassword);
+
+            HttpClient createClientWithAuthorizationHeader(Microsoft.AspNetCore.TestHost.TestServer server)
+            {
+                var adminClient = server.CreateClient();
+
+                adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+
+                return adminClient;
+            }
+
+            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(webHostBuilderMap))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var setAppConfigResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            new ByteArrayContent(webAppConfigZipArchive)).Result;
+
+                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse =
+                            client.PostAsync("", new StringContent("a", System.Text.Encoding.UTF8)).Result;
+
+                        var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                        Assert.AreEqual("a", httpResponseContent, false, "Server response content.");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse =
+                            client.PostAsync("", new StringContent("b", System.Text.Encoding.UTF8)).Result;
+
+                        var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                        Assert.AreEqual("ab", httpResponseContent, false, "Server response content.");
+                    }
+
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var migrateHttpResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiMigrateElmState,
+                            new ByteArrayContent(migrateElmAppZipArchive)).Result;
+
+                        Assert.IsTrue(migrateHttpResponse.IsSuccessStatusCode, "migrate-elm-state response IsSuccessStatusCode");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse =
+                            client.PostAsync("", new StringContent("c", System.Text.Encoding.UTF8)).Result;
+
+                        var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                        Assert.AreEqual("ab2c", httpResponseContent, false, "Server response content.");
+                    }
+                }
+            }
+        }
+
         class FileStoreFromDelegates : IFileStore
         {
             readonly Action<IImmutableList<string>, byte[]> setFileContent;
