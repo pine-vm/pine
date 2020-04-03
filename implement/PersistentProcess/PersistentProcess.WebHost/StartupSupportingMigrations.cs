@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
@@ -22,6 +23,12 @@ namespace Kalmit.PersistentProcess.WebHost
         static public string PathApiMigrateElmState => "/api/migrate-elm-state";
 
         static public string PathApiGetAppConfig => "/api/get-app-config";
+
+        static public string MigrationElmAppInterfaceModuleName => "MigrateBackendState";
+
+        static string MigrationElmAppCompilationRootModuleName => MigrationElmAppInterfaceModuleName + "Root";
+
+        static string MigrateElmFunctionNameInModule => "migrate";
 
         public StartupSupportingMigrations()
         {
@@ -256,12 +263,17 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         var migrateElmAppConfigZipArchive = memoryStream.ToArray();
 
-                        var migrateElmAppFiles =
-                            ZipArchive.EntriesFromZipArchive(migrateElmAppConfigZipArchive)
-                            .Select(entry =>
-                                (filePath: (IImmutableList<string>)entry.name.Split(new[] { '/', '\\' }).ToImmutableList(),
-                                fileContent: (IImmutableList<byte>)entry.content.ToImmutableList()))
-                            .ToImmutableList();
+                        var prepareMigrateResult = PrepareMigrateSerializedValueWithoutChangingElmType(migrateElmAppConfigZipArchive);
+
+                        if (prepareMigrateResult?.Ok == null)
+                        {
+                            if (publicAppWebHost == null)
+                            {
+                                context.Response.StatusCode = 400;
+                                await context.Response.WriteAsync("Failed to prepare migration with this Elm app:\n" + prepareMigrateResult?.Err);
+                                return;
+                            }
+                        }
 
                         if (publicAppWebHost == null)
                         {
@@ -306,57 +318,27 @@ namespace Kalmit.PersistentProcess.WebHost
                             return;
                         }
 
-                        var javascriptFromElmMake = Kalmit.ProcessFromElm019Code.CompileElmToJavascript(
-                            ElmApp.ToFlatDictionaryWithPathComparer(migrateElmAppFiles),
-                            ImmutableList.Create("src", "Main.elm"));
+                        var attemptMigrateResult = prepareMigrateResult.Ok(elmAppStateSerializedBefore);
 
-                        var javascriptMinusCrashes = Kalmit.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
-
-                        var listFunctionToPublish =
-                            new[]
-                            {
-                                (functionNameInElm: "Main.migrate",
-                                publicName: "interface_migrate",
-                                arity: 1),
-                            };
-
-                        var javascriptToRun =
-                            Kalmit.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
-                                javascriptMinusCrashes,
-                                listFunctionToPublish);
-
-                        string migrateResultString = null;
-
-                        //  TODO: For build JS engine, reuse impl from Common.
-
-                        using (var javascriptEngine = new JavaScriptEngineSwitcher.ChakraCore.ChakraCoreJsEngine(
-                            new JavaScriptEngineSwitcher.ChakraCore.ChakraCoreSettings
-                            {
-                                DisableEval = true,
-                                EnableExperimentalFeatures = true,
-                                MaxStackSize = 10_000_000,
-                            }
-                            ))
+                        if (attemptMigrateResult?.Ok == null)
                         {
-                            var initAppResult = javascriptEngine.Evaluate(javascriptToRun);
-
-                            var migrateResult = javascriptEngine.CallFunction(
-                                "interface_migrate", elmAppStateSerializedBefore);
-
-                            migrateResultString = migrateResult.ToString();
+                            context.Response.StatusCode = 400;
+                            await context.Response.WriteAsync("Attempt to migrate failed:\n" + attemptMigrateResult?.Err);
+                            return;
                         }
 
                         using (var publicAppClient = createPublicHostClientWithAuthorizationHeader())
                         {
                             var setStateResponse = publicAppClient.PostAsync(
-                                httpPathToProcessState, new System.Net.Http.StringContent(migrateResultString)).Result;
+                                httpPathToProcessState, new System.Net.Http.StringContent(attemptMigrateResult.Ok)).Result;
 
                             if (!setStateResponse.IsSuccessStatusCode)
                             {
                                 context.Response.StatusCode = 500;
-                                await context.Response.WriteAsync("Failed to set the migrated state.");
+                                await context.Response.WriteAsync(
+                                    "Failed to set the migrated state:\nstatus code: " + setStateResponse.StatusCode +
+                                    "\nContent:\n" + setStateResponse.Content?.ReadAsStringAsync().Result);
                                 return;
-
                             }
                         }
 
@@ -369,6 +351,217 @@ namespace Kalmit.PersistentProcess.WebHost
                     await context.Response.WriteAsync("Not Found");
                     return;
                 });
+        }
+
+        class Result<ErrT, OkT>
+        {
+            public ErrT Err;
+
+            public OkT Ok;
+        }
+
+        static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValueWithoutChangingElmType(
+            byte[] migrateElmAppZipArchive)
+        {
+            var migrateElmAppOriginalFiles =
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    ZipArchive.EntriesFromZipArchive(migrateElmAppZipArchive)
+                    .Select(entry =>
+                        (filePath: (IImmutableList<string>)entry.name.Split(new[] { '/', '\\' }).ToImmutableList(),
+                        fileContent: (IImmutableList<byte>)entry.content.ToImmutableList()))
+                    .ToImmutableList());
+
+            var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
+            var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
+
+            var migrateElmAppInterfaceModuleOriginalFile =
+                migrateElmAppOriginalFiles[pathToInterfaceModuleFile];
+
+            if (migrateElmAppInterfaceModuleOriginalFile == null)
+                return new Result<string, Func<string, Result<string, string>>>
+                {
+                    Err = "Did not find interface module at '" + string.Join("/", pathToInterfaceModuleFile) + "'",
+                };
+
+            var migrateElmAppInterfaceModuleOriginalText =
+                Encoding.UTF8.GetString(migrateElmAppInterfaceModuleOriginalFile.ToArray());
+
+            var migrateFunctionTypeAnnotation =
+                CompileElm.TypeAnnotationFromFunctionName(MigrateElmFunctionNameInModule, migrateElmAppInterfaceModuleOriginalText);
+
+            if (migrateFunctionTypeAnnotation == null)
+                return new Result<string, Func<string, Result<string, string>>>
+                {
+                    Err = "Did not find type annotation for function '" + MigrateElmFunctionNameInModule + "'"
+                };
+
+            var typeAnnotationMatch = Regex.Match(migrateFunctionTypeAnnotation, @"^\s*([\w\d_\.]+)\s*->\s*([\w\d_\.]+)\s*$");
+
+            if (!typeAnnotationMatch.Success)
+                return new Result<string, Func<string, Result<string, string>>>
+                {
+                    Err = "Type annotation did not match expected pattern: '" + migrateFunctionTypeAnnotation + "'"
+                };
+
+            var inputTypeText = typeAnnotationMatch.Groups[1].Value;
+            var returnTypeText = typeAnnotationMatch.Groups[2].Value;
+
+            if (!inputTypeText.Equals(returnTypeText))
+                return new Result<string, Func<string, Result<string, string>>>
+                {
+                    Err = "Return type text is not equal input type text: '" + inputTypeText + "', '" + returnTypeText + "'"
+                };
+
+            var stateTypeCanonicalName =
+                inputTypeText.Contains(".") ?
+                inputTypeText :
+                MigrationElmAppInterfaceModuleName + "." + inputTypeText;
+
+            var compilationRootModuleInitialText = @"
+module " + MigrationElmAppCompilationRootModuleName + @" exposing(decodeMigrateAndEncodeAndSerializeResult, main)
+
+import " + MigrationElmAppInterfaceModuleName + @"
+import Json.Decode
+import Json.Encode
+
+
+decodeMigrateAndEncode : " + stateTypeCanonicalName + @" -> Result String " + stateTypeCanonicalName + @"
+decodeMigrateAndEncode =
+    Json.Decode.decodeString jsonDecodeBackendState
+        >> Result.map (" + MigrationElmAppInterfaceModuleName + "." + MigrateElmFunctionNameInModule + @" >> jsonEncodeBackendState >> Json.Encode.encode 0)
+        >> Result.mapError Json.Decode.errorToString
+
+
+decodeMigrateAndEncodeAndSerializeResult : String -> String
+decodeMigrateAndEncodeAndSerializeResult =
+    decodeMigrateAndEncode
+        >> jsonEncodeResult Json.Encode.string Json.Encode.string
+        >> Json.Encode.encode 0
+
+
+jsonEncodeResult : (err -> Json.Encode.Value) -> (ok -> Json.Encode.Value) -> Result err ok -> Json.Encode.Value
+jsonEncodeResult encodeErr encodeOk valueToEncode =
+    case valueToEncode of
+        Err valueToEncodeError ->
+            [ ( ""Err"", [ valueToEncodeError ] |> Json.Encode.list encodeErr ) ] |> Json.Encode.object
+
+        Ok valueToEncodeOk ->
+            [ ( ""Ok"", [ valueToEncodeOk ] |> Json.Encode.list encodeOk ) ] |> Json.Encode.object
+
+
+main : Program Int {} String
+main =
+    Platform.worker
+        { init = \_ -> ( {}, Cmd.none )
+        , update =
+            \_ _ ->
+                ( decodeMigrateAndEncodeAndSerializeResult |> always {}, Cmd.none )
+        , subscriptions = \_ -> Sub.none
+        }
+";
+            var compileCodingFunctionsLogLines = new System.Collections.Generic.List<string>();
+
+            try
+            {
+                var migrateElmAppFilesBeforeAddingCodingSupport =
+                    migrateElmAppOriginalFiles.SetItem(
+                        pathToCompilationRootModuleFile,
+                        Encoding.UTF8.GetBytes(compilationRootModuleInitialText).ToImmutableList());
+
+                var appFilesWithSupportAdded =
+                    ElmApp.WithSupportForCodingElmType(
+                        migrateElmAppFilesBeforeAddingCodingSupport,
+                        stateTypeCanonicalName,
+                        MigrationElmAppCompilationRootModuleName,
+                        compileCodingFunctionsLogLines.Add,
+                        out var functionNames);
+
+                var rootModuleTextWithSupportAdded =
+                    Encoding.UTF8.GetString(appFilesWithSupportAdded[pathToCompilationRootModuleFile].ToArray());
+
+                var rootModuleText =
+                    new[]
+                    {
+                    "jsonEncodeBackendState = " + functionNames.encodeFunctionName,
+                    "jsonDecodeBackendState = " + functionNames.decodeFunctionName
+                    }
+                    .Aggregate(rootModuleTextWithSupportAdded, (intermediateModuleText, functionToAdd) =>
+                        CompileElm.WithFunctionAdded(intermediateModuleText, functionToAdd));
+
+                var migrateElmAppFiles = appFilesWithSupportAdded.SetItem(
+                    pathToCompilationRootModuleFile,
+                    Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
+
+                var javascriptFromElmMake = Kalmit.ProcessFromElm019Code.CompileElmToJavascript(
+                    migrateElmAppFiles,
+                    pathToCompilationRootModuleFile);
+
+                var javascriptMinusCrashes = Kalmit.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
+
+                var javascriptToRun =
+                    Kalmit.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                        javascriptMinusCrashes,
+                        new[]
+                        {
+                            (functionNameInElm: MigrationElmAppCompilationRootModuleName + ".decodeMigrateAndEncodeAndSerializeResult",
+                            publicName: "interface_migrate",
+                            arity: 1),
+                        });
+
+                var attemptMigrateFunc = new Func<string, Result<string, string>>(elmAppStateBeforeSerialized =>
+                {
+                    string migrateResultString = null;
+
+                    //  TODO: For build JS engine, reuse impl from Common.
+
+                    using (var javascriptEngine = new JavaScriptEngineSwitcher.ChakraCore.ChakraCoreJsEngine(
+                            new JavaScriptEngineSwitcher.ChakraCore.ChakraCoreSettings
+                            {
+                                DisableEval = true,
+                                EnableExperimentalFeatures = true,
+                                MaxStackSize = 10_000_000,
+                            }
+                            ))
+                    {
+                        var initAppResult = javascriptEngine.Evaluate(javascriptToRun);
+
+                        var migrateResult = javascriptEngine.CallFunction(
+                            "interface_migrate", elmAppStateBeforeSerialized);
+
+                        migrateResultString = migrateResult.ToString();
+                    }
+
+                    var migrateResultStructure =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.ElmValueCommonJson.Result<string, string>>(migrateResultString);
+
+                    var elmAppStateMigratedSerialized = migrateResultStructure?.Ok?.FirstOrDefault();
+
+                    if (elmAppStateMigratedSerialized == null)
+                    {
+                        return new Result<string, string>
+                        {
+                            Err = "Decoding of serialized state failed for this migration:\n" + migrateResultStructure?.Err?.FirstOrDefault()
+                        };
+                    }
+
+                    return new Result<string, string>
+                    {
+                        Ok = elmAppStateMigratedSerialized
+                    };
+                });
+
+                return new Result<string, Func<string, Result<string, string>>>
+                {
+                    Ok = attemptMigrateFunc
+                };
+            }
+            catch (Exception e)
+            {
+                return new Result<string, Func<string, Result<string, string>>>
+                {
+                    Err = "Failed with exception:\n" + e.ToString() + "\ncompileCodingFunctionsLogLines:\n" + String.Join("\n", compileCodingFunctionsLogLines)
+                };
+            }
         }
     }
 }

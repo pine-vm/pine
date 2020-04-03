@@ -173,6 +173,34 @@ namespace Kalmit
                 .AddRange(followingFunctionsInModule);
         }
 
+        static public string TypeAnnotationFromFunctionName(string functionName, string elmModuleText)
+        {
+            var function =
+                CompileElm.ParseAllFunctionsFromModule(elmModuleText)
+                .FirstOrDefault(c => c.functionName == functionName);
+
+            if (function.functionName != functionName)
+                return null;
+
+            var commonLineStart = "^" + functionName;
+
+            var startMatches = Regex.Matches(
+                function.functionText, commonLineStart, RegexOptions.Multiline);
+
+            if (startMatches.Count != 2)
+                return null;
+
+            var partWithTypeAnnotation = function.functionText.Substring(0, startMatches[1].Index);
+
+            var typeAnnotationPrefixMatch = Regex.Match(partWithTypeAnnotation, commonLineStart + @"\s*:");
+
+            if (!typeAnnotationPrefixMatch.Success)
+                throw new NotImplementedException("Error in pattern.");
+
+            return
+                partWithTypeAnnotation.Substring(typeAnnotationPrefixMatch.Index + typeAnnotationPrefixMatch.Length);
+        }
+
         static public string WithImportsAdded(
             string originalElmModuleText, IImmutableSet<IEnumerable<string>> modulesToImport)
         {

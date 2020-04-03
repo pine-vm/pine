@@ -239,7 +239,7 @@ namespace Kalmit
                         originalFunction.functionText));
         }
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> WithSupportForCodingElmType(
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> WithSupportForCodingElmType(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             string elmTypeName,
             string elmModuleToAddFunctionsIn,
@@ -409,7 +409,7 @@ namespace Kalmit
                     Encoding.UTF8.GetBytes(interfaceModuleWithSupportingFunctions).ToImmutableList());
         }
 
-        static IImmutableList<string> FilePathFromModuleName(string moduleName)
+        static public IImmutableList<string> FilePathFromModuleName(string moduleName)
         {
             var pathComponents = moduleName.Split(new[] { '.' });
 
