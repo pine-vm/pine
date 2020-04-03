@@ -80,9 +80,14 @@ namespace Kalmit.PersistentProcess.WebHost
                     return ImmutableList.Create(directoryName, directoryName + "T" + time.ToString("HH") + ".composition.jsonl");
                 });
 
+            var persistentProcessMap =
+                serviceProvider.GetService<PersistentProcessMap>()?.mapPersistentProcess
+                ??
+                new Func<IPersistentProcess, IPersistentProcess>(persistentProcess => persistentProcess);
+
             services.AddSingleton<ProcessStore.IProcessStoreReader>(processStore);
             services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);
-            services.AddSingleton<IPersistentProcess>(BuildPersistentProcess);
+            services.AddSingleton<IPersistentProcess>(serviceProvider => persistentProcessMap(BuildPersistentProcess(serviceProvider)));
 
             var letsEncryptOptions = webAppConfigObject?.JsonStructure?.letsEncryptOptions;
             if (letsEncryptOptions == null)
@@ -419,5 +424,10 @@ namespace Kalmit.PersistentProcess.WebHost
                 request = Asp.AsPersistentProcessInterfaceHttpRequest(httpContext.Request),
             };
         }
+    }
+
+    public class PersistentProcessMap
+    {
+        public Func<IPersistentProcess, IPersistentProcess> mapPersistentProcess;
     }
 }

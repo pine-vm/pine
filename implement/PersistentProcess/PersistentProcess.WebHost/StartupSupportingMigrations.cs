@@ -1,3 +1,4 @@
+using Kalmit.ProcessStore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -47,6 +49,13 @@ namespace Kalmit.PersistentProcess.WebHost
             }
         }
 
+        class PublicHostConfiguration
+        {
+            public SyncPersistentProcess syncPersistentProcess;
+
+            public IWebHost webHost;
+        }
+
         public void Configure(
             IApplicationBuilder app,
             IWebHostEnvironment env,
@@ -71,17 +80,17 @@ namespace Kalmit.PersistentProcess.WebHost
 
             object publicAppLock = new object();
 
-            IWebHost publicAppWebHost = null;
+            PublicHostConfiguration publicAppHost = null;
 
             void stopPublicApp()
             {
                 lock (publicAppLock)
                 {
-                    if (publicAppWebHost != null)
+                    if (publicAppHost != null)
                     {
-                        publicAppWebHost.StopAsync(TimeSpan.FromSeconds(10)).Wait();
-                        publicAppWebHost.Dispose();
-                        publicAppWebHost = null;
+                        publicAppHost?.webHost.StopAsync(TimeSpan.FromSeconds(10)).Wait();
+                        publicAppHost?.webHost.Dispose();
+                        publicAppHost = null;
                     }
                 }
             }
@@ -113,16 +122,27 @@ namespace Kalmit.PersistentProcess.WebHost
                             elmAppProcessStore.DeleteFile(filePath);
                     }
 
+                    var newPublicAppConfig = new PublicHostConfiguration { };
+
                     var webHost =
                         Program.CreateWebHostBuilder(null, overrideDefaultUrls: publicWebHostUrls)
                         .WithSettingAdminRootPassword(rootPassword)
                         .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                         .WithWebAppConfigurationZipArchive(webAppConfigZipArchive)
                         .WithProcessStoreFileStore(elmAppProcessStore)
+                        .ConfigureServices(services => services.AddSingleton(new PersistentProcessMap
+                        {
+                            mapPersistentProcess = originalPersistentProcess =>
+                            {
+                                return newPublicAppConfig.syncPersistentProcess = new SyncPersistentProcess(originalPersistentProcess);
+                            }
+                        }))
                         .Build();
 
+                    newPublicAppConfig.webHost = webHost;
+
                     webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
-                    publicAppWebHost = webHost;
+                    publicAppHost = newPublicAppConfig;
                 }
             }
 
@@ -267,7 +287,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         if (prepareMigrateResult?.Ok == null)
                         {
-                            if (publicAppWebHost == null)
+                            if (publicAppHost == null)
                             {
                                 context.Response.StatusCode = 400;
                                 await context.Response.WriteAsync("Failed to prepare migration with this Elm app:\n" + prepareMigrateResult?.Err);
@@ -275,71 +295,41 @@ namespace Kalmit.PersistentProcess.WebHost
                             }
                         }
 
-                        if (publicAppWebHost == null)
+                        if (publicAppHost == null)
                         {
                             context.Response.StatusCode = 400;
                             await context.Response.WriteAsync("Migration not possible because there is no app (state).");
                             return;
                         }
 
-                        var publicAppWebHostAddresses =
-                            publicAppWebHost.ServerFeatures.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>().Addresses;
-
-                        string elmAppStateSerializedBefore = null;
-
-                        var httpPathToProcessState = Configuration.AdminPath + Configuration.ApiPersistentProcessStatePath;
-
-                        System.Net.Http.HttpClient createPublicHostClientWithAuthorizationHeader()
-                        {
-                            var adminClient = new System.Net.Http.HttpClient()
-                            {
-                                BaseAddress = new Uri(publicAppWebHostAddresses.First())
-                            };
-
-                            adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                                "Basic",
-                                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                                    WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
-
-                            return adminClient;
-                        }
-
-                        using (var publicAppClient = createPublicHostClientWithAuthorizationHeader())
-                        {
-                            var getStateResponse = publicAppClient.GetAsync(httpPathToProcessState).Result;
-
-                            elmAppStateSerializedBefore = getStateResponse.Content.ReadAsStringAsync().Result;
-                        }
-
-                        if (!(0 < elmAppStateSerializedBefore?.Length))
+                        if (publicAppHost.syncPersistentProcess == null)
                         {
                             context.Response.StatusCode = 500;
-                            await context.Response.WriteAsync("Failed to read the current app state.");
+                            await context.Response.WriteAsync("syncPersistentProcess == null");
                             return;
                         }
 
-                        var attemptMigrateResult = prepareMigrateResult.Ok(elmAppStateSerializedBefore);
+                        Result<string, string> attemptMigrateResult = null;
+
+                        publicAppHost.syncPersistentProcess.RunInLock(persistentProcess =>
+                        {
+                            var elmAppStateSerializedBefore = persistentProcess.ReductionRecordForCurrentState().ReducedValueLiteralString;
+
+                            attemptMigrateResult = prepareMigrateResult.Ok(elmAppStateSerializedBefore);
+
+                            if (attemptMigrateResult?.Ok == null)
+                                return;
+
+                            //  TODO: Add write event to history.
+
+                            persistentProcess.SetState(attemptMigrateResult.Ok);
+                        });
 
                         if (attemptMigrateResult?.Ok == null)
                         {
                             context.Response.StatusCode = 400;
                             await context.Response.WriteAsync("Attempt to migrate failed:\n" + attemptMigrateResult?.Err);
                             return;
-                        }
-
-                        using (var publicAppClient = createPublicHostClientWithAuthorizationHeader())
-                        {
-                            var setStateResponse = publicAppClient.PostAsync(
-                                httpPathToProcessState, new System.Net.Http.StringContent(attemptMigrateResult.Ok)).Result;
-
-                            if (!setStateResponse.IsSuccessStatusCode)
-                            {
-                                context.Response.StatusCode = 500;
-                                await context.Response.WriteAsync(
-                                    "Failed to set the migrated state:\nstatus code: " + setStateResponse.StatusCode +
-                                    "\nContent:\n" + setStateResponse.Content?.ReadAsStringAsync().Result);
-                                return;
-                            }
                         }
 
                         context.Response.StatusCode = 200;
@@ -561,6 +551,50 @@ main =
                 {
                     Err = "Failed with exception:\n" + e.ToString() + "\ncompileCodingFunctionsLogLines:\n" + String.Join("\n", compileCodingFunctionsLogLines)
                 };
+            }
+        }
+    }
+
+    public class SyncPersistentProcess : IPersistentProcess
+    {
+        readonly object @lock = new object();
+
+        readonly IPersistentProcess persistentProcess;
+
+        public SyncPersistentProcess(IPersistentProcess persistentProcess)
+        {
+            this.persistentProcess = persistentProcess;
+        }
+
+        public void RunInLock(Action<IPersistentProcess> action)
+        {
+            lock (@lock)
+            {
+                action(persistentProcess);
+            }
+        }
+
+        public (IReadOnlyList<string> responses, (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash)) ProcessEvents(IReadOnlyList<string> serializedEvents)
+        {
+            lock (@lock)
+            {
+                return persistentProcess.ProcessEvents(serializedEvents);
+            }
+        }
+
+        public ReductionRecord ReductionRecordForCurrentState()
+        {
+            lock (@lock)
+            {
+                return persistentProcess.ReductionRecordForCurrentState();
+            }
+        }
+
+        public (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash) SetState(string state)
+        {
+            lock (@lock)
+            {
+                return persistentProcess.SetState(state);
             }
         }
     }
