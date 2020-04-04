@@ -283,16 +283,15 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         var migrateElmAppConfigZipArchive = memoryStream.ToArray();
 
-                        var prepareMigrateResult = PrepareMigrateSerializedValueWithoutChangingElmType(migrateElmAppConfigZipArchive);
+                        var prepareMigrateResult = PrepareMigrateSerializedValueWithoutChangingElmType(
+                            migrateElmAppConfigZipArchive,
+                            publicAppConfigZipArchive: getPublicAppConfigFileFromStore());
 
                         if (prepareMigrateResult?.Ok == null)
                         {
-                            if (publicAppHost == null)
-                            {
-                                context.Response.StatusCode = 400;
-                                await context.Response.WriteAsync("Failed to prepare migration with this Elm app:\n" + prepareMigrateResult?.Err);
-                                return;
-                            }
+                            context.Response.StatusCode = 400;
+                            await context.Response.WriteAsync("Failed to prepare migration with this Elm app:\n" + prepareMigrateResult?.Err);
+                            return;
                         }
 
                         if (publicAppHost == null)
@@ -351,7 +350,8 @@ namespace Kalmit.PersistentProcess.WebHost
         }
 
         static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValueWithoutChangingElmType(
-            byte[] migrateElmAppZipArchive)
+            byte[] migrateElmAppZipArchive,
+            byte[] publicAppConfigZipArchive)
         {
             var migrateElmAppOriginalFiles =
                 ElmApp.ToFlatDictionaryWithPathComparer(
@@ -364,8 +364,7 @@ namespace Kalmit.PersistentProcess.WebHost
             var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
             var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
 
-            var migrateElmAppInterfaceModuleOriginalFile =
-                migrateElmAppOriginalFiles[pathToInterfaceModuleFile];
+            migrateElmAppOriginalFiles.TryGetValue(pathToInterfaceModuleFile, out var migrateElmAppInterfaceModuleOriginalFile);
 
             if (migrateElmAppInterfaceModuleOriginalFile == null)
                 return new Result<string, Func<string, Result<string, string>>>
@@ -415,7 +414,7 @@ import Json.Decode
 import Json.Encode
 
 
-decodeMigrateAndEncode : " + stateTypeCanonicalName + @" -> Result String " + stateTypeCanonicalName + @"
+decodeMigrateAndEncode : String -> Result String String
 decodeMigrateAndEncode =
     Json.Decode.decodeString jsonDecodeBackendState
         >> Result.map (" + MigrationElmAppInterfaceModuleName + "." + MigrateElmFunctionNameInModule + @" >> jsonEncodeBackendState >> Json.Encode.encode 0)
@@ -532,6 +531,31 @@ main =
                         {
                             Err = "Decoding of serialized state failed for this migration:\n" + migrateResultStructure?.Err?.FirstOrDefault()
                         };
+                    }
+
+                    var publicAppConfigElmApp =
+                        ElmApp.ToFlatDictionaryWithPathComparer(
+                            WebAppConfiguration.FromFiles(
+                                ZipArchive.EntriesFromZipArchive(publicAppConfigZipArchive)
+                                .Select(entry =>
+                                    (path: (IImmutableList<string>)entry.name.Split(new[] { '/', '\\' }).ToImmutableList(),
+                                    content: (IImmutableList<byte>)entry.content.ToImmutableList())
+                                    ).ToImmutableList()).ElmAppFiles);
+
+                    using (var testProcess = new PersistentProcessWithHistoryOnFileFromElm019Code(
+                        new EmptyProcessStoreReader(),
+                        publicAppConfigElmApp,
+                        logger: logEntry => { }))
+                    {
+                        testProcess.SetState(elmAppStateMigratedSerialized);
+
+                        var resultingState = testProcess.ReductionRecordForCurrentState()?.ReducedValueLiteralString;
+
+                        if (resultingState != elmAppStateMigratedSerialized)
+                            return new Result<string, string>
+                            {
+                                Err = "Failed to load the migrated serialized state with the current public app configuration. resulting State:\n" + resultingState
+                            };
                     }
 
                     return new Result<string, string>

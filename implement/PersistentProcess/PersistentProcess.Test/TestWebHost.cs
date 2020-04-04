@@ -988,6 +988,133 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void Web_host_supporting_migrations_prevents_damaging_backend_state_with_invalid_migration()
+        {
+            const string rootPassword = "Root-Password_1234567";
+
+            var elmApp = TestSetup.GetElmAppFromExampleName("test-prevent-damage-by-migrate-webapp");
+
+            var webAppConfig = new WebAppConfiguration().WithElmApp(elmApp);
+
+            var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles());
+
+            var migrateElmAppZipArchive = ZipArchive.ZipArchiveFromEntries(elmApp);
+
+            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap =
+                builder => builder.WithSettingAdminRootPassword(rootPassword);
+
+            HttpClient createClientWithAuthorizationHeader(Microsoft.AspNetCore.TestHost.TestServer server)
+            {
+                var adminClient = server.CreateClient();
+
+                adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+
+                return adminClient;
+            }
+
+            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(webHostBuilderMap))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var setAppConfigResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            new ByteArrayContent(webAppConfigZipArchive)).Result;
+
+                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
+                    }
+
+                    var stateToTriggerInvalidMigration =
+                        @"{""attemptSetMaybeStringOnMigration"":true,""maybeString"":{""Nothing"":[]},""otherState"":""""}";
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse =
+                            client.PostAsync("", new StringContent(stateToTriggerInvalidMigration, System.Text.Encoding.UTF8)).Result;
+
+                        Assert.IsTrue(
+                            httpResponse.IsSuccessStatusCode,
+                            "Set state httpResponse.IsSuccessStatusCode (" + httpResponse.Content?.ReadAsStringAsync().Result + ")");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse = client.GetAsync("").Result;
+
+                        Assert.AreEqual(
+                            httpResponse.Content?.ReadAsStringAsync().Result,
+                            stateToTriggerInvalidMigration,
+                            "Get same state back.");
+                    }
+
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var migrateHttpResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiMigrateElmState,
+                            new ByteArrayContent(migrateElmAppZipArchive)).Result;
+
+                        Assert.AreEqual(
+                            System.Net.HttpStatusCode.BadRequest,
+                            migrateHttpResponse.StatusCode,
+                            "migrate-elm-state response status code is BadRequest");
+
+                        Assert.IsTrue(
+                            (migrateHttpResponse.Content?.ReadAsStringAsync().Result ?? "").Contains("Failed to load the migrated serialized state"),
+                            "HTTP response content contains matching message");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse = client.GetAsync("").Result;
+
+                        Assert.AreEqual(
+                            stateToTriggerInvalidMigration,
+                            httpResponse.Content?.ReadAsStringAsync().Result,
+                            "Get same state back after attempted migration.");
+                    }
+
+                    var stateNotTriggeringInvalidMigration =
+                        @"{""attemptSetMaybeStringOnMigration"":false,""maybeString"":{""Nothing"":[]},""otherState"":""sometext""}";
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse =
+                            client.PostAsync("", new StringContent(stateNotTriggeringInvalidMigration, System.Text.Encoding.UTF8)).Result;
+
+                        Assert.IsTrue(
+                            httpResponse.IsSuccessStatusCode,
+                            "Set state httpResponse.IsSuccessStatusCode (" + httpResponse.Content?.ReadAsStringAsync().Result + ")");
+                    }
+
+                    using (var adminClient = createClientWithAuthorizationHeader(server))
+                    {
+                        var migrateHttpResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiMigrateElmState,
+                            new ByteArrayContent(migrateElmAppZipArchive)).Result;
+
+                        Assert.IsTrue(
+                            migrateHttpResponse.IsSuccessStatusCode,
+                            "migrateHttpResponse.IsSuccessStatusCode (" + migrateHttpResponse.Content?.ReadAsStringAsync().Result + ")");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse = client.GetAsync("").Result;
+
+                        Assert.AreEqual(
+                            stateNotTriggeringInvalidMigration.Replace("sometext", "sometext8"),
+                            httpResponse.Content?.ReadAsStringAsync().Result,
+                            "Get expected state from public app, reflecting the mapping coded in the Elm migration code.");
+                    }
+                }
+            }
+        }
+
         class FileStoreFromDelegates : IFileStore
         {
             readonly Action<IImmutableList<string>, byte[]> setFileContent;

@@ -64,6 +64,16 @@ namespace Kalmit.ProcessStore
         ReductionRecord GetReduction(byte[] reducedCompositionHash);
     }
 
+    public class EmptyProcessStoreReader : IProcessStoreReader
+    {
+        public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse()
+        {
+            yield break;
+        }
+
+        public ReductionRecord GetReduction(byte[] reducedCompositionHash) => null;
+    }
+
     public class ProcessStoreInFileDirectory : ProcessStoreInFileStore
     {
         public ProcessStoreInFileDirectory(string directoryPath, Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
