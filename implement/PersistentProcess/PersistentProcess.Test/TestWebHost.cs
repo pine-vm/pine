@@ -821,7 +821,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
@@ -854,7 +854,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppHttpResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
                     }
                 }
@@ -866,7 +866,7 @@ namespace Kalmit.PersistentProcess.Test
                         using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                         {
                             var setAppHttpResponse = adminClient.PostAsync(
-                                StartupSupportingMigrations.PathApiSetAppConfigAndContinueState,
+                                StartupSupportingMigrations.PathApiSetAppConfigAndContinueElmState,
                                 new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                             Assert.IsTrue(setAppHttpResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
@@ -906,7 +906,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
@@ -972,7 +972,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitState,
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(
@@ -1065,6 +1065,91 @@ namespace Kalmit.PersistentProcess.Test
                 }
             }
         }
+
+        [TestMethod]
+        public void Web_host_supporting_migrations_supports_set_app_config_and_migrate_elm_state()
+        {
+            var initialWebAppConfig = TestElmWebAppHttpServer.CounterWebApp;
+
+            var migrateAndSecondElmApp =
+                TestSetup.GetElmAppFromExampleName("migrate-from-int-to-string-builder-web-app");
+
+            var migrateAndSecondElmAppWebAppConfig =
+                initialWebAppConfig.WithElmApp(migrateAndSecondElmApp);
+
+            var initialWebAppConfigZipArchive =
+                ZipArchive.ZipArchiveFromEntries(initialWebAppConfig.AsFiles());
+
+            var migrateAndSecondElmAppWebAppConfigZipArchive =
+                ZipArchive.ZipArchiveFromEntries(migrateAndSecondElmAppWebAppConfig.AsFiles());
+
+            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
+            {
+                using (var server = testSetup.BuildServer())
+                {
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    {
+                        var setAppConfigResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
+                            new ByteArrayContent(initialWebAppConfigZipArchive)).Result;
+
+                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
+                    }
+
+                    var counterEventsAndExpectedResponses =
+                        TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                            new (int addition, int expectedResponse)[]
+                            {
+                                (0, 0),
+                                (1, 1),
+                                (13, 14),
+                            }).ToList();
+
+                    foreach (var (serializedEvent, expectedResponse) in counterEventsAndExpectedResponses)
+                    {
+                        using (var client = testSetup.BuildPublicAppHttpClient())
+                        {
+                            var httpResponse =
+                                client.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response matches " + expectedResponse);
+                        }
+                    }
+
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    {
+                        var setAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
+                            StartupSupportingMigrations.PathApiSetAppConfigAndMigrateElmState,
+                            new ByteArrayContent(migrateAndSecondElmAppWebAppConfigZipArchive)).Result;
+
+                        Assert.IsTrue(
+                            setAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode,
+                            "setAppConfigAndMigrateElmStateResponse IsSuccessStatusCode (" +
+                            setAppConfigAndMigrateElmStateResponse.Content.ReadAsStringAsync().Result + ")");
+                    }
+
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        Assert.AreEqual(
+                            "14",
+                            client.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                            "State migrated from counter app");
+
+                        Assert.AreEqual(HttpStatusCode.OK, client.PostAsync("", new StringContent("-part-a")).Result.StatusCode);
+
+                        Assert.AreEqual(HttpStatusCode.OK, client.PostAsync("", new StringContent("-part-b")).Result.StatusCode);
+
+                        Assert.AreEqual(
+                            "14-part-a-part-b",
+                            client.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                            "State after multiple posts");
+                    }
+                }
+            }
+        }
+
 
         class FileStoreFromDelegates : IFileStore
         {

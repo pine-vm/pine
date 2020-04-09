@@ -18,9 +18,11 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class StartupSupportingMigrations
     {
-        static public string PathApiSetAppConfigAndInitState => "/api/set-app-config-and-init-state";
+        static public string PathApiSetAppConfigAndInitElmState => "/api/set-app-config-and-init-elm-state";
 
-        static public string PathApiSetAppConfigAndContinueState => "/api/set-app-config-and-continue-state";
+        static public string PathApiSetAppConfigAndContinueElmState => "/api/set-app-config-and-continue-elm-state";
+
+        static public string PathApiSetAppConfigAndMigrateElmState => "/api/set-app-config-and-migrate-elm-state";
 
         static public string PathApiMigrateElmState => "/api/migrate-elm-state";
 
@@ -82,13 +84,25 @@ namespace Kalmit.PersistentProcess.WebHost
 
             PublicHostConfiguration publicAppHost = null;
 
-            void stopPublicApp()
+            void stopPublicApp(out ReductionRecord processStateReduction)
             {
                 lock (publicAppLock)
                 {
+                    processStateReduction = null;
+
                     if (publicAppHost != null)
                     {
                         publicAppHost?.webHost.StopAsync(TimeSpan.FromSeconds(10)).Wait();
+
+                        ReductionRecord lambdaLimit_processStateReduction = null;
+
+                        publicAppHost.syncPersistentProcess.RunInLock(persistentProcess =>
+                        {
+                            lambdaLimit_processStateReduction = persistentProcess.ReductionRecordForCurrentState();
+                        });
+
+                        processStateReduction = lambdaLimit_processStateReduction;
+
                         publicAppHost?.webHost.Dispose();
                         publicAppHost = null;
                     }
@@ -97,26 +111,35 @@ namespace Kalmit.PersistentProcess.WebHost
 
             appLifetime.ApplicationStopping.Register(() =>
             {
-                stopPublicApp();
+                stopPublicApp(out var _);
             });
 
-            void setAndStartPublicApp(byte[] webAppConfigZipArchive, bool elmAppInitState)
+            void setAndStartPublicApp(
+                byte[] webAppConfigZipArchive,
+                bool elmAppClearProcessStore,
+                string elmAppSetProcessState)
             {
                 lock (publicAppLock)
                 {
                     processStoreFileStore.SetFileContent(pathToPublicAppConfigFile, webAppConfigZipArchive);
 
-                    startPublicApp(webAppConfigZipArchive, elmAppInitState);
+                    startPublicApp(
+                        webAppConfigZipArchive,
+                        elmAppClearProcessStore: elmAppClearProcessStore,
+                        elmAppSetProcessState: elmAppSetProcessState);
                 }
             }
 
-            void startPublicApp(byte[] webAppConfigZipArchive, bool elmAppInitState)
+            void startPublicApp(
+                byte[] webAppConfigZipArchive,
+                bool elmAppClearProcessStore,
+                string elmAppSetProcessState)
             {
                 lock (publicAppLock)
                 {
-                    stopPublicApp();
+                    stopPublicApp(out var _);
 
-                    if (elmAppInitState)
+                    if (elmAppClearProcessStore)
                     {
                         foreach (var filePath in elmAppProcessStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
                             elmAppProcessStore.DeleteFile(filePath);
@@ -134,6 +157,9 @@ namespace Kalmit.PersistentProcess.WebHost
                         {
                             mapPersistentProcess = originalPersistentProcess =>
                             {
+                                if (elmAppSetProcessState != null)
+                                    originalPersistentProcess.SetState(elmAppSetProcessState);
+
                                 return newPublicAppConfig.syncPersistentProcess = new SyncPersistentProcess(originalPersistentProcess);
                             }
                         }))
@@ -149,12 +175,15 @@ namespace Kalmit.PersistentProcess.WebHost
             byte[] getPublicAppConfigFileFromStore() =>
                 processStoreFileStore.GetFileContent(pathToPublicAppConfigFile);
 
+            void startPublicAppForConfigFromStore()
             {
                 var publicAppConfigFile = getPublicAppConfigFileFromStore();
 
                 if (publicAppConfigFile != null)
-                    startPublicApp(publicAppConfigFile, elmAppInitState: false);
+                    startPublicApp(publicAppConfigFile, elmAppClearProcessStore: false, elmAppSetProcessState: null);
             }
+
+            startPublicAppForConfigFromStore();
 
             app.Run(async (context) =>
                 {
@@ -198,10 +227,10 @@ namespace Kalmit.PersistentProcess.WebHost
                     }
 
                     var requestPathIsSetAppAndInitState =
-                        context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndInitState));
+                        context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndInitElmState));
 
                     var requestPathIsSetAppAndContinueState =
-                        context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndContinueState));
+                        context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndContinueElmState));
 
                     if (context.Request.Path.StartsWithSegments(new PathString(PathApiGetAppConfig)))
                     {
@@ -262,7 +291,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         setAndStartPublicApp(
                             webAppConfigZipArchive,
-                            elmAppInitState: requestPathIsSetAppAndInitState);
+                            elmAppClearProcessStore: requestPathIsSetAppAndInitState,
+                            elmAppSetProcessState: null);
 
                         context.Response.StatusCode = 200;
                         await context.Response.WriteAsync("Successfully set the app and started the web server.");
@@ -283,21 +313,66 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         var migrateElmAppConfigZipArchive = memoryStream.ToArray();
 
-                        var prepareMigrateResult = PrepareMigrateSerializedValueWithoutChangingElmType(
+                        var destinationAppConfigZipArchive = getPublicAppConfigFileFromStore();
+
+                        if (destinationAppConfigZipArchive == null)
+                        {
+                            context.Response.StatusCode = 400;
+                            await context.Response.WriteAsync("Migration not possible because there is no app (state).");
+                            return;
+                        }
+
+                        await attemptMigrateElmStateAndSetAppConfigAndSendHttpResponse(
+                            migrateElmAppConfigZipArchive: migrateElmAppConfigZipArchive,
+                            webAppConfigZipArchive: destinationAppConfigZipArchive);
+
+                        return;
+                    }
+
+                    if (context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndMigrateElmState)))
+                    {
+                        if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            context.Response.StatusCode = 405;
+                            await context.Response.WriteAsync("Method not supported.");
+                            return;
+                        }
+
+                        var memoryStream = new MemoryStream();
+                        context.Request.Body.CopyTo(memoryStream);
+
+                        var webAppConfigZipArchive = memoryStream.ToArray();
+
+                        var elmAppFiles =
+                            ElmApp.ToFlatDictionaryWithPathComparer(
+                                WebAppConfiguration.FromFiles(
+                                    ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
+                                    .Select(entry =>
+                                        (path: (IImmutableList<string>)entry.name.Split(new[] { '/', '\\' }).ToImmutableList(),
+                                        content: (IImmutableList<byte>)entry.content.ToImmutableList())
+                                        ).ToImmutableList()).ElmAppFiles);
+
+                        var migrateElmAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(elmAppFiles);
+
+                        await attemptMigrateElmStateAndSetAppConfigAndSendHttpResponse(
+                            migrateElmAppConfigZipArchive: migrateElmAppConfigZipArchive,
+                            webAppConfigZipArchive: webAppConfigZipArchive);
+
+                        return;
+                    }
+
+                    async System.Threading.Tasks.Task attemptMigrateElmStateAndSetAppConfigAndSendHttpResponse(
+                        byte[] migrateElmAppConfigZipArchive,
+                        byte[] webAppConfigZipArchive)
+                    {
+                        var prepareMigrateResult = PrepareMigrateSerializedValue(
                             migrateElmAppConfigZipArchive,
-                            publicAppConfigZipArchive: getPublicAppConfigFileFromStore());
+                            destinationAppConfigZipArchive: webAppConfigZipArchive);
 
                         if (prepareMigrateResult?.Ok == null)
                         {
                             context.Response.StatusCode = 400;
                             await context.Response.WriteAsync("Failed to prepare migration with this Elm app:\n" + prepareMigrateResult?.Err);
-                            return;
-                        }
-
-                        if (publicAppHost == null)
-                        {
-                            context.Response.StatusCode = 400;
-                            await context.Response.WriteAsync("Migration not possible because there is no app (state).");
                             return;
                         }
 
@@ -308,28 +383,32 @@ namespace Kalmit.PersistentProcess.WebHost
                             return;
                         }
 
-                        Result<string, string> attemptMigrateResult = null;
+                        stopPublicApp(out var elmAppStateBefore);
 
-                        publicAppHost.syncPersistentProcess.RunInLock(persistentProcess =>
+                        if (elmAppStateBefore == null)
                         {
-                            var elmAppStateSerializedBefore = persistentProcess.ReductionRecordForCurrentState().ReducedValueLiteralString;
+                            context.Response.StatusCode = 400;
+                            await context.Response.WriteAsync("Migration not possible because there is no Elm app state.");
+                            return;
+                        }
 
-                            attemptMigrateResult = prepareMigrateResult.Ok(elmAppStateSerializedBefore);
-
-                            if (attemptMigrateResult?.Ok == null)
-                                return;
-
-                            //  TODO: Add write event to history.
-
-                            persistentProcess.SetState(attemptMigrateResult.Ok);
-                        });
+                        var attemptMigrateResult = prepareMigrateResult.Ok(elmAppStateBefore.ReducedValueLiteralString);
 
                         if (attemptMigrateResult?.Ok == null)
                         {
+                            startPublicAppForConfigFromStore();
+
                             context.Response.StatusCode = 400;
                             await context.Response.WriteAsync("Attempt to migrate failed:\n" + attemptMigrateResult?.Err);
                             return;
                         }
+
+                        //  TODO: Add write event to history.
+
+                        setAndStartPublicApp(
+                            webAppConfigZipArchive,
+                            elmAppClearProcessStore: false,
+                            elmAppSetProcessState: attemptMigrateResult.Ok);
 
                         context.Response.StatusCode = 200;
                         await context.Response.WriteAsync("Completed migration.");
@@ -349,9 +428,9 @@ namespace Kalmit.PersistentProcess.WebHost
             public OkT Ok;
         }
 
-        static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValueWithoutChangingElmType(
+        static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValue(
             byte[] migrateElmAppZipArchive,
-            byte[] publicAppConfigZipArchive)
+            byte[] destinationAppConfigZipArchive)
         {
             var migrateElmAppOriginalFiles =
                 ElmApp.ToFlatDictionaryWithPathComparer(
@@ -395,16 +474,15 @@ namespace Kalmit.PersistentProcess.WebHost
             var inputTypeText = typeAnnotationMatch.Groups[1].Value;
             var returnTypeText = typeAnnotationMatch.Groups[2].Value;
 
-            if (!inputTypeText.Equals(returnTypeText))
-                return new Result<string, Func<string, Result<string, string>>>
-                {
-                    Err = "Return type text is not equal input type text: '" + inputTypeText + "', '" + returnTypeText + "'"
-                };
-
-            var stateTypeCanonicalName =
+            var inputTypeCanonicalName =
                 inputTypeText.Contains(".") ?
                 inputTypeText :
                 MigrationElmAppInterfaceModuleName + "." + inputTypeText;
+
+            var returnTypeCanonicalName =
+                returnTypeText.Contains(".") ?
+                returnTypeText :
+                MigrationElmAppInterfaceModuleName + "." + returnTypeText;
 
             var compilationRootModuleInitialText = @"
 module " + MigrationElmAppCompilationRootModuleName + @" exposing(decodeMigrateAndEncodeAndSerializeResult, main)
@@ -457,27 +535,35 @@ main =
                         pathToCompilationRootModuleFile,
                         Encoding.UTF8.GetBytes(compilationRootModuleInitialText).ToImmutableList());
 
-                var appFilesWithSupportAdded =
+                var appFilesWithInputCodingFunctions =
                     ElmApp.WithSupportForCodingElmType(
                         migrateElmAppFilesBeforeAddingCodingSupport,
-                        stateTypeCanonicalName,
+                        inputTypeCanonicalName,
                         MigrationElmAppCompilationRootModuleName,
                         compileCodingFunctionsLogLines.Add,
-                        out var functionNames);
+                        out var inputTypeFunctionNames);
+
+                var appFilesWithCodingFunctions =
+                    ElmApp.WithSupportForCodingElmType(
+                        appFilesWithInputCodingFunctions,
+                        returnTypeCanonicalName,
+                        MigrationElmAppCompilationRootModuleName,
+                        compileCodingFunctionsLogLines.Add,
+                        out var returnTypeFunctionNames);
 
                 var rootModuleTextWithSupportAdded =
-                    Encoding.UTF8.GetString(appFilesWithSupportAdded[pathToCompilationRootModuleFile].ToArray());
+                    Encoding.UTF8.GetString(appFilesWithCodingFunctions[pathToCompilationRootModuleFile].ToArray());
 
                 var rootModuleText =
                     new[]
                     {
-                    "jsonEncodeBackendState = " + functionNames.encodeFunctionName,
-                    "jsonDecodeBackendState = " + functionNames.decodeFunctionName
+                        "jsonDecodeBackendState = " + inputTypeFunctionNames.decodeFunctionName,
+                        "jsonEncodeBackendState = " + returnTypeFunctionNames.encodeFunctionName
                     }
                     .Aggregate(rootModuleTextWithSupportAdded, (intermediateModuleText, functionToAdd) =>
                         CompileElm.WithFunctionAdded(intermediateModuleText, functionToAdd));
 
-                var migrateElmAppFiles = appFilesWithSupportAdded.SetItem(
+                var migrateElmAppFiles = appFilesWithCodingFunctions.SetItem(
                     pathToCompilationRootModuleFile,
                     Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
 
@@ -533,10 +619,10 @@ main =
                         };
                     }
 
-                    var publicAppConfigElmApp =
+                    var destinationAppConfigElmApp =
                         ElmApp.ToFlatDictionaryWithPathComparer(
                             WebAppConfiguration.FromFiles(
-                                ZipArchive.EntriesFromZipArchive(publicAppConfigZipArchive)
+                                ZipArchive.EntriesFromZipArchive(destinationAppConfigZipArchive)
                                 .Select(entry =>
                                     (path: (IImmutableList<string>)entry.name.Split(new[] { '/', '\\' }).ToImmutableList(),
                                     content: (IImmutableList<byte>)entry.content.ToImmutableList())
@@ -544,7 +630,7 @@ main =
 
                     using (var testProcess = new PersistentProcessWithHistoryOnFileFromElm019Code(
                         new EmptyProcessStoreReader(),
-                        publicAppConfigElmApp,
+                        destinationAppConfigElmApp,
                         logger: logEntry => { }))
                     {
                         testProcess.SetState(elmAppStateMigratedSerialized);
@@ -554,7 +640,7 @@ main =
                         if (resultingState != elmAppStateMigratedSerialized)
                             return new Result<string, string>
                             {
-                                Err = "Failed to load the migrated serialized state with the current public app configuration. resulting State:\n" + resultingState
+                                Err = "Failed to load the migrated serialized state with the destination public app configuration. resulting State:\n" + resultingState
                             };
                     }
 
