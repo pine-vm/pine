@@ -41,7 +41,7 @@ namespace Kalmit.PersistentProcess
 
         static string jsonFileName => "elm-fullstack.json";
 
-        static string staticFilesDirectoryName => "static-files";
+        static public string staticFilesDirectoryName => "static-files";
 
         static string elmAppDirectoryName => "elm-app";
 

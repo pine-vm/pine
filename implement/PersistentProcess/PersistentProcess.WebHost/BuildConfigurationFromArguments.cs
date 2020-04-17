@@ -13,6 +13,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
         public const string ElmAppSubdirectoryName = "elm-app";
 
+        static string StaticFilesSubdirectoryName => WebAppConfiguration.staticFilesDirectoryName;
+
         public static IImmutableList<string> FrontendElmAppRootFilePath =>
             ImmutableList.Create("src", "FrontendWeb", "Main.elm");
 
@@ -75,10 +77,26 @@ namespace Kalmit.PersistentProcess.WebHost
                     Console.WriteLine("I did not find a file at '" + jsonFileSearchPath + "'. I build the configuration without the 'elm-fullstack.json'.");
                 }
 
-                var staticFiles =
+                var staticFilesFromFrontendWeb =
                     frontendWebFile == null ?
                     Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :
                     new[] { (name: (IImmutableList<string>)ImmutableList.Create(FrontendWebStaticFileName), (IImmutableList<byte>)frontendWebFile.ToImmutableList()) };
+
+                var staticFilesSourceDirectory = Path.Combine(currentDirectory, StaticFilesSubdirectoryName);
+
+                var staticFilesFromDirectory =
+                    Directory.Exists(staticFilesSourceDirectory)
+                    ?
+                    Filesystem.GetAllFilesFromDirectory(staticFilesSourceDirectory)
+                    .Select(nameAndContent => (name: (IImmutableList<string>)nameAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList(), content: nameAndContent.content))
+                    .ToImmutableList()
+                    :
+                    ImmutableList<(IImmutableList<string> name, IImmutableList<byte> content)>.Empty;
+
+                Console.WriteLine("I found " + staticFilesFromDirectory.Count + " static files to include.");
+
+                var staticFiles =
+                    staticFilesFromDirectory.AddRange(staticFilesFromFrontendWeb);
 
                 var webAppConfig =
                     new WebAppConfiguration()
