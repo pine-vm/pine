@@ -185,6 +185,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             persistentProcess.ReductionRecordForCurrentState().ReducedValueLiteralString;
 
                         context.Response.StatusCode = 200;
+                        context.Response.ContentType = "application/json";
                         await context.Response.WriteAsync(reducedValueLiteralString);
                         return;
                     }
