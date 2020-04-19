@@ -11,7 +11,7 @@ namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-04-18";
+        static string AppVersionId => "2020-04-19";
 
         static int Main(string[] args)
         {
@@ -35,6 +35,7 @@ namespace elm_fullstack
                 runServerCmd.ThrowOnUnexpectedArgument = false;
 
                 var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the backend process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var processStoreSeparateReaderDirectoryPathOption = runServerCmd.Option("--process-store-separate-reader-directory-path", "Directory in the file system to read the backend process store to continue from, separate from the directory to write new store entries to. Typically used to test new versions before deploying to production.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
                 var webAppConfigurationFilePathOption = runServerCmd.Option("--web-app-configuration-file-path", "Path to a file containing the complete configuration in a zip-archive. If you don't use this option, the server uses the current directory as the source.", CommandOptionType.SingleValue);
                 var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
                 var frontendWebElmMakeAppendixOption = runServerCmd.Option("--frontend-web-elm-make-appendix", "Arguments to add when using elm make to build the frontend app.", CommandOptionType.SingleValue);
@@ -42,6 +43,7 @@ namespace elm_fullstack
                 runServerCmd.OnExecute(() =>
                 {
                     var processStoreDirectoryPath = processStoreDirectoryPathOption.Value();
+                    var processStoreSeparateReaderDirectoryPath = processStoreSeparateReaderDirectoryPathOption.Value();
 
                     if (deletePreviousBackendStateOption.HasValue())
                     {
@@ -54,6 +56,7 @@ namespace elm_fullstack
                     var webHostBuilder = Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(runServerCmd.RemainingArguments.ToArray());
 
                     webHostBuilder.WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
+                    webHostBuilder.WithSettingProcessStoreSeparateReaderDirectoryPath(processStoreSeparateReaderDirectoryPath);
 
                     var webAppConfigurationFilePath = webAppConfigurationFilePathOption.Value();
 

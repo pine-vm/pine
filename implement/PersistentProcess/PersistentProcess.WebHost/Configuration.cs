@@ -33,6 +33,12 @@ namespace Kalmit.PersistentProcess.WebHost
             string processStoreDirectoryPath) =>
             orig.WithProcessStoreFileStore(new FileStoreFromSystemIOFile(processStoreDirectoryPath));
 
+        static public IWebHostBuilder WithSettingProcessStoreSeparateReaderDirectoryPath(
+            this IWebHostBuilder orig,
+            string processStoreSeparateReaderDirectoryPath) =>
+            orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(
+                new FileStoreForProcessStoreReader(new FileStoreFromSystemIOFile(processStoreSeparateReaderDirectoryPath))));
+
         static public IWebHostBuilder WithWebAppConfigurationZipArchive(
             this IWebHostBuilder orig,
             byte[] zipArchive) =>
@@ -72,6 +78,16 @@ namespace Kalmit.PersistentProcess.WebHost
         readonly public IFileStore fileStore;
 
         public FileStoreForProcessStore(IFileStore fileStore)
+        {
+            this.fileStore = fileStore;
+        }
+    }
+
+    public class FileStoreForProcessStoreReader
+    {
+        readonly public IFileStore fileStore;
+
+        public FileStoreForProcessStoreReader(IFileStore fileStore)
         {
             this.fileStore = fileStore;
         }

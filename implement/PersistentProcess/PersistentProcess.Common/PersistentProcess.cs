@@ -22,7 +22,7 @@ namespace Kalmit.PersistentProcess
     public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProcess, IDisposable
     {
         static readonly Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings =
-            ProcessStore.ProcessStoreInFileDirectory.RecordSerializationSettings;
+            ProcessStore.ProcessStoreInFileStore.RecordSerializationSettings;
 
         byte[] lastStateHash;
 

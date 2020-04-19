@@ -50,7 +50,7 @@ namespace Kalmit.PersistentProcess.Test
                 IEnumerable<string> ReadStoredReductionFileRelativePaths()
                 {
                     System.Threading.Thread.Sleep(1111);  //  Storing reduction may be completed after client has received response.
-                    return testSetup.BuildProcessStoreInFileDirectory().ReductionsFilesNames();
+                    return testSetup.BuildProcessStoreReaderInFileDirectory().ReductionsFilesNames();
                 }
 
                 using (var server = testSetup.BuildServer())
@@ -122,11 +122,11 @@ namespace Kalmit.PersistentProcess.Test
             using (var testSetup = WebHostTestSetup.Setup(
                 TestElmWebAppHttpServer.CounterWebApp, () => persistentProcessHostDateTime))
             {
-                ProcessStore.ProcessStoreInFileDirectory BuildProcessStore() =>
-                    testSetup.BuildProcessStoreInFileDirectory();
+                ProcessStore.ProcessStoreReaderInFileStore BuildProcessStoreReader() =>
+                    testSetup.BuildProcessStoreReaderInFileDirectory();
 
                 IEnumerable<string> ReadCompositionLogFilesNames() =>
-                    BuildProcessStore().EnumerateCompositionsLogFilesPaths()
+                    BuildProcessStoreReader().EnumerateCompositionsLogFilesPaths()
                     .Select(filePath => String.Join(Path.DirectorySeparatorChar, filePath));
 
                 string FirstReductionRecordFile = null;
@@ -134,7 +134,7 @@ namespace Kalmit.PersistentProcess.Test
                 void deleteAllReductionRecordFilesExceptTheFirstOne()
                 {
                     var filesNamesExceptTheFirst =
-                        BuildProcessStore().ReductionsFilesNames().Except(new[] { FirstReductionRecordFile }).ToList();
+                        BuildProcessStoreReader().ReductionsFilesNames().Except(new[] { FirstReductionRecordFile }).ToList();
 
                     filesNamesExceptTheFirst.ForEach(reductionFileName =>
                     {
@@ -143,7 +143,7 @@ namespace Kalmit.PersistentProcess.Test
                             File.Delete(matchingFile);
                     });
 
-                    Assert.IsTrue(BuildProcessStore().ReductionsFilesNames().Count() <= 1);
+                    Assert.IsTrue(BuildProcessStoreReader().ReductionsFilesNames().Count() <= 1);
                 }
 
                 string PostStringContentAndGetResponseStringFromServer(
@@ -162,7 +162,7 @@ namespace Kalmit.PersistentProcess.Test
                     finally
                     {
                         FirstReductionRecordFile =
-                            FirstReductionRecordFile ?? BuildProcessStore().ReductionsFilesNames().FirstOrDefault();
+                            FirstReductionRecordFile ?? BuildProcessStoreReader().ReductionsFilesNames().FirstOrDefault();
                     }
                 }
 

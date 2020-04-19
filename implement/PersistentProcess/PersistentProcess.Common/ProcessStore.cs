@@ -74,55 +74,47 @@ namespace Kalmit.ProcessStore
         public ReductionRecord GetReduction(byte[] reducedCompositionHash) => null;
     }
 
-    public class ProcessStoreInFileDirectory : ProcessStoreInFileStore
+    public class ProcessStoreInFileStore
     {
-        public ProcessStoreInFileDirectory(string directoryPath, Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
-            : base(new FileStoreFromSystemIOFile(directoryPath), getCompositionLogRequestedNextFilePath)
+        static public Newtonsoft.Json.JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
         {
-        }
-    }
+            NullValueHandling = NullValueHandling.Ignore
+        };
 
-    public class ProcessStoreInFileStore : IProcessStoreWriter, IProcessStoreReader
-    {
-        private class ReductionRecordInFile
+        static readonly protected Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
+
+        protected class ReductionRecordInFile
         {
             public string ReducedCompositionHashBase16;
 
             public ValueInFile ReducedValue;
         }
 
-        IFileStore fileStore;
+        protected IFileStore fileStore;
 
-        Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath;
+        protected IFileStore compositionFileStore => new FileStoreFromSubdirectory(fileStore, "composition");
 
-        readonly object appendSerializedCompositionRecordLock = new object();
-        IImmutableList<string> appendSerializedCompositionRecordLastFilePath = null;
+        protected IFileStore reductionFileStore => new FileStoreFromSubdirectory(fileStore, "reduction");
 
-        IFileStore compositionFileStore => new FileStoreFromSubdirectory(fileStore, "composition");
-
-        IFileStore reductionFileStore => new FileStoreFromSubdirectory(fileStore, "reduction");
-
-        static public Newtonsoft.Json.JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
-        {
-            NullValueHandling = NullValueHandling.Ignore
-        };
-
-        static Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
-
-        public ProcessStoreInFileStore(
-            IFileStore fileStore,
-            Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
-        {
-            this.fileStore = fileStore;
-            this.getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
-        }
-
-        static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
+        static protected IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
             logFilesNames?.OrderBy(filePath => string.Join("", filePath));
 
         public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
             CompositionLogFileOrder(
                 compositionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty));
+
+        public ProcessStoreInFileStore(IFileStore fileStore)
+        {
+            this.fileStore = fileStore;
+        }
+    }
+
+    public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessStoreReader
+    {
+        public ProcessStoreReaderInFileStore(IFileStore fileStore)
+            : base(fileStore)
+        {
+        }
 
         public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
             EnumerateCompositionsLogFilesPaths().Reverse()
@@ -153,6 +145,27 @@ namespace Kalmit.ProcessStore
                 ReducedCompositionHash = reducedCompositionHash,
                 ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString,
             };
+        }
+
+        public IEnumerable<string> ReductionsFilesNames() =>
+            reductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
+            .Select(Enumerable.Last);
+    }
+
+    public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
+    {
+        Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath;
+
+        readonly object appendSerializedCompositionRecordLock = new object();
+
+        IImmutableList<string> appendSerializedCompositionRecordLastFilePath = null;
+
+        public ProcessStoreWriterInFileStore(
+            IFileStore fileStore,
+            Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
+            : base(fileStore)
+        {
+            this.getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
         }
 
         public void AppendSerializedCompositionRecord(byte[] record)
@@ -199,11 +212,7 @@ namespace Kalmit.ProcessStore
             var filePath = ImmutableList.Create(fileName);
 
             reductionFileStore.SetFileContent(
-                filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(recordInFile, RecordSerializationSettings)));
+                filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(recordInFile, recordSerializationSettings)));
         }
-
-        public IEnumerable<string> ReductionsFilesNames() =>
-            reductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
-            .Select(Enumerable.Last);
     }
 }

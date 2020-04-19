@@ -63,11 +63,11 @@ namespace Kalmit.PersistentProcess.Test
             this.webHostBuilderMap = webHostBuilderMap;
         }
 
-        public ProcessStore.ProcessStoreInFileDirectory BuildProcessStoreInFileDirectory() =>
-            new ProcessStore.ProcessStoreInFileDirectory(ProcessStoreDirectory, null);
+        public ProcessStore.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
+            new ProcessStore.ProcessStoreReaderInFileStore(new FileStoreFromSystemIOFile(ProcessStoreDirectory));
 
         public IEnumerable<PersistentProcess.InterfaceToHost.Event> EnumerateStoredProcessEventsReverse() =>
-            BuildProcessStoreInFileDirectory()
+            BuildProcessStoreReaderInFileDirectory()
             .EnumerateSerializedCompositionsRecordsReverse()
             .Select(Encoding.UTF8.GetString)
             .Select(JsonConvert.DeserializeObject<CompositionRecordInFile>)

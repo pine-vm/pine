@@ -71,7 +71,14 @@ namespace Kalmit.PersistentProcess.WebHost
             }
 
             var processStoreFileStore = serviceProvider.GetService<FileStoreForProcessStore>().fileStore;
-            var processStore = new Kalmit.ProcessStore.ProcessStoreInFileStore(
+            var processStoreFileStoreReader =
+                serviceProvider.GetService<FileStoreForProcessStoreReader>()?.fileStore
+                ??
+                processStoreFileStore;
+
+            var processStoreReader = new Kalmit.ProcessStore.ProcessStoreReaderInFileStore(processStoreFileStoreReader);
+
+            var processStoreWriter = new Kalmit.ProcessStore.ProcessStoreWriterInFileStore(
                 processStoreFileStore,
                 () =>
                 {
@@ -85,8 +92,8 @@ namespace Kalmit.PersistentProcess.WebHost
                 ??
                 new Func<IPersistentProcess, IPersistentProcess>(persistentProcess => persistentProcess);
 
-            services.AddSingleton<ProcessStore.IProcessStoreReader>(processStore);
-            services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStore);
+            services.AddSingleton<ProcessStore.IProcessStoreReader>(processStoreReader);
+            services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStoreWriter);
             services.AddSingleton<IPersistentProcess>(serviceProvider => persistentProcessMap(BuildPersistentProcess(serviceProvider)));
 
             var letsEncryptOptions = webAppConfigObject?.JsonStructure?.letsEncryptOptions;

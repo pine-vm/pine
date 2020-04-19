@@ -89,10 +89,15 @@ namespace Kalmit.PersistentProcess.Test
 
             IDisposableProcessWithStringInterface InstantiatePersistentProcess()
             {
-                var store = new ProcessStore.ProcessStoreInFileDirectory(processStoreDirectory, null);
+                var storeReader = new ProcessStore.ProcessStoreReaderInFileStore(
+                    new FileStoreFromSystemIOFile(processStoreDirectory));
+
+                var storeWriter = new ProcessStore.ProcessStoreWriterInFileStore(
+                    new FileStoreFromSystemIOFile(processStoreDirectory), null);
 
                 return new PersistentProcessWithControlFlowOverStoreWriter(
-                    new PersistentProcessWithHistoryOnFileFromElm019Code(store, TestSetup.CounterElmApp, logger: null), store);
+                    new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmApp, logger: null),
+                    storeWriter: storeWriter);
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
