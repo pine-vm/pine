@@ -134,17 +134,36 @@ namespace Kalmit.ProcessStore
             if (fileContent == null)
                 return null;
 
-            var reductionRecordFromFile =
-                JsonConvert.DeserializeObject<ReductionRecordInFile>(Encoding.UTF8.GetString(fileContent));
-
-            if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
-                throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
-
-            return new ReductionRecord
+            try
             {
-                ReducedCompositionHash = reducedCompositionHash,
-                ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString,
-            };
+                var payloadStartIndex =
+                    /*
+                    Previous implementation used `File.WriteAllText`:
+                    https://github.com/elm-fullstack/elm-fullstack/blob/1cd3f00bdf5a05e9bda479c534b0458b2496393c/implement/PersistentProcess/PersistentProcess.Common/ProcessStore.cs#L183
+                    Looking at the files from stores in production, it seems like that caused addition of BOM.
+                    */
+                    fileContent.Take(3).SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF })
+                    ?
+                    3
+                    :
+                    0;
+
+                var reductionRecordFromFile =
+                    JsonConvert.DeserializeObject<ReductionRecordInFile>(Encoding.UTF8.GetString(fileContent.AsSpan(payloadStartIndex)));
+
+                if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
+                    throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
+
+                return new ReductionRecord
+                {
+                    ReducedCompositionHash = reducedCompositionHash,
+                    ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString,
+                };
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Failed to read reduction from file '" + string.Join("/", filePath) + "'.", e);
+            }
         }
 
         public IEnumerable<string> ReductionsFilesNames() =>
