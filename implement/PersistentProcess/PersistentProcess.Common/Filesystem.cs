@@ -17,17 +17,17 @@ namespace Kalmit
                 "kalmit", ".cache");
 
         static public IReadOnlyCollection<(string name, IImmutableList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
-                Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
-                .Select(filePath => (GetRelativePath(directoryPath, filePath), (IImmutableList<byte>)File.ReadAllBytes(filePath).ToImmutableList()))
-                .ToList();
+            Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
+            .Select(filePath => (GetRelativePath(directoryPath, filePath), (IImmutableList<byte>)File.ReadAllBytes(filePath).ToImmutableList()))
+            .ToList();
 
         static public string GetRelativePath(
             string relativeTo, string path, StringComparison comparisonType = StringComparison.InvariantCultureIgnoreCase)
         {
-            if (path.StartsWith(relativeTo, comparisonType))
-                return path.Substring(relativeTo.Length + 1);
+            if (!path.StartsWith(relativeTo, comparisonType) || !(0 < relativeTo?.Length))
+                return path;
 
-            return path;
+            return path.Substring(relativeTo.Length).TrimStart(Path.DirectorySeparatorChar);
         }
 
         static public string CreateRandomDirectoryInTempDirectory()
