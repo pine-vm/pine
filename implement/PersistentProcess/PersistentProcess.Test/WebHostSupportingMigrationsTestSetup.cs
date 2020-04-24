@@ -23,6 +23,16 @@ namespace Kalmit.PersistentProcess.Test
         public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
         public Microsoft.AspNetCore.TestHost.TestServer BuildServer(
+             WebAppConfiguration setAppConfigAndInitElmState) =>
+             BuildServer(
+                 setAppConfigAndInitElmState:
+                    setAppConfigAndInitElmState == null
+                    ?
+                    null
+                    :
+                    ZipArchive.ZipArchiveFromEntries(setAppConfigAndInitElmState.AsFiles()));
+
+        public Microsoft.AspNetCore.TestHost.TestServer BuildServer(
              Func<IFileStore, IFileStore> processStoreFileStoreMap = null,
              byte[] setAppConfigAndInitElmState = null)
         {

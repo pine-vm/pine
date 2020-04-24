@@ -11,7 +11,7 @@ namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-04-20";
+        static string AppVersionId => "2020-04-24";
 
         static int Main(string[] args)
         {
@@ -238,7 +238,11 @@ namespace elm_fullstack
             }
             else
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(outputOption));
+                var directory = Path.GetDirectoryName(outputOption);
+
+                if (0 < directory?.Length)
+                    Directory.CreateDirectory(directory);
+
                 File.WriteAllBytes(outputOption, configZipArchive);
 
                 Console.WriteLine("I saved zip archive " + configZipArchiveFileId + " to '" + outputOption + "'");

@@ -504,68 +504,77 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Web_host_supports_setting_persistent_process_state_only_after_authorization()
+        public void Web_host_supports_setting_elm_app_state_only_after_authorization()
         {
             const string rootPassword = "Root-Password_1234567";
 
-            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap =
-                builder => builder.WithSettingAdminRootPassword(rootPassword);
+            static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppState(
+                HttpClient client, string state) =>
+                client.PostAsync(
+                    Kalmit.PersistentProcess.WebHost.StartupSupportingMigrations.PathApiElmAppState,
+                    new StringContent(state, System.Text.Encoding.UTF8));
 
-            using (var testSetup = WebHostTestSetup.Setup(TestElmWebAppHttpServer.StringBuilderWebApp, webHostBuilderMap))
+            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: rootPassword))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp))
                 {
-                    Assert.AreEqual(
-                        "",
-                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
-                        "Initial State");
-
-                    Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(server, "part-a").StatusCode);
-
-                    Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(server, "-part-b").StatusCode);
-
-                    Assert.AreEqual(
-                        "part-a-part-b",
-                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
-                        "State After Multiple Posts");
-
-                    using (var client = server.CreateClient())
+                    using (var publicClient = testSetup.BuildPublicAppHttpClient())
                     {
                         Assert.AreEqual(
-                            HttpStatusCode.Unauthorized,
-                            HttpSetPersistentProcessState(client, "new-state").Result.StatusCode,
-                                "HTTP status code for unauthorized request to set persistent process state.");
+                            "",
+                            publicClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                            "Initial State");
+
+                        Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicClient, "part-a").StatusCode);
+
+                        Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicClient, "-⚙️-part-b").StatusCode);
 
                         Assert.AreEqual(
-                            "part-a-part-b",
-                            HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
-                            "State after failing to set persistent process state.");
+                            "part-a-⚙️-part-b",
+                            publicClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                            "State After Multiple Posts");
 
-                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                            "Basic",
-                            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                                WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+                        using (var client = server.CreateClient())
+                        {
+                            Assert.AreEqual(
+                                HttpStatusCode.Unauthorized,
+                                HttpSetElmAppState(client, "new-state").Result.StatusCode,
+                                    "HTTP status code for unauthorized request to set elm app state.");
+
+                            Assert.AreEqual(
+                                "part-a-⚙️-part-b",
+                                publicClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                                "State after failing to set elm app state.");
+
+                            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                                "Basic",
+                                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                                    WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+
+                            Assert.AreEqual(
+                                HttpStatusCode.OK,
+                                HttpSetElmAppState(client, @"""new-state""").Result.StatusCode,
+                                    "HTTP status code for authorized request to set elm app state.");
+                        }
 
                         Assert.AreEqual(
-                            HttpStatusCode.OK,
-                            HttpSetPersistentProcessState(client, @"""new-state""").Result.StatusCode,
-                                "HTTP status code for authorized request to set persistent process state.");
+                            "new-state",
+                            publicClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                            "State after setting elm app state.");
+
+                        Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicClient, "_appendix").StatusCode);
                     }
-
-                    Assert.AreEqual(
-                        "new-state",
-                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
-                        "State after setting persistent process state.");
-
-                    Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(server, "_appendix").StatusCode);
                 }
 
                 using (var server = testSetup.BuildServer())
                 {
-                    Assert.AreEqual(
-                        "new-state_appendix",
-                        HttpGetAtRoot(server).Content.ReadAsStringAsync().Result,
-                        "State after setting persistent process state, appending, and restarting server.");
+                    using (var publicClient = testSetup.BuildPublicAppHttpClient())
+                    {
+                        Assert.AreEqual(
+                            "new-state_appendix",
+                            publicClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+                            "State after setting elm app state, appending, and restarting server.");
+                    }
                 }
             }
         }
@@ -1171,31 +1180,8 @@ namespace Kalmit.PersistentProcess.Test
             public string[] values = null;
         }
 
-        static HttpResponseMessage HttpGetAtRoot(
-            Microsoft.AspNetCore.TestHost.TestServer server)
-        {
-            using (var client = server.CreateClient())
-            {
-                return client.GetAsync("").Result;
-            }
-        }
-
         static HttpResponseMessage HttpPostStringContentAtRoot(
-            Microsoft.AspNetCore.TestHost.TestServer server, string requestContent)
-        {
-            using (var client = server.CreateClient())
-            {
-                return
-                    client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
-            }
-        }
-
-        static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetPersistentProcessState(
-            HttpClient client,
-            string state) =>
-            client.PostAsync(
-                Kalmit.PersistentProcess.WebHost.Configuration.AdminPath +
-                Kalmit.PersistentProcess.WebHost.Configuration.ApiPersistentProcessStatePath,
-                new StringContent(state, System.Text.Encoding.UTF8));
+            HttpClient client, string requestContent) =>
+                client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
     }
 }

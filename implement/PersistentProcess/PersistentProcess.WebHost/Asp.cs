@@ -123,6 +123,10 @@ namespace Kalmit.PersistentProcess.WebHost
                 new PathString(Configuration.AdminPath),
                 out var requestPathInAdmin))
             {
+                /* TODO:
+                Remove special handling for this path from the public HTTP interface when the apps in production have been migrated to the new admin interface.
+                */
+
                 var configuration = context.RequestServices.GetService<IConfiguration>();
 
                 var rootPassword = configuration.GetValue<string>(Configuration.AdminRootPasswordSettingKey);

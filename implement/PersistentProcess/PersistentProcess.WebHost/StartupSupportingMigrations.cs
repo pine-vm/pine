@@ -26,6 +26,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiMigrateElmState => "/api/migrate-elm-state";
 
+        static public string PathApiElmAppState => "/api/elm-app-state";
+
         static public string PathApiGetAppConfig => "/api/get-app-config";
 
         static public string MigrationElmAppInterfaceModuleName => "MigrateBackendState";
@@ -359,6 +361,58 @@ namespace Kalmit.PersistentProcess.WebHost
                             webAppConfigZipArchive: webAppConfigZipArchive);
 
                         return;
+                    }
+
+                    if (context.Request.Path.Equals(new PathString(PathApiElmAppState)))
+                    {
+                        if (publicAppHost == null)
+                        {
+                            context.Response.StatusCode = 400;
+                            await context.Response.WriteAsync("Not possible because there is no app (state).");
+                            return;
+                        }
+
+                        if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            var syncPersistentProcess = publicAppHost.syncPersistentProcess;
+
+                            if (syncPersistentProcess == null)
+                            {
+                                context.Response.StatusCode = 500;
+                                await context.Response.WriteAsync("syncPersistentProcess == null");
+                                return;
+                            }
+
+                            var reducedValueLiteralString =
+                                syncPersistentProcess.ReductionRecordForCurrentState().ReducedValueLiteralString;
+
+                            context.Response.StatusCode = 200;
+                            context.Response.ContentType = "application/json";
+                            await context.Response.WriteAsync(reducedValueLiteralString);
+                            return;
+                        }
+                        else
+                        {
+                            if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEndAsync().Result;
+
+                                startPublicApp(
+                                    webAppConfigZipArchive: getPublicAppConfigFileFromStore(),
+                                    elmAppClearProcessStore: false,
+                                    elmAppSetProcessState: stateToSet);
+
+                                context.Response.StatusCode = 200;
+                                await context.Response.WriteAsync("Successfully set elm app state.");
+                                return;
+                            }
+                            else
+                            {
+                                context.Response.StatusCode = 405;
+                                await context.Response.WriteAsync("Method not supported.");
+                                return;
+                            }
+                        }
                     }
 
                     async System.Threading.Tasks.Task attemptMigrateElmStateAndSetAppConfigAndSendHttpResponse(
