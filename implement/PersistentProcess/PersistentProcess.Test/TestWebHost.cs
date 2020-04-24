@@ -901,17 +901,8 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: webAppConfigZipArchive))
                 {
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
-                    {
-                        var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
-                            new ByteArrayContent(webAppConfigZipArchive)).Result;
-
-                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
-                    }
-
                     using (var client = testSetup.BuildPublicAppHttpClient())
                     {
                         var httpResponse =
@@ -967,19 +958,8 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: webAppConfigZipArchive))
                 {
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
-                    {
-                        var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
-                            new ByteArrayContent(webAppConfigZipArchive)).Result;
-
-                        Assert.IsTrue(
-                            setAppConfigResponse.IsSuccessStatusCode,
-                            "set-app response IsSuccessStatusCode (" + setAppConfigResponse.StatusCode + ")");
-                    }
-
                     var stateToTriggerInvalidMigration =
                         @"{""attemptSetMaybeStringOnMigration"":true,""maybeString"":{""Nothing"":[]},""otherState"":""""}";
 
@@ -1085,17 +1065,8 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: initialWebAppConfigZipArchive))
                 {
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
-                    {
-                        var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
-                            new ByteArrayContent(initialWebAppConfigZipArchive)).Result;
-
-                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
-                    }
-
                     var counterEventsAndExpectedResponses =
                         TestSetup.CounterProcessTestEventsAndExpectedResponses(
                             new (int addition, int expectedResponse)[]

@@ -1,7 +1,9 @@
 using Kalmit.PersistentProcess.WebHost;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
+using System.Net.Http;
 using System.Net.Http.Headers;
 
 namespace Kalmit.PersistentProcess.Test
@@ -21,11 +23,12 @@ namespace Kalmit.PersistentProcess.Test
         public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
         public Microsoft.AspNetCore.TestHost.TestServer BuildServer(
-             Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
+             Func<IFileStore, IFileStore> processStoreFileStoreMap = null,
+             byte[] setAppConfigAndInitElmState = null)
         {
             var defaultFileStore = new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
-            return
+            var server =
                 new Microsoft.AspNetCore.TestHost.TestServer(
                     (webHostBuilderMap ?? (builder => builder))
                     (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
@@ -34,6 +37,22 @@ namespace Kalmit.PersistentProcess.Test
                     .WithSettingAdminRootPassword(adminRootPassword)
                     .UseStartup<StartupSupportingMigrations>()
                     .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore)));
+
+            if (setAppConfigAndInitElmState != null)
+            {
+                using (var adminClient = SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                {
+                    var setAppConfigResponse = adminClient.PostAsync(
+                        StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
+                        new ByteArrayContent(setAppConfigAndInitElmState)).Result;
+
+                    Assert.IsTrue(
+                        setAppConfigResponse.IsSuccessStatusCode,
+                        "set-app response IsSuccessStatusCode (" + setAppConfigResponse.StatusCode + ")");
+                }
+            }
+
+            return server;
         }
 
         static public WebHostSupportingMigrationsTestSetup Setup(
