@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -150,7 +151,24 @@ namespace Kalmit.PersistentProcess.WebHost
                     var newPublicAppConfig = new PublicHostConfiguration { };
 
                     var webHost =
-                        Program.CreateWebHostBuilder(null, overrideDefaultUrls: publicWebHostUrls)
+                        Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
+                        .ConfigureLogging((hostingContext, logging) =>
+                        {
+                            logging.AddConfiguration(hostingContext.Configuration.GetSection("Logging"));
+                            logging.AddConsole();
+                            logging.AddDebug();
+                        })
+                        .ConfigureKestrel(kestrelOptions =>
+                        {
+                            kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
+                            {
+                                httpsOptions.ServerCertificateSelector = (c, s) => FluffySpoon.AspNet.LetsEncrypt.LetsEncryptRenewalService.Certificate;
+                            });
+                        })
+                        .UseUrls(publicWebHostUrls ?? new[] { "http://*", "https://*" })
+                        .UseStartup<Startup>()
+
+                        //  TODO: Remove WithSettingAdminRootPassword when apps in production are migrated to new admin interface.
                         .WithSettingAdminRootPassword(rootPassword)
                         .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                         .WithWebAppConfigurationZipArchive(webAppConfigZipArchive)

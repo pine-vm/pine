@@ -6,6 +6,7 @@ using Kalmit;
 using Kalmit.PersistentProcess.WebHost;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 
 namespace elm_fullstack
 {
@@ -139,10 +140,13 @@ namespace elm_fullstack
 
                     var webHostBuilder =
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
+                        .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                         .UseUrls("http://*:" + adminInterfaceHttpPort.ToString())
                         .UseStartup<StartupSupportingMigrations>()
-                        .WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath)
-                        .WithSettingAdminRootPassword(adminRootPasswordOption.Value());
+                        .WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
+
+                    if (adminRootPasswordOption.HasValue())
+                        webHostBuilder = webHostBuilder.WithSettingAdminRootPassword(adminRootPasswordOption.Value());
 
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.Run(webHostBuilder.Build());
                 });
