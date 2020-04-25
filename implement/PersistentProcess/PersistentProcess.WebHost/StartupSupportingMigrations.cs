@@ -247,12 +247,12 @@ namespace Kalmit.PersistentProcess.WebHost
                     }
 
                     var requestPathIsSetAppAndInitState =
-                        context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndInitElmState));
+                        context.Request.Path.Equals(new PathString(PathApiSetAppConfigAndInitElmState));
 
                     var requestPathIsSetAppAndContinueState =
-                        context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndContinueElmState));
+                        context.Request.Path.Equals(new PathString(PathApiSetAppConfigAndContinueElmState));
 
-                    if (context.Request.Path.StartsWithSegments(new PathString(PathApiGetAppConfig)))
+                    if (context.Request.Path.Equals(new PathString(PathApiGetAppConfig)))
                     {
                         if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                         {
@@ -319,7 +319,7 @@ namespace Kalmit.PersistentProcess.WebHost
                         return;
                     }
 
-                    if (context.Request.Path.StartsWithSegments(new PathString(PathApiMigrateElmState)))
+                    if (context.Request.Path.Equals(new PathString(PathApiMigrateElmState)))
                     {
                         if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
                         {
@@ -349,7 +349,7 @@ namespace Kalmit.PersistentProcess.WebHost
                         return;
                     }
 
-                    if (context.Request.Path.StartsWithSegments(new PathString(PathApiSetAppConfigAndMigrateElmState)))
+                    if (context.Request.Path.Equals(new PathString(PathApiSetAppConfigAndMigrateElmState)))
                     {
                         if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
                         {
