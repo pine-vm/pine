@@ -122,6 +122,7 @@ namespace elm_fullstack
                 var deletePreviousBackendStateOption = runServerSupportingMigrationsCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
                 var adminInterfaceHttpPortOption = runServerSupportingMigrationsCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminRootPasswordOption = runServerSupportingMigrationsCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
+                var deployOption = runServerSupportingMigrationsCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command.", CommandOptionType.NoValue);
 
                 runServerSupportingMigrationsCmd.OnExecute(() =>
                 {
@@ -129,10 +130,12 @@ namespace elm_fullstack
 
                     if (deletePreviousBackendStateOption.HasValue())
                     {
-                        Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'");
+                        Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'...");
 
                         if (System.IO.Directory.Exists(processStoreDirectoryPath))
                             System.IO.Directory.Delete(processStoreDirectoryPath, true);
+
+                        Console.WriteLine("Completed deleting the previous process state from '" + processStoreDirectoryPath + "'.");
                     }
 
                     var adminInterfaceHttpPort =
@@ -148,7 +151,42 @@ namespace elm_fullstack
                     if (adminRootPasswordOption.HasValue())
                         webHostBuilder = webHostBuilder.WithSettingAdminRootPassword(adminRootPasswordOption.Value());
 
-                    Microsoft.AspNetCore.Hosting.WebHostExtensions.Run(webHostBuilder.Build());
+                    var webHost = webHostBuilder.Build();
+
+                    Console.WriteLine("Starting the web server with the admin interface...");
+
+                    webHost.Start();
+
+                    Console.WriteLine("Completed starting the web server with the admin interface.");
+
+                    if (deployOption.HasValue())
+                    {
+                        System.Threading.Tasks.Task.Delay(1000).Wait();
+
+                        deploy(
+                            adminInterface: "http://localhost:" + adminInterfaceHttpPort,
+                            adminRootPassword: adminRootPasswordOption.Value(),
+                            initElmAppState: deletePreviousBackendStateOption.HasValue());
+                    }
+
+                    Microsoft.AspNetCore.Hosting.WebHostExtensions.WaitForShutdown(webHost);
+                });
+            });
+
+            app.Command("deploy", deployCmd =>
+            {
+                deployCmd.Description = "Deploy an app to a server. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+
+                var adminInterfaceOption = deployCmd.Option("--admin-interface", "Address to the admin interface of the server to deploy to.", CommandOptionType.SingleValue).IsRequired();
+                var adminRootPasswordOption = deployCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue).IsRequired();
+                var initElmAppStateOption = deployCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
+
+                deployCmd.OnExecute(() =>
+                {
+                    deploy(
+                        adminInterface: adminInterfaceOption.Value(),
+                        adminRootPassword: adminRootPasswordOption.Value(),
+                        initElmAppState: initElmAppStateOption.HasValue());
                 });
             });
 
@@ -161,6 +199,58 @@ namespace elm_fullstack
             });
 
             return app.Execute(args);
+        }
+
+        static void deploy(string adminInterface, string adminRootPassword, bool initElmAppState)
+        {
+            var buildConfigurationLog = new System.Collections.Generic.List<String>();
+
+            Console.WriteLine("Beginning to build configuration...");
+
+            var (compileConfigZipArchive, loweredElmAppFiles) =
+                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                    //  TODO: Fix scope for frontendWebElmMakeCommandAppendix: Looks like this does not belong here. Move it to `elm-fullstack.json`?
+                    frontendWebElmMakeCommandAppendix: null,
+                    buildConfigurationLog.Add);
+
+            var webAppConfigZipArchive = compileConfigZipArchive();
+
+            var webAppConfigZipArchiveFileId =
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigZipArchive));
+
+            var webAppConfigFileId =
+                Kalmit.CommonConversion.StringBase16FromByteArray(
+                    Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                        Kalmit.ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)))));
+
+            Console.WriteLine(
+                "Built zip archive " + webAppConfigZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
+
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(adminRootPassword))));
+
+                var deployAddress =
+                    adminInterface +
+                    (initElmAppState
+                    ?
+                    StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState
+                    :
+                    StartupSupportingMigrations.PathApiSetAppConfigAndMigrateElmState);
+
+                Console.WriteLine("Beginning to deploy app '" + webAppConfigFileId + "' to '" + deployAddress + "'...");
+
+                var httpResponse = httpClient.PostAsync(
+                    deployAddress,
+                    new System.Net.Http.ByteArrayContent(webAppConfigZipArchive)).Result;
+
+                Console.WriteLine(
+                    "Server response: " + httpResponse.StatusCode + "\n" +
+                     httpResponse.Content.ReadAsStringAsync().Result);
+            }
         }
 
         static (string commandName, bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)
@@ -230,8 +320,9 @@ namespace elm_fullstack
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
 
             var webAppConfigFileId =
-                Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
-                    Kalmit.ZipArchive.EntriesFromZipArchive(configZipArchive))));
+                Kalmit.CommonConversion.StringBase16FromByteArray(
+                    Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                        Kalmit.ZipArchive.EntriesFromZipArchive(configZipArchive)))));
 
             Console.WriteLine(
                 "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
