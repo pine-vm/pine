@@ -6,6 +6,8 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class Program
     {
+        static public string AppVersionId => "2020-04-25";
+
         public static IWebHostBuilder CreateWebHostBuilder(string[] args, string[] overrideDefaultUrls = null) =>
             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((hostingContext, config) =>

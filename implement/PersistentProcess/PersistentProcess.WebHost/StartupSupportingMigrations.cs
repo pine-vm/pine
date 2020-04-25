@@ -487,6 +487,15 @@ namespace Kalmit.PersistentProcess.WebHost
                         return;
                     }
 
+                    if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
+                    {
+                        context.Response.StatusCode = 200;
+                        await context.Response.WriteAsync(
+                            "Welcome to Elm-fullstack version " + Program.AppVersionId + ".\n" +
+                            "To learn about this admin interface, see http://elm-fullstack.org/");
+                        return;
+                    }
+
                     context.Response.StatusCode = 404;
                     await context.Response.WriteAsync("Not Found");
                     return;

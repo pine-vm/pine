@@ -12,8 +12,6 @@ namespace elm_fullstack
 {
     class Program
     {
-        static string AppVersionId => "2020-04-25";
-
         static int Main(string[] args)
         {
             var app = new CommandLineApplication
@@ -24,7 +22,7 @@ namespace elm_fullstack
 
             app.HelpOption(inherited: true);
 
-            app.VersionOption(template: "-v|--version", shortFormVersion: "version " + AppVersionId);
+            app.VersionOption(template: "-v|--version", shortFormVersion: "version " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId);
 
             CommandOption verboseLogOptionFromCommand(CommandLineApplication command) =>
                 command.Option("--verbose-log", "", CommandOptionType.NoValue);
