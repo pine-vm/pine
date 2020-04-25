@@ -240,7 +240,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             context.Response.StatusCode = 401;
                             context.Response.Headers.Add(
                                 "WWW-Authenticate",
-                                @"Basic realm=""" + context.Request.Host + Configuration.AdminPath + @""", charset=""UTF-8""");
+                                @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""");
                             await context.Response.WriteAsync("Unauthorized");
                             return;
                         }
