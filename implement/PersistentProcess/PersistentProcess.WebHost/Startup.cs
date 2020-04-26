@@ -41,7 +41,6 @@ namespace Kalmit.PersistentProcess.WebHost
                         "I did not find a web app config in the services. I try to build the config from current directory.");
 
                     var (compileConfigZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                        frontendWebElmMakeCommandAppendix: config.GetValue<string>(Configuration.WithSettingFrontendWebElmMakeAppendixSettingKey),
                         verboseLogWriteLine: null);
 
                     webAppConfigFileZipArchive = compileConfigZipArchive();

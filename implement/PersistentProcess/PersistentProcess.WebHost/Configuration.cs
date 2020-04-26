@@ -11,8 +11,6 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string ApiPersistentProcessStatePath => "/api/process/state";
 
-        static public string WithSettingFrontendWebElmMakeAppendixSettingKey => "frontendWebElmMakeAppendix";
-
         static public string AdminRootPasswordSettingKey => "adminRootPassword";
 
         static public string PublicWebHostUrlsSettingKey = "publicWebHostUrls";
@@ -51,11 +49,6 @@ namespace Kalmit.PersistentProcess.WebHost
             this IWebHostBuilder orig,
             string webAppConfigurationFilePath) =>
             orig.WithWebAppConfigurationZipArchive(System.IO.File.ReadAllBytes(webAppConfigurationFilePath));
-
-        static public IWebHostBuilder WithSettingFrontendWebElmMakeAppendix(
-            this IWebHostBuilder orig,
-            string frontendWebElmMakeAppendix) =>
-            orig.UseSetting(WithSettingFrontendWebElmMakeAppendixSettingKey, frontendWebElmMakeAppendix);
 
         static public IWebHostBuilder WithSettingAdminRootPassword(
             this IWebHostBuilder orig,

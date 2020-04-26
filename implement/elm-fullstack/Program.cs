@@ -37,7 +37,6 @@ namespace elm_fullstack
                 var processStoreSeparateReaderDirectoryPathOption = runServerCmd.Option("--process-store-separate-reader-directory-path", "Directory in the file system to read the backend process store to continue from, separate from the directory to write new store entries to. Typically used to test new versions before deploying to production.", CommandOptionType.SingleValue);
                 var webAppConfigurationFilePathOption = runServerCmd.Option("--web-app-configuration-file-path", "Path to a file containing the complete configuration in a zip-archive. If you don't use this option, the server uses the current directory as the source.", CommandOptionType.SingleValue);
                 var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
-                var frontendWebElmMakeAppendixOption = runServerCmd.Option("--frontend-web-elm-make-appendix", "Arguments to add when using elm make to build the frontend app.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -64,8 +63,6 @@ namespace elm_fullstack
                     if (webAppConfigurationFilePath != null)
                         webHostBuilder.WithWebAppConfigurationZipArchiveFromFilePath(webAppConfigurationFilePath);
 
-                    webHostBuilder.WithSettingFrontendWebElmMakeAppendix(frontendWebElmMakeAppendixOption.Value());
-
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.Run(webHostBuilder.Build());
                 });
             });
@@ -77,7 +74,6 @@ namespace elm_fullstack
                 var verboseLogOption = verboseLogOptionFromCommand(buildConfigCmd);
                 var outputOption = buildConfigCmd.Option("--output", "Path to write the zip-archive to.", CommandOptionType.SingleValue);
                 var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
-                var frontendWebElmMakeCommandAppendixOption = buildConfigCmd.Option("--frontend-web-elm-make-appendix", "Text to append when invoking Elm make.", CommandOptionType.SingleValue);
 
                 buildConfigCmd.ThrowOnUnexpectedArgument = false;
 
@@ -92,7 +88,6 @@ namespace elm_fullstack
                     BuildConfiguration(
                         outputOption: outputOption.Value(),
                         loweredElmOutputOption: loweredElmOutputOption.Value(),
-                        frontendWebElmMakeCommandAppendixOption: frontendWebElmMakeCommandAppendixOption.Value(),
                         verboseLogWriteLine: verboseLogWriteLine);
                 });
             });
@@ -207,8 +202,6 @@ namespace elm_fullstack
 
             var (compileConfigZipArchive, loweredElmAppFiles) =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                    //  TODO: Fix scope for frontendWebElmMakeCommandAppendix: Looks like this does not belong here. Move it to `elm-fullstack.json`?
-                    frontendWebElmMakeCommandAppendix: null,
                     buildConfigurationLog.Add);
 
             var webAppConfigZipArchive = compileConfigZipArchive();
@@ -293,12 +286,11 @@ namespace elm_fullstack
         static public void BuildConfiguration(
             string outputOption,
             string loweredElmOutputOption,
-            string frontendWebElmMakeCommandAppendixOption,
             Action<string> verboseLogWriteLine)
         {
             var (compileConfigZipArchive, loweredElmAppFiles) =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                    frontendWebElmMakeCommandAppendixOption, verboseLogWriteLine);
+                    verboseLogWriteLine);
 
             if (0 < loweredElmOutputOption?.Length)
             {
