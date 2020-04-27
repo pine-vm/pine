@@ -18,7 +18,7 @@ FROM binaries AS build-default-config
 COPY ./PersistentProcess/example-elm-apps/default-full-stack-app /default-app/
 
 WORKDIR /default-app
-RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll" build-config --frontend-web-elm-make-appendix="--debug" --output="/build-output/web-app-config.zip"
+RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll" build-config --output="/build-output/web-app-config.zip"
 
 # Reduce startup cost: Produce an image which has popular blobs already in cache: Continue with state after having built a configuration.
 FROM build-default-config AS with-default-app

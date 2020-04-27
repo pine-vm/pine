@@ -4,5 +4,6 @@
             "matchingRegexPattern": "^.*//[^/]+(|/(?!(api/|elm-fullstack-admin/)).*)$",
             "resultString": "FrontendWeb.html"
         }
-    ]
+    ],
+    "frontendWebElmMakeCommandAppendix": "--debug"
 }
