@@ -29,6 +29,6 @@ namespace Kalmit.PersistentProcess.WebHost
                 })
                 .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                 .UseUrls(overrideDefaultUrls ?? new[] { "http://*", "https://*" })
-                .UseStartup<Startup>();
+                .UseStartup<StartupPublicApp>();
     }
 }

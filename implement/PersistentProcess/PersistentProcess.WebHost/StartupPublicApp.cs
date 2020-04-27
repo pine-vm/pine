@@ -13,11 +13,11 @@ using System.Linq;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
-    public class Startup
+    public class StartupPublicApp
     {
-        private readonly ILogger<Startup> _logger;
+        private readonly ILogger<StartupPublicApp> _logger;
 
-        public Startup(ILogger<Startup> logger)
+        public StartupPublicApp(ILogger<StartupPublicApp> logger)
         {
             _logger = logger;
 
@@ -113,7 +113,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
         {
-            var logger = services.GetService<ILogger<Startup>>();
+            var logger = services.GetService<ILogger<StartupPublicApp>>();
             var elmAppFiles = services.GetService<WebAppConfiguration>()?.ElmAppFiles;
 
             if (!(0 < elmAppFiles?.Count))

@@ -17,7 +17,7 @@ using System.Text.RegularExpressions;
 
 namespace Kalmit.PersistentProcess.WebHost
 {
-    public class StartupSupportingMigrations
+    public class StartupAdminInterface
     {
         static public string PathApiSetAppConfigAndInitElmState => "/api/set-app-config-and-init-elm-state";
 
@@ -37,7 +37,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static string MigrateElmFunctionNameInModule => "migrate";
 
-        public StartupSupportingMigrations()
+        public StartupAdminInterface()
         {
         }
 
@@ -166,10 +166,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             });
                         })
                         .UseUrls(publicWebHostUrls ?? new[] { "http://*", "https://*" })
-                        .UseStartup<Startup>()
-
-                        //  TODO: Remove WithSettingAdminRootPassword when apps in production are migrated to new admin interface.
-                        .WithSettingAdminRootPassword(rootPassword)
+                        .UseStartup<StartupPublicApp>()
                         .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                         .WithWebAppConfigurationZipArchive(webAppConfigZipArchive)
                         .WithProcessStoreFileStore(elmAppProcessStore)

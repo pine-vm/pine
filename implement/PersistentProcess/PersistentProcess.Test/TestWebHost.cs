@@ -511,10 +511,10 @@ namespace Kalmit.PersistentProcess.Test
             static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppState(
                 HttpClient client, string state) =>
                 client.PostAsync(
-                    Kalmit.PersistentProcess.WebHost.StartupSupportingMigrations.PathApiElmAppState,
+                    Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiElmAppState,
                     new StringContent(state, System.Text.Encoding.UTF8));
 
-            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: rootPassword))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(adminRootPassword: rootPassword))
             {
                 using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp))
                 {
@@ -823,14 +823,14 @@ namespace Kalmit.PersistentProcess.Test
             var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(
                 TestElmWebAppHttpServer.CounterWebApp.AsFiles());
 
-            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
                 using (var server = testSetup.BuildServer())
                 {
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppConfigResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
+                            StartupAdminInterface.PathApiSetAppConfigAndInitElmState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
@@ -838,7 +838,7 @@ namespace Kalmit.PersistentProcess.Test
 
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
-                        var getAppConfigResponse = adminClient.GetAsync(StartupSupportingMigrations.PathApiGetAppConfig).Result;
+                        var getAppConfigResponse = adminClient.GetAsync(StartupAdminInterface.PathApiGetAppConfig).Result;
 
                         Assert.IsTrue(getAppConfigResponse.IsSuccessStatusCode, "get-app response IsSuccessStatusCode");
 
@@ -863,7 +863,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppHttpResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
+                            StartupAdminInterface.PathApiSetAppConfigAndInitElmState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
                     }
                 }
@@ -875,7 +875,7 @@ namespace Kalmit.PersistentProcess.Test
                         using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                         {
                             var setAppHttpResponse = adminClient.PostAsync(
-                                StartupSupportingMigrations.PathApiSetAppConfigAndContinueElmState,
+                                StartupAdminInterface.PathApiSetAppConfigAndContinueElmState,
                                 new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                             Assert.IsTrue(setAppHttpResponse.IsSuccessStatusCode, "set-app response IsSuccessStatusCode");
@@ -908,7 +908,7 @@ namespace Kalmit.PersistentProcess.Test
             var migrateElmAppZipArchive = ZipArchive.ZipArchiveFromEntries(
                 TestSetup.GetElmAppFromExampleName("migrate-string-append-length"));
 
-            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
                 using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: webAppConfigZipArchive))
                 {
@@ -935,7 +935,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiMigrateElmState,
+                            StartupAdminInterface.PathApiMigrateElmState,
                             new ByteArrayContent(migrateElmAppZipArchive)).Result;
 
                         Assert.IsTrue(migrateHttpResponse.IsSuccessStatusCode, "migrate-elm-state response IsSuccessStatusCode");
@@ -965,7 +965,7 @@ namespace Kalmit.PersistentProcess.Test
 
             var migrateElmAppZipArchive = ZipArchive.ZipArchiveFromEntries(elmApp);
 
-            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
                 using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: webAppConfigZipArchive))
                 {
@@ -995,7 +995,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiMigrateElmState,
+                            StartupAdminInterface.PathApiMigrateElmState,
                             new ByteArrayContent(migrateElmAppZipArchive)).Result;
 
                         Assert.AreEqual(
@@ -1034,7 +1034,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiMigrateElmState,
+                            StartupAdminInterface.PathApiMigrateElmState,
                             new ByteArrayContent(migrateElmAppZipArchive)).Result;
 
                         Assert.IsTrue(
@@ -1072,7 +1072,7 @@ namespace Kalmit.PersistentProcess.Test
             var migrateAndSecondElmAppWebAppConfigZipArchive =
                 ZipArchive.ZipArchiveFromEntries(migrateAndSecondElmAppWebAppConfig.AsFiles());
 
-            using (var testSetup = WebHostSupportingMigrationsTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(adminRootPassword: "Root-Password_1234567"))
             {
                 using (var server = testSetup.BuildServer(setAppConfigAndInitElmState: initialWebAppConfigZipArchive))
                 {
@@ -1101,7 +1101,7 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
                         var setAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
-                            StartupSupportingMigrations.PathApiSetAppConfigAndMigrateElmState,
+                            StartupAdminInterface.PathApiSetAppConfigAndMigrateElmState,
                             new ByteArrayContent(migrateAndSecondElmAppWebAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(

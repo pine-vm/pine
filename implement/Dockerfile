@@ -23,10 +23,10 @@ RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll" build-config --output="/bui
 # Reduce startup cost: Produce an image which has popular blobs already in cache: Continue with state after having built a configuration.
 FROM build-default-config AS with-default-app
 
-COPY --from=build-default-config /build-output/web-app-config.zip /elm-fullstack/
+# COPY --from=build-default-config /build-output/web-app-config.zip /elm-fullstack/
 
 WORKDIR /elm-fullstack
 
-ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store", "--web-app-configuration-file-path=/elm-fullstack/web-app-config.zip"]
+ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store"]
 
 # ENV APPSETTING_adminRootPassword="password-for-elm-fullstack-root"

@@ -8,7 +8,7 @@ using System.Net.Http.Headers;
 
 namespace Kalmit.PersistentProcess.Test
 {
-    public class WebHostSupportingMigrationsTestSetup : IDisposable
+    public class WebHostAdminInterfaceTestSetup : IDisposable
     {
         static string PublicWebHostUrl => "http://localhost:35491";
 
@@ -45,7 +45,7 @@ namespace Kalmit.PersistentProcess.Test
                     .UseUrls(AdminWebHostUrl)
                     .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
                     .WithSettingAdminRootPassword(adminRootPassword)
-                    .UseStartup<StartupSupportingMigrations>()
+                    .UseStartup<StartupAdminInterface>()
                     .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore)));
 
             if (setAppConfigAndInitElmState != null)
@@ -53,7 +53,7 @@ namespace Kalmit.PersistentProcess.Test
                 using (var adminClient = SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                 {
                     var setAppConfigResponse = adminClient.PostAsync(
-                        StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState,
+                        StartupAdminInterface.PathApiSetAppConfigAndInitElmState,
                         new ByteArrayContent(setAppConfigAndInitElmState)).Result;
 
                     Assert.IsTrue(
@@ -65,18 +65,18 @@ namespace Kalmit.PersistentProcess.Test
             return server;
         }
 
-        static public WebHostSupportingMigrationsTestSetup Setup(
+        static public WebHostAdminInterfaceTestSetup Setup(
             Func<DateTimeOffset> persistentProcessHostDateTime = null) =>
             Setup(
                 builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
 
-        static public WebHostSupportingMigrationsTestSetup Setup(
+        static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap = null,
             string adminRootPassword = null)
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-            var setup = new WebHostSupportingMigrationsTestSetup(
+            var setup = new WebHostAdminInterfaceTestSetup(
                 testDirectory,
                 adminRootPassword: adminRootPassword,
                 webHostBuilderMap: webHostBuilderMap);
@@ -110,7 +110,7 @@ namespace Kalmit.PersistentProcess.Test
             Directory.Delete(testDirectory, true);
         }
 
-        WebHostSupportingMigrationsTestSetup(
+        WebHostAdminInterfaceTestSetup(
             string testDirectory,
             string adminRootPassword,
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)

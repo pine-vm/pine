@@ -27,46 +27,6 @@ namespace elm_fullstack
             CommandOption verboseLogOptionFromCommand(CommandLineApplication command) =>
                 command.Option("--verbose-log", "", CommandOptionType.NoValue);
 
-            app.Command("run-server", runServerCmd =>
-            {
-                runServerCmd.Description = "Run a web server with your Elm app.";
-
-                runServerCmd.ThrowOnUnexpectedArgument = false;
-
-                var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the backend process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
-                var processStoreSeparateReaderDirectoryPathOption = runServerCmd.Option("--process-store-separate-reader-directory-path", "Directory in the file system to read the backend process store to continue from, separate from the directory to write new store entries to. Typically used to test new versions before deploying to production.", CommandOptionType.SingleValue);
-                var webAppConfigurationFilePathOption = runServerCmd.Option("--web-app-configuration-file-path", "Path to a file containing the complete configuration in a zip-archive. If you don't use this option, the server uses the current directory as the source.", CommandOptionType.SingleValue);
-                var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
-
-                runServerCmd.OnExecute(() =>
-                {
-                    var processStoreDirectoryPath = processStoreDirectoryPathOption.Value();
-                    var processStoreSeparateReaderDirectoryPath = processStoreSeparateReaderDirectoryPathOption.Value();
-
-                    if (deletePreviousBackendStateOption.HasValue())
-                    {
-                        Console.WriteLine("Deleting the previous backend state from '" + processStoreDirectoryPath + "'");
-
-                        if (System.IO.Directory.Exists(processStoreDirectoryPath))
-                            System.IO.Directory.Delete(processStoreDirectoryPath, true);
-                    }
-
-                    var webHostBuilder = Kalmit.PersistentProcess.WebHost.Program.CreateWebHostBuilder(runServerCmd.RemainingArguments.ToArray());
-
-                    webHostBuilder.WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
-
-                    if (0 < processStoreSeparateReaderDirectoryPath?.Length)
-                        webHostBuilder.WithSettingProcessStoreSeparateReaderDirectoryPath(processStoreSeparateReaderDirectoryPath);
-
-                    var webAppConfigurationFilePath = webAppConfigurationFilePathOption.Value();
-
-                    if (webAppConfigurationFilePath != null)
-                        webHostBuilder.WithWebAppConfigurationZipArchiveFromFilePath(webAppConfigurationFilePath);
-
-                    Microsoft.AspNetCore.Hosting.WebHostExtensions.Run(webHostBuilder.Build());
-                });
-            });
-
             app.Command("build-config", buildConfigCmd =>
             {
                 buildConfigCmd.Description = "Build a configuration file that can be used to run a server.";
@@ -105,19 +65,19 @@ namespace elm_fullstack
                 });
             });
 
-            app.Command("run-server-supporting-migrations", runServerSupportingMigrationsCmd =>
+            app.Command("run-server", runServerCmd =>
             {
-                runServerSupportingMigrationsCmd.Description = "Run a web server that supports migrations between Elm apps. This encapsulates the functionality you get with the `run-server` command.";
+                runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack app via HTTP. Deployments and migrations of an app usually go through this HTTP server.";
 
                 var adminInterfaceHttpPortDefault = 4000;
 
-                var processStoreDirectoryPathOption = runServerSupportingMigrationsCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
-                var deletePreviousBackendStateOption = runServerSupportingMigrationsCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
-                var adminInterfaceHttpPortOption = runServerSupportingMigrationsCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
-                var adminRootPasswordOption = runServerSupportingMigrationsCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
-                var deployOption = runServerSupportingMigrationsCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command.", CommandOptionType.NoValue);
+                var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
+                var adminInterfaceHttpPortOption = runServerCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
+                var adminRootPasswordOption = runServerCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
+                var deployOption = runServerCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command.", CommandOptionType.NoValue);
 
-                runServerSupportingMigrationsCmd.OnExecute(() =>
+                runServerCmd.OnExecute(() =>
                 {
                     var processStoreDirectoryPath = processStoreDirectoryPathOption.Value();
 
@@ -134,11 +94,13 @@ namespace elm_fullstack
                     var adminInterfaceHttpPort =
                         int.Parse(adminInterfaceHttpPortOption.Value() ?? adminInterfaceHttpPortDefault.ToString());
 
+                    var adminInterfaceUrl = "http://*:" + adminInterfaceHttpPort.ToString();
+
                     var webHostBuilder =
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                         .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
-                        .UseUrls("http://*:" + adminInterfaceHttpPort.ToString())
-                        .UseStartup<StartupSupportingMigrations>()
+                        .UseUrls(adminInterfaceUrl)
+                        .UseStartup<StartupAdminInterface>()
                         .WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
 
                     if (adminRootPasswordOption.HasValue())
@@ -150,7 +112,7 @@ namespace elm_fullstack
 
                     webHost.Start();
 
-                    Console.WriteLine("Completed starting the web server with the admin interface.");
+                    Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrl + "'.");
 
                     if (deployOption.HasValue())
                     {
@@ -168,7 +130,7 @@ namespace elm_fullstack
 
             app.Command("deploy", deployCmd =>
             {
-                deployCmd.Description = "Deploy an app to a server. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+                deployCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
 
                 var adminInterfaceOption = deployCmd.Option("--admin-interface", "Address to the admin interface of the server to deploy to.", CommandOptionType.SingleValue).IsRequired();
                 var adminRootPasswordOption = deployCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue).IsRequired();
@@ -225,12 +187,12 @@ namespace elm_fullstack
                         Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(adminRootPassword))));
 
                 var deployAddress =
-                    adminInterface +
+                    (adminInterface.TrimEnd('/')) +
                     (initElmAppState
                     ?
-                    StartupSupportingMigrations.PathApiSetAppConfigAndInitElmState
+                    StartupAdminInterface.PathApiSetAppConfigAndInitElmState
                     :
-                    StartupSupportingMigrations.PathApiSetAppConfigAndMigrateElmState);
+                    StartupAdminInterface.PathApiSetAppConfigAndMigrateElmState);
 
                 Console.WriteLine("Beginning to deploy app '" + webAppConfigFileId + "' to '" + deployAddress + "'...");
 
