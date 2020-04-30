@@ -29,8 +29,7 @@ namespace Kalmit.PersistentProcess.WebHost
         static public async Task MiddlewareFromWebAppConfig(
             WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next) =>
             await StaticFilesMiddlewareFromWebAppConfig(webAppConfig, context,
-                () => RateLimitMiddlewareFromWebAppConfig(webAppConfig, context,
-                () => AdminPersistentProcessMiddlewareFromWebAppConfig(webAppConfig, context, next)));
+                () => RateLimitMiddlewareFromWebAppConfig(webAppConfig, context, next));
 
         static async Task StaticFilesMiddlewareFromWebAppConfig(
             WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next)
@@ -114,97 +113,6 @@ namespace Kalmit.PersistentProcess.WebHost
                 limit = jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
                 windowSize = jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
             });
-        }
-
-        static async Task AdminPersistentProcessMiddlewareFromWebAppConfig(
-            WebAppConfiguration webAppConfig, HttpContext context, Func<Task> next)
-        {
-            if (context.Request.Path.StartsWithSegments(
-                new PathString(Configuration.AdminPath),
-                out var requestPathInAdmin))
-            {
-                /* TODO:
-                Remove special handling for this path from the public HTTP interface when the apps in production have been migrated to the new admin interface.
-                */
-
-                var configuration = context.RequestServices.GetService<IConfiguration>();
-
-                var rootPassword = configuration.GetValue<string>(Configuration.AdminRootPasswordSettingKey);
-
-                var expectedAuthorization = Configuration.BasicAuthenticationForAdminRoot(rootPassword);
-
-                context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
-
-                AuthenticationHeaderValue.TryParse(
-                    requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
-
-                if (!(0 < rootPassword?.Length))
-                {
-                    context.Response.StatusCode = 403;
-                    await context.Response.WriteAsync("Forbidden");
-                    return;
-                }
-
-                var buffer = new byte[400];
-
-                var decodedRequestAuthorizationParameter =
-                    Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
-                    Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
-
-                if (!(string.Equals(expectedAuthorization, decodedRequestAuthorizationParameter) &&
-                    string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
-                {
-                    context.Response.StatusCode = 401;
-                    context.Response.Headers.Add(
-                        "WWW-Authenticate",
-                        @"Basic realm=""" + context.Request.Host + Configuration.AdminPath + @""", charset=""UTF-8""");
-                    await context.Response.WriteAsync("Unauthorized");
-                    return;
-                }
-
-                if (string.Equals(requestPathInAdmin, Configuration.ApiPersistentProcessStatePath))
-                {
-                    if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        var stateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEndAsync().Result;
-
-                        var processStoreWriter = context.RequestServices.GetService<ProcessStore.IProcessStoreWriter>();
-
-                        var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
-
-                        var compositionRecord = persistentProcess.SetState(stateToSet);
-
-                        processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
-
-                        context.Response.StatusCode = 200;
-                        await context.Response.WriteAsync("Successfully set process state.");
-                        return;
-                    }
-
-                    if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        var persistentProcess = context.RequestServices.GetService<IPersistentProcess>();
-
-                        var reducedValueLiteralString =
-                            persistentProcess.ReductionRecordForCurrentState().ReducedValueLiteralString;
-
-                        context.Response.StatusCode = 200;
-                        context.Response.ContentType = "application/json";
-                        await context.Response.WriteAsync(reducedValueLiteralString);
-                        return;
-                    }
-
-                    context.Response.StatusCode = 405;
-                    await context.Response.WriteAsync("Method not supported.");
-                    return;
-                }
-
-                context.Response.StatusCode = 404;
-                await context.Response.WriteAsync("Not Found");
-                return;
-            }
-
-            await next?.Invoke();
         }
 
         static public InterfaceToHost.HttpRequest AsPersistentProcessInterfaceHttpRequest(

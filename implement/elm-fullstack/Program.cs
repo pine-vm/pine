@@ -190,9 +190,9 @@ namespace elm_fullstack
                     (adminInterface.TrimEnd('/')) +
                     (initElmAppState
                     ?
-                    StartupAdminInterface.PathApiSetAppConfigAndInitElmState
+                    StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
                     :
-                    StartupAdminInterface.PathApiSetAppConfigAndMigrateElmState);
+                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
 
                 Console.WriteLine("Beginning to deploy app '" + webAppConfigFileId + "' to '" + deployAddress + "'...");
 

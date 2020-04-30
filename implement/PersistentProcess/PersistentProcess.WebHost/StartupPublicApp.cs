@@ -30,37 +30,6 @@ namespace Kalmit.PersistentProcess.WebHost
             var serviceProvider = services.BuildServiceProvider();
             var config = serviceProvider.GetService<IConfiguration>();
 
-            Composition.Component webAppConfig = null;
-
-            {
-                var webAppConfigFileZipArchive = serviceProvider.GetService<WebAppConfigurationZipArchive>()?.zipArchive;
-
-                if (!(0 < webAppConfigFileZipArchive?.Length))
-                {
-                    _logger.LogInformation(
-                        "I did not find a web app config in the services. I try to build the config from current directory.");
-
-                    var (compileConfigZipArchive, _) = BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                        verboseLogWriteLine: null);
-
-                    webAppConfigFileZipArchive = compileConfigZipArchive();
-                }
-
-                webAppConfig = Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
-                    ZipArchive.EntriesFromZipArchive(webAppConfigFileZipArchive)));
-            }
-
-            _logger.LogInformation("Loaded configuration " +
-                CommonConversion.StringBase16FromByteArray(Composition.GetHash(webAppConfig)));
-
-            var webAppConfigObject = WebAppConfiguration.FromFiles(
-                Composition.ParseAsTree(webAppConfig).ok.EnumerateBlobsTransitive()
-                .Select(blobWithPath =>
-                    (path: (IImmutableList<string>)blobWithPath.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
-                    content: blobWithPath.blobContent))
-                    .ToList());
-            services.AddSingleton<WebAppConfiguration>(webAppConfigObject);
-
             var getDateTimeOffset = serviceProvider.GetService<Func<DateTimeOffset>>();
 
             if (getDateTimeOffset == null)
@@ -69,49 +38,59 @@ namespace Kalmit.PersistentProcess.WebHost
                 services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset);
             }
 
-            var processStoreFileStore = serviceProvider.GetService<FileStoreForProcessStore>().fileStore;
-            var processStoreFileStoreReader =
-                serviceProvider.GetService<FileStoreForProcessStoreReader>()?.fileStore
-                ??
-                processStoreFileStore;
-
-            var processStoreReader = new Kalmit.ProcessStore.ProcessStoreReaderInFileStore(processStoreFileStoreReader);
-
-            var processStoreWriter = new Kalmit.ProcessStore.ProcessStoreWriterInFileStore(
-                processStoreFileStore,
-                () =>
-                {
-                    var time = getDateTimeOffset();
-                    var directoryName = time.ToString("yyyy-MM-dd");
-                    return ImmutableList.Create(directoryName, directoryName + "T" + time.ToString("HH") + ".composition.jsonl");
-                });
-
             var persistentProcessMap =
                 serviceProvider.GetService<PersistentProcessMap>()?.mapPersistentProcess
                 ??
-                new Func<IPersistentProcess, IPersistentProcess>(persistentProcess => persistentProcess);
+                new Func<PersistentProcess.IPersistentProcess, PersistentProcess.IPersistentProcess>(persistentProcess => persistentProcess);
 
-            services.AddSingleton<ProcessStore.IProcessStoreReader>(processStoreReader);
-            services.AddSingleton<ProcessStore.IProcessStoreWriter>(processStoreWriter);
-            services.AddSingleton<IPersistentProcess>(serviceProvider => persistentProcessMap(BuildPersistentProcess(serviceProvider)));
+            services.AddSingleton<PersistentProcess.IPersistentProcess>(
+                serviceProvider => persistentProcessMap(BuildPersistentProcess(serviceProvider)));
 
-            var letsEncryptOptions = webAppConfigObject?.JsonStructure?.letsEncryptOptions;
-            if (letsEncryptOptions == null)
             {
-                _logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
-            }
-            else
-            {
-                _logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
-                services.AddFluffySpoonLetsEncryptRenewalService(letsEncryptOptions);
-                services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
-                services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
+                var processStoreReader =
+                    serviceProvider.GetService<ProcessStoreSupportingMigrations.IProcessStoreReader>();
+
+                var appConfigComponent =
+                    PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                        processStoreReader,
+                        _ => { })
+                    ?.lastAppConfig?.appConfigComponent;
+
+                if (appConfigComponent == null)
+                    throw new Exception("This process store contains no app config.");
+
+                var appConfigTree = Composition.ParseAsTree(appConfigComponent).ok;
+
+                var appConfigFilesNamesAndContents =
+                    appConfigTree.EnumerateBlobsTransitive()
+                    .Select(blobPathAndContent => (
+                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
+                        fileContent: blobPathAndContent.blobContent))
+                        .ToImmutableList();
+
+                var webAppConfigObject = WebAppConfiguration.FromFiles(appConfigFilesNamesAndContents);
+
+                services.AddSingleton<WebAppConfiguration>(webAppConfigObject);
+
+                var letsEncryptOptions = webAppConfigObject?.JsonStructure?.letsEncryptOptions;
+
+                if (letsEncryptOptions == null)
+                {
+                    _logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
+                }
+                else
+                {
+                    _logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
+                    services.AddFluffySpoonLetsEncryptRenewalService(letsEncryptOptions);
+                    services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
+                    services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
+                }
             }
 
             Asp.ConfigureServices(services);
         }
 
-        static PersistentProcessWithHistoryOnFileFromElm019Code BuildPersistentProcess(IServiceProvider services)
+        static PersistentProcess.IPersistentProcess BuildPersistentProcess(IServiceProvider services)
         {
             var logger = services.GetService<ILogger<StartupPublicApp>>();
             var elmAppFiles = services.GetService<WebAppConfiguration>()?.ElmAppFiles;
@@ -129,9 +108,8 @@ namespace Kalmit.PersistentProcess.WebHost
                 CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppComposition)));
 
             var persistentProcess =
-                new PersistentProcessWithHistoryOnFileFromElm019Code(
-                    services.GetService<ProcessStore.IProcessStoreReader>(),
-                    ElmApp.ToFlatDictionaryWithPathComparer(elmAppFiles),
+                PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                    services.GetService<ProcessStoreSupportingMigrations.IProcessStoreReader>(),
                     logger: logEntry => logger.LogInformation(logEntry));
 
             logger.LogInformation("Completed building the persistent process.");
@@ -143,7 +121,7 @@ namespace Kalmit.PersistentProcess.WebHost
             IApplicationBuilder app,
             IWebHostEnvironment env,
             WebAppConfiguration webAppConfig,
-            ProcessStore.IProcessStoreWriter processStoreWriter,
+            ProcessStoreSupportingMigrations.IProcessStoreWriter processStoreWriter,
             Func<DateTimeOffset> getDateTimeOffset)
         {
             if (env.IsDevelopment())
@@ -273,7 +251,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var processRequestCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
 
-            var persistentProcess = app.ApplicationServices.GetService<IPersistentProcess>();
+            var persistentProcess = app.ApplicationServices.GetService<PersistentProcess.IPersistentProcess>();
 
             void processEventAndResultingRequests(InterfaceToHost.Event interfaceEvent)
             {
@@ -281,9 +259,8 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
 
-                    var (eventResponses, compositionRecord) = persistentProcess.ProcessEvents(new[] { serializedInterfaceEvent });
-
-                    processStoreWriter.AppendSerializedCompositionRecord(compositionRecord.serializedCompositionRecord);
+                    var eventResponses = persistentProcess.ProcessElmAppEvents(
+                        processStoreWriter, new[] { serializedInterfaceEvent });
 
                     var serializedResponse = eventResponses.Single();
 
@@ -387,11 +364,9 @@ namespace Kalmit.PersistentProcess.WebHost
                             if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
                                 return;
 
-                            var reductionRecord = persistentProcess.ReductionRecordForCurrentState();
-
                             lock (processStoreWriter)
                             {
-                                processStoreWriter.StoreReduction(reductionRecord);
+                                var reductionRecord = persistentProcess.StoreReductionRecordForCurrentState(processStoreWriter);
                             }
 
                             cyclicReductionStoreLastTime = currentDateTime;
@@ -434,6 +409,6 @@ namespace Kalmit.PersistentProcess.WebHost
 
     public class PersistentProcessMap
     {
-        public Func<IPersistentProcess, IPersistentProcess> mapPersistentProcess;
+        public Func<PersistentProcess.IPersistentProcess, PersistentProcess.IPersistentProcess> mapPersistentProcess;
     }
 }

@@ -35,9 +35,9 @@ namespace Kalmit
 
         static public int? OverrideChakraCoreSettingsMaxStackSize = null;
 
-        public ProcessHostedWithChakraCore(string javascriptPreparedToRun)
+        static public JsEngineBase ConstructJsEngine()
         {
-            javascriptEngine = new ChakraCoreJsEngine(
+            return new ChakraCoreJsEngine(
                 new ChakraCoreSettings
                 {
                     DisableEval = true,
@@ -45,6 +45,11 @@ namespace Kalmit
                     MaxStackSize = OverrideChakraCoreSettingsMaxStackSize ?? 10_000_000,
                 }
             );
+        }
+
+        public ProcessHostedWithChakraCore(string javascriptPreparedToRun)
+        {
+            javascriptEngine = ConstructJsEngine();
 
             var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
 

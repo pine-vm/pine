@@ -13,6 +13,12 @@ namespace Kalmit
 
             public IImmutableList<Component> ListContent;
 
+            static public Component Blob(ImmutableList<byte> blobContent) =>
+                new Component { BlobContent = blobContent };
+
+            static public Component Blob(IReadOnlyList<byte> blobContent) =>
+                Blob(blobContent.ToImmutableList());
+
             public bool Equals(Component other)
             {
                 if (BlobContent != null || other.BlobContent != null)
@@ -274,13 +280,42 @@ namespace Kalmit
             return currentLevelBlobs.AddRange(subTrees).ToImmutableList();
         }
 
-        static public byte[] GetHash(Component component)
+        static public Component Deserialize(byte[] serializedComponent) =>
+            Deserialize(serializedComponent.ToImmutableList());
+
+        static public Component Deserialize(IImmutableList<byte> serializedComponent)
+        {
+            var asciiStringUpToNull =
+                System.Text.Encoding.ASCII.GetString(serializedComponent.TakeWhile(c => c != '\0').ToArray());
+
+            var asciiStringUpToFirstSpace =
+                asciiStringUpToNull.Split(' ').First();
+
+            if (asciiStringUpToFirstSpace == "blob")
+            {
+                var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
+
+                var expectedCount = serializedComponent.Count - beginningToRemoveLength;
+
+                var count = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
+
+                if (count != expectedCount)
+                    throw new Exception("Unexpected count: got " + count + ", but I expected " + expectedCount);
+
+                return Component.Blob(serializedComponent.RemoveRange(0, beginningToRemoveLength));
+            }
+
+            throw new NotImplementedException("Deserialize is only implemented for blob case so far. Unsupported prefix: '" + asciiStringUpToFirstSpace + "'.");
+        }
+
+        //  TODO: Add GetSerialRepresentationAndDependencies
+        static public byte[] GetSerialRepresentation(Component component)
         {
             if (component.BlobContent != null)
             {
                 var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.BlobContent.Count.ToString() + "\0");
 
-                return CommonConversion.HashSHA256(prefix.Concat(component.BlobContent).ToArray());
+                return prefix.Concat(component.BlobContent).ToArray();
             }
 
             {
@@ -289,9 +324,16 @@ namespace Kalmit
 
                 var prefix = System.Text.Encoding.ASCII.GetBytes("list " + componentsHashes.Count.ToString() + "\0");
 
-                return CommonConversion.HashSHA256(prefix.Concat(componentsHashes.SelectMany(t => t)).ToArray());
+                return prefix.Concat(componentsHashes.SelectMany(t => t)).ToArray();
             }
         }
+
+        //  TODO: Add GetHashAndDependencies
+        static public byte[] GetHash(Component component) =>
+            CommonConversion.HashSHA256(GetSerialRepresentation(component));
+
+        static public byte[] GetHash(TreeComponent component) =>
+            CommonConversion.HashSHA256(GetSerialRepresentation(FromTree(component)));
 
         public class Result<Err, Ok> : IEquatable<Result<Err, Ok>>
         {
