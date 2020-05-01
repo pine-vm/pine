@@ -272,13 +272,13 @@ namespace Kalmit
             Loaded 2019-10-29 from
             https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
             */
-            "E44AF52BB27F725A973478E589D990A6428E115FE1BB14F03833134D6C0F155C"
+            "e44af52bb27f725a973478e589d990a6428e115fe1bb14f03833134d6c0f155c"
             :
             /*
             Loaded 2019-10-29 from
             https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
             */
-            "D1BF666298CBE3C5447B9CA0EA608552D750E5D232F9845C2AF11907B654903B"));
+            "d1bf666298cbe3c5447b9ca0ea608552d750e5d232f9845c2af11907b654903b"));
 
         public const string appStateJsVarName = "app_state";
 

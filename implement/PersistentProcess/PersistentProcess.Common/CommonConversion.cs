@@ -12,7 +12,7 @@ namespace Kalmit
             .ToArray();
 
         static public string StringBase16FromByteArray(byte[] array) =>
-            BitConverter.ToString(array).Replace("-", "").ToUpperInvariant();
+            BitConverter.ToString(array).Replace("-", "").ToLowerInvariant();
 
         static public byte[] HashSHA256(byte[] input)
         {

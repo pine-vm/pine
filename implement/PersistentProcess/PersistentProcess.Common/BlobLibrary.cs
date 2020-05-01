@@ -31,7 +31,7 @@ namespace Kalmit
         {
             var sha256DirectoryName = "by-sha256";
 
-            var fileName = BitConverter.ToString(sha256).Replace("-", "").ToUpperInvariant();
+            var fileName = BitConverter.ToString(sha256).Replace("-", "").ToLowerInvariant();
 
             var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
 
@@ -48,12 +48,37 @@ namespace Kalmit
             catch
             { }
 
-            var url = containerUrl + "/" + sha256DirectoryName + "/" + fileName;
+            string url(bool useUppercaseForHash) =>
+                containerUrl + "/" + sha256DirectoryName + "/" +
+                (useUppercaseForHash ? fileName.ToUpperInvariant() : fileName);
 
             var handler = new HttpClientHandler()
             {
                 AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip
             };
+
+            byte[] continueForHttpResponse(HttpResponseMessage httpResponse)
+            {
+                if (!httpResponse.IsSuccessStatusCode)
+                {
+                    throw new Exception(
+                        "unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" +
+                        httpResponse.StatusCode + ") ('" + httpResponse.Content.ReadAsStringAsync().Result + "')");
+                }
+
+                var responseContent = httpResponse.Content.ReadAsByteArrayAsync().Result;
+
+                if (!blobHasExpectedSHA256(responseContent))
+                {
+                    throw new NotImplementedException("Received unexpected blob for '" + fileName + "'.");
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
+
+                File.WriteAllBytes(cacheFilePath, responseContent);
+
+                return responseContent;
+            }
 
             using (var httpClient = new HttpClient(handler))
             {
@@ -61,18 +86,20 @@ namespace Kalmit
                 httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
                 httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new StringWithQualityHeaderValue("deflate"));
 
-                var response = httpClient.GetAsync(url).Result;
+                var httpResponse = httpClient.GetAsync(url(false)).Result;
 
-                var responseContent = response.Content.ReadAsByteArrayAsync().Result;
+                if (httpResponse.StatusCode == HttpStatusCode.NotFound)
+                {
+                    //  2020-05-01 Maintain backward compatibility for now: Try for the file name using uppercase letters.
 
-                if (!blobHasExpectedSHA256(responseContent))
-                    throw new NotImplementedException("Received unexpected blob for '" + fileName + "'.");
+                    try
+                    {
+                        return continueForHttpResponse(httpClient.GetAsync(url(true)).Result);
+                    }
+                    catch { }
+                }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
-
-                File.WriteAllBytes(cacheFilePath, responseContent);
-
-                return responseContent;
+                return continueForHttpResponse(httpResponse);
             }
         }
     }

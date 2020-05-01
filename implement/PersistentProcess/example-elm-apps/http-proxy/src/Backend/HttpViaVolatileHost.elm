@@ -92,7 +92,7 @@ volatileHostScript =
 #r "System.Linq"
 
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
-#r "sha256:B9B4E633EA6C728BAD5F7CBBEF7F8B842F7E10181731DBE5EC3CD995A6F60287"
+#r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
 using System;
 using System.Collections.Generic;
