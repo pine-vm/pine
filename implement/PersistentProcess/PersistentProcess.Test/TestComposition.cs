@@ -69,7 +69,7 @@ namespace Kalmit.PersistentProcess.Test
                     },
                     expectedOutput = new Composition.ParseAsTreeResult
                     {
-                        ok = new Composition.TreeComponent{ BlobContent = new byte[]{0,1,2}.ToImmutableList()}
+                        Ok = new Composition.TreeComponent{ BlobContent = new byte[]{0,1,2}.ToImmutableList()}
                     }
                 },
                 new
@@ -90,7 +90,7 @@ namespace Kalmit.PersistentProcess.Test
                     },
                     expectedOutput = new Composition.ParseAsTreeResult
                     {
-                        ok = new Composition.TreeComponent
+                        Ok = new Composition.TreeComponent
                         {
                             TreeContent = new []
                             {

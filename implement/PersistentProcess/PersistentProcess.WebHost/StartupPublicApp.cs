@@ -59,7 +59,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 if (appConfigComponent == null)
                     throw new Exception("This process store contains no app config.");
 
-                var appConfigTree = Composition.ParseAsTree(appConfigComponent).ok;
+                var appConfigTree = Composition.ParseAsTree(appConfigComponent).Ok;
 
                 var appConfigFilesNamesAndContents =
                     appConfigTree.EnumerateBlobsTransitive()

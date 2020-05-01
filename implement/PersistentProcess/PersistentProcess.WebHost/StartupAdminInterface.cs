@@ -173,7 +173,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     var appConfigComponent =
                         restoredProcess?.lastAppConfig?.appConfigComponent;
 
-                    var appConfigTree = Composition.ParseAsTree(appConfigComponent).ok;
+                    var appConfigTree = Composition.ParseAsTree(appConfigComponent).Ok;
 
                     var appConfigFilesNamesAndContents =
                         appConfigTree.EnumerateBlobsTransitive()

@@ -113,10 +113,10 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
                 var parseAsTreeResult = Composition.ParseAsTree(component);
 
-                if (parseAsTreeResult.ok == null)
+                if (parseAsTreeResult.Ok == null)
                     throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree.");
 
-                return parseAsTreeResult.ok;
+                return parseAsTreeResult.Ok;
             }
 
             var compositionRecords = new Dictionary<string, (string compositionRecordHash, CompositionLogRecordInFile compositionRecord)>();
@@ -159,7 +159,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         {
                             var parseAppConfigAsTree = Composition.ParseAsTree(appConfigComponent);
 
-                            if (parseAppConfigAsTree.ok == null)
+                            if (parseAppConfigAsTree.Ok == null)
                             {
                                 throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree.");
                             }
@@ -172,7 +172,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                             loadedReduction = new LoadedReduction
                             {
                                 appConfig = appConfigComponent,
-                                appConfigAsTree = parseAppConfigAsTree.ok,
+                                appConfigAsTree = parseAppConfigAsTree.Ok,
                                 elmAppState = elmAppStateComponent.BlobContent.ToArray(),
                             };
                         }

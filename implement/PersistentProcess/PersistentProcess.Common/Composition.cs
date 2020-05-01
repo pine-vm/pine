@@ -123,7 +123,7 @@ namespace Kalmit
             {
                 return new ParseAsTreeResult
                 {
-                    ok = new TreeComponent { BlobContent = composition.BlobContent }
+                    Ok = new TreeComponent { BlobContent = composition.BlobContent }
                 };
             }
 
@@ -135,7 +135,7 @@ namespace Kalmit
                     {
                         return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
                         {
-                            err = ImmutableList<(int index, IImmutableList<byte> name)>.Empty
+                            Err = ImmutableList<(int index, IImmutableList<byte> name)>.Empty
                         };
                     }
 
@@ -143,35 +143,35 @@ namespace Kalmit
 
                     var parseResult = ParseAsTree(component.ListContent.ElementAt(1));
 
-                    if (parseResult.ok == null)
+                    if (parseResult.Ok == null)
                     {
                         return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
                         {
-                            err = ImmutableList.Create(currentIndexAndName).AddRange(parseResult.err)
+                            Err = ImmutableList.Create(currentIndexAndName).AddRange(parseResult.Err)
                         };
                     }
 
                     return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
                     {
-                        ok = (name: currentIndexAndName.name, parseResult.ok)
+                        Ok = (name: currentIndexAndName.name, parseResult.Ok)
                     };
                 })
                 .ToImmutableList();
 
             var firstError =
                 compositionResults
-                .Select(componentResult => componentResult.err)
+                .Select(componentResult => componentResult.Err)
                 .Where(componentError => componentError != null)
                 .FirstOrDefault();
 
             if (firstError != null)
-                return new ParseAsTreeResult { err = firstError };
+                return new ParseAsTreeResult { Err = firstError };
 
             return
                 new ParseAsTreeResult
                 {
-                    ok = new TreeComponent
-                    { TreeContent = compositionResults.Select(compositionResult => compositionResult.ok).ToImmutableList() }
+                    Ok = new TreeComponent
+                    { TreeContent = compositionResults.Select(compositionResult => compositionResult.Ok).ToImmutableList() }
                 };
         }
 
@@ -285,10 +285,14 @@ namespace Kalmit
             return currentLevelBlobs.AddRange(subTrees).ToImmutableList();
         }
 
-        static public Component Deserialize(byte[] serializedComponent) =>
-            Deserialize(serializedComponent.ToImmutableList());
+        static public Result<String, Component> Deserialize(
+            byte[] serializedComponent,
+            Func<IReadOnlyList<byte>, IReadOnlyList<byte>> loadSerializedComponentByHash) =>
+            Deserialize(serializedComponent.ToImmutableList(), loadSerializedComponentByHash);
 
-        static public Component Deserialize(IImmutableList<byte> serializedComponent)
+        static public Result<String, Component> Deserialize(
+            IImmutableList<byte> serializedComponent,
+            Func<IReadOnlyList<byte>, IReadOnlyList<byte>> loadSerializedComponentByHash)
         {
             var asciiStringUpToNull =
                 System.Text.Encoding.ASCII.GetString(serializedComponent.TakeWhile(c => c != '\0').ToArray());
@@ -307,20 +311,91 @@ namespace Kalmit
                 if (count != expectedCount)
                     throw new Exception("Unexpected count: got " + count + ", but I expected " + expectedCount);
 
-                return Component.Blob(serializedComponent.RemoveRange(0, beginningToRemoveLength));
+                return new Result<string, Component>
+                {
+                    Ok = Component.Blob(serializedComponent.RemoveRange(0, beginningToRemoveLength))
+                };
             }
 
-            throw new NotImplementedException("Deserialize is only implemented for blob case so far. Unsupported prefix: '" + asciiStringUpToFirstSpace + "'.");
+            if (asciiStringUpToFirstSpace == "list")
+            {
+                var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
+
+                var remainingBytes = serializedComponent.RemoveRange(0, beginningToRemoveLength);
+
+                var parsedElementCount = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
+
+                var elementHashLength = 32;
+
+                var expectedRemainingLength = parsedElementCount * elementHashLength;
+
+                if (remainingBytes.Count != expectedRemainingLength)
+                    throw new Exception("Unexpected remaining length: " + remainingBytes.Count + " instead of " + expectedRemainingLength);
+
+                var elementsHashes =
+                    Enumerable.Range(0, parsedElementCount)
+                    .Select(elementIndex => remainingBytes.Skip(elementIndex * elementHashLength).Take(elementHashLength).ToImmutableList())
+                    .ToImmutableList();
+
+                Result<string, Component> TryLoadElementForHash(IImmutableList<byte> elementHash)
+                {
+                    var loadedElementSerialRepresentation = loadSerializedComponentByHash(elementHash);
+
+                    if (loadedElementSerialRepresentation == null)
+                        return new Result<string, Component>
+                        {
+                            Err = "Failed to load list element " + CommonConversion.StringBase16FromByteArray(elementHash.ToArray())
+                        };
+
+                    if (!CommonConversion.HashSHA256(loadedElementSerialRepresentation.ToArray()).SequenceEqual(elementHash))
+                        return new Result<string, Component>
+                        {
+                            Err = "Hash for loaded element does not match " + CommonConversion.StringBase16FromByteArray(elementHash.ToArray()),
+                        };
+
+                    return Deserialize(loadedElementSerialRepresentation.ToImmutableList(), loadSerializedComponentByHash);
+                }
+
+                var loadElementsResults =
+                    elementsHashes
+                    .Select(elementHash => (elementHash, loadResult: TryLoadElementForHash(elementHash)))
+                    .ToImmutableList();
+
+                var firstFailed =
+                    loadElementsResults
+                    .FirstOrDefault(elementResult => elementResult.loadResult.Ok == null);
+
+                if (firstFailed.elementHash != null)
+                    return new Result<string, Component>
+                    {
+                        Err = "Failed to load element " + CommonConversion.StringBase16FromByteArray(firstFailed.elementHash.ToArray()) + ": " + firstFailed.loadResult.Err,
+                    };
+
+                return new Result<string, Component>
+                {
+                    Ok = new Component
+                    {
+                        ListContent = loadElementsResults.Select(elementResult => elementResult.loadResult.Ok).ToImmutableList(),
+                    }
+                };
+            }
+
+            throw new NotImplementedException("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
         }
 
-        //  TODO: Add GetSerialRepresentationAndDependencies
-        static public byte[] GetSerialRepresentation(Component component)
+        static public byte[] GetSerialRepresentation(Component component) =>
+            GetSerialRepresentationAndDependencies(component).serialRepresentation;
+
+        static public (byte[] serialRepresentation, IReadOnlyCollection<Component> dependencies)
+            GetSerialRepresentationAndDependencies(Component component)
         {
             if (component.BlobContent != null)
             {
                 var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.BlobContent.Count.ToString() + "\0");
 
-                return prefix.Concat(component.BlobContent).ToArray();
+                return
+                    (serialRepresentation: prefix.Concat(component.BlobContent).ToArray(),
+                    dependencies: ImmutableHashSet<Component>.Empty);
             }
 
             {
@@ -329,44 +404,53 @@ namespace Kalmit
 
                 var prefix = System.Text.Encoding.ASCII.GetBytes("list " + componentsHashes.Count.ToString() + "\0");
 
-                return prefix.Concat(componentsHashes.SelectMany(t => t)).ToArray();
+                return
+                    (serialRepresentation: prefix.Concat(componentsHashes.SelectMany(t => t)).ToArray(),
+                    dependencies: component.ListContent);
             }
         }
 
-        //  TODO: Add GetHashAndDependencies
         static public byte[] GetHash(Component component) =>
-            CommonConversion.HashSHA256(GetSerialRepresentation(component));
+            GetHashAndDependencies(component).hash;
+
+        static public (byte[] hash, IReadOnlyCollection<Component> dependencies)
+            GetHashAndDependencies(Component component)
+        {
+            var (serialRepresentation, dependencies) = GetSerialRepresentationAndDependencies(component);
+
+            return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies: dependencies);
+        }
 
         static public byte[] GetHash(TreeComponent component) =>
             CommonConversion.HashSHA256(GetSerialRepresentation(FromTree(component)));
 
-        public class Result<Err, Ok> : IEquatable<Result<Err, Ok>>
+        public class Result<ErrT, OkT> : IEquatable<Result<ErrT, OkT>>
         {
-            public Err err;
+            public ErrT Err;
 
-            public Ok ok;
+            public OkT Ok;
 
-            public bool Equals(Result<Err, Ok> other)
+            public bool Equals(Result<ErrT, OkT> other)
             {
-                if (err != null || other.err != null)
+                if (Err != null || other.Err != null)
                 {
-                    if (err == null || other.err == null)
+                    if (Err == null || other.Err == null)
                         return false;
 
-                    return err.Equals(other.err);
+                    return Err.Equals(other.Err);
                 }
 
-                if (ok == null || other.ok == null)
+                if (Ok == null || other.Ok == null)
                     return false;
 
-                return ok.Equals(other.ok);
+                return Ok.Equals(other.Ok);
             }
 
-            override public bool Equals(object obj) => Equals(obj as Result<Err, Ok>);
+            override public bool Equals(object obj) => Equals(obj as Result<ErrT, OkT>);
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(err, ok);
+                return HashCode.Combine(Err, Ok);
             }
         }
 

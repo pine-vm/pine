@@ -176,8 +176,6 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
         //  Plain Kalmit component.
         protected IFileStore componentFileStore => new FileStoreFromSubdirectory(fileStore, "component");
 
-        protected IFileStore treeFromZipArchiveFileStore => new FileStoreFromSubdirectory(fileStore, "tree-from-zip-archive");
-
         protected IFileStore compositionLogFileStore => new FileStoreFromSubdirectory(fileStore, "composition-log");
 
         protected IFileStore provisionalReductionFileStore => new FileStoreFromSubdirectory(fileStore, "provisional-reduction");
@@ -212,44 +210,28 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
                 .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord)));
 
-        public Composition.Component LoadComponent(string componentHash)
+        IReadOnlyList<byte> LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
+            componentFileStore.GetFileContent(
+                GetFilePathForComponentInComponentFileStore(CommonConversion.StringBase16FromByteArray(componentHash.ToArray())));
+
+        public Composition.Component LoadComponent(string componentHashBase16)
         {
             var fromComponentStore = componentFileStore.GetFileContent(
-                GetFilePathForComponentInComponentFileStore(componentHash));
+                GetFilePathForComponentInComponentFileStore(componentHashBase16));
 
-            if (fromComponentStore != null)
-            {
-                var component = Composition.Deserialize(fromComponentStore);
+            if (fromComponentStore == null)
+                return null;
 
-                if (CommonConversion.StringBase16FromByteArray(Composition.GetHash(component)) != componentHash)
-                    throw new Exception("Unexpected content in file " + componentHash + ": Content hash does not match.");
+            var loadComponentResult =
+                Composition.Deserialize(fromComponentStore, LoadComponentSerialRepresentationForHash);
 
-                return component;
-            }
+            if (loadComponentResult.Ok == null)
+                throw new Exception("Failed to load component " + componentHashBase16 + ": " + loadComponentResult.Err);
 
-            var zipArchive = treeFromZipArchiveFileStore.GetFileContent(ImmutableList.Create(componentHash));
+            if (CommonConversion.StringBase16FromByteArray(Composition.GetHash(loadComponentResult.Ok)) != componentHashBase16)
+                throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
-            if (zipArchive != null)
-            {
-                try
-                {
-                    var asTree =
-                        Composition.TreeFromSetOfBlobsWithCommonFilePath(ZipArchive.EntriesFromZipArchive(zipArchive));
-
-                    var component = Composition.FromTree(asTree);
-
-                    if (CommonConversion.StringBase16FromByteArray(Composition.GetHash(component)) != componentHash)
-                        throw new Exception("Content hash does not match.");
-
-                    return component;
-                }
-                catch (Exception e)
-                {
-                    throw new Exception("Failed to load component " + componentHash + " from zip archive.", e);
-                }
-            }
-
-            return null;
+            return loadComponentResult.Ok;
         }
 
         public ProvisionalReductionRecordInFile LoadProvisionalReduction(string reducedCompositionHash)
@@ -354,39 +336,16 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         public void StoreComponent(Composition.Component component)
         {
-            var componentHash = Composition.GetHash(component);
+            var (serialRepresentation, dependencies) = Composition.GetSerialRepresentationAndDependencies(component);
 
-            var componentHashBase16 = CommonConversion.StringBase16FromByteArray(componentHash);
+            var hashBase16 = CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(serialRepresentation));
 
-            if (component.BlobContent != null)
-            {
-                componentFileStore.SetFileContent(
-                    GetFilePathForComponentInComponentFileStore(componentHashBase16),
-                    Composition.GetSerialRepresentation(component));
+            componentFileStore.SetFileContent(
+                GetFilePathForComponentInComponentFileStore(hashBase16),
+                serialRepresentation);
 
-                return;
-            }
-
-            var parseAsTreeResult = Composition.ParseAsTree(component);
-
-            if (parseAsTreeResult.ok == null)
-            {
-                throw new NotImplementedException("StoreComponent is currently only implemented for blobs and trees. Failed to parse as tree.");
-            }
-
-            var filesNamesAndContents =
-                parseAsTreeResult.ok.EnumerateBlobsTransitive()
-                .Select(blobPathAndContent => (
-                    fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                    fileContent: blobPathAndContent.blobContent))
-                .ToImmutableList();
-
-            var zipArchive =
-                ZipArchive.ZipArchiveFromEntries(ElmApp.ToFlatDictionaryWithPathComparer(filesNamesAndContents));
-
-            treeFromZipArchiveFileStore.SetFileContent(
-                ImmutableList.Create(componentHashBase16),
-                zipArchive);
+            foreach (var dependency in dependencies)
+                StoreComponent(dependency);
         }
     }
 }
