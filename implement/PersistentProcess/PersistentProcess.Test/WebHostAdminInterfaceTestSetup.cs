@@ -4,6 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -22,17 +23,15 @@ namespace Kalmit.PersistentProcess.Test
 
         readonly string adminRootPassword;
 
-        readonly byte[] setAppConfigAndInitElmState;
-
         readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
 
         public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
+        IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+
         public Microsoft.AspNetCore.TestHost.TestServer BuildServer(
              Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
         {
-            var defaultFileStore = new FileStoreFromSystemIOFile(ProcessStoreDirectory);
-
             var server =
                 new Microsoft.AspNetCore.TestHost.TestServer(
                     (webHostBuilderMap ?? (builder => builder))
@@ -58,12 +57,12 @@ namespace Kalmit.PersistentProcess.Test
                     ?
                     null
                     :
-                    ZipArchive.ZipArchiveFromEntries(setAppConfigAndInitElmState.AsFiles()));
+                    Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(setAppConfigAndInitElmState.AsFiles())));
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<DateTimeOffset> persistentProcessHostDateTime = null,
             string adminRootPassword = null,
-            byte[] setAppConfigAndInitElmState = null) =>
+            Composition.Component setAppConfigAndInitElmState = null) =>
             Setup(
                 adminRootPassword: adminRootPassword,
                 setAppConfigAndInitElmState: setAppConfigAndInitElmState,
@@ -72,7 +71,7 @@ namespace Kalmit.PersistentProcess.Test
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminRootPassword = null,
-            byte[] setAppConfigAndInitElmState = null)
+            Composition.Component setAppConfigAndInitElmState = null)
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -114,29 +113,42 @@ namespace Kalmit.PersistentProcess.Test
         WebHostAdminInterfaceTestSetup(
             string testDirectory,
             string adminRootPassword,
-            byte[] setAppConfigAndInitElmState,
+            Composition.Component setAppConfigAndInitElmState,
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)
         {
             this.testDirectory = testDirectory;
             this.adminRootPassword = adminRootPassword ?? "notempty";
-            this.setAppConfigAndInitElmState = setAppConfigAndInitElmState;
             this.webHostBuilderMap = webHostBuilderMap;
 
             if (setAppConfigAndInitElmState != null)
             {
-                using (var server = BuildServer())
-                {
-                    using (var adminClient = SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                var compositionLogEvent =
+                    new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
                     {
-                        var deployAppConfigResponse = adminClient.PostAsync(
-                            StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState,
-                            new ByteArrayContent(setAppConfigAndInitElmState)).Result;
+                        DeployAppConfigAndInitElmAppState =
+                            new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                            {
+                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(setAppConfigAndInitElmState))
+                            }
+                    };
 
-                        Assert.IsTrue(
-                            deployAppConfigResponse.IsSuccessStatusCode,
-                            "Deploy response IsSuccessStatusCode (" + deployAppConfigResponse.StatusCode + ")");
-                    }
-                }
+                var processStoreWriter =
+                    new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                    defaultFileStore,
+                    () =>
+                    {
+                        return ImmutableList.Create("0000-first-composition-log-file.jsonl");
+                    });
+
+                processStoreWriter.StoreComponent(setAppConfigAndInitElmState);
+
+                var projectedStoreReader =
+                    WebHost.ProcessStoreSupportingMigrations.IProcessStoreReader.ProjectReaderForAppendedCompositionLogEvent(
+                        originalStore: WebHost.ProcessStoreSupportingMigrations.IProcessStoreReader.EmptyProcessStoreReader(),
+                        compositionLogEvent: compositionLogEvent);
+
+                processStoreWriter.AppendSerializedCompositionLogRecord(
+                    projectedStoreReader.EnumerateSerializedCompositionLogRecordsReverse().First());
             }
         }
 

@@ -39,6 +39,16 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
             };
         }
 
+        static public IProcessStoreReader EmptyProcessStoreReader()
+        {
+            return new DelegatingProcessStoreReader
+            {
+                LoadComponentDelegate = _ => null,
+                LoadProvisionalReductionDelegate = _ => null,
+                EnumerateSerializedCompositionLogRecordsReverseDelegate = () => ImmutableList<byte[]>.Empty
+            };
+        }
+
         static IEnumerable<byte[]> AppendCompositionEventToCompositionLogChain(
             IEnumerable<byte[]> originalCompositionLogRecordsReverse,
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent)

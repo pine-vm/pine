@@ -232,6 +232,11 @@ namespace Kalmit
             TreeFromSetOfBlobs(
                 blobsWithPath, pathComponent => System.Text.Encoding.UTF8.GetBytes(pathComponent).ToImmutableList());
 
+        static public TreeComponent TreeFromSetOfBlobsWithStringPath(
+            IReadOnlyDictionary<IImmutableList<string>, IImmutableList<byte>> blobsWithPath) =>
+            TreeFromSetOfBlobsWithStringPath(
+                blobsWithPath.Select(pathAndBlobContent => (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
+
         static public TreeComponent TreeFromSetOfBlobs(
             IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             new TreeComponent
