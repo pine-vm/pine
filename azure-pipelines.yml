@@ -15,8 +15,22 @@ steps:
 
 - script: dotnet --version
 
-- script: dotnet test ./implement/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --logger trx
+- task: NugetToolInstaller@1
+- task: DotNetCoreCLI@2
+  inputs:
+    command: restore
+    projects: |
+      **/PersistentProcess.Test.csproj
+      **/elm-fullstack.csproj
+
+- task: DotNetCoreCLI@2
   displayName: 'test'
+  inputs:
+    command: test
+    projects: |
+      **/PersistentProcess.Test.csproj
+    arguments:  --logger trx
+    publishTestResults: false
 
 - task: PublishTestResults@2
   condition: succeededOrFailed()
