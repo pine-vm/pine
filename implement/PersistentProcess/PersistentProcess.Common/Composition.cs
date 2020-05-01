@@ -309,12 +309,9 @@ namespace Kalmit
                 var count = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
 
                 if (count != expectedCount)
-                    throw new Exception("Unexpected count: got " + count + ", but I expected " + expectedCount);
+                    return Result<string, Component>.err("Unexpected count: got " + count + ", but I expected " + expectedCount);
 
-                return new Result<string, Component>
-                {
-                    Ok = Component.Blob(serializedComponent.RemoveRange(0, beginningToRemoveLength))
-                };
+                return Result<string, Component>.ok(Component.Blob(serializedComponent.RemoveRange(0, beginningToRemoveLength)));
             }
 
             if (asciiStringUpToFirstSpace == "list")
@@ -330,7 +327,8 @@ namespace Kalmit
                 var expectedRemainingLength = parsedElementCount * elementHashLength;
 
                 if (remainingBytes.Count != expectedRemainingLength)
-                    throw new Exception("Unexpected remaining length: " + remainingBytes.Count + " instead of " + expectedRemainingLength);
+                    return Result<string, Component>.err(
+                        "Unexpected remaining length: " + remainingBytes.Count + " instead of " + expectedRemainingLength);
 
                 var elementsHashes =
                     Enumerable.Range(0, parsedElementCount)
@@ -342,16 +340,12 @@ namespace Kalmit
                     var loadedElementSerialRepresentation = loadSerializedComponentByHash(elementHash);
 
                     if (loadedElementSerialRepresentation == null)
-                        return new Result<string, Component>
-                        {
-                            Err = "Failed to load list element " + CommonConversion.StringBase16FromByteArray(elementHash.ToArray())
-                        };
+                        return Result<string, Component>.err(
+                            "Failed to load list element " + CommonConversion.StringBase16FromByteArray(elementHash.ToArray()));
 
                     if (!CommonConversion.HashSHA256(loadedElementSerialRepresentation.ToArray()).SequenceEqual(elementHash))
-                        return new Result<string, Component>
-                        {
-                            Err = "Hash for loaded element does not match " + CommonConversion.StringBase16FromByteArray(elementHash.ToArray()),
-                        };
+                        return Result<string, Component>.err(
+                            "Hash for loaded element does not match " + CommonConversion.StringBase16FromByteArray(elementHash.ToArray()));
 
                     return Deserialize(loadedElementSerialRepresentation.ToImmutableList(), loadSerializedComponentByHash);
                 }
@@ -366,21 +360,17 @@ namespace Kalmit
                     .FirstOrDefault(elementResult => elementResult.loadResult.Ok == null);
 
                 if (firstFailed.elementHash != null)
-                    return new Result<string, Component>
-                    {
-                        Err = "Failed to load element " + CommonConversion.StringBase16FromByteArray(firstFailed.elementHash.ToArray()) + ": " + firstFailed.loadResult.Err,
-                    };
+                    return Result<string, Component>.err(
+                        "Failed to load element " + CommonConversion.StringBase16FromByteArray(firstFailed.elementHash.ToArray()) + ": " + firstFailed.loadResult.Err);
 
-                return new Result<string, Component>
-                {
-                    Ok = new Component
+                return Result<string, Component>.ok(
+                    new Component
                     {
                         ListContent = loadElementsResults.Select(elementResult => elementResult.loadResult.Ok).ToImmutableList(),
-                    }
-                };
+                    });
             }
 
-            throw new NotImplementedException("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
+            return Result<string, Component>.err("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
         }
 
         static public byte[] GetSerialRepresentation(Component component) =>
@@ -429,6 +419,12 @@ namespace Kalmit
             public ErrT Err;
 
             public OkT Ok;
+
+            static public Result<ErrT, OkT> err(ErrT err) =>
+                new Result<ErrT, OkT> { Err = err };
+
+            static public Result<ErrT, OkT> ok(OkT ok) =>
+                new Result<ErrT, OkT> { Ok = ok };
 
             public bool Equals(Result<ErrT, OkT> other)
             {
