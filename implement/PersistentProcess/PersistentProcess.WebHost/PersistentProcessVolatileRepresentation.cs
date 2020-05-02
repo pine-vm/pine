@@ -277,7 +277,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
                                     if (prepareMigrateResult.Ok == null)
                                     {
-                                        setElmAppStateResult = new Result<string, string> { Err = "Failed to prepare elm app state migration:" + prepareMigrateResult.Err };
+                                        setElmAppStateResult = new Result<string, string> { Err = "Failed to prepare elm app state migration: " + prepareMigrateResult.Err };
                                     }
                                     else
                                     {

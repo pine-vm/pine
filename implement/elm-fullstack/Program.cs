@@ -196,9 +196,13 @@ namespace elm_fullstack
 
                 Console.WriteLine("Beginning to deploy app '" + webAppConfigFileId + "' to '" + deployAddress + "'...");
 
-                var httpResponse = httpClient.PostAsync(
-                    deployAddress,
-                    new System.Net.Http.ByteArrayContent(webAppConfigZipArchive)).Result;
+                var httpContent = new System.Net.Http.ByteArrayContent(webAppConfigZipArchive);
+
+                httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+                httpContent.Headers.ContentDisposition =
+                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = webAppConfigFileId + ".zip" };
+
+                var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
 
                 Console.WriteLine(
                     "Server response: " + httpResponse.StatusCode + "\n" +

@@ -24,7 +24,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiElmAppState => "/api/elm-app-state";
 
-        static public string PathApiGetAppConfig => "/api/get-app-config";
+        static public string PathApiGetDeployedAppConfig => "/api/get-deployed-app-config";
 
         public StartupAdminInterface()
         {
@@ -164,27 +164,13 @@ namespace Kalmit.PersistentProcess.WebHost
 
             startPublicApp();
 
-            byte[] getPublicAppConfigFromStoreAsZipArchive()
+            Composition.Component getPublicAppConfigFromStore()
             {
                 using (var restoredProcess = PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
                         new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore),
                         _ => { }))
                 {
-                    var appConfigComponent =
-                        restoredProcess?.lastAppConfig?.appConfigComponent;
-
-                    var appConfigTree = Composition.ParseAsTree(appConfigComponent).Ok;
-
-                    var appConfigFilesNamesAndContents =
-                        appConfigTree.EnumerateBlobsTransitive()
-                        .Select(blobPathAndContent => (
-                            fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                            fileContent: blobPathAndContent.blobContent))
-                        .ToImmutableList();
-
-                    return
-                        ZipArchive.ZipArchiveFromEntries(
-                            ElmApp.ToFlatDictionaryWithPathComparer(appConfigFilesNamesAndContents));
+                    return restoredProcess?.lastAppConfig?.appConfigComponent;
                 }
             }
 
@@ -232,7 +218,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     var requestPathIsDeployAppConfigAndInitElmAppState =
                         context.Request.Path.Equals(new PathString(PathApiDeployAppConfigAndInitElmAppState));
 
-                    if (context.Request.Path.Equals(new PathString(PathApiGetAppConfig)))
+                    if (context.Request.Path.Equals(new PathString(PathApiGetDeployedAppConfig)))
                     {
                         if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                         {
@@ -241,18 +227,33 @@ namespace Kalmit.PersistentProcess.WebHost
                             return;
                         }
 
-                        var appConfigZipArchive = getPublicAppConfigFromStoreAsZipArchive();
+                        var appConfig = getPublicAppConfigFromStore();
 
-                        if (appConfigZipArchive == null)
+                        if (appConfig == null)
                         {
-                            context.Response.StatusCode = 200;
-                            await context.Response.WriteAsync("I did not find an app config file in the store.");
+                            context.Response.StatusCode = 404;
+                            await context.Response.WriteAsync("I did not find an app config in the history. Looks like no app was deployed so far.");
                             return;
                         }
 
+                        var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
+
+                        var appConfigTree = Composition.ParseAsTree(appConfig).Ok;
+
+                        var appConfigFilesNamesAndContents =
+                            appConfigTree.EnumerateBlobsTransitive()
+                            .Select(blobPathAndContent => (
+                                fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
+                                fileContent: blobPathAndContent.blobContent))
+                            .ToImmutableList();
+
+                        var appConfigZipArchive =
+                            ZipArchive.ZipArchiveFromEntries(
+                                ElmApp.ToFlatDictionaryWithPathComparer(appConfigFilesNamesAndContents));
+
                         context.Response.StatusCode = 200;
                         context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
-                        context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = "web-app-config.zip" }.ToString());
+                        context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString());
                         context.Response.Headers.Add("Content-Type", new MediaTypeHeaderValue("application/zip").ToString());
 
                         await context.Response.Body.WriteAsync(appConfigZipArchive);

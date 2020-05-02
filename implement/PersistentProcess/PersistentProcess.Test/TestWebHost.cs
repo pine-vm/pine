@@ -803,7 +803,7 @@ namespace Kalmit.PersistentProcess.Test
 
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
                     {
-                        var getAppConfigResponse = adminClient.GetAsync(StartupAdminInterface.PathApiGetAppConfig).Result;
+                        var getAppConfigResponse = adminClient.GetAsync(StartupAdminInterface.PathApiGetDeployedAppConfig).Result;
 
                         Assert.IsTrue(getAppConfigResponse.IsSuccessStatusCode, "get-app-config response IsSuccessStatusCode");
 
