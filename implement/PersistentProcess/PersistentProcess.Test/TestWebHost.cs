@@ -20,7 +20,7 @@ namespace Kalmit.PersistentProcess.Test
     public class TestWebHost
     {
         [TestMethod]
-        public void Web_host_stores_reduction_every_hour()
+        public void Web_host_stores_process_history_reduction_every_hour_by_default()
         {
             var persistentProcessHostDateTime = new DateTimeOffset(2018, 11, 4, 8, 17, 13, TimeSpan.Zero);
 

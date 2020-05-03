@@ -8,7 +8,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace Kalmit.PersistentProcess.WebHost
@@ -38,41 +37,15 @@ namespace Kalmit.PersistentProcess.WebHost
                 services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset);
             }
 
-            var persistentProcessMap =
-                serviceProvider.GetService<PersistentProcessMap>()?.mapPersistentProcess
-                ??
-                new Func<PersistentProcess.IPersistentProcess, PersistentProcess.IPersistentProcess>(persistentProcess => persistentProcess);
+            var webAppAndElmAppConfig = serviceProvider.GetService<WebAppAndElmAppConfig>();
 
-            services.AddSingleton<PersistentProcess.IPersistentProcess>(
-                serviceProvider => persistentProcessMap(BuildPersistentProcess(serviceProvider)));
+            if (webAppAndElmAppConfig == null)
+            {
+                throw new Exception("Missing reference to the web app config.");
+            }
 
             {
-                var processStoreReader =
-                    serviceProvider.GetService<ProcessStoreSupportingMigrations.IProcessStoreReader>();
-
-                var appConfigComponent =
-                    PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                        processStoreReader,
-                        _ => { })
-                    ?.lastAppConfig?.appConfigComponent;
-
-                if (appConfigComponent == null)
-                    throw new Exception("This process store contains no app config.");
-
-                var appConfigTree = Composition.ParseAsTree(appConfigComponent).Ok;
-
-                var appConfigFilesNamesAndContents =
-                    appConfigTree.EnumerateBlobsTransitive()
-                    .Select(blobPathAndContent => (
-                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                        fileContent: blobPathAndContent.blobContent))
-                        .ToImmutableList();
-
-                var webAppConfigObject = WebAppConfiguration.FromFiles(appConfigFilesNamesAndContents);
-
-                services.AddSingleton<WebAppConfiguration>(webAppConfigObject);
-
-                var letsEncryptOptions = webAppConfigObject?.JsonStructure?.letsEncryptOptions;
+                var letsEncryptOptions = webAppAndElmAppConfig.WebAppConfiguration?.JsonStructure?.letsEncryptOptions;
 
                 if (letsEncryptOptions == null)
                 {
@@ -90,38 +63,10 @@ namespace Kalmit.PersistentProcess.WebHost
             Asp.ConfigureServices(services);
         }
 
-        static PersistentProcess.IPersistentProcess BuildPersistentProcess(IServiceProvider services)
-        {
-            var logger = services.GetService<ILogger<StartupPublicApp>>();
-            var elmAppFiles = services.GetService<WebAppConfiguration>()?.ElmAppFiles;
-
-            if (!(0 < elmAppFiles?.Count))
-            {
-                logger.LogInformation("Found no ElmAppFile in configuration.");
-                return null;
-            }
-
-            var elmAppComposition =
-                Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(elmAppFiles));
-
-            logger.LogInformation("Begin to build the persistent process for Elm app " +
-                CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppComposition)));
-
-            var persistentProcess =
-                PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                    services.GetService<ProcessStoreSupportingMigrations.IProcessStoreReader>(),
-                    logger: logEntry => logger.LogInformation(logEntry));
-
-            logger.LogInformation("Completed building the persistent process.");
-
-            return persistentProcess;
-        }
-
         public void Configure(
             IApplicationBuilder app,
             IWebHostEnvironment env,
-            WebAppConfiguration webAppConfig,
-            ProcessStoreSupportingMigrations.IProcessStoreWriter processStoreWriter,
+            WebAppAndElmAppConfig webAppAndElmAppConfig,
             Func<DateTimeOffset> getDateTimeOffset)
         {
             if (env.IsDevelopment())
@@ -129,13 +74,14 @@ namespace Kalmit.PersistentProcess.WebHost
                 app.UseDeveloperExceptionPage();
             }
 
+            if (webAppAndElmAppConfig == null)
+            {
+                throw new Exception("Missing reference to the web app config.");
+            }
+
             var nextHttpRequestIndex = 0;
 
-            var cyclicReductionStoreLock = new object();
-            DateTimeOffset? cyclicReductionStoreLastTime = null;
-            var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
-
-            if (webAppConfig?.JsonStructure?.letsEncryptOptions != null)
+            if (webAppAndElmAppConfig.WebAppConfiguration.JsonStructure?.letsEncryptOptions != null)
                 app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
             var createVolatileHostAttempts = 0;
@@ -251,53 +197,45 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var processRequestCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
 
-            var persistentProcess = app.ApplicationServices.GetService<PersistentProcess.IPersistentProcess>();
-
             void processEventAndResultingRequests(InterfaceToHost.Event interfaceEvent)
             {
-                lock (processStoreWriter)
+                var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
+
+                var serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+
+                InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
+
+                try
                 {
-                    var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
+                    structuredResponse =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
+                            serializedResponse);
+                }
+                catch (Exception parseException)
+                {
+                    throw new Exception(
+                        "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
+                        parseException);
+                }
 
-                    var eventResponses = persistentProcess.ProcessElmAppEvents(
-                        processStoreWriter, new[] { serializedInterfaceEvent });
+                if (structuredResponse?.decodeEventSuccess == null)
+                {
+                    throw new Exception("Hosted app failed to decode the event: " + structuredResponse.decodeEventError);
+                }
 
-                    var serializedResponse = eventResponses.Single();
+                foreach (var requestFromProcess in structuredResponse.decodeEventSuccess)
+                {
+                    if (requestFromProcess.completeHttpResponse != null)
+                        processRequestCompleteHttpResponse[requestFromProcess.completeHttpResponse.httpRequestId] =
+                            requestFromProcess.completeHttpResponse.response;
 
-                    InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
-
-                    try
-                    {
-                        structuredResponse =
-                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                                serializedResponse);
-                    }
-                    catch (Exception parseException)
-                    {
-                        throw new Exception(
-                            "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
-                            parseException);
-                    }
-
-                    if (structuredResponse?.decodeEventSuccess == null)
-                    {
-                        throw new Exception("Hosted app failed to decode the event: " + structuredResponse.decodeEventError);
-                    }
-
-                    foreach (var requestFromProcess in structuredResponse.decodeEventSuccess)
-                    {
-                        if (requestFromProcess.completeHttpResponse != null)
-                            processRequestCompleteHttpResponse[requestFromProcess.completeHttpResponse.httpRequestId] =
-                                requestFromProcess.completeHttpResponse.response;
-
-                        if (requestFromProcess.startTask != null)
-                            System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(requestFromProcess.startTask));
-                    }
+                    if (requestFromProcess.startTask != null)
+                        System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(requestFromProcess.startTask));
                 }
             }
 
             app
-            .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppConfig, context, next))
+            .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
             .Run(async (context) =>
             {
                 var currentDateTime = getDateTimeOffset();
@@ -350,34 +288,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     System.Threading.Thread.Sleep(100);
                 }
 
-                System.Threading.Thread.MemoryBarrier();
-                var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
 
-                if (!(cyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds))
-                {
-                    if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
-                    {
-                        try
-                        {
-                            var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
-
-                            if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
-                                return;
-
-                            lock (processStoreWriter)
-                            {
-                                var reductionRecord = persistentProcess.StoreReductionRecordForCurrentState(processStoreWriter);
-                            }
-
-                            cyclicReductionStoreLastTime = currentDateTime;
-                            System.Threading.Thread.MemoryBarrier();
-                        }
-                        finally
-                        {
-                            System.Threading.Monitor.Exit(cyclicReductionStoreLock);
-                        }
-                    }
-                }
             });
         }
 
@@ -407,8 +318,10 @@ namespace Kalmit.PersistentProcess.WebHost
         }
     }
 
-    public class PersistentProcessMap
+    public class WebAppAndElmAppConfig
     {
-        public Func<PersistentProcess.IPersistentProcess, PersistentProcess.IPersistentProcess> mapPersistentProcess;
+        public WebAppConfiguration WebAppConfiguration;
+
+        public Func<string, string> ProcessEventInElmApp;
     }
 }

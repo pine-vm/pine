@@ -26,8 +26,11 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiGetDeployedAppConfig => "/api/get-deployed-app-config";
 
-        public StartupAdminInterface()
+        private readonly ILogger<StartupAdminInterface> logger;
+
+        public StartupAdminInterface(ILogger<StartupAdminInterface> logger)
         {
+            this.logger = logger;
         }
 
         public void ConfigureServices(IServiceCollection services)
@@ -45,7 +48,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
         class PublicHostConfiguration
         {
-            public SyncPersistentProcess syncPersistentProcess;
+            public PersistentProcess.PersistentProcessVolatileRepresentation processVolatileRepresentation;
 
             public IWebHost webHost;
         }
@@ -80,6 +83,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     {
                         publicAppHost?.webHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
                         publicAppHost?.webHost?.Dispose();
+                        publicAppHost?.processVolatileRepresentation?.Dispose();
                         publicAppHost = null;
                     }
                 }
@@ -108,21 +112,73 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     var newPublicAppConfig = new PublicHostConfiguration { };
 
-                    var processStoreReader =
-                        new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore);
+                    logger.LogInformation("Begin to build the process volatile representation.");
 
-                    using (var restoredProcess = PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                            processStoreReader,
-                            _ => { }))
+                    var processVolatileRepresentation =
+                        PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                            new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore),
+                            logger: logEntry => logger.LogInformation(logEntry));
+
+                    logger.LogInformation("Completed building the process volatile representation.");
+
+                    var cyclicReductionStoreLock = new object();
+                    DateTimeOffset? cyclicReductionStoreLastTime = null;
+                    var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
+
+                    void maintainStoreReductions()
                     {
-                        var appConfigComponent =
-                            restoredProcess?.lastAppConfig?.appConfigComponent;
+                        var currentDateTime = getDateTimeOffset();
 
-                        var webHost =
-                            appConfigComponent == null
-                            ?
-                            null
-                            :
+                        System.Threading.Thread.MemoryBarrier();
+                        var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
+
+                        if (!(cyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds))
+                        {
+                            if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
+                            {
+                                try
+                                {
+                                    var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
+
+                                    if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
+                                        return;
+
+                                    lock (processStoreWriter)
+                                    {
+                                        var reductionRecord = processVolatileRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
+                                    }
+
+                                    cyclicReductionStoreLastTime = currentDateTime;
+                                    System.Threading.Thread.MemoryBarrier();
+                                }
+                                finally
+                                {
+                                    System.Threading.Monitor.Exit(cyclicReductionStoreLock);
+                                }
+                            }
+                        }
+                    }
+
+                    var webHost =
+                        processVolatileRepresentation?.lastAppConfig?.appConfigComponent == null
+                        ?
+                        null
+                        :
+                        buildWebHost();
+
+                    IWebHost buildWebHost()
+                    {
+                        var appConfigTree = Composition.ParseAsTree(
+                            processVolatileRepresentation.lastAppConfig.Value.appConfigComponent).Ok;
+
+                        var appConfigFilesNamesAndContents =
+                            appConfigTree.EnumerateBlobsTransitive()
+                            .Select(blobPathAndContent => (
+                                fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
+                                fileContent: blobPathAndContent.blobContent))
+                                .ToImmutableList();
+
+                        return
                             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                             .ConfigureLogging((hostingContext, logging) =>
                             {
@@ -142,37 +198,40 @@ namespace Kalmit.PersistentProcess.WebHost
                             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                             .ConfigureServices(services =>
                             {
-                                services.AddSingleton<ProcessStoreSupportingMigrations.IProcessStoreReader>(processStoreReader);
-                                services.AddSingleton<ProcessStoreSupportingMigrations.IProcessStoreWriter>(processStoreWriter);
+                                services.AddSingleton<WebAppAndElmAppConfig>(
+                                    new WebAppAndElmAppConfig
+                                    {
+                                        WebAppConfiguration = WebAppConfiguration.FromFiles(appConfigFilesNamesAndContents),
+                                        ProcessEventInElmApp = serializedEvent =>
+                                        {
+                                            lock (processStoreWriter)
+                                            {
+                                                lock (publicAppLock)
+                                                {
+                                                    var elmEventResponse =
+                                                        processVolatileRepresentation.ProcessElmAppEvents(
+                                                            processStoreWriter, new[] { serializedEvent }).Single();
+
+                                                    maintainStoreReductions();
+
+                                                    return elmEventResponse;
+                                                }
+                                            }
+                                        }
+                                    });
                             })
-                            .ConfigureServices(services => services.AddSingleton(new PersistentProcessMap
-                            {
-                                mapPersistentProcess = originalPersistentProcess =>
-                                {
-                                    return newPublicAppConfig.syncPersistentProcess = new SyncPersistentProcess(originalPersistentProcess);
-                                }
-                            }))
                             .Build();
-
-                        newPublicAppConfig.webHost = webHost;
-
-                        webHost?.StartAsync(appLifetime.ApplicationStopping).Wait();
-                        publicAppHost = newPublicAppConfig;
                     }
+
+                    newPublicAppConfig.processVolatileRepresentation = processVolatileRepresentation;
+                    newPublicAppConfig.webHost = webHost;
+
+                    webHost?.StartAsync(appLifetime.ApplicationStopping).Wait();
+                    publicAppHost = newPublicAppConfig;
                 }
             }
 
             startPublicApp();
-
-            Composition.Component getPublicAppConfigFromStore()
-            {
-                using (var restoredProcess = PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                        new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore),
-                        _ => { }))
-                {
-                    return restoredProcess?.lastAppConfig?.appConfigComponent;
-                }
-            }
 
             app.Run(async (context) =>
                 {
@@ -227,7 +286,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             return;
                         }
 
-                        var appConfig = getPublicAppConfigFromStore();
+                        var appConfig = publicAppHost?.processVolatileRepresentation?.lastAppConfig?.appConfigComponent;
 
                         if (appConfig == null)
                         {
@@ -333,9 +392,9 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            var syncPersistentProcess = publicAppHost?.syncPersistentProcess;
+                            var processVolatileRepresentation = publicAppHost?.processVolatileRepresentation;
 
-                            if (syncPersistentProcess == null)
+                            if (processVolatileRepresentation == null)
                             {
                                 context.Response.StatusCode = 500;
                                 await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
@@ -352,7 +411,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             };
 
                             var reductionRecord =
-                                syncPersistentProcess.StoreReductionRecordForCurrentState(storeWriter);
+                                processVolatileRepresentation.StoreReductionRecordForCurrentState(storeWriter);
 
                             var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
 
@@ -446,44 +505,6 @@ namespace Kalmit.PersistentProcess.WebHost
                     await context.Response.WriteAsync("Not Found");
                     return;
                 });
-        }
-    }
-
-    public class SyncPersistentProcess : PersistentProcess.IPersistentProcess
-    {
-        readonly object @lock = new object();
-
-        readonly PersistentProcess.IPersistentProcess persistentProcess;
-
-        public SyncPersistentProcess(PersistentProcess.IPersistentProcess persistentProcess)
-        {
-            this.persistentProcess = persistentProcess;
-        }
-
-        public void RunInLock(Action<PersistentProcess.IPersistentProcess> action)
-        {
-            lock (@lock)
-            {
-                action(persistentProcess);
-            }
-        }
-
-        public IImmutableList<string> ProcessElmAppEvents(
-            ProcessStoreSupportingMigrations.IProcessStoreWriter storeWriter, IReadOnlyList<string> serializedEvents)
-        {
-            lock (@lock)
-            {
-                return persistentProcess.ProcessElmAppEvents(storeWriter, serializedEvents);
-            }
-        }
-
-        public ProcessStoreSupportingMigrations.ProvisionalReductionRecordInFile StoreReductionRecordForCurrentState(
-            ProcessStoreSupportingMigrations.IProcessStoreWriter storeWriter)
-        {
-            lock (@lock)
-            {
-                return persistentProcess.StoreReductionRecordForCurrentState(storeWriter);
-            }
         }
     }
 }
