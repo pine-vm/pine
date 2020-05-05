@@ -9,7 +9,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 {
     public interface IProcessStoreWriter
     {
-        void AppendSerializedCompositionLogRecord(byte[] serializedCompositionRecord);
+        (byte[] recordHash, string recordHashBase16) SetCompositionLogHeadRecord(byte[] serializedCompositionRecord);
 
         void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction);
 
@@ -24,19 +24,59 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         Composition.Component LoadComponent(string componentHash);
 
-        static public IProcessStoreReader ProjectReaderForAppendedCompositionLogEvent(
-            IProcessStoreReader originalStore,
+        static public (IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)
+            ProjectFileStoreReaderForAppendedCompositionLogEvent(
+            IFileStoreReader originalFileStore,
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
         {
-            return new DelegatingProcessStoreReader
+            var originalProcessStoreReader = new ProcessStoreReaderInFileStore(originalFileStore);
+
+            var originalStoreLastCompositionRecord =
+                originalProcessStoreReader.EnumerateSerializedCompositionLogRecordsReverse().FirstOrDefault();
+
+            var parentHashBase16 =
+                originalStoreLastCompositionRecord == null
+                ?
+                CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16
+                :
+                CompositionLogRecordInFile.HashBase16FromCompositionRecord(originalStoreLastCompositionRecord);
+
+            var compositionLogRecordStructure = new ProcessStoreSupportingMigrations.CompositionLogRecordInFile
             {
-                LoadComponentDelegate = originalStore.LoadComponent,
-                LoadProvisionalReductionDelegate = originalStore.LoadProvisionalReduction,
-                EnumerateSerializedCompositionLogRecordsReverseDelegate = () =>
-                    AppendCompositionEventToCompositionLogChain(
-                        originalStore.EnumerateSerializedCompositionLogRecordsReverse(),
-                        compositionLogEvent)
+                parentHashBase16 = parentHashBase16,
+                events = ImmutableList.Create(compositionLogEvent),
             };
+
+            var compositionLogRecordSerialized = ProcessStoreInFileStore.Serialize(compositionLogRecordStructure);
+
+            var projectedFiles = new List<(IImmutableList<string> filePath, byte[] fileContent)>();
+
+            var fileStoreWriter = new DelegatingFileStoreWriter
+            {
+                SetFileContentDelegate = projectedFiles.Add,
+                AppendFileContentDelegate = _ => throw new Exception("Unexpeced operation append to file."),
+                DeleteFileDelegate = _ => throw new Exception("Unexpeced operation delete file."),
+            };
+
+            var processStoreWriter = new ProcessStoreWriterInFileStore(fileStoreWriter);
+
+            processStoreWriter.SetCompositionLogHeadRecord(compositionLogRecordSerialized);
+
+            var projectedFileStoreReader = new DelegatingFileStoreReader
+            {
+                GetFileContentDelegate = filePath =>
+                {
+                    var projectedFilePathAndContent = projectedFiles.FirstOrDefault(c => c.filePath.SequenceEqual(filePath));
+
+                    if (projectedFilePathAndContent.filePath?.SequenceEqual(filePath) ?? false)
+                        return projectedFilePathAndContent.fileContent;
+
+                    return originalFileStore.GetFileContent(filePath);
+                },
+                ListFilesInDirectoryDelegate = originalFileStore.ListFilesInDirectory,
+            };
+
+            return (projectedFiles: projectedFiles, projectedReader: projectedFileStoreReader);
         }
 
         static public IProcessStoreReader EmptyProcessStoreReader()
@@ -47,40 +87,6 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
                 LoadProvisionalReductionDelegate = _ => null,
                 EnumerateSerializedCompositionLogRecordsReverseDelegate = () => ImmutableList<byte[]>.Empty
             };
-        }
-
-        static IEnumerable<byte[]> AppendCompositionEventToCompositionLogChain(
-            IEnumerable<byte[]> originalCompositionLogRecordsReverse,
-            CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
-        {
-            byte[] buildRecordForParentHash(string parentHashBase16)
-            {
-                var compositionLogRecord = new ProcessStoreSupportingMigrations.CompositionLogRecordInFile
-                {
-                    parentHashBase16 = parentHashBase16,
-                    events = ImmutableList.Create(compositionLogEvent),
-                };
-
-                return ProcessStoreInFileStore.Serialize(compositionLogRecord);
-            }
-
-            bool isLast = true;
-
-            foreach (var originalRecordSerialized in originalCompositionLogRecordsReverse)
-            {
-                if (isLast)
-                {
-                    yield return buildRecordForParentHash(
-                        CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(originalRecordSerialized)));
-
-                    isLast = false;
-                }
-
-                yield return originalRecordSerialized;
-            }
-
-            if (isLast)
-                yield return buildRecordForParentHash(CompositionLogRecordInFile.compositionLogEmptyInitHashBase16);
         }
     }
 
@@ -104,14 +110,14 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
     public class DelegatingProcessStoreWriter : IProcessStoreWriter
     {
-        public Action<byte[]> AppendSerializedCompositionLogRecordDelegate;
+        public Func<byte[], (byte[] recordHash, string recordHashBase16)> SetCompositionLogHeadRecordDelegate;
 
         public Action<Composition.Component> StoreComponentDelegate;
 
         public Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate;
 
-        public void AppendSerializedCompositionLogRecord(byte[] serializedCompositionRecord) =>
-            AppendSerializedCompositionLogRecordDelegate(serializedCompositionRecord);
+        public (byte[] recordHash, string recordHashBase16) SetCompositionLogHeadRecord(byte[] serializedCompositionRecord) =>
+            SetCompositionLogHeadRecordDelegate(serializedCompositionRecord);
 
         public void StoreComponent(Composition.Component component) =>
             StoreComponentDelegate(component);
@@ -127,16 +133,14 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
     public class CompositionLogRecordInFile
     {
-        static public string compositionLogEmptyInitHashBase16 =>
-            CommonConversion.StringBase16FromByteArray(
-                CompositionLogRecordInFile.HashFromSerialRepresentation(new byte[0]));
+        static public string compositionLogFirstRecordParentHashBase16 => null;
+
+        static public string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
+            CommonConversion.StringBase16FromByteArray(Composition.GetHash(Composition.Component.Blob(compositionRecord)));
 
         public string parentHashBase16;
 
         public IReadOnlyList<CompositionEvent> events;
-
-        static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
-            CommonConversion.HashSHA256(serialized);
 
         public class CompositionEvent
         {
@@ -166,19 +170,13 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
             NullValueHandling = NullValueHandling.Ignore
         };
 
+        static protected IImmutableList<string> CompositionHeadHashFilePath =>
+            ImmutableList.Create("composition-log-head-hash");
+
         static readonly protected Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
 
         static public IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
             ImmutableList.Create(componentHash.Substring(0, 2), componentHash);
-
-        protected IFileStore fileStore;
-
-        //  Plain Kalmit component.
-        protected IFileStore componentFileStore => new FileStoreFromSubdirectory(fileStore, "component");
-
-        protected IFileStore compositionLogFileStore => new FileStoreFromSubdirectory(fileStore, "composition-log");
-
-        protected IFileStore provisionalReductionFileStore => new FileStoreFromSubdirectory(fileStore, "provisional-reduction");
 
         static protected IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
             logFilesNames?.OrderBy(filePath => string.Join("", filePath));
@@ -186,29 +184,24 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
         static public byte[] Serialize(CompositionLogRecordInFile record) =>
             Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(record, recordSerializationSettings));
 
-        public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
-            CompositionLogFileOrder(
-                compositionLogFileStore.ListFilesInDirectory(ImmutableList<string>.Empty));
-
-        public ProcessStoreInFileStore(IFileStore fileStore)
+        public ProcessStoreInFileStore()
         {
-            this.fileStore = fileStore;
         }
     }
 
     public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessStoreReader
     {
-        public ProcessStoreReaderInFileStore(IFileStore fileStore)
-            : base(fileStore)
-        {
-        }
+        protected IFileStoreReader fileStore;
 
-        public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse() =>
-            EnumerateCompositionsLogFilesPaths().Reverse()
-            .SelectMany(compositionFilePath =>
-                Encoding.UTF8.GetString(compositionLogFileStore.GetFileContent(compositionFilePath))
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
-                .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord)));
+        //  Plain Kalmit component.
+        protected IFileStoreReader componentFileStore => fileStore.ForSubdirectory("component");
+
+        protected IFileStoreReader provisionalReductionFileStore => fileStore.ForSubdirectory("provisional-reduction");
+
+        public ProcessStoreReaderInFileStore(IFileStoreReader fileStore)
+        {
+            this.fileStore = fileStore;
+        }
 
         IReadOnlyList<byte> LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
             componentFileStore.GetFileContent(
@@ -275,53 +268,59 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
         public IEnumerable<string> ReductionsFilesNames() =>
             provisionalReductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
             .Select(Enumerable.Last);
+
+        public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse()
+        {
+            var compositionHeadHash = fileStore.GetFileContent(CompositionHeadHashFilePath);
+
+            if (compositionHeadHash == null)
+                yield break;
+
+            var nextHashBase16 = CommonConversion.StringBase16FromByteArray(compositionHeadHash);
+
+            while (nextHashBase16 != CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+            {
+                var compositionRecordComponent = LoadComponent(nextHashBase16);
+
+                if (compositionRecordComponent == null)
+                    throw new Exception("Failed to load composition record component " + nextHashBase16);
+
+                if (compositionRecordComponent.BlobContent == null)
+                    throw new Exception("Unexpected content for composition record component " + nextHashBase16);
+
+                var compositionRecordArray = compositionRecordComponent.BlobContent.ToArray();
+
+                var recordStructure = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(
+                    Encoding.UTF8.GetString(compositionRecordArray));
+
+                yield return compositionRecordArray;
+
+                nextHashBase16 = recordStructure.parentHashBase16?.ToLowerInvariant();
+            }
+        }
     }
 
     public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
     {
-        Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath;
+        protected IFileStoreWriter fileStore;
 
-        readonly object appendSerializedCompositionRecordLock = new object();
+        //  Plain Kalmit component.
+        protected IFileStoreWriter componentFileStore => fileStore.ForSubdirectory("component");
 
-        IImmutableList<string> appendSerializedCompositionRecordLastFilePath = null;
+        protected IFileStoreWriter provisionalReductionFileStore => fileStore.ForSubdirectory("provisional-reduction");
 
-        public ProcessStoreWriterInFileStore(
-            IFileStore fileStore,
-            Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
-            : base(fileStore)
+        public ProcessStoreWriterInFileStore(IFileStoreWriter fileStore)
         {
-            this.getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
+            this.fileStore = fileStore;
         }
 
-        public void AppendSerializedCompositionLogRecord(byte[] record)
+        public (byte[] recordHash, string recordHashBase16) SetCompositionLogHeadRecord(byte[] record)
         {
-            lock (appendSerializedCompositionRecordLock)
-            {
-                var lastOrDefaultPath = appendSerializedCompositionRecordLastFilePath ?? ImmutableList.Create("composition");
+            var recordHash = StoreComponentAndGetHash(Composition.Component.Blob(record));
 
-                var compositionLogRequestedFilePathInDirectory =
-                    getCompositionLogRequestedNextFilePath?.Invoke() ?? lastOrDefaultPath;
+            fileStore.SetFileContent(CompositionHeadHashFilePath, recordHash.hash);
 
-                var compositionLogFilePath = lastOrDefaultPath;
-
-                if (!compositionLogRequestedFilePathInDirectory.SequenceEqual(compositionLogFilePath))
-                {
-                    // When reading the composition log, we depend on file names to determine the order of records.
-                    // Therefore, only switch to the requested filename if it will be the last in that order.
-
-                    var lastFileNameIfAddRequestedFileName =
-                        CompositionLogFileOrder(
-                            EnumerateCompositionsLogFilesPaths().Concat(new[] { compositionLogRequestedFilePathInDirectory }))
-                        .Last();
-
-                    if (compositionLogRequestedFilePathInDirectory.Equals(lastFileNameIfAddRequestedFileName))
-                        compositionLogFilePath = compositionLogRequestedFilePathInDirectory;
-                }
-
-                compositionLogFileStore.AppendFileContent(compositionLogFilePath, record.Concat(Encoding.UTF8.GetBytes("\n")).ToArray());
-
-                appendSerializedCompositionRecordLastFilePath = compositionLogFilePath;
-            }
+            return recordHash;
         }
 
         public void StoreProvisionalReduction(ProvisionalReductionRecordInFile reductionRecord)
@@ -336,9 +335,16 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         public void StoreComponent(Composition.Component component)
         {
+            StoreComponentAndGetHash(component);
+        }
+
+        (byte[] hash, string hashBase16) StoreComponentAndGetHash(Composition.Component component)
+        {
             var (serialRepresentation, dependencies) = Composition.GetSerialRepresentationAndDependencies(component);
 
-            var hashBase16 = CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(serialRepresentation));
+            var hash = CommonConversion.HashSHA256(serialRepresentation);
+
+            var hashBase16 = CommonConversion.StringBase16FromByteArray(hash);
 
             componentFileStore.SetFileContent(
                 GetFilePathForComponentInComponentFileStore(hashBase16),
@@ -346,6 +352,8 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
             foreach (var dependency in dependencies)
                 StoreComponent(dependency);
+
+            return (hash, hashBase16);
         }
     }
 }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -10,7 +12,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace elm_fullstack
 {
-    class Program
+    public class Program
     {
         static int Main(string[] args)
         {
@@ -201,6 +203,91 @@ namespace elm_fullstack
                 httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
                 httpContent.Headers.ContentDisposition =
                     new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = webAppConfigFileId + ".zip" };
+
+                var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
+
+                Console.WriteLine(
+                    "Server response: " + httpResponse.StatusCode + "\n" +
+                     httpResponse.Content.ReadAsStringAsync().Result);
+            }
+        }
+
+        static public void replicateProcess(
+            string destinationAdminInterface,
+            string destinationAdminRootPassword,
+            string sourceAdminInterface,
+            string sourceAdminRootPassword)
+        {
+            var processHistoryfilesFromRemoteHost = new ConcurrentDictionary<IImmutableList<string>, IImmutableList<byte>>();
+
+            using (var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) })
+            {
+                Console.WriteLine("Begin reading process history from '" + sourceHttpClient.BaseAddress + "' ...");
+
+                sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sourceAdminRootPassword))));
+
+                var processHistoryFileStoreRemoteReader = new Kalmit.DelegatingFileStoreReader
+                {
+                    GetFileContentDelegate = filePath =>
+                    {
+                        var httpRequestPath =
+                            Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                            string.Join("/", filePath);
+
+                        var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
+
+                        Console.WriteLine("Attempting to read file from '" + httpRequestPath + "', result is " + response.StatusCode);
+
+                        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                            return null;
+
+                        var fileContent = response.Content.ReadAsByteArrayAsync().Result;
+
+                        processHistoryfilesFromRemoteHost[filePath] = fileContent.ToImmutableList();
+
+                        return fileContent;
+                    }
+                };
+
+                using (var processVolatileRepresentation =
+                    Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation
+                    .Restore(new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+                        processHistoryFileStoreRemoteReader), _ => { }))
+                {
+                }
+            }
+
+            Console.WriteLine("Completed reading part of process history for restore. Read " + processHistoryfilesFromRemoteHost.Count + " files from " + sourceAdminInterface + " during restore.");
+
+            var processHistoryTree =
+                Composition.TreeFromSetOfBlobsWithStringPath(processHistoryfilesFromRemoteHost);
+
+            var processHistoryComponentHash = Composition.GetHash(Composition.FromTree(processHistoryTree));
+            var processHistoryComponentHashBase16 = CommonConversion.StringBase16FromByteArray(processHistoryComponentHash);
+
+            var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(processHistoryfilesFromRemoteHost);
+
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(destinationAdminRootPassword))));
+
+                var deployAddress =
+                    destinationAdminInterface.TrimEnd('/') +
+                    Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
+
+                Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
+
+                var httpContent = new System.Net.Http.ByteArrayContent(processHistoryZipArchive);
+
+                httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+                httpContent.Headers.ContentDisposition =
+                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = processHistoryComponentHashBase16 + ".zip" };
 
                 var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
 

@@ -54,7 +54,7 @@ namespace Kalmit.PersistentProcess.Test
                     return testSetup.BuildProcessStoreReaderInFileDirectory().ReductionsFilesNames();
                 }
 
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     //  Do not depend on an exact number of reductions stored on initialization: Send one request before measuring the number of stored reductions.
                     using (var client = testSetup.BuildPublicAppHttpClient())
@@ -89,127 +89,6 @@ namespace Kalmit.PersistentProcess.Test
                                 beforeBatchStoredReductionsCount + 1,
                                 ReadStoredReductionFileRelativePaths().Count(),
                                 "Number of stored reductions has increased by one since previous batch.");
-                        }
-                    }
-                }
-            }
-        }
-
-        [TestMethod]
-        public void Web_host_continues_composition_log_on_new_file_every_calendar_day()
-        {
-            var persistentProcessHostDateTime = new DateTimeOffset(2018, 11, 4, 8, 17, 13, TimeSpan.Zero);
-
-            void letTimePassInPersistentProcessHost(TimeSpan amount) =>
-                persistentProcessHostDateTime = persistentProcessHostDateTime + amount;
-
-            var allEventsAndExpectedResponses =
-                TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                    new (int addition, int expectedResponse)[]
-                    {
-                        (0, 0),
-                        (1, 1),
-                        (3, 4),
-                        (5, 9),
-                        (7, 16),
-                        (11, 27),
-                        (-13, 14),
-                    }).ToList();
-
-            var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
-
-            Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
-
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                setAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
-                persistentProcessHostDateTime: () => persistentProcessHostDateTime))
-            {
-                WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReader() =>
-                    testSetup.BuildProcessStoreReaderInFileDirectory();
-
-                IEnumerable<string> ReadCompositionLogFilesNames() =>
-                    BuildProcessStoreReader().EnumerateCompositionsLogFilesPaths()
-                    .Select(filePath => String.Join(Path.DirectorySeparatorChar, filePath));
-
-                string FirstReductionRecordFile = null;
-
-                void deleteAllReductionRecordFilesExceptTheFirstOne()
-                {
-                    var filesNamesExceptTheFirst =
-                        BuildProcessStoreReader().ReductionsFilesNames().Except(new[] { FirstReductionRecordFile }).ToList();
-
-                    filesNamesExceptTheFirst.ForEach(reductionFileName =>
-                    {
-                        foreach (var matchingFile in Directory.EnumerateFiles(
-                            testSetup.ProcessStoreDirectory, reductionFileName, SearchOption.AllDirectories))
-                            File.Delete(matchingFile);
-                    });
-
-                    Assert.IsTrue(BuildProcessStoreReader().ReductionsFilesNames().Count() <= 1);
-                }
-
-                string PostStringContentAndGetResponseStringFromPublicApp(
-                    Microsoft.AspNetCore.TestHost.TestServer server, string requestContent)
-                {
-                    try
-                    {
-                        using (var client = testSetup.BuildPublicAppHttpClient())
-                        {
-                            var httpResponse =
-                                client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
-
-                            return httpResponse.Content.ReadAsStringAsync().Result;
-                        }
-                    }
-                    finally
-                    {
-                        FirstReductionRecordFile =
-                            FirstReductionRecordFile ?? BuildProcessStoreReader().ReductionsFilesNames().FirstOrDefault();
-                    }
-                }
-
-                using (var server = testSetup.BuildServer())
-                {
-                    //  Do not depend on an exact number of files stored on initialization: Send one request before measuring the number of stored files.
-                    PostStringContentAndGetResponseStringFromPublicApp(server, "");
-                }
-
-                foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
-                {
-                    var beforeBatchCompositionLogFiles = ReadCompositionLogFilesNames().ToList();
-
-                    letTimePassInPersistentProcessHost(TimeSpan.FromDays(1));
-
-                    var batchDayCompositionLogFileNameExpectedStart =
-                        persistentProcessHostDateTime.ToString("yyyy-MM-dd");
-
-                    //  Test that restoring works over all composition log files.
-                    deleteAllReductionRecordFilesExceptTheFirstOne();
-
-                    using (var server = testSetup.BuildServer())
-                    {
-                        foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
-                        {
-                            letTimePassInPersistentProcessHost(TimeSpan.FromMinutes(4));
-
-                            var httpResponseContent = PostStringContentAndGetResponseStringFromPublicApp(server, serializedEvent);
-
-                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
-
-                            var inBatchNewCompositionLogFiles =
-                                ReadCompositionLogFilesNames().Except(beforeBatchCompositionLogFiles).ToList();
-
-                            Assert.AreEqual(
-                                1,
-                                inBatchNewCompositionLogFiles.Count,
-                                "Exactly one new composition log files since start of batch.");
-
-                            var newCompositionLogFileName = Path.GetFileName(inBatchNewCompositionLogFiles.Single());
-
-                            Assert.IsTrue(
-                                newCompositionLogFileName.StartsWith(batchDayCompositionLogFileNameExpectedStart),
-                                "File name of new composition log file ('" + newCompositionLogFileName +
-                                "') starts with '" + batchDayCompositionLogFileNameExpectedStart + "')");
                         }
                     }
                 }
@@ -281,7 +160,7 @@ namespace Kalmit.PersistentProcess.Test
                     }
                 }
 
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
                     {
@@ -380,8 +259,7 @@ namespace Kalmit.PersistentProcess.Test
                     .Select(processEvent => processEvent?.httpRequest?.request?.bodyAsString)
                     .WhereNotNull();
 
-                HttpResponseMessage PostStringContentToServer(
-                    Microsoft.AspNetCore.TestHost.TestServer server, string requestContent)
+                HttpResponseMessage PostStringContentToPublicApp(string requestContent)
                 {
                     using (var client = testSetup.BuildPublicAppHttpClient())
                     {
@@ -394,7 +272,7 @@ namespace Kalmit.PersistentProcess.Test
                     IEnumerable<HttpResponseMessage> httpResponses) =>
                     httpResponses.Where(httpResponse => httpResponse.StatusCode == HttpStatusCode.TooManyRequests);
 
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     {
                         var firstBatchHttpResponses =
@@ -402,7 +280,7 @@ namespace Kalmit.PersistentProcess.Test
                             {
                                 letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
 
-                                return PostStringContentToServer(server, processEvent);
+                                return PostStringContentToPublicApp(processEvent);
                             }).ToList();
 
                         whereStatusCodeTooManyRequests(firstBatchHttpResponses).Count()
@@ -421,7 +299,7 @@ namespace Kalmit.PersistentProcess.Test
                                 //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
                                 letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
 
-                                return PostStringContentToServer(server, processEvent);
+                                return PostStringContentToPublicApp(processEvent);
                             }).ToList();
 
                         whereStatusCodeTooManyRequests(secondBatchHttpResponses).Count()
@@ -441,7 +319,7 @@ namespace Kalmit.PersistentProcess.Test
                             {
                                 letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
 
-                                return PostStringContentToServer(server, processEvent);
+                                return PostStringContentToPublicApp(processEvent);
                             }).ToList();
 
                         whereStatusCodeTooManyRequests(thirdBatchHttpResponses).Count()
@@ -471,7 +349,7 @@ namespace Kalmit.PersistentProcess.Test
                 setAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
                 adminRootPassword: rootPassword))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
                     {
@@ -489,7 +367,7 @@ namespace Kalmit.PersistentProcess.Test
                             publicAppClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
                             "State After Multiple Posts");
 
-                        using (var client = server.CreateClient())
+                        using (var client = testSetup.BuildAdminInterfaceHttpClient())
                         {
                             Assert.AreEqual(
                                 HttpStatusCode.Unauthorized,
@@ -521,7 +399,7 @@ namespace Kalmit.PersistentProcess.Test
                     }
                 }
 
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
                     {
@@ -542,7 +420,7 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
                     {
@@ -615,7 +493,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: TestElmWebAppHttpServer.HttpProxyWebApp))
                 {
-                    using (var server = testSetup.BuildServer())
+                    using (var server = testSetup.StartWebHost())
                     {
                         using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
                         {
@@ -712,7 +590,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 Action runBeforeMutateInFileStore = null;
 
-                using (var server = testSetup.BuildServer(
+                using (var server = testSetup.StartWebHost(
                     processStoreFileStoreMap: originalFileStore =>
                     {
                         return new FileStoreFromDelegates(
@@ -790,19 +668,17 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup())
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var setAppConfigResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app-config response IsSuccessStatusCode");
-                    }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
-                    {
                         var getAppConfigResponse = adminClient.GetAsync(StartupAdminInterface.PathApiGetDeployedAppConfig).Result;
 
                         Assert.IsTrue(getAppConfigResponse.IsSuccessStatusCode, "get-app-config response IsSuccessStatusCode");
@@ -832,7 +708,8 @@ namespace Kalmit.PersistentProcess.Test
                         }
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var deployHttpResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState,
@@ -842,9 +719,10 @@ namespace Kalmit.PersistentProcess.Test
 
                 foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
                 {
-                    using (var server = testSetup.BuildServer())
+                    using (var server = testSetup.StartWebHost())
                     {
-                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                            testSetup.BuildAdminInterfaceHttpClient()))
                         {
                             var deployHttpResponse = adminClient.PostAsync(
                                 StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
@@ -881,7 +759,7 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: webAppConfig))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     var stateToTriggerInvalidMigration =
                         @"{""attemptSetMaybeStringOnMigration"":true,""maybeString"":{""Nothing"":[]},""otherState"":""""}";
@@ -906,7 +784,8 @@ namespace Kalmit.PersistentProcess.Test
                             "Get same state back.");
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
@@ -945,7 +824,8 @@ namespace Kalmit.PersistentProcess.Test
                             "Set state httpResponse.IsSuccessStatusCode (" + httpResponse.Content?.ReadAsStringAsync().Result + ")");
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
@@ -985,7 +865,7 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: initialWebAppConfig))
             {
-                using (var server = testSetup.BuildServer())
+                using (var server = testSetup.StartWebHost())
                 {
                     var counterEventsAndExpectedResponses =
                         TestSetup.CounterProcessTestEventsAndExpectedResponses(
@@ -1009,7 +889,8 @@ namespace Kalmit.PersistentProcess.Test
                         }
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(server.CreateClient()))
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var setAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
@@ -1036,6 +917,113 @@ namespace Kalmit.PersistentProcess.Test
                             "14-part-a-part-b",
                             client.GetAsync("").Result.Content.ReadAsStringAsync().Result,
                             "State after multiple posts");
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void tooling_supports_replace_process_history_replicating_from_remote_host()
+        {
+            var originalHostAdminPassword = "original-host-password-678";
+
+            var allEventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (3, 4),
+                        (5, 9),
+                        (7, 16),
+                        (11, 27),
+                        (-13, 14),
+                    }).ToList();
+
+            var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
+
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.First();
+
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.Skip(1).First();
+
+            HttpClient originalServerPublicAppClient = null;
+
+            var replicaAdminInterfaceUrl = "http://localhost:18790";
+            var replicaPublicAppUrl = "http://localhost:18791";
+            var replicaAdminPassword = "replica-admin-password";
+
+            WebHostAdminInterfaceTestSetup replicaSetup = null;
+
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+                adminRootPassword: originalHostAdminPassword,
+                setAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            {
+                using (var server = testSetup.StartWebHost())
+                {
+                    originalServerPublicAppClient = testSetup.BuildPublicAppHttpClient();
+
+                    foreach (var (serializedEvent, expectedResponse) in firstBatchOfCounterAppEvents)
+                    {
+                        var httpResponse =
+                            originalServerPublicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                        var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                        Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                    }
+
+                    replicaSetup = WebHostAdminInterfaceTestSetup.Setup(
+                        webHostBuilderMap: null,
+                        adminWebHostUrlOverride: replicaAdminInterfaceUrl,
+                        publicWebHostUrlOverride: replicaPublicAppUrl,
+                        adminRootPassword: replicaAdminPassword);
+
+                    using (var replicaHost = replicaSetup.StartWebHost())
+                    {
+                        elm_fullstack.Program.replicateProcess(
+                            destinationAdminInterface: replicaAdminInterfaceUrl,
+                            destinationAdminRootPassword: replicaAdminPassword,
+                            sourceAdminInterface: testSetup.AdminWebHostUrl,
+                            sourceAdminRootPassword: originalHostAdminPassword);
+                    }
+                }
+            }
+
+            using (var replicaHost = replicaSetup.StartWebHost())
+            {
+                {
+                    // Assert the original server does not run anymore.
+
+                    try
+                    {
+                        var httpResponse =
+                            originalServerPublicAppClient.PostAsync(
+                                "", new StringContent("test", System.Text.Encoding.UTF8)).Result;
+
+                        throw new Exception("HTTP client should signal connection failed.");
+                    }
+                    catch (Exception e)
+                        // Message seen on Windows
+                        when (e.ToString().Contains("No connection could be made because the target machine actively refused it"))
+                    {
+                    }
+                    catch (Exception e)
+                        // Message seen on Ubuntu
+                        when (e.ToString().Contains("Connection refused"))
+                    {
+                    }
+                }
+
+                foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
+                {
+                    using (var client = replicaSetup.BuildPublicAppHttpClient())
+                    {
+                        var httpResponse =
+                            client.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                        var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                        Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
                     }
                 }
             }

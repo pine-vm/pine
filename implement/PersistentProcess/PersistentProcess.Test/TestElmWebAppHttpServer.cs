@@ -47,7 +47,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
                 {
-                    using (var server = testSetup.BuildServer())
+                    using (var server = testSetup.StartWebHost())
                     {
                         foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
                         {

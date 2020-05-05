@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -5,17 +6,55 @@ using System.Linq;
 
 namespace Kalmit
 {
-    public interface IFileStore
+    public interface IFileStoreReader
     {
-        void SetFileContent(IImmutableList<string> path, byte[] fileContent);
-
-        void AppendFileContent(IImmutableList<string> path, byte[] fileContent);
-
-        void DeleteFile(IImmutableList<string> path);
-
         byte[] GetFileContent(IImmutableList<string> path);
 
         IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath);
+    }
+
+    public interface IFileStoreWriter
+    {
+        void SetFileContent(IImmutableList<string> path, byte[] fileContent);
+
+        // TODO: Simplify IFileStoreWriter: Do we still need AppendFileContent there?
+        void AppendFileContent(IImmutableList<string> path, byte[] fileContent);
+
+        void DeleteFile(IImmutableList<string> path);
+    }
+
+    public class DelegatingFileStoreReader : IFileStoreReader
+    {
+        public Func<IImmutableList<string>, byte[]> GetFileContentDelegate;
+
+        public Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> ListFilesInDirectoryDelegate;
+
+        public byte[] GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
+
+        public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
+            ListFilesInDirectoryDelegate(directoryPath);
+    }
+
+    public class DelegatingFileStoreWriter : IFileStoreWriter
+    {
+        public Action<(IImmutableList<string> path, byte[] fileContent)> AppendFileContentDelegate;
+
+        public Action<IImmutableList<string>> DeleteFileDelegate;
+
+        public Action<(IImmutableList<string> path, byte[] fileContent)> SetFileContentDelegate;
+
+        public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
+            AppendFileContentDelegate((path, fileContent));
+
+        public void DeleteFile(IImmutableList<string> path) =>
+            DeleteFileDelegate(path);
+
+        public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
+            SetFileContentDelegate((path, fileContent));
+    }
+
+    public interface IFileStore : IFileStoreReader, IFileStoreWriter
+    {
     }
 
     public class FileStoreFromSystemIOFile : IFileStore
@@ -111,42 +150,31 @@ namespace Kalmit
         }
     }
 
-    public class FileStoreWithMappedPath : IFileStore
+    static public class FileStoreExtension
     {
-        readonly IFileStore originalFileStore;
+        static public IFileStoreReader WithMappedPath(
+            this IFileStoreReader originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
+            new DelegatingFileStoreReader
+            {
+                GetFileContentDelegate = originalPath => originalFileStore.GetFileContent(pathMap(originalPath)),
+                ListFilesInDirectoryDelegate = originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath)),
+            };
 
-        readonly System.Func<IImmutableList<string>, IImmutableList<string>> pathMap;
+        static public IFileStoreReader ForSubdirectory(
+            this IFileStoreReader originalFileStore, string directoryName) =>
+            WithMappedPath(originalFileStore, originalPath => originalPath.Insert(0, directoryName));
 
-        public FileStoreWithMappedPath(IFileStore originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap)
-        {
-            this.originalFileStore = originalFileStore;
-            this.pathMap = pathMap;
-        }
+        static public IFileStoreWriter WithMappedPath(
+            this IFileStoreWriter originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
+            new DelegatingFileStoreWriter
+            {
+                SetFileContentDelegate = pathAndFileContent => originalFileStore.SetFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
+                AppendFileContentDelegate = pathAndFileContent => originalFileStore.AppendFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
+                DeleteFileDelegate = originalPath => originalFileStore.DeleteFile(pathMap(originalPath)),
+            };
 
-        public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
-            originalFileStore.AppendFileContent(pathMap(path), fileContent);
-
-        public byte[] GetFileContent(IImmutableList<string> path) =>
-            originalFileStore.GetFileContent(pathMap(path));
-
-        public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> path) =>
-            originalFileStore.ListFilesInDirectory(pathMap(path));
-
-        public void DeleteFile(IImmutableList<string> path) =>
-            originalFileStore.DeleteFile(pathMap(path));
-
-        public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
-            originalFileStore.SetFileContent(pathMap(path), fileContent);
-    }
-
-    public class FileStoreFromSubdirectory : FileStoreWithMappedPath
-    {
-        public IFileStore fileStore;
-
-        public FileStoreFromSubdirectory(IFileStore fileStore, string directoryName)
-            :
-            base(fileStore, originalPath => originalPath.Insert(0, directoryName))
-        {
-        }
+        static public IFileStoreWriter ForSubdirectory(
+            this IFileStoreWriter originalFileStore, string directoryName) =>
+            WithMappedPath(originalFileStore, originalPath => originalPath.Insert(0, directoryName));
     }
 }

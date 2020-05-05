@@ -92,16 +92,18 @@ namespace Kalmit.ProcessStore
 
         protected IFileStore fileStore;
 
-        protected IFileStore compositionFileStore => new FileStoreFromSubdirectory(fileStore, "composition");
+        protected IFileStoreReader compositionFileStoreReader => ((IFileStoreReader)fileStore).ForSubdirectory("composition");
+        protected IFileStoreWriter compositionFileStoreWriter => ((IFileStoreWriter)fileStore).ForSubdirectory("composition");
 
-        protected IFileStore reductionFileStore => new FileStoreFromSubdirectory(fileStore, "reduction");
+        protected IFileStoreReader reductionFileStoreReader => ((IFileStoreReader)fileStore).ForSubdirectory("reduction");
+        protected IFileStoreWriter reductionFileStoreWriter => ((IFileStoreWriter)fileStore).ForSubdirectory("reduction");
 
         static protected IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
             logFilesNames?.OrderBy(filePath => string.Join("", filePath));
 
         public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
             CompositionLogFileOrder(
-                compositionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty));
+                compositionFileStoreReader.ListFilesInDirectory(ImmutableList<string>.Empty));
 
         public ProcessStoreInFileStore(IFileStore fileStore)
         {
@@ -119,7 +121,7 @@ namespace Kalmit.ProcessStore
         public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
             EnumerateCompositionsLogFilesPaths().Reverse()
             .SelectMany(compositionFilePath =>
-                Encoding.UTF8.GetString(compositionFileStore.GetFileContent(compositionFilePath))
+                Encoding.UTF8.GetString(compositionFileStoreReader.GetFileContent(compositionFilePath))
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
                 .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord)));
 
@@ -129,7 +131,7 @@ namespace Kalmit.ProcessStore
 
             var filePath = ImmutableList.Create(reducedCompositionHashBase16);
 
-            var fileContent = reductionFileStore.GetFileContent(filePath);
+            var fileContent = reductionFileStoreReader.GetFileContent(filePath);
 
             if (fileContent == null)
                 return null;
@@ -167,7 +169,7 @@ namespace Kalmit.ProcessStore
         }
 
         public IEnumerable<string> ReductionsFilesNames() =>
-            reductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
+            reductionFileStoreReader.ListFilesInDirectory(ImmutableList<string>.Empty)
             .Select(Enumerable.Last);
     }
 
@@ -212,7 +214,7 @@ namespace Kalmit.ProcessStore
                         compositionLogFilePath = compositionLogRequestedFilePathInDirectory;
                 }
 
-                compositionFileStore.AppendFileContent(compositionLogFilePath, record.Concat(Encoding.UTF8.GetBytes("\n")).ToArray());
+                compositionFileStoreWriter.AppendFileContent(compositionLogFilePath, record.Concat(Encoding.UTF8.GetBytes("\n")).ToArray());
 
                 appendSerializedCompositionRecordLastFilePath = compositionLogFilePath;
             }
@@ -230,7 +232,7 @@ namespace Kalmit.ProcessStore
 
             var filePath = ImmutableList.Create(fileName);
 
-            reductionFileStore.SetFileContent(
+            reductionFileStoreWriter.SetFileContent(
                 filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(recordInFile, recordSerializationSettings)));
         }
     }

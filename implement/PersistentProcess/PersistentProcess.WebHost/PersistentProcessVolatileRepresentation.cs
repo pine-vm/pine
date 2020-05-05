@@ -25,10 +25,6 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
         static public string MigrateElmFunctionNameInModule => "migrate";
 
-        static public string compositionLogEmptyInitHashBase16 =>
-            CommonConversion.StringBase16FromByteArray(
-                CompositionLogRecordInFile.HashFromSerialRepresentation(new byte[0]));
-
         readonly object processLock = new object();
 
         string lastCompositionLogRecordHashBase16;
@@ -130,8 +126,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         System.Text.Encoding.UTF8.GetString(serializedCompositionRecord));
 
                     var compositionRecordHash =
-                        CommonConversion.StringBase16FromByteArray(
-                            CompositionLogRecordInFile.HashFromSerialRepresentation(serializedCompositionRecord));
+                        CompositionLogRecordInFile.HashBase16FromCompositionRecord(serializedCompositionRecord);
 
                     var compositionChainElement = (compositionRecordHash, compositionRecordFromFile);
 
@@ -179,7 +174,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                     }
 
                     if ((loadedReduction?.appConfig != null && loadedReduction?.elmAppState != null) ||
-                        compositionLogEmptyInitHashBase16 == compositionRecord.parentHashBase16)
+                        CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16 == compositionRecord.parentHashBase16)
                     {
                         IDisposableProcessWithStringInterface lastElmAppVolatileProcess = null;
                         (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun))? lastAppConfig = null;
@@ -336,7 +331,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
             logger?.Invoke("Found no composition record, default to initial state.");
 
             return new PersistentProcessVolatileRepresentation(
-                lastCompositionLogRecordHashBase16: compositionLogEmptyInitHashBase16,
+                lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
                 lastAppConfig: null,
                 lastElmAppVolatileProcess: null,
                 lastSetElmAppStateResult: null);
@@ -604,16 +599,14 @@ main =
                 var serializedCompositionLogRecord =
                     ProcessStoreInFileStore.Serialize(compositionRecord);
 
-                var compositionLogRecordHash = CompositionLogRecordInFile.HashFromSerialRepresentation(serializedCompositionLogRecord);
-
                 foreach (var elmAppEvent in elmAppEvents)
                 {
                     storeWriter.StoreComponent(elmAppEvent.eventComponent);
                 }
 
-                storeWriter.AppendSerializedCompositionLogRecord(serializedCompositionLogRecord);
+                var recordHash = storeWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
 
-                lastCompositionLogRecordHashBase16 = CommonConversion.StringBase16FromByteArray(compositionLogRecordHash);
+                lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
 
                 return responses;
             }

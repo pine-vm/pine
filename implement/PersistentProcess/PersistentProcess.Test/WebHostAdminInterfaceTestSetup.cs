@@ -13,9 +13,17 @@ namespace Kalmit.PersistentProcess.Test
 {
     public class WebHostAdminInterfaceTestSetup : IDisposable
     {
-        static string PublicWebHostUrl => "http://localhost:35491";
+        static string PublicWebHostUrlDefault => "http://localhost:35491";
 
-        static string AdminWebHostUrl => "http://localhost:19372";
+        static string AdminWebHostUrlDefault => "http://localhost:19372";
+
+        readonly string publicWebHostUrlOverride;
+
+        readonly string adminWebHostUrlOverride;
+
+        public string PublicWebHostUrl => publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
+
+        public string AdminWebHostUrl => adminWebHostUrlOverride ?? AdminWebHostUrlDefault;
 
         readonly string testDirectory;
 
@@ -27,20 +35,22 @@ namespace Kalmit.PersistentProcess.Test
 
         IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
-        public Microsoft.AspNetCore.TestHost.TestServer BuildServer(
+        public IWebHost StartWebHost(
              Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
         {
-            var server =
-                new Microsoft.AspNetCore.TestHost.TestServer(
-                    (webHostBuilderMap ?? (builder => builder))
-                    (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-                    .UseUrls(AdminWebHostUrl)
-                    .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
-                    .WithSettingAdminRootPassword(adminRootPassword)
-                    .UseStartup<StartupAdminInterface>()
-                    .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore)));
+            var webHost =
+                (webHostBuilderMap ?? (builder => builder))
+                (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
+                .UseUrls(AdminWebHostUrl)
+                .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
+                .WithSettingAdminRootPassword(adminRootPassword)
+                .UseStartup<StartupAdminInterface>()
+                .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore))
+                .Build();
 
-            return server;
+            webHost?.StartAsync().Wait();
+
+            return webHost;
         }
 
         static public WebHostAdminInterfaceTestSetup Setup(
@@ -69,7 +79,9 @@ namespace Kalmit.PersistentProcess.Test
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminRootPassword = null,
-            Composition.Component setAppConfigAndInitElmState = null)
+            Composition.Component setAppConfigAndInitElmState = null,
+            string adminWebHostUrlOverride = null,
+            string publicWebHostUrlOverride = null)
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -77,7 +89,9 @@ namespace Kalmit.PersistentProcess.Test
                 testDirectory,
                 adminRootPassword: adminRootPassword,
                 setAppConfigAndInitElmState: setAppConfigAndInitElmState,
-                webHostBuilderMap: webHostBuilderMap);
+                webHostBuilderMap: webHostBuilderMap,
+                adminWebHostUrlOverride: adminWebHostUrlOverride,
+                publicWebHostUrlOverride: publicWebHostUrlOverride);
 
             return setup;
         }
@@ -87,6 +101,14 @@ namespace Kalmit.PersistentProcess.Test
             return new System.Net.Http.HttpClient
             {
                 BaseAddress = new Uri(PublicWebHostUrl),
+            };
+        }
+
+        public System.Net.Http.HttpClient BuildAdminInterfaceHttpClient()
+        {
+            return new System.Net.Http.HttpClient
+            {
+                BaseAddress = new Uri(AdminWebHostUrl),
             };
         }
 
@@ -112,11 +134,15 @@ namespace Kalmit.PersistentProcess.Test
             string testDirectory,
             string adminRootPassword,
             Composition.Component setAppConfigAndInitElmState,
-            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap)
+            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
+            string adminWebHostUrlOverride,
+            string publicWebHostUrlOverride)
         {
             this.testDirectory = testDirectory;
             this.adminRootPassword = adminRootPassword ?? "notempty";
             this.webHostBuilderMap = webHostBuilderMap;
+            this.adminWebHostUrlOverride = adminWebHostUrlOverride;
+            this.publicWebHostUrlOverride = publicWebHostUrlOverride;
 
             if (setAppConfigAndInitElmState != null)
             {
@@ -132,21 +158,20 @@ namespace Kalmit.PersistentProcess.Test
 
                 var processStoreWriter =
                     new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-                    defaultFileStore,
-                    () =>
-                    {
-                        return ImmutableList.Create("0000-first-composition-log-file.jsonl");
-                    });
+                    defaultFileStore);
 
                 processStoreWriter.StoreComponent(setAppConfigAndInitElmState);
 
-                var projectedStoreReader =
-                    WebHost.ProcessStoreSupportingMigrations.IProcessStoreReader.ProjectReaderForAppendedCompositionLogEvent(
-                        originalStore: WebHost.ProcessStoreSupportingMigrations.IProcessStoreReader.EmptyProcessStoreReader(),
-                        compositionLogEvent: compositionLogEvent);
+                var compositionRecord = new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
+                {
+                    parentHashBase16 = WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    events = ImmutableList.Create(compositionLogEvent)
+                };
 
-                processStoreWriter.AppendSerializedCompositionLogRecord(
-                    projectedStoreReader.EnumerateSerializedCompositionLogRecordsReverse().First());
+                var serializedCompositionLogRecord =
+                    WebHost.ProcessStoreSupportingMigrations.ProcessStoreInFileStore.Serialize(compositionRecord);
+
+                processStoreWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
             }
         }
 

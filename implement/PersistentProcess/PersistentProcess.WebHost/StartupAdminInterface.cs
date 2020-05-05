@@ -26,6 +26,12 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiGetDeployedAppConfig => "/api/get-deployed-app-config";
 
+        static public string PathApiReplaceProcessHistory => "/api/replace-process-history";
+
+        static public string PathApiProcessHistoryFileStore => "/api/process-history-file-store";
+
+        static public string PathApiProcessHistoryFileStoreGetFileContent => PathApiProcessHistoryFileStore + "/get-file-content";
+
         private readonly ILogger<StartupAdminInterface> logger;
 
         public StartupAdminInterface(ILogger<StartupAdminInterface> logger)
@@ -95,14 +101,7 @@ namespace Kalmit.PersistentProcess.WebHost
             });
 
             var processStoreWriter =
-                new ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-                processStoreFileStore,
-                () =>
-                {
-                    var time = getDateTimeOffset();
-                    var directoryName = time.ToString("yyyy-MM-dd");
-                    return ImmutableList.Create(directoryName, directoryName + "T" + time.ToString("HH") + ".composition.jsonl");
-                });
+                new ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(processStoreFileStore);
 
             void startPublicApp()
             {
@@ -143,7 +142,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                     if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
                                         return;
 
-                                    lock (processStoreWriter)
+                                    lock (processStoreFileStore)
                                     {
                                         var reductionRecord = processVolatileRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
                                     }
@@ -407,7 +406,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             {
                                 StoreComponentDelegate = components.Add,
                                 StoreProvisionalReductionDelegate = _ => { },
-                                AppendSerializedCompositionLogRecordDelegate = _ => { }
+                                SetCompositionLogHeadRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
                             };
 
                             var reductionRecord =
@@ -458,16 +457,80 @@ namespace Kalmit.PersistentProcess.WebHost
                         }
                     }
 
+
+                    if (context.Request.Path.Equals(new PathString(PathApiReplaceProcessHistory)))
+                    {
+                        var memoryStream = new MemoryStream();
+                        context.Request.Body.CopyTo(memoryStream);
+
+                        var webAppConfigZipArchive = memoryStream.ToArray();
+
+                        var replacementFiles =
+                            ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
+                            .Select(filePathAndContent =>
+                                (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
+                                , content: filePathAndContent.content))
+                            .ToImmutableList();
+
+                        lock (publicAppLock)
+                        {
+                            lock (processStoreFileStore)
+                            {
+                                stopPublicApp();
+
+                                foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
+                                    processStoreFileStore.DeleteFile(filePath);
+
+                                foreach (var replacementFile in replacementFiles)
+                                    processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
+
+                                startPublicApp();
+                            }
+                        }
+
+                        context.Response.StatusCode = 200;
+                        await context.Response.WriteAsync("Successfully replaced the process history.");
+                        return;
+                    }
+
+                    if (context.Request.Path.StartsWithSegments(
+                        new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
+                    {
+                        if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            context.Response.StatusCode = 405;
+                            await context.Response.WriteAsync("Method not supported.");
+                            return;
+                        }
+
+                        var filePathInStore =
+                            remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
+
+                        var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
+
+                        if (fileContent == null)
+                        {
+                            context.Response.StatusCode = 404;
+                            await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
+                            return;
+                        }
+
+                        context.Response.StatusCode = 200;
+                        context.Response.ContentType = "application/octet-stream";
+                        await context.Response.Body.WriteAsync(fileContent);
+                        return;
+                    }
+
                     async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
-                        var projectedStoreReader = IProcessStoreReader.ProjectReaderForAppendedCompositionLogEvent(
-                            originalStore: new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore),
+                        var (projectedFiles, projectedFileReader) = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                            originalFileStore: processStoreFileStore,
                             compositionLogEvent: compositionLogEvent);
 
                         using (var projectedProcess =
                             PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                                projectedStoreReader,
+                                new ProcessStoreReaderInFileStore(projectedFileReader),
                                 _ => { }))
                         {
                             if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
@@ -482,8 +545,9 @@ namespace Kalmit.PersistentProcess.WebHost
                             }
                         }
 
-                        processStoreWriter.AppendSerializedCompositionLogRecord(
-                            projectedStoreReader.EnumerateSerializedCompositionLogRecordsReverse().First());
+                        foreach (var projectedFilePathAndContent in projectedFiles)
+                            processStoreFileStore.SetFileContent(
+                                projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
 
                         startPublicApp();
 
