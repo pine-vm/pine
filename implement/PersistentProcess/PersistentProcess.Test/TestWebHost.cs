@@ -923,7 +923,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void tooling_supports_replace_process_history_replicating_from_remote_host()
+        public void tooling_supports_replicate_process_from_remote_host()
         {
             var originalHostAdminPassword = "original-host-password-678";
 

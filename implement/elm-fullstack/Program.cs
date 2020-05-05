@@ -77,13 +77,20 @@ namespace elm_fullstack
                 var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
                 var adminInterfaceHttpPortOption = runServerCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminRootPasswordOption = runServerCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
-                var deployOption = runServerCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command.", CommandOptionType.NoValue);
+                var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
+                var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-backend-state'.", CommandOptionType.SingleValue);
+                var replicateProcessAdminPassword = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
+                var deployOption = runServerCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
 
                 runServerCmd.OnExecute(() =>
                 {
                     var processStoreDirectoryPath = processStoreDirectoryPathOption.Value();
 
-                    if (deletePreviousBackendStateOption.HasValue())
+                    var publicAppUrls =
+                        publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
+                        Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault;
+
+                    if (deletePreviousBackendStateOption.HasValue() || replicateProcessFromOption.HasValue())
                     {
                         Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'...");
 
@@ -91,6 +98,18 @@ namespace elm_fullstack
                             System.IO.Directory.Delete(processStoreDirectoryPath, true);
 
                         Console.WriteLine("Completed deleting the previous process state from '" + processStoreDirectoryPath + "'.");
+                    }
+
+                    var processStoreFileStore = new FileStoreFromSystemIOFile(processStoreDirectoryPath);
+
+                    if (replicateProcessFromOption.HasValue())
+                    {
+                        var replicatedFiles = readFilesForRestoreProcessFromAdminInterface(
+                            sourceAdminInterface: replicateProcessFromOption.Value(),
+                            sourceAdminRootPassword: replicateProcessAdminPassword.Value());
+
+                        foreach (var file in replicatedFiles)
+                            processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
                     }
 
                     var adminInterfaceHttpPort =
@@ -103,7 +122,8 @@ namespace elm_fullstack
                         .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                         .UseUrls(adminInterfaceUrl)
                         .UseStartup<StartupAdminInterface>()
-                        .WithSettingProcessStoreDirectoryPath(processStoreDirectoryPath);
+                        .WithSettingPublicWebHostUrls(publicAppUrls)
+                        .WithProcessStoreFileStore(processStoreFileStore);
 
                     if (adminRootPasswordOption.HasValue())
                         webHostBuilder = webHostBuilder.WithSettingAdminRootPassword(adminRootPasswordOption.Value());
@@ -120,10 +140,16 @@ namespace elm_fullstack
                     {
                         System.Threading.Tasks.Task.Delay(1000).Wait();
 
+                        /*
+                        TODO:
+                        Make deploy synchronous: Inject this in the host to be processed at startup, so that no public app is started for the pre-deploy state.
+                        Also, to prevent confusion, we might want to fail starting the server completely in case the deployment fails.
+                        */
+
                         deploy(
                             adminInterface: "http://localhost:" + adminInterfaceHttpPort,
                             adminRootPassword: adminRootPasswordOption.Value(),
-                            initElmAppState: deletePreviousBackendStateOption.HasValue());
+                            initElmAppState: deletePreviousBackendStateOption.HasValue() && !replicateProcessFromOption.HasValue());
                     }
 
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.WaitForShutdown(webHost);
@@ -212,18 +238,14 @@ namespace elm_fullstack
             }
         }
 
-        static public void replicateProcess(
-            string destinationAdminInterface,
-            string destinationAdminRootPassword,
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> readFilesForRestoreProcessFromAdminInterface(
             string sourceAdminInterface,
             string sourceAdminRootPassword)
         {
-            var processHistoryfilesFromRemoteHost = new ConcurrentDictionary<IImmutableList<string>, IImmutableList<byte>>();
+            var processHistoryfilesFromRemoteHost = ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty;
 
             using (var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) })
             {
-                Console.WriteLine("Begin reading process history from '" + sourceHttpClient.BaseAddress + "' ...");
-
                 sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
@@ -239,14 +261,16 @@ namespace elm_fullstack
 
                         var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
-                        Console.WriteLine("Attempting to read file from '" + httpRequestPath + "', result is " + response.StatusCode);
-
                         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                             return null;
 
+                        if (!response.IsSuccessStatusCode)
+                            throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
+
                         var fileContent = response.Content.ReadAsByteArrayAsync().Result;
 
-                        processHistoryfilesFromRemoteHost[filePath] = fileContent.ToImmutableList();
+                        processHistoryfilesFromRemoteHost =
+                            processHistoryfilesFromRemoteHost.SetItem(filePath, fileContent.ToImmutableList());
 
                         return fileContent;
                     }
@@ -259,6 +283,20 @@ namespace elm_fullstack
                 {
                 }
             }
+
+            return processHistoryfilesFromRemoteHost;
+        }
+
+        static public void replicateProcess(
+            string destinationAdminInterface,
+            string destinationAdminRootPassword,
+            string sourceAdminInterface,
+            string sourceAdminRootPassword)
+        {
+            Console.WriteLine("Begin reading process history from '" + sourceAdminInterface + "' ...");
+
+            var processHistoryfilesFromRemoteHost =
+                readFilesForRestoreProcessFromAdminInterface(sourceAdminInterface, sourceAdminRootPassword);
 
             Console.WriteLine("Completed reading part of process history for restore. Read " + processHistoryfilesFromRemoteHost.Count + " files from " + sourceAdminInterface + " during restore.");
 

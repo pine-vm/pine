@@ -18,6 +18,8 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class StartupAdminInterface
     {
+        static public string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
+
         static public string PathApiDeployAppConfigAndInitElmAppState => "/api/deploy-app-config-and-init-elm-app-state";
 
         static public string PathApiDeployAppConfigAndMigrateElmAppState => "/api/deploy-app-config-and-migrate-elm-app-state";
@@ -192,7 +194,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                     httpsOptions.ServerCertificateSelector = (c, s) => FluffySpoon.AspNet.LetsEncrypt.LetsEncryptRenewalService.Certificate;
                                 });
                             })
-                            .UseUrls(publicWebHostUrls ?? new[] { "http://*", "https://*" })
+                            .UseUrls(publicWebHostUrls ?? PublicWebHostUrlsDefault)
                             .UseStartup<StartupPublicApp>()
                             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                             .ConfigureServices(services =>
