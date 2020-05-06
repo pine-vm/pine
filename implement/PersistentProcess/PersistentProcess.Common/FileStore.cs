@@ -63,6 +63,9 @@ namespace Kalmit
 
         public FileStoreFromSystemIOFile(string directoryPath)
         {
+            if (directoryPath == null)
+                throw new ArgumentNullException(nameof(directoryPath));
+
             this.directoryPath = directoryPath;
         }
 

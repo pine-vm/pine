@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -79,7 +78,7 @@ namespace elm_fullstack
                 var adminRootPasswordOption = runServerCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-backend-state'.", CommandOptionType.SingleValue);
-                var replicateProcessAdminPassword = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
+                var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
                 var deployOption = runServerCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
 
                 runServerCmd.OnExecute(() =>
@@ -89,6 +88,11 @@ namespace elm_fullstack
                     var publicAppUrls =
                         publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
                         Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault;
+
+                    var replicateProcessSource = replicateProcessFromOption.Value();
+
+                    var replicateProcessAdminPassword =
+                        replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessSource);
 
                     if (deletePreviousBackendStateOption.HasValue() || replicateProcessFromOption.HasValue())
                     {
@@ -102,13 +106,13 @@ namespace elm_fullstack
 
                     var processStoreFileStore = new FileStoreFromSystemIOFile(processStoreDirectoryPath);
 
-                    if (replicateProcessFromOption.HasValue())
+                    if (replicateProcessSource != null)
                     {
-                        var replicatedFiles = readFilesForRestoreProcessFromAdminInterface(
-                            sourceAdminInterface: replicateProcessFromOption.Value(),
-                            sourceAdminRootPassword: replicateProcessAdminPassword.Value());
+                        var filesForRestore = readFilesForRestoreProcessFromAdminInterface(
+                            sourceAdminInterface: replicateProcessSource,
+                            sourceAdminRootPassword: replicateProcessAdminPassword);
 
-                        foreach (var file in replicatedFiles)
+                        foreach (var file in filesForRestore)
                             processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
                     }
 
@@ -166,10 +170,31 @@ namespace elm_fullstack
 
                 deployCmd.OnExecute(() =>
                 {
+                    var adminInterface = adminInterfaceOption.Value();
+
+                    var adminRootPassword =
+                        adminRootPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(adminInterface);
+
                     deploy(
-                        adminInterface: adminInterfaceOption.Value(),
-                        adminRootPassword: adminRootPasswordOption.Value(),
+                        adminInterface: adminInterface,
+                        adminRootPassword: adminRootPassword,
                         initElmAppState: initElmAppStateOption.HasValue());
+                });
+            });
+
+            app.Command("user-secrets", userSecretsCmd =>
+            {
+                userSecretsCmd.Description = "Manage user secrets to use with 'deploy' or replication.";
+
+                userSecretsCmd.Command("store", userSecretsCmd =>
+                {
+                    var siteArgument = userSecretsCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+                    var passwordArgument = userSecretsCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+
+                    userSecretsCmd.OnExecute(() =>
+                    {
+                        UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
+                    });
                 });
             });
 
