@@ -11,12 +11,11 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 {
     public interface IPersistentProcess
     {
-        IImmutableList<string> ProcessElmAppEvents(IProcessStoreWriter storeWriter, IReadOnlyList<string> serializedEvents);
+        string ProcessElmAppEvent(IProcessStoreWriter storeWriter, string serializedEvent);
 
         ProvisionalReductionRecordInFile StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter);
     }
 
-    //  A provisional special case for a process from an elm app.
     public class PersistentProcessVolatileRepresentation : IPersistentProcess, IDisposable
     {
         static public string MigrationElmAppInterfaceModuleName => "MigrateBackendState";
@@ -87,60 +86,28 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             logger?.Invoke("Begin to restore the process state.");
 
-            IImmutableList<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
+            if (!storeReader.EnumerateSerializedCompositionLogRecordsReverse().Take(1).Any())
             {
-                var component = storeReader.LoadComponent(componentHash);
+                logger?.Invoke("Found no composition record, default to initial state.");
 
-                if (component == null)
-                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
-
-                if (component.BlobContent == null)
-                    throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
-
-                return component.BlobContent;
+                return new PersistentProcessVolatileRepresentation(
+                    lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    lastAppConfig: null,
+                    lastElmAppVolatileProcess: null,
+                    lastSetElmAppStateResult: null);
             }
 
-            Composition.TreeComponent loadComponentFromStoreAndAssertIsTree(string componentHash)
-            {
-                var component = storeReader.LoadComponent(componentHash);
-
-                if (component == null)
-                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
-
-                var parseAsTreeResult = Composition.ParseAsTree(component);
-
-                if (parseAsTreeResult.Ok == null)
-                    throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree.");
-
-                return parseAsTreeResult.Ok;
-            }
-
-            var compositionRecords = new Dictionary<string, (string compositionRecordHash, CompositionLogRecordInFile compositionRecord)>();
-
-            var compositionChain = new Stack<(string hash, CompositionLogRecordInFile composition)>();
-
-            foreach (var serializedCompositionRecord in storeReader.EnumerateSerializedCompositionLogRecordsReverse())
-            {
+            var compositionEventsToLatestReductionReversed =
+                storeReader.EnumerateSerializedCompositionLogRecordsReverse()
+                .Select(serializedCompositionLogRecord =>
                 {
-                    var compositionRecordFromFile = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(
-                        System.Text.Encoding.UTF8.GetString(serializedCompositionRecord));
+                    var compositionRecordHashBase16 =
+                        CompositionLogRecordInFile.HashBase16FromCompositionRecord(serializedCompositionLogRecord);
 
-                    var compositionRecordHash =
-                        CompositionLogRecordInFile.HashBase16FromCompositionRecord(serializedCompositionRecord);
+                    var compositionRecord = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(
+                        System.Text.Encoding.UTF8.GetString(serializedCompositionLogRecord));
 
-                    var compositionChainElement = (compositionRecordHash, compositionRecordFromFile);
-
-                    if (!compositionChain.Any())
-                        compositionChain.Push(compositionChainElement);
-                    else
-                        compositionRecords[compositionRecordHash] = compositionChainElement;
-                }
-
-                while (true)
-                {
-                    var (compositionRecordHash, compositionRecord) = compositionChain.Peek();
-
-                    var reductionRecord = storeReader.LoadProvisionalReduction(compositionRecordHash);
+                    var reductionRecord = storeReader.LoadProvisionalReduction(compositionRecordHashBase16);
 
                     LoadedReduction loadedReduction = null;
 
@@ -173,168 +140,272 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         }
                     }
 
-                    if ((loadedReduction?.appConfig != null && loadedReduction?.elmAppState != null) ||
-                        CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16 == compositionRecord.parentHashBase16)
-                    {
-                        IDisposableProcessWithStringInterface lastElmAppVolatileProcess = null;
-                        (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun))? lastAppConfig = null;
-                        string lastCompositionLogRecordHashBase16 = null;
-                        Result<string, string> lastSetElmAppStateResult = null;
+                    return (
+                        compositionRecord: compositionRecord,
+                        compositionRecordHashBase16: compositionRecordHashBase16,
+                        reduction: loadedReduction);
+                })
+                .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null)
+                .ToImmutableList();
 
-                        if (reductionRecord != null)
-                        {
-                            compositionChain.Pop();
+            logger?.Invoke("Found " + compositionEventsToLatestReductionReversed.Count + " composition log records to use for restore.");
 
-                            var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun)) =
-                                ProcessFromWebAppConfig(
-                                    loadedReduction.appConfigAsTree,
-                                    overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+            var firstCompositionEventRecord =
+                compositionEventsToLatestReductionReversed.LastOrDefault();
 
-                            var elmAppStateAsString = Encoding.UTF8.GetString(loadedReduction.elmAppState);
-
-                            newElmAppProcess.SetSerializedState(elmAppStateAsString);
-
-                            lastElmAppVolatileProcess?.Dispose();
-                            lastElmAppVolatileProcess = newElmAppProcess;
-                            lastAppConfig = (loadedReduction.appConfig, (javascriptFromElmMake, javascriptPreparedToRun));
-
-                            lastCompositionLogRecordHashBase16 = reductionRecord.reducedCompositionHashBase16;
-                        }
-
-                        foreach (var followingCompositionLogRecord in compositionChain)
-                        {
-                            foreach (var compositionEvent in followingCompositionLogRecord.composition.events)
-                            {
-                                if (compositionEvent.SetElmAppState != null)
-                                {
-                                    var projectedElmAppState =
-                                        Encoding.UTF8.GetString(loadComponentFromStoreAndAssertIsBlob(
-                                            compositionEvent.SetElmAppState.HashBase16).ToArray());
-
-                                    lastElmAppVolatileProcess.SetSerializedState(projectedElmAppState);
-
-                                    var resultingElmAppState = lastElmAppVolatileProcess.GetSerializedState();
-
-                                    lastSetElmAppStateResult =
-                                        resultingElmAppState == projectedElmAppState
-                                        ?
-                                        new Result<string, string>
-                                        {
-                                            Ok = "Successfully loaded the elm app state.",
-                                        }
-                                        :
-                                        new Result<string, string>
-                                        {
-                                            Err = "Failed to load the serialized state with the elm app. resulting State:\n" + resultingElmAppState
-                                        };
-                                }
-
-                                if (compositionEvent.UpdateElmAppStateForEvent != null)
-                                {
-                                    lastElmAppVolatileProcess.ProcessEvent(
-                                        Encoding.UTF8.GetString(loadComponentFromStoreAndAssertIsBlob(
-                                            compositionEvent.UpdateElmAppStateForEvent.HashBase16).ToArray()));
-                                }
-
-                                if (compositionEvent.DeployAppConfigAndInitElmAppState != null)
-                                {
-                                    var appConfig = loadComponentFromStoreAndAssertIsTree(
-                                        compositionEvent.DeployAppConfigAndInitElmAppState.HashBase16);
-
-                                    var (newElmAppProcess, buildArtifacts) =
-                                        ProcessFromWebAppConfig(
-                                            appConfig,
-                                            overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
-
-                                    lastAppConfig = (Composition.FromTree(appConfig), buildArtifacts);
-                                    lastElmAppVolatileProcess?.Dispose();
-                                    lastElmAppVolatileProcess = newElmAppProcess;
-                                    lastSetElmAppStateResult = null;
-                                }
-
-                                if (compositionEvent.DeployAppConfigAndMigrateElmAppState != null)
-                                {
-                                    var elmAppStateBefore = lastElmAppVolatileProcess?.GetSerializedState();
-
-                                    var appConfig = loadComponentFromStoreAndAssertIsTree(
-                                        compositionEvent.DeployAppConfigAndMigrateElmAppState.HashBase16);
-
-                                    var prepareMigrateResult =
-                                        PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig);
-
-                                    var (newElmAppProcess, buildArtifacts) =
-                                        ProcessFromWebAppConfig(
-                                            appConfig,
-                                            overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
-
-                                    string migratedSerializedState = null;
-                                    Result<string, string> setElmAppStateResult = null;
-
-                                    if (prepareMigrateResult.Ok == null)
-                                    {
-                                        setElmAppStateResult = new Result<string, string> { Err = "Failed to prepare elm app state migration: " + prepareMigrateResult.Err };
-                                    }
-                                    else
-                                    {
-                                        var migrateResult = prepareMigrateResult.Ok(elmAppStateBefore);
-
-                                        //  TODO: Simplify: Remove the check currently in PrepareMigrateSerializedValue and assign anyway.
-
-                                        if (migrateResult.Ok == null)
-                                        {
-                                            setElmAppStateResult = new Result<string, string> { Err = "Failed to migrate the elm app state:" + migrateResult.Err };
-                                        }
-                                        else
-                                        {
-                                            migratedSerializedState = migrateResult.Ok;
-                                            setElmAppStateResult = new Result<string, string> { Ok = "Successfully migrated the elm app state." };
-                                        }
-                                    }
-
-                                    newElmAppProcess.SetSerializedState(migratedSerializedState ?? "");
-
-                                    lastAppConfig = (Composition.FromTree(appConfig), buildArtifacts);
-                                    lastElmAppVolatileProcess?.Dispose();
-                                    lastElmAppVolatileProcess = newElmAppProcess;
-                                    lastSetElmAppStateResult = setElmAppStateResult;
-                                }
-                            }
-
-                            lastCompositionLogRecordHashBase16 = followingCompositionLogRecord.hash;
-                        }
-
-                        logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
-
-                        return new PersistentProcessVolatileRepresentation(
-                            lastCompositionLogRecordHashBase16: lastCompositionLogRecordHashBase16,
-                            lastAppConfig: lastAppConfig,
-                            lastElmAppVolatileProcess: lastElmAppVolatileProcess,
-                            lastSetElmAppStateResult: lastSetElmAppStateResult);
-                    }
-
-                    var parentKey = compositionRecord.parentHashBase16;
-
-                    if (!compositionRecords.TryGetValue(parentKey, out var compositionChainElementFromPool))
-                        break;
-
-                    compositionChain.Push(compositionChainElementFromPool);
-                    compositionRecords.Remove(parentKey);
-                }
+            if (firstCompositionEventRecord.reduction == null &&
+                firstCompositionEventRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+            {
+                throw new Exception("Failed to get sufficient history: Composition log record points to parent " + firstCompositionEventRecord.compositionRecord.parentHashBase16);
             }
 
-            if (compositionChain.Any())
-                throw new NotImplementedException(
-                    "I did not find a reduction for any composition on the chain to the last composition (" +
-                    compositionChain.Last().hash +
-                    ").");
+            string lastCompositionLogRecordHashBase16 = null;
 
-            logger?.Invoke("Found no composition record, default to initial state.");
-
-            return new PersistentProcessVolatileRepresentation(
-                lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+            var processRepresentationDuringRestore = new PersistentProcessVolatileRepresentationDuringRestore(
                 lastAppConfig: null,
                 lastElmAppVolatileProcess: null,
                 lastSetElmAppStateResult: null);
+
+            foreach (var compositionLogRecord in compositionEventsToLatestReductionReversed.Reverse())
+            {
+                try
+                {
+                    var compositionEvent = compositionLogRecord.compositionRecord.compositionEvent;
+
+                    if (compositionLogRecord.reduction != null)
+                    {
+                        var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun)) =
+                            ProcessFromWebAppConfig(
+                                compositionLogRecord.reduction.appConfigAsTree,
+                                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+                        var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.elmAppState);
+
+                        newElmAppProcess.SetSerializedState(elmAppStateAsString);
+
+                        processRepresentationDuringRestore?.lastElmAppVolatileProcess?.Dispose();
+
+                        processRepresentationDuringRestore = new PersistentProcessVolatileRepresentationDuringRestore(
+                            lastAppConfig: (compositionLogRecord.reduction.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
+                            lastElmAppVolatileProcess: newElmAppProcess,
+                            lastSetElmAppStateResult: null);
+
+                        continue;
+                    }
+
+                    if (compositionEvent.RevertProcessTo != null)
+                    {
+                        if (compositionEvent.RevertProcessTo.HashBase16 != lastCompositionLogRecordHashBase16)
+                        {
+                            throw new Exception(
+                                "Error in enumeration of process composition events: Got revert to " +
+                                compositionEvent.RevertProcessTo.HashBase16 +
+                                ", but previous version in the enumerated sequence was " + lastCompositionLogRecordHashBase16 + ".");
+                        }
+
+                        continue;
+                    }
+
+                    processRepresentationDuringRestore =
+                        ApplyCompositionEvent(
+                            compositionEvent,
+                            processRepresentationDuringRestore,
+                            storeReader,
+                            overrideElmAppInterfaceConfig);
+                }
+                finally
+                {
+                    lastCompositionLogRecordHashBase16 = compositionLogRecord.compositionRecordHashBase16;
+                }
+            }
+
+            logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
+
+            return new PersistentProcessVolatileRepresentation(
+                lastCompositionLogRecordHashBase16: lastCompositionLogRecordHashBase16,
+                lastAppConfig: processRepresentationDuringRestore.lastAppConfig,
+                lastElmAppVolatileProcess: processRepresentationDuringRestore.lastElmAppVolatileProcess,
+                lastSetElmAppStateResult: processRepresentationDuringRestore.lastSetElmAppStateResult);
+        }
+
+        class PersistentProcessVolatileRepresentationDuringRestore
+        {
+            public readonly (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)? lastAppConfig;
+
+            public readonly IDisposableProcessWithStringInterface lastElmAppVolatileProcess;
+
+            public readonly Result<string, string> lastSetElmAppStateResult;
+
+            public PersistentProcessVolatileRepresentationDuringRestore(
+                (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)? lastAppConfig,
+                IDisposableProcessWithStringInterface lastElmAppVolatileProcess,
+                Result<string, string> lastSetElmAppStateResult)
+            {
+                this.lastAppConfig = lastAppConfig;
+                this.lastElmAppVolatileProcess = lastElmAppVolatileProcess;
+                this.lastSetElmAppStateResult = lastSetElmAppStateResult;
+            }
+
+            public PersistentProcessVolatileRepresentationDuringRestore WithLastSetElmAppStateResult(
+                Result<string, string> lastSetElmAppStateResult) =>
+                new PersistentProcessVolatileRepresentationDuringRestore(
+                    lastAppConfig: lastAppConfig,
+                    lastElmAppVolatileProcess: lastElmAppVolatileProcess,
+                    lastSetElmAppStateResult: lastSetElmAppStateResult);
+        }
+
+        static PersistentProcessVolatileRepresentationDuringRestore ApplyCompositionEvent(
+            CompositionLogRecordInFile.CompositionEvent compositionEvent,
+            PersistentProcessVolatileRepresentationDuringRestore processBefore,
+            IProcessStoreReader storeReader,
+            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
+        {
+            IImmutableList<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
+            {
+                var component = storeReader.LoadComponent(componentHash);
+
+                if (component == null)
+                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
+
+                if (component.BlobContent == null)
+                    throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
+
+                return component.BlobContent;
+            }
+
+            Composition.TreeComponent loadComponentFromStoreAndAssertIsTree(string componentHash)
+            {
+                var component = storeReader.LoadComponent(componentHash);
+
+                if (component == null)
+                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
+
+                var parseAsTreeResult = Composition.ParseAsTree(component);
+
+                if (parseAsTreeResult.Ok == null)
+                    throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree.");
+
+                return parseAsTreeResult.Ok;
+            }
+
+            if (compositionEvent.UpdateElmAppStateForEvent != null)
+            {
+                if (processBefore.lastElmAppVolatileProcess == null)
+                    return processBefore;
+
+                processBefore.lastElmAppVolatileProcess.ProcessEvent(
+                    Encoding.UTF8.GetString(loadComponentFromStoreAndAssertIsBlob(
+                        compositionEvent.UpdateElmAppStateForEvent.HashBase16).ToArray()));
+
+                return processBefore;
+            }
+
+            if (compositionEvent.SetElmAppState != null)
+            {
+                if (processBefore.lastElmAppVolatileProcess == null)
+                {
+                    return
+                        processBefore
+                        .WithLastSetElmAppStateResult(new Result<string, string>
+                        {
+                            Err = "Failed to load the serialized state with the elm app: Looks like no app was deployed so far."
+                        });
+                }
+
+                var projectedElmAppState =
+                    Encoding.UTF8.GetString(loadComponentFromStoreAndAssertIsBlob(
+                        compositionEvent.SetElmAppState.HashBase16).ToArray());
+
+                processBefore.lastElmAppVolatileProcess.SetSerializedState(projectedElmAppState);
+
+                var resultingElmAppState = processBefore.lastElmAppVolatileProcess.GetSerializedState();
+
+                var lastSetElmAppStateResult =
+                    resultingElmAppState == projectedElmAppState
+                    ?
+                    new Result<string, string>
+                    {
+                        Ok = "Successfully loaded the elm app state.",
+                    }
+                    :
+                    new Result<string, string>
+                    {
+                        Err = "Failed to load the serialized state with the elm app. resulting State:\n" + resultingElmAppState
+                    };
+
+                return
+                    processBefore
+                    .WithLastSetElmAppStateResult(lastSetElmAppStateResult);
+            }
+
+            if (compositionEvent.DeployAppConfigAndMigrateElmAppState != null)
+            {
+                var elmAppStateBefore = processBefore.lastElmAppVolatileProcess?.GetSerializedState();
+
+                var appConfig = loadComponentFromStoreAndAssertIsTree(
+                    compositionEvent.DeployAppConfigAndMigrateElmAppState.HashBase16);
+
+                var prepareMigrateResult =
+                    PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig);
+
+                var (newElmAppProcess, buildArtifacts) =
+                    ProcessFromWebAppConfig(
+                        appConfig,
+                        overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+                string migratedSerializedState = null;
+                Result<string, string> setElmAppStateResult = null;
+
+                if (prepareMigrateResult.Ok == null)
+                {
+                    setElmAppStateResult = new Result<string, string> { Err = "Failed to prepare elm app state migration: " + prepareMigrateResult.Err };
+                }
+                else
+                {
+                    var migrateResult = prepareMigrateResult.Ok(elmAppStateBefore);
+
+                    //  TODO: Simplify: Remove the check currently in PrepareMigrateSerializedValue and assign anyway.
+
+                    if (migrateResult.Ok == null)
+                    {
+                        setElmAppStateResult = new Result<string, string> { Err = "Failed to migrate the elm app state:" + migrateResult.Err };
+                    }
+                    else
+                    {
+                        migratedSerializedState = migrateResult.Ok;
+                        setElmAppStateResult = new Result<string, string> { Ok = "Successfully migrated the elm app state." };
+                    }
+                }
+
+                newElmAppProcess.SetSerializedState(migratedSerializedState ?? "");
+
+                processBefore.lastElmAppVolatileProcess?.Dispose();
+
+                return new PersistentProcessVolatileRepresentationDuringRestore(
+                    lastAppConfig: (Composition.FromTree(appConfig), buildArtifacts),
+                    lastElmAppVolatileProcess: newElmAppProcess,
+                    lastSetElmAppStateResult: setElmAppStateResult);
+            }
+
+            if (compositionEvent.DeployAppConfigAndInitElmAppState != null)
+            {
+                var appConfig = loadComponentFromStoreAndAssertIsTree(
+                    compositionEvent.DeployAppConfigAndInitElmAppState.HashBase16);
+
+                var (newElmAppProcess, buildArtifacts) =
+                    ProcessFromWebAppConfig(
+                        appConfig,
+                        overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+                processBefore.lastElmAppVolatileProcess?.Dispose();
+
+                return new PersistentProcessVolatileRepresentationDuringRestore(
+                    lastAppConfig: (Composition.FromTree(appConfig), buildArtifacts),
+                    lastElmAppVolatileProcess: newElmAppProcess,
+                    lastSetElmAppStateResult: null);
+            }
+
+            throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
         }
 
         public class Result<ErrT, OkT>
@@ -563,52 +634,38 @@ main =
             }
         }
 
-        public IImmutableList<string> ProcessElmAppEvents(IProcessStoreWriter storeWriter, IReadOnlyList<string> serializedEvents)
+        public string ProcessElmAppEvent(IProcessStoreWriter storeWriter, string serializedEvent)
         {
             lock (processLock)
             {
-                var elmAppEvents =
-                    serializedEvents.Select(serializedEvent =>
-                    {
-                        var eventComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(serializedEvent));
+                var eventElmAppEventComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(serializedEvent));
 
-                        return new
-                        {
-                            eventAsString = serializedEvent,
-                            eventComponent = eventComponent
-                        };
-                    }).ToImmutableList();
+                storeWriter.StoreComponent(eventElmAppEventComponent);
 
-                var responses =
-                    serializedEvents.Select(serializedEvent => lastElmAppVolatileProcess.ProcessEvent(serializedEvent))
-                    .ToImmutableList();
+                var elmAppResponse =
+                    lastElmAppVolatileProcess.ProcessEvent(serializedEvent);
 
                 var compositionRecord = new CompositionLogRecordInFile
                 {
                     parentHashBase16 = lastCompositionLogRecordHashBase16,
-                    events = elmAppEvents.Select(elmAppEvent =>
+                    compositionEvent =
                         new CompositionLogRecordInFile.CompositionEvent
                         {
                             UpdateElmAppStateForEvent = new ValueInFileStructure
                             {
-                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppEvent.eventComponent))
+                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(eventElmAppEventComponent))
                             }
-                        }).ToImmutableList(),
+                        },
                 };
 
                 var serializedCompositionLogRecord =
                     ProcessStoreInFileStore.Serialize(compositionRecord);
 
-                foreach (var elmAppEvent in elmAppEvents)
-                {
-                    storeWriter.StoreComponent(elmAppEvent.eventComponent);
-                }
-
                 var recordHash = storeWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
 
                 lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
 
-                return responses;
+                return elmAppResponse;
             }
         }
 

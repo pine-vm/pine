@@ -165,7 +165,7 @@ namespace Kalmit.PersistentProcess.Test
                 var compositionRecord = new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
                 {
                     parentHashBase16 = WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
-                    events = ImmutableList.Create(compositionLogEvent)
+                    compositionEvent = compositionLogEvent
                 };
 
                 var serializedCompositionLogRecord =
@@ -203,10 +203,8 @@ namespace Kalmit.PersistentProcess.Test
                 .EnumerateSerializedCompositionLogRecordsReverse()
                 .Select(Encoding.UTF8.GetString)
                 .Select(JsonConvert.DeserializeObject<Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
-                .SelectMany(compositionLogRecord =>
-                    compositionLogRecord.events.Reverse()
-                    .Select(record => record.UpdateElmAppStateForEvent)
-                    .WhereNotNull())
+                .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
+                .WhereNotNull()
                 .Select(updateElmAppStateForEvent => eventFromHash(updateElmAppStateForEvent.HashBase16));
         }
     }

@@ -24,6 +24,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiDeployAppConfigAndMigrateElmAppState => "/api/deploy-app-config-and-migrate-elm-app-state";
 
+        static public string PathApiRevertProcessTo => "/api/revert-process-to";
+
         static public string PathApiElmAppState => "/api/elm-app-state";
 
         static public string PathApiGetDeployedAppConfig => "/api/get-deployed-app-config";
@@ -210,8 +212,8 @@ namespace Kalmit.PersistentProcess.WebHost
                                                 lock (publicAppLock)
                                                 {
                                                     var elmEventResponse =
-                                                        processVolatileRepresentation.ProcessElmAppEvents(
-                                                            processStoreWriter, new[] { serializedEvent }).Single();
+                                                        processVolatileRepresentation.ProcessElmAppEvent(
+                                                            processStoreWriter, serializedEvent);
 
                                                     maintainStoreReductions();
 
@@ -379,6 +381,35 @@ namespace Kalmit.PersistentProcess.WebHost
                             };
 
                         await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
+                        return;
+                    }
+
+                    if (context.Request.Path.StartsWithSegments(new PathString(PathApiRevertProcessTo),
+                        out var revertToRemainingPath))
+                    {
+                        if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            context.Response.StatusCode = 405;
+                            await context.Response.WriteAsync("Method not supported.");
+                            return;
+                        }
+
+                        var processVersionId = revertToRemainingPath.ToString().Trim('/');
+
+                        var processVersionComponent =
+                            new ProcessStoreReaderInFileStore(processStoreFileStore).LoadComponent(processVersionId);
+
+                        if (processVersionComponent == null)
+                        {
+                            context.Response.StatusCode = 404;
+                            await context.Response.WriteAsync("Did not find process version '" + processVersionId + "'.");
+                            return;
+                        }
+
+                        await attemptContinueWithCompositionEventAndSendHttpResponse(new CompositionLogRecordInFile.CompositionEvent
+                        {
+                            RevertProcessTo = new ValueInFileStructure { HashBase16 = processVersionId },
+                        });
                         return;
                     }
 

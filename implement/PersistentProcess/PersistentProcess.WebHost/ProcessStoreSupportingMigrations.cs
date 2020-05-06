@@ -44,7 +44,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
             var compositionLogRecordStructure = new ProcessStoreSupportingMigrations.CompositionLogRecordInFile
             {
                 parentHashBase16 = parentHashBase16,
-                events = ImmutableList.Create(compositionLogEvent),
+                compositionEvent = compositionLogEvent,
             };
 
             var compositionLogRecordSerialized = ProcessStoreInFileStore.Serialize(compositionLogRecordStructure);
@@ -140,17 +140,19 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         public string parentHashBase16;
 
-        public IReadOnlyList<CompositionEvent> events;
+        public CompositionEvent compositionEvent;
 
         public class CompositionEvent
         {
-            public ValueInFileStructure SetElmAppState;
-
             public ValueInFileStructure UpdateElmAppStateForEvent;
+
+            public ValueInFileStructure SetElmAppState;
 
             public ValueInFileStructure DeployAppConfigAndInitElmAppState;
 
             public ValueInFileStructure DeployAppConfigAndMigrateElmAppState;
+
+            public ValueInFileStructure RevertProcessTo;
         }
     }
 
@@ -295,7 +297,14 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
                 yield return compositionRecordArray;
 
-                nextHashBase16 = recordStructure.parentHashBase16?.ToLowerInvariant();
+                if (recordStructure.compositionEvent?.RevertProcessTo != null)
+                {
+                    nextHashBase16 = recordStructure.compositionEvent.RevertProcessTo.HashBase16;
+                }
+                else
+                {
+                    nextHashBase16 = recordStructure.parentHashBase16?.ToLowerInvariant();
+                }
             }
         }
     }

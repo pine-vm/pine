@@ -17,6 +17,23 @@ namespace Kalmit
 
         static public IEqualityComparer<IEnumerable<T>> EqualityComparer<T>() => new IEnumerableComparer<T>();
 
+        // From https://github.com/morelinq/MoreLINQ/blob/07bd0861658b381ce97c8b44d3b9f2cd3c9bf769/MoreLinq/TakeUntil.cs
+        static public IEnumerable<TSource> TakeUntil<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            return _(); IEnumerable<TSource> _()
+            {
+                foreach (var item in source)
+                {
+                    yield return item;
+                    if (predicate(item))
+                        yield break;
+                }
+            }
+        }
+
         class IEnumerableComparer<T> : IEqualityComparer<IEnumerable<T>>
         {
             public bool Equals(IEnumerable<T> x, IEnumerable<T> y)

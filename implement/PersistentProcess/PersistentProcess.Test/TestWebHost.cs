@@ -923,6 +923,88 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
+        public void Web_host_supports_revert_to_earlier_process_state()
+        {
+            var allEventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (3, 4),
+                        (5, 9),
+                        (7, 16),
+                        (11, 27),
+                        (-13, 14),
+                    }).ToList();
+
+            var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
+
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.First();
+
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.Skip(1).First();
+
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            {
+                using (var server = testSetup.StartWebHost())
+                {
+                    using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
+                    {
+                        foreach (var (serializedEvent, expectedResponse) in firstBatchOfCounterAppEvents)
+                        {
+                            var httpResponse =
+                                publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                        }
+
+                        var processVersionAfterFirstBatch =
+                            WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
+                                testSetup
+                                .BuildProcessStoreReaderInFileDirectory()
+                                .EnumerateSerializedCompositionLogRecordsReverse().First());
+
+                        foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
+                        {
+                            var httpResponse =
+                                publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                        }
+
+                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                            testSetup.BuildAdminInterfaceHttpClient()))
+                        {
+                            var revertResponse = adminClient.PostAsync(
+                                StartupAdminInterface.PathApiRevertProcessTo + "/" + processVersionAfterFirstBatch,
+                                null).Result;
+
+                            Assert.IsTrue(
+                                revertResponse.IsSuccessStatusCode,
+                                "revertResponse IsSuccessStatusCode (" +
+                                revertResponse.Content.ReadAsStringAsync().Result + ")");
+                        }
+
+                        foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
+                        {
+                            var httpResponse =
+                                publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                        }
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
         public void tooling_supports_replicate_process_from_remote_host()
         {
             var originalHostAdminPassword = "original-host-password-678";
