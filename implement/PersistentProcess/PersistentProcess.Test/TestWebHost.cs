@@ -45,7 +45,7 @@ namespace Kalmit.PersistentProcess.Test
             Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                setAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
                 persistentProcessHostDateTime: () => persistentProcessHostDateTime))
             {
                 IEnumerable<string> ReadStoredReductionFileRelativePaths()
@@ -147,7 +147,7 @@ namespace Kalmit.PersistentProcess.Test
                         (-13, 14),
                     }).ToList();
 
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: webAppConfig))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppConfig))
             {
                 string PostEventToPublicAppAndGetResponseString(string appEvent)
                 {
@@ -251,7 +251,7 @@ namespace Kalmit.PersistentProcess.Test
                     });
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                setAppConfigAndInitElmState: webAppConfig,
+                deployAppConfigAndInitElmState: webAppConfig,
                 persistentProcessHostDateTime: () => persistentProcessHostDateTime))
             {
                 IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
@@ -346,7 +346,7 @@ namespace Kalmit.PersistentProcess.Test
                     new StringContent(state, System.Text.Encoding.UTF8));
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                setAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
                 adminRootPassword: rootPassword))
             {
                 using (var server = testSetup.StartWebHost())
@@ -418,7 +418,7 @@ namespace Kalmit.PersistentProcess.Test
             // This name needs to be consistent with the code in Elm app CrossPropagateHttpHeadersToAndFromBody.
             const string appSpecificHttpResponseHeaderName = "response-header-name";
 
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody))
             {
                 using (var server = testSetup.StartWebHost())
                 {
@@ -491,7 +491,7 @@ namespace Kalmit.PersistentProcess.Test
             {
                 echoServer.Start();
 
-                using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: TestElmWebAppHttpServer.HttpProxyWebApp))
+                using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.HttpProxyWebApp))
                 {
                     using (var server = testSetup.StartWebHost())
                     {
@@ -577,7 +577,7 @@ namespace Kalmit.PersistentProcess.Test
         [TestMethod]
         public void Web_host_sends_HTTP_response_only_after_write_to_history()
         {
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
             {
                 async System.Threading.Tasks.Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
                 {
@@ -673,11 +673,11 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
-                        var setAppConfigResponse = adminClient.PostAsync(
+                        var deployAppConfigResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState,
                             new ByteArrayContent(webAppConfigZipArchive)).Result;
 
-                        Assert.IsTrue(setAppConfigResponse.IsSuccessStatusCode, "set-app-config response IsSuccessStatusCode");
+                        Assert.IsTrue(deployAppConfigResponse.IsSuccessStatusCode, "deploy-app-config response IsSuccessStatusCode");
 
                         var getAppConfigResponse = adminClient.GetAsync(StartupAdminInterface.PathApiGetDeployedAppConfig).Result;
 
@@ -757,7 +757,7 @@ namespace Kalmit.PersistentProcess.Test
 
             var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(webAppConfig.AsFiles());
 
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: webAppConfig))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppConfig))
             {
                 using (var server = testSetup.StartWebHost())
                 {
@@ -863,7 +863,7 @@ namespace Kalmit.PersistentProcess.Test
             var migrateAndSecondElmAppWebAppConfigZipArchive =
                 ZipArchive.ZipArchiveFromEntries(migrateAndSecondElmAppWebAppConfig.AsFiles());
 
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: initialWebAppConfig))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: initialWebAppConfig))
             {
                 using (var server = testSetup.StartWebHost())
                 {
@@ -892,14 +892,14 @@ namespace Kalmit.PersistentProcess.Test
                     using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
-                        var setAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
+                        var deployAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
                             new ByteArrayContent(migrateAndSecondElmAppWebAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(
-                            setAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode,
-                            "setAppConfigAndMigrateElmStateResponse IsSuccessStatusCode (" +
-                            setAppConfigAndMigrateElmStateResponse.Content.ReadAsStringAsync().Result + ")");
+                            deployAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode,
+                            "deployAppConfigAndMigrateElmStateResponse IsSuccessStatusCode (" +
+                            deployAppConfigAndMigrateElmStateResponse.Content.ReadAsStringAsync().Result + ")");
                     }
 
                     using (var client = testSetup.BuildPublicAppHttpClient())
@@ -956,7 +956,7 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
                 adminRootPassword: originalHostAdminPassword,
-                setAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
             {
                 using (var server = testSetup.StartWebHost())
                 {

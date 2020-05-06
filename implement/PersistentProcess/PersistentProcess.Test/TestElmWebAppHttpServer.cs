@@ -26,7 +26,7 @@ namespace Kalmit.PersistentProcess.Test
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()
         {
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(setAppConfigAndInitElmState: CounterWebApp))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: CounterWebApp))
             {
                 var eventsAndExpectedResponses =
                     TestSetup.CounterProcessTestEventsAndExpectedResponses(

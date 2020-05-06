@@ -54,32 +54,32 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         static public WebHostAdminInterfaceTestSetup Setup(
-            WebAppConfiguration setAppConfigAndInitElmState,
+            WebAppConfiguration deployAppConfigAndInitElmState,
             Func<DateTimeOffset> persistentProcessHostDateTime = null,
             string adminRootPassword = null) =>
             Setup(
                 persistentProcessHostDateTime: persistentProcessHostDateTime,
                 adminRootPassword: adminRootPassword,
-                setAppConfigAndInitElmState:
-                    setAppConfigAndInitElmState == null
+                deployAppConfigAndInitElmState:
+                    deployAppConfigAndInitElmState == null
                     ?
                     null
                     :
-                    Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(setAppConfigAndInitElmState.AsFiles())));
+                    Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(deployAppConfigAndInitElmState.AsFiles())));
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<DateTimeOffset> persistentProcessHostDateTime = null,
             string adminRootPassword = null,
-            Composition.Component setAppConfigAndInitElmState = null) =>
+            Composition.Component deployAppConfigAndInitElmState = null) =>
             Setup(
                 adminRootPassword: adminRootPassword,
-                setAppConfigAndInitElmState: setAppConfigAndInitElmState,
+                deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminRootPassword = null,
-            Composition.Component setAppConfigAndInitElmState = null,
+            Composition.Component deployAppConfigAndInitElmState = null,
             string adminWebHostUrlOverride = null,
             string publicWebHostUrlOverride = null)
         {
@@ -88,7 +88,7 @@ namespace Kalmit.PersistentProcess.Test
             var setup = new WebHostAdminInterfaceTestSetup(
                 testDirectory,
                 adminRootPassword: adminRootPassword,
-                setAppConfigAndInitElmState: setAppConfigAndInitElmState,
+                deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: webHostBuilderMap,
                 adminWebHostUrlOverride: adminWebHostUrlOverride,
                 publicWebHostUrlOverride: publicWebHostUrlOverride);
@@ -133,7 +133,7 @@ namespace Kalmit.PersistentProcess.Test
         WebHostAdminInterfaceTestSetup(
             string testDirectory,
             string adminRootPassword,
-            Composition.Component setAppConfigAndInitElmState,
+            Composition.Component deployAppConfigAndInitElmState,
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminWebHostUrlOverride,
             string publicWebHostUrlOverride)
@@ -144,7 +144,7 @@ namespace Kalmit.PersistentProcess.Test
             this.adminWebHostUrlOverride = adminWebHostUrlOverride;
             this.publicWebHostUrlOverride = publicWebHostUrlOverride;
 
-            if (setAppConfigAndInitElmState != null)
+            if (deployAppConfigAndInitElmState != null)
             {
                 var compositionLogEvent =
                     new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
@@ -152,7 +152,7 @@ namespace Kalmit.PersistentProcess.Test
                         DeployAppConfigAndInitElmAppState =
                             new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                             {
-                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(setAppConfigAndInitElmState))
+                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(deployAppConfigAndInitElmState))
                             }
                     };
 
@@ -160,7 +160,7 @@ namespace Kalmit.PersistentProcess.Test
                     new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                     defaultFileStore);
 
-                processStoreWriter.StoreComponent(setAppConfigAndInitElmState);
+                processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
 
                 var compositionRecord = new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
                 {
