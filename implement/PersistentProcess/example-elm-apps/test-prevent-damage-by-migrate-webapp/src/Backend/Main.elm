@@ -6,7 +6,7 @@ module Backend.Main exposing
 
 import Backend.InterfaceToHost as InterfaceToHost
 import Backend.StateType
-import ElmFullstackLoweringInterface.GenerateJsonCoders
+import ElmFullstackCompilerInterface.GenerateJsonCoders
 import Json.Decode
 import Json.Encode
 
@@ -29,7 +29,7 @@ processEvent hostEvent stateBefore =
                             ( stateBefore
                             , 200
                             , stateBefore
-                                |> ElmFullstackLoweringInterface.GenerateJsonCoders.encodeBackendState
+                                |> ElmFullstackCompilerInterface.GenerateJsonCoders.encodeBackendState
                                 |> Json.Encode.encode 0
                             )
 
@@ -37,7 +37,7 @@ processEvent hostEvent stateBefore =
                             case
                                 httpRequestEvent.request.bodyAsString
                                     |> Maybe.withDefault ""
-                                    |> Json.Decode.decodeString ElmFullstackLoweringInterface.GenerateJsonCoders.decodeBackendState
+                                    |> Json.Decode.decodeString ElmFullstackCompilerInterface.GenerateJsonCoders.decodeBackendState
                             of
                                 Err decodeErr ->
                                     ( stateBefore

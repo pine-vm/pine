@@ -114,7 +114,7 @@ namespace Kalmit
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             Action<string> logWriteLine)
         {
-            var generateSerializerInterfaceModuleName = "ElmFullstackLoweringInterface.GenerateJsonCoders";
+            var generateSerializerInterfaceModuleName = "ElmFullstackCompilerInterface.GenerateJsonCoders";
 
             var interfaceModuleFilePath = FilePathFromModuleName(generateSerializerInterfaceModuleName);
 

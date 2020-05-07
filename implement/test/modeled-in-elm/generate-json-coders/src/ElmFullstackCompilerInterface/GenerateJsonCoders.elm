@@ -1,4 +1,4 @@
-module ElmFullstackLoweringInterface.GenerateJsonCoders exposing
+module ElmFullstackCompilerInterface.GenerateJsonCoders exposing
     ( decodeMixedRecord
     , encodeMixedRecord
     , testsValueToInterface
