@@ -675,25 +675,36 @@ main =
         {
             lock (processLock)
             {
+                if (lastCompositionLogRecordHashBase16 == CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+                    return null;
+
                 var elmAppState = lastElmAppVolatileProcess?.GetSerializedState();
 
                 var elmAppStateBlob =
                     elmAppState == null
                     ?
-                    new byte[0]
+                    null
                     :
                     Encoding.UTF8.GetBytes(elmAppState);
 
-                var elmAppStateComponent = Composition.Component.Blob(elmAppStateBlob);
+                var elmAppStateComponent =
+                    elmAppStateBlob == null
+                    ?
+                    null
+                    :
+                    Composition.Component.Blob(elmAppStateBlob);
 
                 var reductionRecord =
                     new ProvisionalReductionRecordInFile
                     {
                         reducedCompositionHashBase16 = lastCompositionLogRecordHashBase16,
-                        elmAppState = new ValueInFileStructure
-                        {
-                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
-                        },
+                        elmAppState =
+                            elmAppStateComponent == null
+                            ? null
+                            : new ValueInFileStructure
+                            {
+                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
+                            },
                         appConfig =
                             lastAppConfig == null
                             ? null

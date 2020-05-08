@@ -126,7 +126,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     var cyclicReductionStoreLock = new object();
                     DateTimeOffset? cyclicReductionStoreLastTime = null;
-                    var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromHours(1).TotalSeconds;
+                    var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
 
                     void maintainStoreReductions()
                     {
@@ -426,13 +426,6 @@ namespace Kalmit.PersistentProcess.WebHost
                         {
                             var processVolatileRepresentation = publicAppHost?.processVolatileRepresentation;
 
-                            if (processVolatileRepresentation == null)
-                            {
-                                context.Response.StatusCode = 500;
-                                await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
-                                return;
-                            }
-
                             var components = new List<Composition.Component>();
 
                             var storeWriter = new DelegatingProcessStoreWriter
@@ -443,7 +436,14 @@ namespace Kalmit.PersistentProcess.WebHost
                             };
 
                             var reductionRecord =
-                                processVolatileRepresentation.StoreReductionRecordForCurrentState(storeWriter);
+                                processVolatileRepresentation?.StoreReductionRecordForCurrentState(storeWriter);
+
+                            if (reductionRecord == null)
+                            {
+                                context.Response.StatusCode = 500;
+                                await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
+                                return;
+                            }
 
                             var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
 
@@ -554,38 +554,52 @@ namespace Kalmit.PersistentProcess.WebHost
                         return;
                     }
 
+                    (int statusCode, string responseBodyString) attemptContinueWithCompositionEvent(
+                        ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
+                    {
+                        lock (processStoreFileStore)
+                        {
+                            lock (publicAppLock)
+                            {
+                                publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
+
+                                var (projectedFiles, projectedFileReader) = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                                    originalFileStore: processStoreFileStore,
+                                    compositionLogEvent: compositionLogEvent);
+
+                                using (var projectedProcess =
+                                    PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                                        new ProcessStoreReaderInFileStore(projectedFileReader),
+                                        _ => { }))
+                                {
+                                    if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
+                                        compositionLogEvent.SetElmAppState != null)
+                                    {
+                                        if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
+                                        {
+                                            return (statusCode: 400, responseBodyString: "Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
+                                        }
+                                    }
+                                }
+
+                                foreach (var projectedFilePathAndContent in projectedFiles)
+                                    processStoreFileStore.SetFileContent(
+                                        projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+
+                                startPublicApp();
+
+                                return (statusCode: 200, responseBodyString: "Successfully deployed this configuration and started the web server.");
+                            }
+                        }
+                    }
+
                     async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
-                        var (projectedFiles, projectedFileReader) = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
-                            originalFileStore: processStoreFileStore,
-                            compositionLogEvent: compositionLogEvent);
+                        var (statusCode, responseBodyString) = attemptContinueWithCompositionEvent(compositionLogEvent);
 
-                        using (var projectedProcess =
-                            PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                                new ProcessStoreReaderInFileStore(projectedFileReader),
-                                _ => { }))
-                        {
-                            if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
-                                compositionLogEvent.SetElmAppState != null)
-                            {
-                                if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
-                                {
-                                    context.Response.StatusCode = 400;
-                                    await context.Response.WriteAsync("Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
-                                    return;
-                                }
-                            }
-                        }
-
-                        foreach (var projectedFilePathAndContent in projectedFiles)
-                            processStoreFileStore.SetFileContent(
-                                projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
-
-                        startPublicApp();
-
-                        context.Response.StatusCode = 200;
-                        await context.Response.WriteAsync("Successfully deployed this configuration and started the web server.");
+                        context.Response.StatusCode = statusCode;
+                        await context.Response.WriteAsync(responseBodyString);
                         return;
                     }
 
