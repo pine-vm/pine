@@ -160,12 +160,18 @@ namespace elm_fullstack
                 });
             });
 
+            CommandOption adminInterfaceOptionFromCmd(CommandLineApplication cmd) =>
+                cmd.Option("--admin-interface", "Address to the admin interface of the server to deploy to.", CommandOptionType.SingleValue).IsRequired();
+
+            CommandOption adminRootPasswordOptionFromCmd(CommandLineApplication cmd) =>
+                cmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
+
             app.Command("deploy", deployCmd =>
             {
                 deployCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
 
-                var adminInterfaceOption = deployCmd.Option("--admin-interface", "Address to the admin interface of the server to deploy to.", CommandOptionType.SingleValue).IsRequired();
-                var adminRootPasswordOption = deployCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue).IsRequired();
+                var adminInterfaceOption = adminInterfaceOptionFromCmd(deployCmd);
+                var adminRootPasswordOption = adminRootPasswordOptionFromCmd(deployCmd);
                 var initElmAppStateOption = deployCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
 
                 deployCmd.OnExecute(() =>
@@ -182,6 +188,29 @@ namespace elm_fullstack
                 });
             });
 
+            app.Command("truncate-process-history", truncateProcessHistoryCmd =>
+            {
+                var adminInterfaceOption = adminInterfaceOptionFromCmd(truncateProcessHistoryCmd);
+                var adminRootPasswordOption = adminRootPasswordOptionFromCmd(truncateProcessHistoryCmd);
+
+                truncateProcessHistoryCmd.OnExecute(() =>
+                {
+                    var adminInterface = adminInterfaceOption.Value();
+
+                    var adminRootPassword =
+                        adminRootPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(adminInterface);
+
+                    var report =
+                        truncateProcessHistory(
+                            adminInterface: adminInterface,
+                            adminRootPassword: adminRootPassword);
+
+                    writeReportToFileInReportDirectory(
+                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
+                        reportKind: "truncate-process-history.json");
+                });
+            });
+
             app.Command("user-secrets", userSecretsCmd =>
             {
                 userSecretsCmd.Description = "Manage user secrets to use with 'deploy' or replication.";
@@ -192,9 +221,9 @@ namespace elm_fullstack
                     var passwordArgument = userSecretsCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
 
                     userSecretsCmd.OnExecute(() =>
-                    {
-                        UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
-                    });
+                                {
+                                    UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
+                                });
                 });
             });
 
@@ -263,12 +292,74 @@ namespace elm_fullstack
             }
         }
 
+        class TruncateProcessHistoryReport
+        {
+            public string site;
+
+            public ResponseFromServerStruct responseFromServer;
+
+            public int totalTimeSpentMilli;
+
+            public class ResponseFromServerStruct
+            {
+                public int? statusCode;
+
+                public object body;
+            }
+        }
+
+        static TruncateProcessHistoryReport truncateProcessHistory(string adminInterface, string adminRootPassword)
+        {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(adminRootPassword))));
+
+                var requestUrl =
+                    adminInterface.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
+
+                Console.WriteLine("Beginning to truncate process history at '" + adminInterface + "'...");
+
+                var httpResponse = httpClient.PostAsync(requestUrl, null).Result;
+
+                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+                Console.WriteLine(
+                    "Server response: " + httpResponse.StatusCode + "\n" +
+                     responseContentString);
+
+                object responseBodyReport = responseContentString;
+
+                try
+                {
+                    responseBodyReport =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
+                }
+                catch { }
+
+                var responseFromServer = new TruncateProcessHistoryReport.ResponseFromServerStruct
+                {
+                    statusCode = (int)httpResponse.StatusCode,
+                    body = responseBodyReport,
+                };
+
+                return new TruncateProcessHistoryReport
+                {
+                    site = adminInterface,
+                    responseFromServer = responseFromServer,
+                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                };
+            }
+        }
+
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> readFilesForRestoreProcessFromAdminInterface(
             string sourceAdminInterface,
             string sourceAdminRootPassword)
         {
-            var processHistoryfilesFromRemoteHost = ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty;
-
             using (var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) })
             {
                 sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
@@ -292,24 +383,12 @@ namespace elm_fullstack
                         if (!response.IsSuccessStatusCode)
                             throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
 
-                        var fileContent = response.Content.ReadAsByteArrayAsync().Result;
-
-                        processHistoryfilesFromRemoteHost =
-                            processHistoryfilesFromRemoteHost.SetItem(filePath, fileContent.ToImmutableList());
-
-                        return fileContent;
+                        return response.Content.ReadAsByteArrayAsync().Result;
                     }
                 };
 
-                using (var processVolatileRepresentation =
-                    Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation
-                    .Restore(new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
-                        processHistoryFileStoreRemoteReader), _ => { }))
-                {
-                }
+                return Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
             }
-
-            return processHistoryfilesFromRemoteHost;
         }
 
         static public void replicateProcess(
@@ -388,8 +467,8 @@ namespace elm_fullstack
                 //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
                 Console.WriteLine(
-                    "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-                    "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+            "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+            "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
             });
 
             var executableIsRegisteredOnPath =
@@ -448,6 +527,19 @@ namespace elm_fullstack
 
                 Console.WriteLine("I saved zip archive " + configZipArchiveFileId + " to '" + outputOption + "'");
             }
+        }
+
+        static void writeReportToFileInReportDirectory(string reportContent, string reportKind)
+        {
+            var fileName = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss") + "_" + reportKind;
+
+            var filePath = Path.Combine(Environment.CurrentDirectory, "elm-fullstack-tool", "report", fileName);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
+            File.WriteAllText(filePath, reportContent, System.Text.Encoding.UTF8);
+
+            Console.WriteLine("Saved report to file '" + filePath + "'.");
         }
 
         static string GetCurrentProcessExecutableFilePath() =>

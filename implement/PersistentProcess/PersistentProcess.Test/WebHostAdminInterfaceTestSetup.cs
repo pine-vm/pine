@@ -175,9 +175,12 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        public Kalmit.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
+                new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+
         public WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
             new WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
-                new FileStoreFromSystemIOFile(ProcessStoreDirectory));
+                BuildProcessStoreFileStoreReaderInFileDirectory());
 
         public IEnumerable<PersistentProcess.InterfaceToHost.Event> EnumerateStoredUpdateElmAppStateForEvents()
         {

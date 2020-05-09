@@ -32,6 +32,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiReplaceProcessHistory => "/api/replace-process-history";
 
+        static public string PathApiTruncateProcessHistory => "/api/truncate-process-history";
+
         static public string PathApiProcessHistoryFileStore => "/api/process-history-file-store";
 
         static public string PathApiProcessHistoryFileStoreGetFileContent => PathApiProcessHistoryFileStore + "/get-file-content";
@@ -81,13 +83,13 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var processStoreFileStore = app.ApplicationServices.GetService<FileStoreForProcessStore>().fileStore;
 
-            object publicAppLock = new object();
+            object avoidConcurrencyLock = new object();
 
             PublicHostConfiguration publicAppHost = null;
 
             void stopPublicApp()
             {
-                lock (publicAppLock)
+                lock (avoidConcurrencyLock)
                 {
                     if (publicAppHost != null)
                     {
@@ -109,7 +111,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             void startPublicApp()
             {
-                lock (publicAppLock)
+                lock (avoidConcurrencyLock)
                 {
                     stopPublicApp();
 
@@ -146,7 +148,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                     if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
                                         return;
 
-                                    lock (processStoreFileStore)
+                                    lock (avoidConcurrencyLock)
                                     {
                                         var reductionRecord = processVolatileRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
                                     }
@@ -207,18 +209,15 @@ namespace Kalmit.PersistentProcess.WebHost
                                         WebAppConfiguration = WebAppConfiguration.FromFiles(appConfigFilesNamesAndContents),
                                         ProcessEventInElmApp = serializedEvent =>
                                         {
-                                            lock (processStoreWriter)
+                                            lock (avoidConcurrencyLock)
                                             {
-                                                lock (publicAppLock)
-                                                {
-                                                    var elmEventResponse =
-                                                        processVolatileRepresentation.ProcessElmAppEvent(
-                                                            processStoreWriter, serializedEvent);
+                                                var elmEventResponse =
+                                                    processVolatileRepresentation.ProcessElmAppEvent(
+                                                        processStoreWriter, serializedEvent);
 
-                                                    maintainStoreReductions();
+                                                maintainStoreReductions();
 
-                                                    return elmEventResponse;
-                                                }
+                                                return elmEventResponse;
                                             }
                                         }
                                     });
@@ -490,7 +489,6 @@ namespace Kalmit.PersistentProcess.WebHost
                         }
                     }
 
-
                     if (context.Request.Path.Equals(new PathString(PathApiReplaceProcessHistory)))
                     {
                         var memoryStream = new MemoryStream();
@@ -505,24 +503,72 @@ namespace Kalmit.PersistentProcess.WebHost
                                 , content: filePathAndContent.content))
                             .ToImmutableList();
 
-                        lock (publicAppLock)
+                        lock (avoidConcurrencyLock)
                         {
-                            lock (processStoreFileStore)
-                            {
-                                stopPublicApp();
+                            stopPublicApp();
 
-                                foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
-                                    processStoreFileStore.DeleteFile(filePath);
+                            foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
+                                processStoreFileStore.DeleteFile(filePath);
 
-                                foreach (var replacementFile in replacementFiles)
-                                    processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
+                            foreach (var replacementFile in replacementFiles)
+                                processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
 
-                                startPublicApp();
-                            }
+                            startPublicApp();
                         }
 
                         context.Response.StatusCode = 200;
                         await context.Response.WriteAsync("Successfully replaced the process history.");
+                        return;
+                    }
+
+                    TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
+                    {
+                        lock (avoidConcurrencyLock)
+                        {
+                            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                            publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
+
+                            var filesForRestore =
+                                PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(
+                                    processStoreFileStore)
+                                .Select(filePathAndContent => filePathAndContent.Key)
+                                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>());
+
+                            var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                            int deletedFilesCount = 0;
+
+                            foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty))
+                            {
+                                if (filesForRestore.Contains(filePath))
+                                    continue;
+
+                                if (productionBlockDurationLimit < totalStopwatch.Elapsed)
+                                    break;
+
+                                processStoreFileStore.DeleteFile(filePath);
+                                ++deletedFilesCount;
+                            }
+
+                            deleteFilesStopwatch.Stop();
+
+                            return new TruncateProcessHistoryReport
+                            {
+                                deletedFilesCount = deletedFilesCount,
+                                deleteFilesTimeSpentMilli = (int)deleteFilesStopwatch.ElapsedMilliseconds,
+                                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                            };
+                        }
+                    }
+
+                    if (context.Request.Path.Equals(new PathString(PathApiTruncateProcessHistory)))
+                    {
+                        var truncateResult = truncateProcessHistory(productionBlockDurationLimit: TimeSpan.FromMinutes(1));
+
+                        context.Response.StatusCode = 200;
+                        context.Response.ContentType = "application/json";
+                        await context.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(truncateResult));
                         return;
                     }
 
@@ -557,39 +603,36 @@ namespace Kalmit.PersistentProcess.WebHost
                     (int statusCode, string responseBodyString) attemptContinueWithCompositionEvent(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
-                        lock (processStoreFileStore)
+                        lock (avoidConcurrencyLock)
                         {
-                            lock (publicAppLock)
+                            publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
+
+                            var (projectedFiles, projectedFileReader) = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                                originalFileStore: processStoreFileStore,
+                                compositionLogEvent: compositionLogEvent);
+
+                            using (var projectedProcess =
+                                PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                                    new ProcessStoreReaderInFileStore(projectedFileReader),
+                                    _ => { }))
                             {
-                                publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
-
-                                var (projectedFiles, projectedFileReader) = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
-                                    originalFileStore: processStoreFileStore,
-                                    compositionLogEvent: compositionLogEvent);
-
-                                using (var projectedProcess =
-                                    PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                                        new ProcessStoreReaderInFileStore(projectedFileReader),
-                                        _ => { }))
+                                if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
+                                    compositionLogEvent.SetElmAppState != null)
                                 {
-                                    if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
-                                        compositionLogEvent.SetElmAppState != null)
+                                    if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
                                     {
-                                        if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
-                                        {
-                                            return (statusCode: 400, responseBodyString: "Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
-                                        }
+                                        return (statusCode: 400, responseBodyString: "Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
                                     }
                                 }
-
-                                foreach (var projectedFilePathAndContent in projectedFiles)
-                                    processStoreFileStore.SetFileContent(
-                                        projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
-
-                                startPublicApp();
-
-                                return (statusCode: 200, responseBodyString: "Successfully deployed this configuration and started the web server.");
                             }
+
+                            foreach (var projectedFilePathAndContent in projectedFiles)
+                                processStoreFileStore.SetFileContent(
+                                    projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+
+                            startPublicApp();
+
+                            return (statusCode: 200, responseBodyString: "Successfully deployed this configuration and started the web server.");
                         }
                     }
 
@@ -617,5 +660,14 @@ namespace Kalmit.PersistentProcess.WebHost
                     return;
                 });
         }
+    }
+
+    public class TruncateProcessHistoryReport
+    {
+        public int deletedFilesCount;
+
+        public int totalTimeSpentMilli;
+
+        public int deleteFilesTimeSpentMilli;
     }
 }

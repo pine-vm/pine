@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -77,28 +78,42 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
             this.lastSetElmAppStateResult = lastSetElmAppStateResult;
         }
 
-        static public PersistentProcessVolatileRepresentation Restore(
-            IProcessStoreReader storeReader,
-            Action<string> logger,
-            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetFilesForRestoreProcess(
+            IFileStoreReader fileStoreReader)
         {
-            var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IImmutableList<byte>>();
 
-            logger?.Invoke("Begin to restore the process state.");
-
-            if (!storeReader.EnumerateSerializedCompositionLogRecordsReverse().Take(1).Any())
+            var recordingReader = new Kalmit.DelegatingFileStoreReader
             {
-                logger?.Invoke("Found no composition record, default to initial state.");
+                GetFileContentDelegate = filePath =>
+                {
+                    var fileContent = fileStoreReader.GetFileContent(filePath);
 
-                return new PersistentProcessVolatileRepresentation(
-                    lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
-                    lastAppConfig: null,
-                    lastElmAppVolatileProcess: null,
-                    lastSetElmAppStateResult: null);
+                    if (fileContent != null)
+                    {
+                        filesForProcessRestore[filePath] = fileContent.ToImmutableList();
+                    }
+
+                    return fileContent;
+                }
+            };
+
+            /*
+            Following part can be made less expensive when we have an implementation that evaluates all readings but skips the
+            rest of the restoring. Something like an extension of `EnumerateCompositionLogRecordsForRestoreProcess` resolving all
+            dependencies on the store.
+            */
+            using (var restoredProcess = Restore(new ProcessStoreReaderInFileStore(recordingReader), _ => { }))
+            {
             }
 
-            var compositionEventsToLatestReductionReversed =
-                storeReader.EnumerateSerializedCompositionLogRecordsReverse()
+            return filesForProcessRestore.ToImmutableDictionary();
+        }
+
+        static IEnumerable<(CompositionLogRecordInFile compositionRecord, string compositionRecordHashBase16, LoadedReduction reduction)>
+            EnumerateCompositionLogRecordsForRestoreProcess(IProcessStoreReader storeReader) =>
+                storeReader
+                .EnumerateSerializedCompositionLogRecordsReverse()
                 .Select(serializedCompositionLogRecord =>
                 {
                     var compositionRecordHashBase16 =
@@ -145,7 +160,30 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         compositionRecordHashBase16: compositionRecordHashBase16,
                         reduction: loadedReduction);
                 })
-                .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null)
+                .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null);
+
+        static public PersistentProcessVolatileRepresentation Restore(
+            IProcessStoreReader storeReader,
+            Action<string> logger,
+            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        {
+            var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            logger?.Invoke("Begin to restore the process state.");
+
+            if (!storeReader.EnumerateSerializedCompositionLogRecordsReverse().Take(1).Any())
+            {
+                logger?.Invoke("Found no composition record, default to initial state.");
+
+                return new PersistentProcessVolatileRepresentation(
+                    lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    lastAppConfig: null,
+                    lastElmAppVolatileProcess: null,
+                    lastSetElmAppStateResult: null);
+            }
+
+            var compositionEventsToLatestReductionReversed =
+                EnumerateCompositionLogRecordsForRestoreProcess(storeReader)
                 .ToImmutableList();
 
             logger?.Invoke("Found " + compositionEventsToLatestReductionReversed.Count + " composition log records to use for restore.");

@@ -1111,6 +1111,83 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void Web_host_supports_truncate_process_history()
+        {
+            var allEventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (3, 4),
+                        (5, 9),
+                        (7, 16),
+                        (11, 27),
+                        (-13, 14),
+                    }).ToList();
+
+            var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
+
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.First();
+
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.Skip(1).First();
+
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            {
+                int countFilesInProcessFileStore() =>
+                    testSetup.BuildProcessStoreFileStoreReaderInFileDirectory()
+                    .ListFilesInDirectory(ImmutableList<string>.Empty).Count();
+
+                using (var server = testSetup.StartWebHost())
+                {
+                    using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
+                    {
+                        foreach (var (serializedEvent, expectedResponse) in firstBatchOfCounterAppEvents)
+                        {
+                            var httpResponse =
+                                publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                        }
+
+                        var numberOfFilesBefore = countFilesInProcessFileStore();
+
+                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                            testSetup.BuildAdminInterfaceHttpClient()))
+                        {
+                            var truncateResponse = adminClient.PostAsync(
+                                StartupAdminInterface.PathApiTruncateProcessHistory, null).Result;
+
+                            Assert.IsTrue(
+                                truncateResponse.IsSuccessStatusCode,
+                                "truncateResponse IsSuccessStatusCode (" +
+                                truncateResponse.Content.ReadAsStringAsync().Result + ")");
+                        }
+
+                        var numberOfFilesAfter = countFilesInProcessFileStore();
+
+                        Assert.IsTrue(
+                            numberOfFilesAfter < numberOfFilesBefore,
+                            "Number of files in store is lower after truncate request.");
+
+                        foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
+                        {
+                            var httpResponse =
+                                publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                            var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                        }
+                    }
+                }
+            }
+        }
+
 
         class FileStoreFromDelegates : IFileStore
         {
