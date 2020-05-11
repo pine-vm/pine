@@ -151,8 +151,8 @@ namespace elm_fullstack
                         */
 
                         deployAppConfig(
-                            adminInterface: "http://localhost:" + adminInterfaceHttpPort,
-                            adminRootPassword: adminRootPasswordOption.Value(),
+                            site: "http://localhost:" + adminInterfaceHttpPort,
+                            sitePassword: adminRootPasswordOption.Value(),
                             initElmAppState: deletePreviousBackendStateOption.HasValue() && !replicateProcessFromOption.HasValue());
                     }
 
@@ -160,31 +160,38 @@ namespace elm_fullstack
                 });
             });
 
-            CommandOption adminInterfaceOptionFromCmd(CommandLineApplication cmd) =>
-                cmd.Option("--admin-interface", "Address to the admin interface of the server to deploy to.", CommandOptionType.SingleValue).IsRequired();
+            Func<(string site, string sitePassword)> siteAndSitePasswordOptionsOnCommand(CommandLineApplication cmd)
+            {
+                var siteOption = cmd.Option("--site", "Site where to apply the changes. Usually an URL to the admin interface of a server.", CommandOptionType.SingleValue).IsRequired();
+                var sitePasswordOption = cmd.Option("--site-password", "Password to access the site where to apply the changes.", CommandOptionType.SingleValue);
 
-            CommandOption adminRootPasswordOptionFromCmd(CommandLineApplication cmd) =>
-                cmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
+                return () =>
+                {
+                    var site = siteOption.Value();
+
+                    var sitePassword =
+                        sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
+
+                    return (site, sitePassword);
+                };
+            }
 
             app.Command("deploy-app-config", deployAppConfigCmd =>
             {
                 deployAppConfigCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
 
-                var adminInterfaceOption = adminInterfaceOptionFromCmd(deployAppConfigCmd);
-                var adminRootPasswordOption = adminRootPasswordOptionFromCmd(deployAppConfigCmd);
+                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(deployAppConfigCmd);
+
                 var initElmAppStateOption = deployAppConfigCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
 
                 deployAppConfigCmd.OnExecute(() =>
                 {
-                    var adminInterface = adminInterfaceOption.Value();
-
-                    var adminRootPassword =
-                        adminRootPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(adminInterface);
+                    var (site, sitePassword) = siteAndPasswordFromCmd();
 
                     var deployReport =
                         deployAppConfig(
-                            adminInterface: adminInterface,
-                            adminRootPassword: adminRootPassword,
+                            site: site,
+                            sitePassword: sitePassword,
                             initElmAppState: initElmAppStateOption.HasValue());
 
                     writeReportToFileInReportDirectory(
@@ -195,20 +202,16 @@ namespace elm_fullstack
 
             app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
-                var adminInterfaceOption = adminInterfaceOptionFromCmd(truncateProcessHistoryCmd);
-                var adminRootPasswordOption = adminRootPasswordOptionFromCmd(truncateProcessHistoryCmd);
+                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
 
                 truncateProcessHistoryCmd.OnExecute(() =>
                 {
-                    var adminInterface = adminInterfaceOption.Value();
-
-                    var adminRootPassword =
-                        adminRootPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(adminInterface);
+                    var (site, sitePassword) = siteAndPasswordFromCmd();
 
                     var report =
                         truncateProcessHistory(
-                            adminInterface: adminInterface,
-                            adminRootPassword: adminRootPassword);
+                            site: site,
+                            sitePassword: sitePassword);
 
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
@@ -267,7 +270,7 @@ namespace elm_fullstack
             }
         }
 
-        static DeployAppConfigReport deployAppConfig(string adminInterface, string adminRootPassword, bool initElmAppState)
+        static DeployAppConfigReport deployAppConfig(string site, string sitePassword, bool initElmAppState)
         {
             var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
 
@@ -301,10 +304,10 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(adminRootPassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
 
                 var deployAddress =
-                    (adminInterface.TrimEnd('/')) +
+                    (site.TrimEnd('/')) +
                     (initElmAppState
                     ?
                     StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
@@ -349,7 +352,7 @@ namespace elm_fullstack
                 appConfigSource = "current-directory",
                 appConfigId = appConfigId,
                 initElmAppState = initElmAppState,
-                site = adminInterface,
+                site = site,
                 responseFromServer = responseFromServer,
                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
             };
@@ -371,7 +374,7 @@ namespace elm_fullstack
             }
         }
 
-        static TruncateProcessHistoryReport truncateProcessHistory(string adminInterface, string adminRootPassword)
+        static TruncateProcessHistoryReport truncateProcessHistory(string site, string sitePassword)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -380,12 +383,12 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(adminRootPassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
 
                 var requestUrl =
-                    adminInterface.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
+                    site.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
 
-                Console.WriteLine("Beginning to truncate process history at '" + adminInterface + "'...");
+                Console.WriteLine("Beginning to truncate process history at '" + site + "'...");
 
                 var httpResponse = httpClient.PostAsync(requestUrl, null).Result;
 
@@ -412,7 +415,7 @@ namespace elm_fullstack
 
                 return new TruncateProcessHistoryReport
                 {
-                    site = adminInterface,
+                    site = site,
                     responseFromServer = responseFromServer,
                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
                 };
@@ -455,17 +458,17 @@ namespace elm_fullstack
         }
 
         static public void replicateProcess(
-            string destinationAdminInterface,
-            string destinationAdminRootPassword,
-            string sourceAdminInterface,
-            string sourceAdminRootPassword)
+            string site,
+            string sitePassword,
+            string sourceSite,
+            string sourceSitePassword)
         {
-            Console.WriteLine("Begin reading process history from '" + sourceAdminInterface + "' ...");
+            Console.WriteLine("Begin reading process history from '" + sourceSite + "' ...");
 
             var processHistoryfilesFromRemoteHost =
-                readFilesForRestoreProcessFromAdminInterface(sourceAdminInterface, sourceAdminRootPassword);
+                readFilesForRestoreProcessFromAdminInterface(sourceSite, sourceSitePassword);
 
-            Console.WriteLine("Completed reading part of process history for restore. Read " + processHistoryfilesFromRemoteHost.Count + " files from " + sourceAdminInterface + " during restore.");
+            Console.WriteLine("Completed reading part of process history for restore. Read " + processHistoryfilesFromRemoteHost.Count + " files from " + sourceSite + " during restore.");
 
             var processHistoryTree =
                 Composition.TreeFromSetOfBlobsWithStringPath(processHistoryfilesFromRemoteHost);
@@ -480,10 +483,10 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(destinationAdminRootPassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
 
                 var deployAddress =
-                    destinationAdminInterface.TrimEnd('/') +
+                    site.TrimEnd('/') +
                     Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
 
                 Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
