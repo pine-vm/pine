@@ -24,7 +24,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         Composition.Component LoadComponent(string componentHash);
 
-        static public (IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)
+        static public (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)
             ProjectFileStoreReaderForAppendedCompositionLogEvent(
             IFileStoreReader originalFileStore,
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
@@ -76,7 +76,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
                 ListFilesInDirectoryDelegate = originalFileStore.ListFilesInDirectory,
             };
 
-            return (projectedFiles: projectedFiles, projectedReader: projectedFileStoreReader);
+            return (parentHashBase16: parentHashBase16, projectedFiles: projectedFiles, projectedReader: projectedFileStoreReader);
         }
 
         static public IProcessStoreReader EmptyProcessStoreReader()

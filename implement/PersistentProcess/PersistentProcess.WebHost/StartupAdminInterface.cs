@@ -600,20 +600,48 @@ namespace Kalmit.PersistentProcess.WebHost
                         return;
                     }
 
-                    (int statusCode, string responseBodyString) attemptContinueWithCompositionEvent(
+                    (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
+                        var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
+
+                        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                         lock (avoidConcurrencyLock)
                         {
                             publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
 
-                            var (projectedFiles, projectedFileReader) = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                            var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
                                 originalFileStore: processStoreFileStore,
                                 compositionLogEvent: compositionLogEvent);
 
+                            (int statusCode, AttemptContinueWithCompositionEventReport report) returnError(string errorMessage)
+                            {
+                                return (statusCode: 400, new AttemptContinueWithCompositionEventReport
+                                {
+                                    beginTime = beginTime,
+                                    parentCompositionHashBase16 = projectionResult.parentHashBase16,
+                                    compositionEvent = compositionLogEvent,
+                                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                                    result = Composition.Result<string, string>.err(errorMessage),
+                                });
+                            }
+
+                            (int statusCode, AttemptContinueWithCompositionEventReport report) returnOk(string okMessage)
+                            {
+                                return (statusCode: 200, new AttemptContinueWithCompositionEventReport
+                                {
+                                    beginTime = beginTime,
+                                    parentCompositionHashBase16 = projectionResult.parentHashBase16,
+                                    compositionEvent = compositionLogEvent,
+                                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                                    result = Composition.Result<string, string>.ok(okMessage),
+                                });
+                            }
+
                             using (var projectedProcess =
                                 PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                                    new ProcessStoreReaderInFileStore(projectedFileReader),
+                                    new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
                                     _ => { }))
                             {
                                 if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
@@ -621,25 +649,27 @@ namespace Kalmit.PersistentProcess.WebHost
                                 {
                                     if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
                                     {
-                                        return (statusCode: 400, responseBodyString: "Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
+                                        return returnError("Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
                                     }
                                 }
                             }
 
-                            foreach (var projectedFilePathAndContent in projectedFiles)
+                            foreach (var projectedFilePathAndContent in projectionResult.projectedFiles)
                                 processStoreFileStore.SetFileContent(
                                     projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
 
                             startPublicApp();
 
-                            return (statusCode: 200, responseBodyString: "Successfully deployed this configuration and started the web server.");
+                            return returnOk("Successfully deployed this configuration and started the web server.");
                         }
                     }
 
                     async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
-                        var (statusCode, responseBodyString) = attemptContinueWithCompositionEvent(compositionLogEvent);
+                        var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
+
+                        var responseBodyString = Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport);
 
                         context.Response.StatusCode = statusCode;
                         await context.Response.WriteAsync(responseBodyString);
@@ -660,6 +690,19 @@ namespace Kalmit.PersistentProcess.WebHost
                     return;
                 });
         }
+    }
+
+    public class AttemptContinueWithCompositionEventReport
+    {
+        public string beginTime;
+
+        public string parentCompositionHashBase16;
+
+        public CompositionLogRecordInFile.CompositionEvent compositionEvent;
+
+        public int totalTimeSpentMilli;
+
+        public Composition.Result<string, string> result;
     }
 
     public class TruncateProcessHistoryReport

@@ -79,7 +79,7 @@ namespace elm_fullstack
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-backend-state'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployOption = runServerCmd.Option("--deploy", "Perform a deployment on startup, analogous to deploying with the `deploy` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
+                var deployAppConfigOption = runServerCmd.Option("--deploy-app-config", "Perform a deployment on startup, analogous to deploying with the `deploy-app-config` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -140,7 +140,7 @@ namespace elm_fullstack
 
                     Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrl + "'.");
 
-                    if (deployOption.HasValue())
+                    if (deployAppConfigOption.HasValue())
                     {
                         System.Threading.Tasks.Task.Delay(1000).Wait();
 
@@ -150,7 +150,7 @@ namespace elm_fullstack
                         Also, to prevent confusion, we might want to fail starting the server completely in case the deployment fails.
                         */
 
-                        deploy(
+                        deployAppConfig(
                             adminInterface: "http://localhost:" + adminInterfaceHttpPort,
                             adminRootPassword: adminRootPasswordOption.Value(),
                             initElmAppState: deletePreviousBackendStateOption.HasValue() && !replicateProcessFromOption.HasValue());
@@ -166,25 +166,30 @@ namespace elm_fullstack
             CommandOption adminRootPasswordOptionFromCmd(CommandLineApplication cmd) =>
                 cmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
 
-            app.Command("deploy", deployCmd =>
+            app.Command("deploy-app-config", deployAppConfigCmd =>
             {
-                deployCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+                deployAppConfigCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
 
-                var adminInterfaceOption = adminInterfaceOptionFromCmd(deployCmd);
-                var adminRootPasswordOption = adminRootPasswordOptionFromCmd(deployCmd);
-                var initElmAppStateOption = deployCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
+                var adminInterfaceOption = adminInterfaceOptionFromCmd(deployAppConfigCmd);
+                var adminRootPasswordOption = adminRootPasswordOptionFromCmd(deployAppConfigCmd);
+                var initElmAppStateOption = deployAppConfigCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
 
-                deployCmd.OnExecute(() =>
+                deployAppConfigCmd.OnExecute(() =>
                 {
                     var adminInterface = adminInterfaceOption.Value();
 
                     var adminRootPassword =
                         adminRootPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(adminInterface);
 
-                    deploy(
-                        adminInterface: adminInterface,
-                        adminRootPassword: adminRootPassword,
-                        initElmAppState: initElmAppStateOption.HasValue());
+                    var deployReport =
+                        deployAppConfig(
+                            adminInterface: adminInterface,
+                            adminRootPassword: adminRootPassword,
+                            initElmAppState: initElmAppStateOption.HasValue());
+
+                    writeReportToFileInReportDirectory(
+                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
+                        reportKind: "deploy-app-config.json");
                 });
             });
 
@@ -238,8 +243,36 @@ namespace elm_fullstack
             return app.Execute(args);
         }
 
-        static void deploy(string adminInterface, string adminRootPassword, bool initElmAppState)
+        class DeployAppConfigReport
         {
+            public string beginTime;
+
+            public string appConfigSource;
+
+            public string appConfigId;
+
+            public bool initElmAppState;
+
+            public string site;
+
+            public ResponseFromServerStruct responseFromServer;
+
+            public int totalTimeSpentMilli;
+
+            public class ResponseFromServerStruct
+            {
+                public int? statusCode;
+
+                public object body;
+            }
+        }
+
+        static DeployAppConfigReport deployAppConfig(string adminInterface, string adminRootPassword, bool initElmAppState)
+        {
+            var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
+
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             var buildConfigurationLog = new System.Collections.Generic.List<String>();
 
             Console.WriteLine("Beginning to build configuration...");
@@ -248,18 +281,20 @@ namespace elm_fullstack
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
                     buildConfigurationLog.Add);
 
-            var webAppConfigZipArchive = compileConfigZipArchive();
+            var appConfigZipArchive = compileConfigZipArchive();
 
-            var webAppConfigZipArchiveFileId =
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(webAppConfigZipArchive));
+            var appConfigZipArchiveFileId =
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
 
-            var webAppConfigFileId =
+            var appConfigId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
-                        Kalmit.ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)))));
+                        Kalmit.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
-                "Built zip archive " + webAppConfigZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
+                "Built zip archive " + appConfigZipArchiveFileId + " containing app config " + appConfigId + ".");
+
+            DeployAppConfigReport.ResponseFromServerStruct responseFromServer = null;
 
             using (var httpClient = new System.Net.Http.HttpClient())
             {
@@ -276,20 +311,48 @@ namespace elm_fullstack
                     :
                     StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
 
-                Console.WriteLine("Beginning to deploy app '" + webAppConfigFileId + "' to '" + deployAddress + "'...");
+                Console.WriteLine("Beginning to deploy app '" + appConfigId + "' to '" + deployAddress + "'...");
 
-                var httpContent = new System.Net.Http.ByteArrayContent(webAppConfigZipArchive);
+                var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
 
                 httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
                 httpContent.Headers.ContentDisposition =
-                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = webAppConfigFileId + ".zip" };
+                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigId + ".zip" };
 
                 var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
 
+                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
                 Console.WriteLine(
                     "Server response: " + httpResponse.StatusCode + "\n" +
-                     httpResponse.Content.ReadAsStringAsync().Result);
+                     responseContentString);
+
+                object responseBodyReport = responseContentString;
+
+                try
+                {
+                    responseBodyReport =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
+                }
+                catch { }
+
+                responseFromServer = new DeployAppConfigReport.ResponseFromServerStruct
+                {
+                    statusCode = (int)httpResponse.StatusCode,
+                    body = responseBodyReport,
+                };
             }
+
+            return new DeployAppConfigReport
+            {
+                beginTime = beginTime,
+                appConfigSource = "current-directory",
+                appConfigId = appConfigId,
+                initElmAppState = initElmAppState,
+                site = adminInterface,
+                responseFromServer = responseFromServer,
+                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+            };
         }
 
         class TruncateProcessHistoryReport
