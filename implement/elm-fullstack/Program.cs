@@ -200,6 +200,30 @@ namespace elm_fullstack
                 });
             });
 
+            app.Command("set-elm-app-state", setElmAppStateCmd =>
+            {
+                setElmAppStateCmd.Description = "Attempt to set the state of a backend Elm app using the common serialized representation.";
+
+                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
+
+                var sourceOption = setElmAppStateCmd.Option("--source", "Source to load the serialized state representation from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+
+                setElmAppStateCmd.OnExecute(() =>
+                {
+                    var (site, sitePassword) = siteAndPasswordFromCmd();
+
+                    var attemptReport =
+                        setElmAppState(
+                            site: site,
+                            sitePassword: sitePassword,
+                            source: sourceOption.Value());
+
+                    writeReportToFileInReportDirectory(
+                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
+                        reportKind: "set-elm-app-state.json");
+                });
+            });
+
             app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
@@ -352,6 +376,91 @@ namespace elm_fullstack
                 appConfigSource = "current-directory",
                 appConfigId = appConfigId,
                 initElmAppState = initElmAppState,
+                site = site,
+                responseFromServer = responseFromServer,
+                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+            };
+        }
+
+        class SetElmAppStateReport
+        {
+            public string beginTime;
+
+            public string elmAppStateSource;
+
+            public string elmAppStateId;
+
+            public string site;
+
+            public ResponseFromServerStruct responseFromServer;
+
+            public int totalTimeSpentMilli;
+
+            public class ResponseFromServerStruct
+            {
+                public int? statusCode;
+
+                public object body;
+            }
+        }
+
+        static SetElmAppStateReport setElmAppState(string site, string sitePassword, string source)
+        {
+            var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
+
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            // For now only support a file path as source.
+
+            var elmAppStateSerialized = File.ReadAllBytes(source);
+
+            var elmAppStateComponent = Composition.Component.Blob(elmAppStateSerialized);
+
+            var elmAppStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent));
+
+            SetElmAppStateReport.ResponseFromServerStruct responseFromServer = null;
+
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
+
+                var httpContent = new System.Net.Http.ByteArrayContent(elmAppStateSerialized);
+
+                httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+                var httpResponse = httpClient.PostAsync(
+                    site.TrimEnd('/') + StartupAdminInterface.PathApiElmAppState, httpContent).Result;
+
+                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+                Console.WriteLine(
+                    "Server response: " + httpResponse.StatusCode + "\n" +
+                     responseContentString);
+
+                object responseBodyReport = responseContentString;
+
+                try
+                {
+                    responseBodyReport =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
+                }
+                catch { }
+
+                responseFromServer = new SetElmAppStateReport.ResponseFromServerStruct
+                {
+                    statusCode = (int)httpResponse.StatusCode,
+                    body = responseBodyReport,
+                };
+            }
+
+            return new SetElmAppStateReport
+            {
+                beginTime = beginTime,
+                elmAppStateSource = source,
+                elmAppStateId = elmAppStateId,
                 site = site,
                 responseFromServer = responseFromServer,
                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
@@ -603,7 +712,7 @@ namespace elm_fullstack
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
-            File.WriteAllText(filePath, reportContent, System.Text.Encoding.UTF8);
+            File.WriteAllBytes(filePath, System.Text.Encoding.UTF8.GetBytes(reportContent));
 
             Console.WriteLine("Saved report to file '" + filePath + "'.");
         }

@@ -359,7 +359,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 var resultingElmAppState = processBefore.lastElmAppVolatileProcess.GetSerializedState();
 
                 var lastSetElmAppStateResult =
-                    resultingElmAppState == projectedElmAppState
+                    applyCommonFormattingToJson(resultingElmAppState) == applyCommonFormattingToJson(projectedElmAppState)
                     ?
                     new Result<string, string>
                     {
@@ -645,7 +645,7 @@ main =
 
                         var resultingState = testProcess.GetSerializedState();
 
-                        if (resultingState != elmAppStateMigratedSerialized)
+                        if (applyCommonFormattingToJson(resultingState) != applyCommonFormattingToJson(elmAppStateMigratedSerialized))
                             return new Result<string, string>
                             {
                                 Err = "Failed to load the migrated serialized state with the destination public app configuration. resulting State:\n" + resultingState
@@ -704,6 +704,18 @@ main =
                 lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
 
                 return elmAppResponse;
+            }
+        }
+
+        static string applyCommonFormattingToJson(string originalJson)
+        {
+            try
+            {
+                return Newtonsoft.Json.JsonConvert.SerializeObject(Newtonsoft.Json.JsonConvert.DeserializeObject(originalJson));
+            }
+            catch
+            {
+                return originalJson;
             }
         }
 
