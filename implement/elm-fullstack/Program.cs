@@ -69,6 +69,7 @@ namespace elm_fullstack
             app.Command("run-server", runServerCmd =>
             {
                 runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
+                runServerCmd.ThrowOnUnexpectedArgument = true;
 
                 var adminInterfaceHttpPortDefault = 4000;
 
@@ -179,6 +180,7 @@ namespace elm_fullstack
             app.Command("deploy-app-config", deployAppConfigCmd =>
             {
                 deployAppConfigCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+                deployAppConfigCmd.ThrowOnUnexpectedArgument = true;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(deployAppConfigCmd);
 
@@ -203,6 +205,7 @@ namespace elm_fullstack
             app.Command("set-elm-app-state", setElmAppStateCmd =>
             {
                 setElmAppStateCmd.Description = "Attempt to set the state of a backend Elm app using the common serialized representation.";
+                setElmAppStateCmd.ThrowOnUnexpectedArgument = true;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
 
@@ -227,6 +230,7 @@ namespace elm_fullstack
             app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
                 truncateProcessHistoryCmd.Description = "Remove parts of the process history from the persistent store, which are not needed to restore the process.";
+                truncateProcessHistoryCmd.ThrowOnUnexpectedArgument = true;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
 
@@ -248,16 +252,27 @@ namespace elm_fullstack
             app.Command("user-secrets", userSecretsCmd =>
             {
                 userSecretsCmd.Description = "Manage passwords for accessing the admin interfaces of servers.";
+                userSecretsCmd.ThrowOnUnexpectedArgument = true;
 
-                userSecretsCmd.Command("store", userSecretsCmd =>
+                userSecretsCmd.Command("store", storeCmd =>
                 {
-                    var siteArgument = userSecretsCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
-                    var passwordArgument = userSecretsCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+                    storeCmd.ThrowOnUnexpectedArgument = true;
 
-                    userSecretsCmd.OnExecute(() =>
+                    var siteArgument = storeCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+                    var passwordArgument = storeCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+
+                    storeCmd.OnExecute(() =>
                     {
                         UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
                     });
+                });
+
+                userSecretsCmd.OnExecute(() =>
+                {
+                    Console.WriteLine("Please specify a subcommand.");
+                    userSecretsCmd.ShowHelp();
+
+                    return 1;
                 });
             });
 
