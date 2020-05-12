@@ -68,16 +68,16 @@ namespace elm_fullstack
 
             app.Command("run-server", runServerCmd =>
             {
-                runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack app via HTTP. Deployments and migrations of an app usually go through this HTTP server.";
+                runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
 
                 var adminInterfaceHttpPortDefault = 4000;
 
                 var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
-                var deletePreviousBackendStateOption = runServerCmd.Option("--delete-previous-backend-state", "Delete the previous state of the backend process. If you don't use this option, the server restores the last state backend on startup.", CommandOptionType.NoValue);
+                var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
                 var adminInterfaceHttpPortOption = runServerCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminRootPasswordOption = runServerCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
-                var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-backend-state'.", CommandOptionType.SingleValue);
+                var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-process'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
                 var deployAppConfigOption = runServerCmd.Option("--deploy-app-config", "Perform a deployment on startup, analogous to deploying with the `deploy-app-config` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
 
@@ -94,7 +94,7 @@ namespace elm_fullstack
                     var replicateProcessAdminPassword =
                         replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessSource);
 
-                    if (deletePreviousBackendStateOption.HasValue() || replicateProcessFromOption.HasValue())
+                    if (deletePreviousProcessOption.HasValue() || replicateProcessFromOption.HasValue())
                     {
                         Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'...");
 
@@ -153,7 +153,7 @@ namespace elm_fullstack
                         deployAppConfig(
                             site: "http://localhost:" + adminInterfaceHttpPort,
                             sitePassword: adminRootPasswordOption.Value(),
-                            initElmAppState: deletePreviousBackendStateOption.HasValue() && !replicateProcessFromOption.HasValue());
+                            initElmAppState: deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue());
                     }
 
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.WaitForShutdown(webHost);
@@ -226,6 +226,8 @@ namespace elm_fullstack
 
             app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
+                truncateProcessHistoryCmd.Description = "Remove parts of the process history from the persistent store, which are not needed to restore the process.";
+
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
 
                 truncateProcessHistoryCmd.OnExecute(() =>
@@ -245,7 +247,7 @@ namespace elm_fullstack
 
             app.Command("user-secrets", userSecretsCmd =>
             {
-                userSecretsCmd.Description = "Manage user secrets to use with 'deploy' or replication.";
+                userSecretsCmd.Description = "Manage passwords for accessing the admin interfaces of servers.";
 
                 userSecretsCmd.Command("store", userSecretsCmd =>
                 {
@@ -253,9 +255,9 @@ namespace elm_fullstack
                     var passwordArgument = userSecretsCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
 
                     userSecretsCmd.OnExecute(() =>
-                                {
-                                    UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
-                                });
+                    {
+                        UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
+                    });
                 });
             });
 
