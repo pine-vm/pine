@@ -7,7 +7,12 @@ jobs:
 
     strategy:
       matrix:
-        environment: [ubuntu-18.04,windows-2019]
+        environment: [ubuntu-18.04, windows-2019]
+        include:
+          - environment: ubuntu-18.04
+            publish-runtime-id: linux-x64
+          - environment: windows-2019
+            publish-runtime-id: win10-x64
 
     runs-on: ${{ matrix.environment }}
 
@@ -15,16 +20,18 @@ jobs:
     - uses: actions/checkout@v1
     - uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: '3.1.100'
+        dotnet-version: '3.1.202'
     - name: Try use dotnet core 3
       run: dotnet --info
     - uses: actions/checkout@v1
     - name: Run tests
       run: dotnet test ./implement/PersistentProcess/PersistentProcess.Test/PersistentProcess.Test.csproj --logger trx
     - name: dotnet publish
-      run: dotnet publish -c Debug ./implement/elm-fullstack
+      env:
+        PUBLISH_RUNTIME_ID: ${{ matrix.publish-runtime-id }}
+      run: dotnet publish -c Debug --runtime ${{ env.PUBLISH_RUNTIME_ID }} --self-contained true /p:PublishReadyToRun=true /p:PublishSingleFile=true ./implement/elm-fullstack
     - name: Publish artifacts
       uses: actions/upload-artifact@v1
       with:
-        name: elm-fullstack-bin-${{github.sha}}-${{ matrix.environment }}
-        path: ./implement/elm-fullstack/bin/Debug/netcoreapp3.1/publish
+        name: elm-fullstack-bin-${{github.sha}}-${{ matrix.publish-runtime-id }}
+        path: ./implement/elm-fullstack/bin/Debug/netcoreapp3.1/${{ matrix.publish-runtime-id }}/publish
