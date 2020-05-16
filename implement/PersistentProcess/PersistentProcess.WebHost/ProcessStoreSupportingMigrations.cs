@@ -54,8 +54,8 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
             var fileStoreWriter = new DelegatingFileStoreWriter
             {
                 SetFileContentDelegate = projectedFiles.Add,
-                AppendFileContentDelegate = _ => throw new Exception("Unexpeced operation append to file."),
-                DeleteFileDelegate = _ => throw new Exception("Unexpeced operation delete file."),
+                AppendFileContentDelegate = _ => throw new Exception("Unexpected operation append to file."),
+                DeleteFileDelegate = _ => throw new Exception("Unexpected operation delete file."),
             };
 
             var processStoreWriter = new ProcessStoreWriterInFileStore(fileStoreWriter);

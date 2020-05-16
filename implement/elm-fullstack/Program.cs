@@ -109,11 +109,11 @@ namespace elm_fullstack
 
                     if (replicateProcessSource != null)
                     {
-                        var filesForRestore = readFilesForRestoreProcessFromAdminInterface(
-                            sourceAdminInterface: replicateProcessSource,
-                            sourceAdminRootPassword: replicateProcessAdminPassword);
+                        var replicateFiles =
+                            LoadFilesForRestoreFromSourceAndLogToConsole(
+                                replicateProcessSource, replicateProcessAdminPassword);
 
-                        foreach (var file in filesForRestore)
+                        foreach (var file in replicateFiles)
                             processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
                     }
 
@@ -246,6 +246,35 @@ namespace elm_fullstack
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "truncate-process-history.json");
+                });
+            });
+
+            app.Command("archive-process", archiveProcessCmd =>
+            {
+                archiveProcessCmd.Description = "Copy the files needed to restore the process and store those in a zip-archive.";
+                archiveProcessCmd.ThrowOnUnexpectedArgument = true;
+
+                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(archiveProcessCmd);
+
+                archiveProcessCmd.OnExecute(() =>
+                {
+                    var (site, sitePassword) = siteAndPasswordFromCmd();
+
+                    Console.WriteLine("Begin reading process history from '" + site + "' ...");
+
+                    var restoreResult =
+                        readFilesForRestoreProcessFromAdminInterface(site, sitePassword);
+
+                    Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + site + "'.");
+
+                    var zipArchive = ZipArchive.ZipArchiveFromEntries(restoreResult.files);
+
+                    var fileName = "process-" + restoreResult.lastCompositionLogRecordHashBase16 + ".zip";
+                    var filePath = Path.Combine(Environment.CurrentDirectory, fileName);
+
+                    File.WriteAllBytes(filePath, zipArchive);
+
+                    Console.WriteLine("Saved process archive to file '" + filePath + "'.");
                 });
             });
 
@@ -548,7 +577,7 @@ namespace elm_fullstack
             }
         }
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> readFilesForRestoreProcessFromAdminInterface(
+        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16) readFilesForRestoreProcessFromAdminInterface(
             string sourceAdminInterface,
             string sourceAdminRootPassword)
         {
@@ -583,26 +612,51 @@ namespace elm_fullstack
             }
         }
 
-        static public void replicateProcess(
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoadFilesForRestoreFromSourceAndLogToConsole(
+            string source, string sourcePassword)
+        {
+            if (Regex.IsMatch(source, "http(|s)://", RegexOptions.IgnoreCase))
+            {
+                Console.WriteLine("Begin reading process history from '" + source + "' ...");
+
+                var restoreResult = readFilesForRestoreProcessFromAdminInterface(
+                    sourceAdminInterface: source,
+                    sourceAdminRootPassword: sourcePassword);
+
+                Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + source + "'.");
+
+                return restoreResult.files;
+            }
+
+            var archive = File.ReadAllBytes(source);
+
+            var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
+
+            return
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    Composition.TreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
+                    .EnumerateBlobsTransitive()
+                    .Select(blobPathAndContent => (
+                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
+                        fileContent: blobPathAndContent.blobContent)));
+        }
+
+        static public void replicateProcessAndLogToConsole(
             string site,
             string sitePassword,
-            string sourceSite,
-            string sourceSitePassword)
+            string source,
+            string sourcePassword)
         {
-            Console.WriteLine("Begin reading process history from '" + sourceSite + "' ...");
-
-            var processHistoryfilesFromRemoteHost =
-                readFilesForRestoreProcessFromAdminInterface(sourceSite, sourceSitePassword);
-
-            Console.WriteLine("Completed reading part of process history for restore. Read " + processHistoryfilesFromRemoteHost.Count + " files from " + sourceSite + " during restore.");
+            var restoreFiles =
+                LoadFilesForRestoreFromSourceAndLogToConsole(source, sourcePassword);
 
             var processHistoryTree =
-                Composition.TreeFromSetOfBlobsWithStringPath(processHistoryfilesFromRemoteHost);
+                Composition.TreeFromSetOfBlobsWithStringPath(restoreFiles);
 
             var processHistoryComponentHash = Composition.GetHash(Composition.FromTree(processHistoryTree));
             var processHistoryComponentHashBase16 = CommonConversion.StringBase16FromByteArray(processHistoryComponentHash);
 
-            var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(processHistoryfilesFromRemoteHost);
+            var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
 
             using (var httpClient = new System.Net.Http.HttpClient())
             {

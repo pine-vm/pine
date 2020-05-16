@@ -531,7 +531,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                             var filesForRestore =
                                 PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(
-                                    processStoreFileStore)
+                                    processStoreFileStore).files
                                 .Select(filePathAndContent => filePathAndContent.Key)
                                 .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>());
 

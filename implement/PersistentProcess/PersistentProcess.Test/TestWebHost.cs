@@ -1062,11 +1062,11 @@ namespace Kalmit.PersistentProcess.Test
 
                     using (var replicaHost = replicaSetup.StartWebHost())
                     {
-                        elm_fullstack.Program.replicateProcess(
+                        elm_fullstack.Program.replicateProcessAndLogToConsole(
                             site: replicaAdminInterfaceUrl,
                             sitePassword: replicaAdminPassword,
-                            sourceSite: testSetup.AdminWebHostUrl,
-                            sourceSitePassword: originalHostAdminPassword);
+                            source: testSetup.AdminWebHostUrl,
+                            sourcePassword: originalHostAdminPassword);
                     }
                 }
             }

@@ -78,10 +78,11 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
             this.lastSetElmAppStateResult = lastSetElmAppStateResult;
         }
 
-        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetFilesForRestoreProcess(
+        static public (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16)
+            GetFilesForRestoreProcess(
             IFileStoreReader fileStoreReader)
         {
-            var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IImmutableList<byte>>();
+            var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IImmutableList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
             var recordingReader = new Kalmit.DelegatingFileStoreReader
             {
@@ -105,9 +106,10 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
             */
             using (var restoredProcess = Restore(new ProcessStoreReaderInFileStore(recordingReader), _ => { }))
             {
+                return (
+                    files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<string>()),
+                    lastCompositionLogRecordHashBase16: restoredProcess.lastCompositionLogRecordHashBase16);
             }
-
-            return filesForProcessRestore.ToImmutableDictionary();
         }
 
         static IEnumerable<(CompositionLogRecordInFile compositionRecord, string compositionRecordHashBase16, LoadedReduction reduction)>
@@ -171,7 +173,11 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             logger?.Invoke("Begin to restore the process state.");
 
-            if (!storeReader.EnumerateSerializedCompositionLogRecordsReverse().Take(1).Any())
+            var compositionEventsToLatestReductionReversed =
+                EnumerateCompositionLogRecordsForRestoreProcess(storeReader)
+                .ToImmutableList();
+
+            if (!compositionEventsToLatestReductionReversed.Any())
             {
                 logger?.Invoke("Found no composition record, default to initial state.");
 
@@ -181,10 +187,6 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                     lastElmAppVolatileProcess: null,
                     lastSetElmAppStateResult: null);
             }
-
-            var compositionEventsToLatestReductionReversed =
-                EnumerateCompositionLogRecordsForRestoreProcess(storeReader)
-                .ToImmutableList();
 
             logger?.Invoke("Found " + compositionEventsToLatestReductionReversed.Count + " composition log records to use for restore.");
 
