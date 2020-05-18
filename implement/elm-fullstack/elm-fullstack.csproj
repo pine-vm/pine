@@ -9,6 +9,10 @@
     <FileVersion>2020.0518.0.0</FileVersion>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <IncludeSymbolsInSingleFile>true</IncludeSymbolsInSingleFile>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.5.0" />
   </ItemGroup>
