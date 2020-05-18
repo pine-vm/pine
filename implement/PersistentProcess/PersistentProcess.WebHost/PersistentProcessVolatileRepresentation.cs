@@ -455,6 +455,35 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
             public OkT Ok;
         }
 
+        static public Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)>
+            TestContinueWithCompositionEvent(
+                ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+                IFileStoreReader fileStoreReader)
+        {
+            var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                originalFileStore: fileStoreReader,
+                compositionLogEvent: compositionLogEvent);
+
+            using (var projectedProcess =
+                PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                    new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
+                    _ => { }))
+            {
+                if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
+                    compositionLogEvent.SetElmAppState != null)
+                {
+                    if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
+                    {
+                        return Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)>.err(
+                            "Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
+                    }
+                }
+            }
+
+            return Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)>.ok(
+                projectionResult);
+        }
+
         static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValue(
             Composition.TreeComponent destinationAppConfigTree)
         {

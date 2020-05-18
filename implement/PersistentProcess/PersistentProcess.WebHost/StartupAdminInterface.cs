@@ -367,17 +367,9 @@ namespace Kalmit.PersistentProcess.WebHost
                             };
 
                         var compositionLogEvent =
-                            requestPathIsDeployAppConfigAndInitElmAppState
-                            ?
-                            new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
-                            {
-                                DeployAppConfigAndInitElmAppState = appConfigValueInFile,
-                            }
-                            :
-                            new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
-                            {
-                                DeployAppConfigAndMigrateElmAppState = appConfigValueInFile,
-                            };
+                            ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                                appConfigValueInFile: appConfigValueInFile,
+                                initElmAppState: requestPathIsDeployAppConfigAndInitElmAppState);
 
                         await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
                         return;
@@ -611,11 +603,15 @@ namespace Kalmit.PersistentProcess.WebHost
                         {
                             publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
 
+                            var testContinueResult = PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
+                                compositionLogEvent: compositionLogEvent,
+                                fileStoreReader: processStoreFileStore);
+
                             var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
                                 originalFileStore: processStoreFileStore,
                                 compositionLogEvent: compositionLogEvent);
 
-                            (int statusCode, AttemptContinueWithCompositionEventReport report) returnError(string errorMessage)
+                            if (testContinueResult.Ok.projectedFiles == null)
                             {
                                 return (statusCode: 400, new AttemptContinueWithCompositionEventReport
                                 {
@@ -623,44 +619,24 @@ namespace Kalmit.PersistentProcess.WebHost
                                     parentCompositionHashBase16 = projectionResult.parentHashBase16,
                                     compositionEvent = compositionLogEvent,
                                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                                    result = Composition.Result<string, string>.err(errorMessage),
+                                    result = Composition.Result<string, string>.err(testContinueResult.Err),
                                 });
                             }
 
-                            (int statusCode, AttemptContinueWithCompositionEventReport report) returnOk(string okMessage)
-                            {
-                                return (statusCode: 200, new AttemptContinueWithCompositionEventReport
-                                {
-                                    beginTime = beginTime,
-                                    parentCompositionHashBase16 = projectionResult.parentHashBase16,
-                                    compositionEvent = compositionLogEvent,
-                                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                                    result = Composition.Result<string, string>.ok(okMessage),
-                                });
-                            }
-
-                            using (var projectedProcess =
-                                PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                                    new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
-                                    _ => { }))
-                            {
-                                if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
-                                    compositionLogEvent.SetElmAppState != null)
-                                {
-                                    if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
-                                    {
-                                        return returnError("Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
-                                    }
-                                }
-                            }
-
-                            foreach (var projectedFilePathAndContent in projectionResult.projectedFiles)
+                            foreach (var projectedFilePathAndContent in testContinueResult.Ok.projectedFiles)
                                 processStoreFileStore.SetFileContent(
                                     projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
 
                             startPublicApp();
 
-                            return returnOk("Successfully deployed this configuration and started the web server.");
+                            return (statusCode: 200, new AttemptContinueWithCompositionEventReport
+                            {
+                                beginTime = beginTime,
+                                parentCompositionHashBase16 = projectionResult.parentHashBase16,
+                                compositionEvent = compositionLogEvent,
+                                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                                result = Composition.Result<string, string>.ok("Successfully deployed this configuration and started the web server."),
+                            });
                         }
                     }
 

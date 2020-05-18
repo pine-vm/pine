@@ -153,6 +153,21 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
             public ValueInFileStructure DeployAppConfigAndMigrateElmAppState;
 
             public ValueInFileStructure RevertProcessTo;
+
+            static public CompositionEvent EventForDeployAppConfig(
+                ValueInFileStructure appConfigValueInFile,
+                bool initElmAppState) =>
+                initElmAppState
+                ?
+                new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                {
+                    DeployAppConfigAndInitElmAppState = appConfigValueInFile,
+                }
+                :
+                new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                {
+                    DeployAppConfigAndMigrateElmAppState = appConfigValueInFile,
+                };
         }
     }
 

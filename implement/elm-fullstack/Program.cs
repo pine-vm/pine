@@ -122,6 +122,51 @@ namespace elm_fullstack
 
                     var adminInterfaceUrl = "http://*:" + adminInterfaceHttpPort.ToString();
 
+                    if (deployAppConfigOption.HasValue())
+                    {
+                        Console.WriteLine("Loading app config to deploy...");
+
+                        var appConfigZipArchive =
+                            Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                                _ => { }).compileConfigZipArchive();
+
+                        var appConfigTree =
+                            Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                                ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
+
+                        var appConfigComponent = Composition.FromTree(appConfigTree);
+
+                        var processStoreWriter =
+                            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                                processStoreFileStore);
+
+                        processStoreWriter.StoreComponent(appConfigComponent);
+
+                        var appConfigValueInFile =
+                            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                            {
+                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                            };
+
+                        var compositionLogEvent =
+                            Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                                appConfigValueInFile: appConfigValueInFile,
+                                initElmAppState: deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue());
+
+                        var testDeployResult = Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
+                            compositionLogEvent: compositionLogEvent,
+                            fileStoreReader: processStoreFileStore);
+
+                        if (testDeployResult.Ok.projectedFiles == null)
+                        {
+                            throw new Exception("Attempt to deploy app config failed: " + testDeployResult.Err);
+                        }
+
+                        foreach (var projectedFilePathAndContent in testDeployResult.Ok.projectedFiles)
+                            processStoreFileStore.SetFileContent(
+                                projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+                    }
+
                     var webHostBuilder =
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                         .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
@@ -140,22 +185,6 @@ namespace elm_fullstack
                     webHost.Start();
 
                     Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrl + "'.");
-
-                    if (deployAppConfigOption.HasValue())
-                    {
-                        System.Threading.Tasks.Task.Delay(1000).Wait();
-
-                        /*
-                        TODO:
-                        Make deploy synchronous: Inject this in the host to be processed at startup, so that no public app is started for the pre-deploy state.
-                        Also, to prevent confusion, we might want to fail starting the server completely in case the deployment fails.
-                        */
-
-                        deployAppConfig(
-                            site: "http://localhost:" + adminInterfaceHttpPort,
-                            sitePassword: adminRootPasswordOption.Value(),
-                            initElmAppState: deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue());
-                    }
 
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.WaitForShutdown(webHost);
                 });
