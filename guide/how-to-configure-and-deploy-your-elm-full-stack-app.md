@@ -1,32 +1,48 @@
 # How to Configure and Deploy Your Elm Full-Stack App
 
-Following is the easiest way to build and deploy your Elm full-stack app:
+In this guide, I use the elm-fullstack command-line interface (CLI) to run an Elm-fullstack web app. You can download the CLI program from the releases section at https://github.com/elm-fullstack/elm-fullstack/releases
 
-+ Make sure you have [Docker](https://www.docker.com) installed.
-+ Clone this repository.
-+ Run the script at [`/implement/PersistentProcess/run-server.ps1`](/implement/run-server.ps1). This script takes the example app from [/implement/PersistentProcess/example-elm-apps/default-full-stack-app](/implement/PersistentProcess/example-elm-apps/default-full-stack-app) and builds a docker image running this app.
-This script also contains a `docker run` command to start the app. Docker will then forward you logs like these:
-```shell
-I start a server.
-info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Loaded configuration 6D03BE6E6A5762B51668C20DDBAFAC4E973D3341359E19F89E9998259C3FF124
-info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
-info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Begin to build the persistent process for Elm app 83F9055AF5DAA4EE5D09F2E8450C7CF2292E1DBBFEBEE0CF3047A0512F94508B
-info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Begin to restore the process state using the storeReader.
-info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Found no composition record, default to initial state.
-info: Kalmit.PersistentProcess.WebHost.Startup[0]
-      Completed building the persistent process.
-Hosting environment: Production
-Content root path: /elm-fullstack
-Now listening on: http://[::]:80
-Now listening on: https://[::]:443
-Application started. Press Ctrl+C to shut down.
+To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack install-command` command.
+
+## Running a Server With an Elm-Fullstack Process
+
+First step is to run a server using the `elm-fullstack run-server` command. We need to configure two aspects of this server: The location where the process state should be persisted, and the password to access the admin interface.
+
+Here is a complete command to run a server:
+
+```cmd
+elm-fullstack run-server --process-store-directory-path=./process-store  --admin-root-password=secret  --admin-interface-http-port=4000
 ```
-+ When you open this site in a web browser, you will find a SPA which connects to the backend using HTTP requests. So this example app contains a backend (entry point in [elm-app/src/Backend/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) and a frontend (entry point in [elm-app/src/FrontendWeb/Main.elm](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/FrontendWeb/Main.elm)).
+
+(There are more options available when running a server, you can see these options using the command `elm-fullstack run-server --help`.)
+
+When running this command, you will get an output like this:
+
+```text
+Starting the web server with the admin interface...
+info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+      Begin to build the process volatile representation.
+info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+      Begin to restore the process state.
+info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+      Found no composition record, default to initial state.
+info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+      Completed building the process volatile representation.
+Completed starting the web server with the admin interface at 'http://*:4000'.
+```
+
+This server continues running until you shut it down. It will output additional log messages for various events.
+
+When you navigate to http://localhost:4000/ using a web browser, you find a prompt to authenticate. You can use the username `root` and the password `secret` that we specified in the command above.
+
+When you log in at http://localhost:4000/, you will get this message:
+
+```
+Welcome to Elm-fullstack version 2020-05-18.
+To learn about this admin interface, see http://elm-fullstack.org/
+```
+
+But we don't need a web browser to interact with the admin interface. To deploy an app, we will use the command-line interface in a new terminal window.
 
 ## Full Stack App File Structure
 
@@ -68,9 +84,29 @@ Below is an example which directs HTTP requests to the static file of the fronte
 }
 ```
 
+## Configure the Admin Password via Environment Variable
+
+If you do not use the `--admin-root-password` option with the `run-server` command, the program will get the password from the environment variable `APPSETTING_adminRootPassword`.
+Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
+
+```cmd
+docker run -p 80:80 -p 4000:4000 --env "APPSETTING_adminRootPassword=secret" elmfullstack/elm-fullstack
+```
+
+## Manage the Process Store
+
+The process store contains not only the latest state of the app but also the event log.
+In the Docker image `elmfullstack/elm-fullstack`, the process store is located in the directory `/elm-fullstack/process-store`.
+You can copy this directory to backup the process store or copy it to another container.
+
+Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
+```powershell
+docker run --mount source=your-docker-volume-name,destination=/elm-fullstack/process-store -p 80:80 elmfullstack/elm-fullstack
+```
+
 ## Support HTTPS
 
-The Elm-fullstack web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from Let's Encrypt. To configure this, add a `letsEncryptOptions` property to the `elm-fullstack.json` file as follows:
+The Elm-fullstack web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `elm-fullstack.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {
@@ -106,23 +142,3 @@ A persisted non-expired LetsEncrypt certificate was found and will be used.
 
 As long as the `UseStaging` property is set to `true`, the app gets the SSL certificate from the [Let's Encrypt Staging Environment](https://letsencrypt.org/docs/staging-environment/). This way you can experiment without the risk of running into the stricter production rate-limits of Let's Encrypt. You can test with a web-browser that the SSL certificate successfully arrives on the client side. When this works, switch from staging to production SSL certificates by setting the `UseStaging` property to `false`.
 
-## Set a Password for the Admin Interface
-
-In case you want to use the admin interface, you can set it using the environment variable `APPSETTING_adminRootPassword`. The username is `root`.
-You can use these credentials for example at https://your-domain.com/elm-fullstack-admin/api/process/state to inspect or set the process state.
-When using Docker, you can set the environment variable when creating a container as follows:
-```cmd
-docker run -p 80:80 --env "APPSETTING_adminRootPassword=secret" elmfullstack/elm-fullstack
-```
-For more details about environment variables in docker, see https://docs.docker.com/engine/reference/run/#env-environment-variables
-
-## Manage the Process Store
-
-The process store contains not only the latest state of the app but also the event log.
-In the Docker image `elmfullstack/elm-fullstack`, the process store is located in the directory `/elm-fullstack/process-store`.
-You can copy this directory to backup the process store or copy it to another container.
-
-Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
-```powershell
-docker run --mount source=your-docker-volume-name,destination=/elm-fullstack/process-store -p 80:80 elmfullstack/elm-fullstack
-```
