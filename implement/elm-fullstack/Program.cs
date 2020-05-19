@@ -371,7 +371,7 @@ namespace elm_fullstack
 
         static DeployAppConfigReport deployAppConfig(string site, string sitePassword, bool initElmAppState)
         {
-            var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
+            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -481,7 +481,7 @@ namespace elm_fullstack
 
         static SetElmAppStateReport setElmAppState(string site, string sitePassword, string source)
         {
-            var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
+            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -544,6 +544,8 @@ namespace elm_fullstack
 
         class TruncateProcessHistoryReport
         {
+            public string beginTime;
+
             public string site;
 
             public ResponseFromServerStruct responseFromServer;
@@ -560,6 +562,8 @@ namespace elm_fullstack
 
         static TruncateProcessHistoryReport truncateProcessHistory(string site, string sitePassword)
         {
+            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             using (var httpClient = new System.Net.Http.HttpClient())
@@ -599,6 +603,7 @@ namespace elm_fullstack
 
                 return new TruncateProcessHistoryReport
                 {
+                    beginTime = beginTime,
                     site = site,
                     responseFromServer = responseFromServer,
                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
@@ -806,7 +811,7 @@ namespace elm_fullstack
 
         static void writeReportToFileInReportDirectory(string reportContent, string reportKind)
         {
-            var fileName = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss") + "_" + reportKind;
+            var fileName = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow) + "_" + reportKind;
 
             var filePath = Path.Combine(Environment.CurrentDirectory, "elm-fullstack-tool", "report", fileName);
 

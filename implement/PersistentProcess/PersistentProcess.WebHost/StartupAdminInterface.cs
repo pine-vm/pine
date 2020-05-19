@@ -515,10 +515,12 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
                     {
+                        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+                        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                         lock (avoidConcurrencyLock)
                         {
-                            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
                             publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
 
                             var filesForRestore =
@@ -547,6 +549,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                             return new TruncateProcessHistoryReport
                             {
+                                beginTime = beginTime,
                                 deletedFilesCount = deletedFilesCount,
                                 deleteFilesTimeSpentMilli = (int)deleteFilesStopwatch.ElapsedMilliseconds,
                                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
@@ -595,7 +598,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
-                        var beginTime = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss");
+                        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
                         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -683,6 +686,8 @@ namespace Kalmit.PersistentProcess.WebHost
 
     public class TruncateProcessHistoryReport
     {
+        public string beginTime;
+
         public int deletedFilesCount;
 
         public int totalTimeSpentMilli;

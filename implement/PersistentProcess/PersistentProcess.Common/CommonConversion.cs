@@ -30,5 +30,8 @@ namespace Kalmit
                 return decompressedStream.ToArray();
             }
         }
+
+        static public string TimeStringViewForReport(DateTimeOffset time) =>
+            time.ToString("yyyy-MM-ddTHH-mm-ss");
     }
 }
