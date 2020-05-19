@@ -31,7 +31,7 @@ info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
 
-This server continues running until you shut it down. It will output additional log messages for various events.
+This server continues running until you shut it down. It will output additional log messages for various events, for example, HTTP requests.
 
 When you navigate to http://localhost:4000/ using a web browser, you find a prompt to authenticate. You can use the username `root` and the password `secret` that we specified in the command above.
 
@@ -101,7 +101,7 @@ You can copy this directory to backup the process store or copy it to another co
 
 Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
 ```powershell
-docker run --mount source=your-docker-volume-name,destination=/elm-fullstack/process-store -p 80:80 elmfullstack/elm-fullstack
+docker run --mount source=your-docker-volume-name,destination=/elm-fullstack/process-store -p 80:80 -p 4000:4000 elmfullstack/elm-fullstack
 ```
 
 ## Support HTTPS
