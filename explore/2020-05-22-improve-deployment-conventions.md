@@ -1,0 +1,7 @@
+# 2020-05-22 Improve Deployment Conventions
+
+Some ideas to improve the conventions used for deployment appeared (again) while updating the guide today:
+
++ How to get rid of parts in `elm-fullstack.json` (and sometimes the whole file): To avoid specifying the pattern for the frontend HTML document: Give this file to the back-end, perhaps in a parameter on the update function. We can remove all handling of static files in `elm-fullstack.json` analogous: Provide all files to the back-end update function,  reuse the URL/path mapping in the back-end to decide when to respond with any of these files.
++ Why is `interfaceToHost_initState` still in the `Backend.Main` module? Since the introduction of migrations, migration is the default, for example, in the CLI. It seems more consistent to place the init function in `elm-app/src/InitBackendState.elm`.
++ Today's state of the guide offers another hint on how to simplify: Instead of instructing the user to navigate to the particular directory containing the app, support specifying the path to this directory. In this case, we point to a directory in a git repository. To avoid requiring the user to clone or download anything explicitly, the tool can support these URLs into git repositories too. In the context of the `run-server` command, the option name would become `--deploy-app-config-from` or `--deploy-app-config-source`. In the `deploy-app-config`, this would be a new option `--from`.

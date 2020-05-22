@@ -11,7 +11,7 @@ First step is to run a server using the `elm-fullstack run-server` command. We n
 Here is a complete command to run a server:
 
 ```cmd
-elm-fullstack run-server --process-store-directory-path=./process-store  --admin-root-password=secret  --admin-interface-http-port=4000
+elm-fullstack  run-server  --process-store-directory-path=./process-store  --admin-root-password=secret  --admin-interface-http-port=4000
 ```
 
 (There are more options available when running a server, you can see these options using the command `elm-fullstack run-server --help`.)
@@ -39,12 +39,27 @@ When you log in at http://localhost:4000/, you will get this message:
 
 ```
 Welcome to Elm-fullstack version 2020-05-18.
-To learn about this admin interface, see http://elm-fullstack.org/
 ```
 
-But we don't need a web browser to interact with the admin interface. To deploy an app, we will use the command-line interface in a new terminal window.
+But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
 
-## Full Stack App File Structure
+## Deploying an App
+
+To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
+
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/46c6172fd3bf3827dfa2de47297d1a46b51d1cf2/implement/PersistentProcess/example-elm-apps/default-full-stack-app
+
+One way to deploy an app is to do it at the same time as starting a new server. We can use the `--deploy-app-config` option with the `run-server` command. You can try this by running this command from the directory https://github.com/elm-fullstack/elm-fullstack/tree/46c6172fd3bf3827dfa2de47297d1a46b51d1cf2/implement/PersistentProcess/example-elm-apps/default-full-stack-app (This is the directory containing the `elm-fullstack.json` file)
+
+```cmd
+elm-fullstack  run-server  --process-store-directory-path=./process-store  --public-urls="http://*:5000"  --deploy-app-config  --delete-previous-process
+```
+
+When this server has completed starting, we can see the app at http://localhost:5000/
+
+## App File and Module Name Conventions
+
+This section covers the conventions for structuring the app code so that we can deploy it to an Elm-fullstack process.
 
 ### `elm-app/src/Backend/Main.elm`
 
@@ -59,7 +74,28 @@ As we can see in the examples, the `interfaceToHost_processEvent` takes care of 
 processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 ```
 
-Analogous to the update function in a client Elm app, this function returns the new state of your app as the first element in the tuple. The web server takes care of saving this state and automatically restores it in case the server restarts. When you stop and restart the docker container, you will find the server still has the state which resulted from processing the last event.
+Analogous to the update function in a front-end Elm app, this function returns the new state of the back-end app as the first element in the tuple.
+
+### `elm-app/src/MigrateBackendState.elm`
+
+We need to add the `MigrateBackendState` module when we choose to migrate the back-end state during an app's deployment. We encode the migration in a function named `migrate` with types matching previous app and new app accordingly.
+
+In the simplest case, we did not change the back-end state model since the last deployment to the process. In this case, both input type and return type are the same. Then we can implement the whole module as follows:
+
+```Elm
+module MigrateBackendState exposing (migrate)
+
+import Backend.Main
+
+
+migrate : Backend.Main.State -> Backend.Main.State
+migrate backendState =
+    backendState
+```
+
+We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
+
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/46c6172fd3bf3827dfa2de47297d1a46b51d1cf2/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-app/src/FrontendWeb/Main.elm`
 
@@ -70,9 +106,9 @@ This file is optional. If it exists in your app, the build process compiles it t
 The `elm-fullstack.json` file is where you can configure the acquisition of SSL certificates, rate-limiting, and other features.
 Since all of these features are optional to use, in the simplest case, this file is not present at all.
 
-If your app includes a frontend, you need to decide on which paths the server should serve the HTML document containing the frontend.
+If your app includes a front-end, you need to decide on which paths the server should serve the HTML document containing the front-end.
 
-Below is an example which directs HTTP requests to the static file of the frontend if the path does not start with `/api/` or `/elm-fullstack-admin/`:
+Below is an example which directs HTTP requests to the static file of the front-end if the path does not start with `/api/` or `/elm-fullstack-admin/`:
 ```JSON
 {
     "mapsFromRequestUrlToStaticFileName": [
