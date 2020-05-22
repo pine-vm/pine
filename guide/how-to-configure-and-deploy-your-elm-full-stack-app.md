@@ -108,12 +108,12 @@ Since all of these features are optional to use, in the simplest case, this file
 
 If your app includes a front-end, you need to decide on which paths the server should serve the HTML document containing the front-end.
 
-Below is an example which directs HTTP requests to the static file of the front-end if the path does not start with `/api/` or `/elm-fullstack-admin/`:
+Below is an example which directs HTTP requests to the static file of the front-end if the path does not start with `/api/`:
 ```JSON
 {
     "mapsFromRequestUrlToStaticFileName": [
         {
-            "matchingRegexPattern": "^.*//[^/]+(|/(?!(api/|elm-fullstack-admin/)).*)$",
+            "matchingRegexPattern": "^.*//[^/]+(|/(?!(api/)).*)$",
             "resultString": "FrontendWeb.html"
         }
     ]
