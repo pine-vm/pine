@@ -18,8 +18,6 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class StartupAdminInterface
     {
-        static public string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
-
         static public string PathApiDeployAppConfigAndInitElmAppState => "/api/deploy-app-config-and-init-elm-app-state";
 
         static public string PathApiDeployAppConfigAndMigrateElmAppState => "/api/deploy-app-config-and-migrate-elm-app-state";
@@ -79,7 +77,9 @@ namespace Kalmit.PersistentProcess.WebHost
             var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
             var rootPassword = configuration.GetValue<string>(Configuration.AdminRootPasswordSettingKey);
-            var publicWebHostUrls = configuration.GetValue<string>(Configuration.PublicWebHostUrlsSettingKey)?.Split(new[] { ',', ';' });
+
+            var publicWebHostUrls =
+                configuration.GetValue<string>(Configuration.PublicWebHostUrlsSettingKey).Split(new[] { ',', ';' });
 
             var processStoreFileStore = app.ApplicationServices.GetService<FileStoreForProcessStore>().fileStore;
 
@@ -93,6 +93,8 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     if (publicAppHost != null)
                     {
+                        logger.LogInformation("Begin to stop the public app.");
+
                         publicAppHost?.webHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
                         publicAppHost?.webHost?.Dispose();
                         publicAppHost?.processVolatileRepresentation?.Dispose();
@@ -164,13 +166,6 @@ namespace Kalmit.PersistentProcess.WebHost
                         }
                     }
 
-                    var webHost =
-                        processVolatileRepresentation?.lastAppConfig?.appConfigComponent == null
-                        ?
-                        null
-                        :
-                        buildWebHost();
-
                     IWebHost buildWebHost()
                     {
                         var appConfigTree = Composition.ParseAsTree(
@@ -198,7 +193,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                     httpsOptions.ServerCertificateSelector = (c, s) => FluffySpoon.AspNet.LetsEncrypt.LetsEncryptRenewalService.Certificate;
                                 });
                             })
-                            .UseUrls(publicWebHostUrls ?? PublicWebHostUrlsDefault)
+                            .UseUrls(publicWebHostUrls)
                             .UseStartup<StartupPublicApp>()
                             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                             .ConfigureServices(services =>
@@ -225,10 +220,20 @@ namespace Kalmit.PersistentProcess.WebHost
                             .Build();
                     }
 
+                    var webHost =
+                        processVolatileRepresentation?.lastAppConfig?.appConfigComponent == null
+                        ?
+                        null
+                        :
+                        buildWebHost();
+
                     newPublicAppConfig.processVolatileRepresentation = processVolatileRepresentation;
                     newPublicAppConfig.webHost = webHost;
 
                     webHost?.StartAsync(appLifetime.ApplicationStopping).Wait();
+
+                    logger.LogInformation("Started the public app at '" + string.Join(",", publicWebHostUrls) + "'.");
+
                     publicAppHost = newPublicAppConfig;
                 }
             }

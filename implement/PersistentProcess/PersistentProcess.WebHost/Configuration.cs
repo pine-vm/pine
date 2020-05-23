@@ -7,8 +7,6 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     static public class Configuration
     {
-        static public string AdminPath => "/elm-fullstack-admin";
-
         static public string ApiPersistentProcessStatePath => "/api/process/state";
 
         static public string AdminRootPasswordSettingKey => "adminRootPassword";

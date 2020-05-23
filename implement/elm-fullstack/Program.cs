@@ -72,12 +72,14 @@ namespace elm_fullstack
                 runServerCmd.ThrowOnUnexpectedArgument = true;
 
                 var adminInterfaceHttpPortDefault = 4000;
+                string[] publicWebHostUrlsDefault = new[] { "http://*", "https://*" };
+
 
                 var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
                 var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
                 var adminInterfaceHttpPortOption = runServerCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminRootPasswordOption = runServerCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
-                var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
+                var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-process'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
                 var deployAppConfigOption = runServerCmd.Option("--deploy-app-config", "Perform a deployment on startup, analogous to deploying with the `deploy-app-config` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
@@ -88,7 +90,7 @@ namespace elm_fullstack
 
                     var publicAppUrls =
                         publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
-                        Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PublicWebHostUrlsDefault;
+                        publicWebHostUrlsDefault;
 
                     var replicateProcessSource = replicateProcessFromOption.Value();
 
