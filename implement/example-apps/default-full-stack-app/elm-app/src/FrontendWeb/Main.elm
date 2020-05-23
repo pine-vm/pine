@@ -225,7 +225,7 @@ guideMarkdown =
 Welcome to the Elm-fullstack example app.
 This app comes as default with the [docker image](https://hub.docker.com/r/elmfullstack/elm-fullstack/tags). You can replace it with your own app.
 
-You can find the source code for this app at [https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/PersistentProcess/example-elm-apps/default-full-stack-app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/PersistentProcess/example-elm-apps/default-full-stack-app)
+You can find the source code for this app at [https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/default-full-stack-app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/default-full-stack-app)
 
 To learn more, have a look at the guide at [https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md](https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md)
 """

@@ -63,7 +63,7 @@ This section covers the conventions for structuring the app code so that we can 
 
 ### `elm-app/src/Backend/Main.elm`
 
-The [main Elm module of the backend](/implement/PersistentProcess/example-elm-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
+The [main Elm module of the backend](/implement/example-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
 + `interfaceToHost_initState : State`
 + `interfaceToHost_processEvent : String -> State -> ( State, String )`
