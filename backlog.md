@@ -8,7 +8,6 @@
 
 + Support application to configure tradeoff between the cost of persisting and cost of restoring.
 + Reduce load on storage: Provide automation to remove reductions which are not needed anymore from the store.
-+ Add information in the admin section on the web host at `/elm-fullstack-admin`. This seems a good place to inform about available options. Illustrate how to set the process state.
 
 ### Collaboration on Elm-Fullstack
 
