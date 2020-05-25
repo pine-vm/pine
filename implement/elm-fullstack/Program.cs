@@ -73,14 +73,14 @@ namespace elm_fullstack
                 runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
                 runServerCmd.ThrowOnUnexpectedArgument = true;
 
-                var adminInterfaceHttpPortDefault = 4000;
+                var adminUrlsDefault = "http://*:4000";
                 string[] publicWebHostUrlsDefault = new[] { "http://*", "https://*" };
 
 
                 var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
                 var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
-                var adminInterfaceHttpPortOption = runServerCmd.Option("--admin-interface-http-port", "Port for the admin interface HTTP web host. The default is " + adminInterfaceHttpPortDefault.ToString() + ".", CommandOptionType.SingleValue);
-                var adminRootPasswordOption = runServerCmd.Option("--admin-root-password", "Password to access the admin interface with the username 'root'.", CommandOptionType.SingleValue);
+                var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
+                var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-process'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
@@ -121,10 +121,7 @@ namespace elm_fullstack
                             processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
                     }
 
-                    var adminInterfaceHttpPort =
-                        int.Parse(adminInterfaceHttpPortOption.Value() ?? adminInterfaceHttpPortDefault.ToString());
-
-                    var adminInterfaceUrl = "http://*:" + adminInterfaceHttpPort.ToString();
+                    var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
                     if (deployAppFromOption.HasValue())
                     {
@@ -175,13 +172,13 @@ namespace elm_fullstack
                     var webHostBuilder =
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                         .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
-                        .UseUrls(adminInterfaceUrl)
+                        .UseUrls(adminInterfaceUrls)
                         .UseStartup<StartupAdminInterface>()
                         .WithSettingPublicWebHostUrls(publicAppUrls)
                         .WithProcessStoreFileStore(processStoreFileStore);
 
-                    if (adminRootPasswordOption.HasValue())
-                        webHostBuilder = webHostBuilder.WithSettingAdminRootPassword(adminRootPasswordOption.Value());
+                    if (adminPasswordOption.HasValue())
+                        webHostBuilder = webHostBuilder.WithSettingAdminRootPassword(adminPasswordOption.Value());
 
                     var webHost = webHostBuilder.Build();
 
@@ -189,7 +186,7 @@ namespace elm_fullstack
 
                     webHost.Start();
 
-                    Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrl + "'.");
+                    Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
 
                     Microsoft.AspNetCore.Hosting.WebHostExtensions.WaitForShutdown(webHost);
                 });
