@@ -40,7 +40,7 @@ namespace Kalmit.PersistentProcess
 
         public IReadOnlyCollection<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> ElmAppFiles;
 
-        static string jsonFileName => "elm-fullstack.json";
+        static public string jsonFileName => "elm-fullstack.json";
 
         static public string staticFilesDirectoryName => "elm-fullstack-static-files";
 

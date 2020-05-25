@@ -48,7 +48,7 @@ namespace elm_fullstack
                         null;
 
                     BuildConfiguration(
-                        fromDirectory: fromOption.Value(),
+                        fromPath: fromOption.Value(),
                         outputOption: outputOption.Value(),
                         loweredElmOutputOption: loweredElmOutputOption.Value(),
                         verboseLogWriteLine: verboseLogWriteLine);
@@ -128,8 +128,8 @@ namespace elm_fullstack
                         Console.WriteLine("Loading app config to deploy...");
 
                         var appConfigZipArchive =
-                            Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                                fromDirectory: deployAppFromOption.Value(),
+                            Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                                fromPath: deployAppFromOption.Value(),
                                 _ => { }).compileConfigZipArchive();
 
                         var appConfigTree =
@@ -210,7 +210,7 @@ namespace elm_fullstack
 
             app.Command("deploy-app", deployAppCmd =>
             {
-                deployAppCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+                deployAppCmd.Description = "Deploy an app to an Elm-fullstack process. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
                 deployAppCmd.ThrowOnUnexpectedArgument = true;
 
                 var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);
@@ -224,7 +224,7 @@ namespace elm_fullstack
 
                     var deployReport =
                         deployApp(
-                            fromDirectory: fromOption.Value(),
+                            fromPath: fromOption.Value(),
                             site: site,
                             sitePassword: sitePassword,
                             initElmAppState: initElmAppStateOption.HasValue());
@@ -374,7 +374,7 @@ namespace elm_fullstack
         }
 
         static DeployAppConfigReport deployApp(
-            string fromDirectory,
+            string fromPath,
             string site,
             string sitePassword,
             bool initElmAppState)
@@ -388,8 +388,8 @@ namespace elm_fullstack
             Console.WriteLine("Beginning to build configuration...");
 
             var (compileConfigZipArchive, loweredElmAppFiles) =
-                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                    fromDirectory: fromDirectory,
+                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                    fromPath: fromPath,
                     buildConfigurationLog.Add);
 
             var appConfigZipArchive = compileConfigZipArchive();
@@ -768,14 +768,14 @@ namespace elm_fullstack
         }
 
         static public void BuildConfiguration(
-            string fromDirectory,
+            string fromPath,
             string outputOption,
             string loweredElmOutputOption,
             Action<string> verboseLogWriteLine)
         {
             var (compileConfigZipArchive, loweredElmAppFiles) =
-                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
-                    fromDirectory: fromDirectory,
+                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                    fromPath: fromPath,
                     verboseLogWriteLine);
 
             if (0 < loweredElmOutputOption?.Length)

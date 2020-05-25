@@ -19,16 +19,61 @@ namespace Kalmit.PersistentProcess.WebHost
             ImmutableList.Create("src", "FrontendWeb", "Main.elm");
 
         static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
-            BuildConfigurationZipArchive(
-                string fromDirectory,
+            BuildConfigurationZipArchiveFromPath(
+                string fromPath,
                 Action<string> verboseLogWriteLine)
         {
-            Console.WriteLine("Starting to build app configuration from '" + fromDirectory + "'.");
+            var loadFromPathResult = LoadFromPath.LoadTreeFromPath(fromPath);
+
+            if (loadFromPathResult?.Ok == null)
+            {
+                throw new Exception("Failed to load from path '" + fromPath + "': " + loadFromPathResult?.Err);
+            }
+
+            var sourceComposition = Composition.FromTree(loadFromPathResult.Ok);
+
+            Console.WriteLine(
+                "Loaded source composition " +
+                CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition)) +
+                " from '" + fromPath + "'.");
+
+            return BuildConfigurationZipArchive(
+                sourceComposition: sourceComposition,
+                verboseLogWriteLine: verboseLogWriteLine);
+        }
+
+        static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
+            BuildConfigurationZipArchive(
+                Composition.Component sourceComposition,
+                Action<string> verboseLogWriteLine)
+        {
+            Console.WriteLine(
+                "Starting to build app from '" +
+                CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition)) +
+                "'.");
+
+            var parseSourceAsTree = Composition.ParseAsTree(sourceComposition);
+
+            if (parseSourceAsTree.Ok == null)
+                throw new Exception("Failed to map source to tree.");
+
+            var sourceFiles =
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    parseSourceAsTree.Ok.EnumerateBlobsTransitive()
+                    .Select(sourceFilePathAndContent =>
+                        (path: (IImmutableList<string>)sourceFilePathAndContent.path.Select(pathComponent => Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
+                        sourceFilePathAndContent.blobContent))
+                        .ToImmutableList());
+
+            var elmAppSourceFiles =
+                sourceFiles
+                .Where(sourceFile => sourceFile.Key.FirstOrDefault() == "elm-app")
+                .Select(sourceFile => (path: String.Join("/", sourceFile.Key.Skip(1)), content: sourceFile.Value))
+                .ToImmutableList();
 
             var elmAppFilesBeforeLowering =
                 ElmApp.ToFlatDictionaryWithPathComparer(
-                    ElmApp.FilesFilteredForElmApp(
-                        Filesystem.GetAllFilesFromDirectory(Path.Combine(fromDirectory, ElmAppSubdirectoryName)))
+                    ElmApp.FilesFilteredForElmApp(elmAppSourceFiles)
                     .Select(filePathAndContent =>
                         ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(),
                         filePathAndContent.fileContent)));
@@ -48,19 +93,16 @@ namespace Kalmit.PersistentProcess.WebHost
             {
                 WebAppConfigurationJsonStructure jsonStructure = null;
 
-                var jsonFileSearchPath = Path.Combine(fromDirectory, "elm-fullstack.json");
-
-                if (File.Exists(jsonFileSearchPath))
+                if (sourceFiles.TryGetValue(ImmutableList.Create(WebAppConfiguration.jsonFileName), out var jsonFile))
                 {
-                    Console.WriteLine("I found a file at '" + jsonFileSearchPath + "'. I use this to build the configuration.");
+                    Console.WriteLine("I found a file at '" + WebAppConfiguration.jsonFileName + "'. I use this to build the configuration.");
 
-                    var jsonFile = File.ReadAllBytes(jsonFileSearchPath);
-
-                    jsonStructure = JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(jsonFile));
+                    jsonStructure = JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(
+                        Encoding.UTF8.GetString(jsonFile.ToArray()));
                 }
                 else
                 {
-                    Console.WriteLine("I did not find a file at '" + jsonFileSearchPath + "'. I build the configuration without the 'elm-fullstack.json'.");
+                    Console.WriteLine("I did not find a file at '" + WebAppConfiguration.jsonFileName + "'. I build the configuration without the 'elm-fullstack.json'.");
                 }
 
                 byte[] frontendWebFile = null;
@@ -80,16 +122,11 @@ namespace Kalmit.PersistentProcess.WebHost
                     Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :
                     new[] { (name: (IImmutableList<string>)ImmutableList.Create(FrontendWebStaticFileName), (IImmutableList<byte>)frontendWebFile.ToImmutableList()) };
 
-                var staticFilesSourceDirectory = Path.Combine(fromDirectory, StaticFilesSubdirectoryName);
-
                 var staticFilesFromDirectory =
-                    Directory.Exists(staticFilesSourceDirectory)
-                    ?
-                    Filesystem.GetAllFilesFromDirectory(staticFilesSourceDirectory)
-                    .Select(nameAndContent => (name: (IImmutableList<string>)nameAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList(), content: nameAndContent.content))
-                    .ToImmutableList()
-                    :
-                    ImmutableList<(IImmutableList<string> name, IImmutableList<byte> content)>.Empty;
+                    sourceFiles
+                    .Where(sourceFile => sourceFile.Key.FirstOrDefault() == StaticFilesSubdirectoryName)
+                    .Select(sourceFile => (path: (IImmutableList<string>)sourceFile.Key.Skip(1).ToImmutableList(), content: sourceFile.Value))
+                    .ToImmutableList();
 
                 Console.WriteLine("I found " + staticFilesFromDirectory.Count + " static files to include.");
 
