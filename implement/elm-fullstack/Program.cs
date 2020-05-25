@@ -35,6 +35,7 @@ namespace elm_fullstack
                 var verboseLogOption = verboseLogOptionFromCommand(buildConfigCmd);
                 var outputOption = buildConfigCmd.Option("--output", "Path to write the zip-archive to.", CommandOptionType.SingleValue);
                 var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
+                var fromOption = buildConfigCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
                 buildConfigCmd.ThrowOnUnexpectedArgument = false;
 
@@ -47,6 +48,7 @@ namespace elm_fullstack
                         null;
 
                     BuildConfiguration(
+                        fromDirectory: fromOption.Value(),
                         outputOption: outputOption.Value(),
                         loweredElmOutputOption: loweredElmOutputOption.Value(),
                         verboseLogWriteLine: verboseLogWriteLine);
@@ -82,7 +84,7 @@ namespace elm_fullstack
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-process'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployAppConfigOption = runServerCmd.Option("--deploy-app-config", "Perform a deployment on startup, analogous to deploying with the `deploy-app-config` command. Can be combined with '--replicate-process-from'.", CommandOptionType.NoValue);
+                var deployAppFromOption = runServerCmd.Option("--deploy-app-from", "Perform a deployment on startup, analogous to deploying with the `deploy-app` command. Can be combined with '--replicate-process-from'.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -124,12 +126,13 @@ namespace elm_fullstack
 
                     var adminInterfaceUrl = "http://*:" + adminInterfaceHttpPort.ToString();
 
-                    if (deployAppConfigOption.HasValue())
+                    if (deployAppFromOption.HasValue())
                     {
                         Console.WriteLine("Loading app config to deploy...");
 
                         var appConfigZipArchive =
                             Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                                fromDirectory: deployAppFromOption.Value(),
                                 _ => { }).compileConfigZipArchive();
 
                         var appConfigTree =
@@ -208,28 +211,30 @@ namespace elm_fullstack
                 };
             }
 
-            app.Command("deploy-app-config", deployAppConfigCmd =>
+            app.Command("deploy-app", deployAppCmd =>
             {
-                deployAppConfigCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
-                deployAppConfigCmd.ThrowOnUnexpectedArgument = true;
+                deployAppCmd.Description = "Deploy an app to a server that was started with the `run-server` command. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+                deployAppCmd.ThrowOnUnexpectedArgument = true;
 
-                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(deployAppConfigCmd);
+                var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);
+                var fromOption = deployAppCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
-                var initElmAppStateOption = deployAppConfigCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
+                var initElmAppStateOption = deployAppCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
 
-                deployAppConfigCmd.OnExecute(() =>
+                deployAppCmd.OnExecute(() =>
                 {
-                    var (site, sitePassword) = siteAndPasswordFromCmd();
+                    var (site, sitePassword) = getSiteAndPasswordFromOptions();
 
                     var deployReport =
-                        deployAppConfig(
+                        deployApp(
+                            fromDirectory: fromOption.Value(),
                             site: site,
                             sitePassword: sitePassword,
                             initElmAppState: initElmAppStateOption.HasValue());
 
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
-                        reportKind: "deploy-app-config.json");
+                        reportKind: "deploy-app.json");
                 });
             });
 
@@ -371,7 +376,11 @@ namespace elm_fullstack
             }
         }
 
-        static DeployAppConfigReport deployAppConfig(string site, string sitePassword, bool initElmAppState)
+        static DeployAppConfigReport deployApp(
+            string fromDirectory,
+            string site,
+            string sitePassword,
+            bool initElmAppState)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
@@ -383,6 +392,7 @@ namespace elm_fullstack
 
             var (compileConfigZipArchive, loweredElmAppFiles) =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                    fromDirectory: fromDirectory,
                     buildConfigurationLog.Add);
 
             var appConfigZipArchive = compileConfigZipArchive();
@@ -761,12 +771,14 @@ namespace elm_fullstack
         }
 
         static public void BuildConfiguration(
+            string fromDirectory,
             string outputOption,
             string loweredElmOutputOption,
             Action<string> verboseLogWriteLine)
         {
             var (compileConfigZipArchive, loweredElmAppFiles) =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchive(
+                    fromDirectory: fromDirectory,
                     verboseLogWriteLine);
 
             if (0 < loweredElmOutputOption?.Length)

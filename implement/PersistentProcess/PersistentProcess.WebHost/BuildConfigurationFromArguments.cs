@@ -20,16 +20,15 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
             BuildConfigurationZipArchive(
-            Action<string> verboseLogWriteLine)
+                string fromDirectory,
+                Action<string> verboseLogWriteLine)
         {
-            var currentDirectory = Environment.CurrentDirectory;
-
-            Console.WriteLine("The currentDirectory is '" + currentDirectory + "'.");
+            Console.WriteLine("Starting to build app configuration from '" + fromDirectory + "'.");
 
             var elmAppFilesBeforeLowering =
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     ElmApp.FilesFilteredForElmApp(
-                        Filesystem.GetAllFilesFromDirectory(Path.Combine(currentDirectory, ElmAppSubdirectoryName)))
+                        Filesystem.GetAllFilesFromDirectory(Path.Combine(fromDirectory, ElmAppSubdirectoryName)))
                     .Select(filePathAndContent =>
                         ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(),
                         filePathAndContent.fileContent)));
@@ -49,7 +48,7 @@ namespace Kalmit.PersistentProcess.WebHost
             {
                 WebAppConfigurationJsonStructure jsonStructure = null;
 
-                var jsonFileSearchPath = Path.Combine(currentDirectory, "elm-fullstack.json");
+                var jsonFileSearchPath = Path.Combine(fromDirectory, "elm-fullstack.json");
 
                 if (File.Exists(jsonFileSearchPath))
                 {
@@ -81,7 +80,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :
                     new[] { (name: (IImmutableList<string>)ImmutableList.Create(FrontendWebStaticFileName), (IImmutableList<byte>)frontendWebFile.ToImmutableList()) };
 
-                var staticFilesSourceDirectory = Path.Combine(currentDirectory, StaticFilesSubdirectoryName);
+                var staticFilesSourceDirectory = Path.Combine(fromDirectory, StaticFilesSubdirectoryName);
 
                 var staticFilesFromDirectory =
                     Directory.Exists(staticFilesSourceDirectory)
