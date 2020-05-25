@@ -35,3 +35,10 @@ jobs:
       with:
         name: elm-fullstack-bin-${{github.sha}}-${{ matrix.publish-runtime-id }}
         path: ./implement/elm-fullstack/bin/Debug/netcoreapp3.1/${{ matrix.publish-runtime-id }}/publish
+    - name: dotnet publish with separate assemblies
+      run: dotnet publish -c Debug ./implement/elm-fullstack --output ./publish-separate-assemblies
+    - name: Publish artifacts with separate assemblies
+      uses: actions/upload-artifact@v1
+      with:
+        name: elm-fullstack-separate-assemblies-${{github.sha}}-${{ matrix.publish-runtime-id }}
+        path: ./publish-separate-assemblies
