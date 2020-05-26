@@ -603,48 +603,16 @@ namespace Kalmit.PersistentProcess.WebHost
                     (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
                         ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
-                        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
-
-                        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
                         lock (avoidConcurrencyLock)
                         {
                             publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
 
-                            var testContinueResult = PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
-                                compositionLogEvent: compositionLogEvent,
-                                fileStoreReader: processStoreFileStore);
-
-                            var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
-                                originalFileStore: processStoreFileStore,
-                                compositionLogEvent: compositionLogEvent);
-
-                            if (testContinueResult.Ok.projectedFiles == null)
-                            {
-                                return (statusCode: 400, new AttemptContinueWithCompositionEventReport
-                                {
-                                    beginTime = beginTime,
-                                    parentCompositionHashBase16 = projectionResult.parentHashBase16,
-                                    compositionEvent = compositionLogEvent,
-                                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                                    result = Composition.Result<string, string>.err(testContinueResult.Err),
-                                });
-                            }
-
-                            foreach (var projectedFilePathAndContent in testContinueResult.Ok.projectedFiles)
-                                processStoreFileStore.SetFileContent(
-                                    projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+                            var response =
+                                AttemptContinueWithCompositionEventAndCommit(compositionLogEvent, processStoreFileStore);
 
                             startPublicApp();
 
-                            return (statusCode: 200, new AttemptContinueWithCompositionEventReport
-                            {
-                                beginTime = beginTime,
-                                parentCompositionHashBase16 = projectionResult.parentHashBase16,
-                                compositionEvent = compositionLogEvent,
-                                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                                result = Composition.Result<string, string>.ok("Successfully deployed this configuration and started the web server."),
-                            });
+                            return response;
                         }
                     }
 
@@ -673,6 +641,48 @@ namespace Kalmit.PersistentProcess.WebHost
                     await context.Response.WriteAsync("Not Found");
                     return;
                 });
+        }
+
+        static public (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
+            ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+            IFileStore processStoreFileStore)
+        {
+            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var testContinueResult = PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
+                compositionLogEvent: compositionLogEvent,
+                fileStoreReader: processStoreFileStore);
+
+            var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                originalFileStore: processStoreFileStore,
+                compositionLogEvent: compositionLogEvent);
+
+            if (testContinueResult.Ok.projectedFiles == null)
+            {
+                return (statusCode: 400, new AttemptContinueWithCompositionEventReport
+                {
+                    beginTime = beginTime,
+                    parentCompositionHashBase16 = projectionResult.parentHashBase16,
+                    compositionEvent = compositionLogEvent,
+                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                    result = Composition.Result<string, string>.err(testContinueResult.Err),
+                });
+            }
+
+            foreach (var projectedFilePathAndContent in testContinueResult.Ok.projectedFiles)
+                processStoreFileStore.SetFileContent(
+                    projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+
+            return (statusCode: 200, new AttemptContinueWithCompositionEventReport
+            {
+                beginTime = beginTime,
+                parentCompositionHashBase16 = projectionResult.parentHashBase16,
+                compositionEvent = compositionLogEvent,
+                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                result = Composition.Result<string, string>.ok("Successfully applied this composition event to the process."),
+            });
         }
     }
 

@@ -1188,6 +1188,38 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
+        [TestMethod]
+        public void tooling_supports_deploy_app_directly_on_process_store()
+        {
+            var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+
+            var deployReport = elm_fullstack.Program.deployApp(
+                sourcePath: "./../../../../../example-apps/docker-image-default-app",
+                site: testDirectory,
+                sitePassword: null,
+                initElmAppState: true);
+
+            using (var restoredProcess =
+                Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+                        new FileStoreFromSystemIOFile(testDirectory)),
+                        _ => { }))
+            {
+                var restoredProcessLastDeployedAppComponent = restoredProcess.lastAppConfig?.appConfigComponent;
+
+                Assert.IsNotNull(
+                    restoredProcessLastDeployedAppComponent,
+                    "Restored process has app deployed.");
+
+                Assert.AreEqual(
+                    deployReport.appConfigBuildId,
+                    CommonConversion.StringBase16FromByteArray(Composition.GetHash(restoredProcessLastDeployedAppComponent)),
+                    "App ID in restored process equals app ID from deployment report.");
+            }
+
+            Directory.Delete(testDirectory, recursive: true);
+        }
+
 
         class FileStoreFromDelegates : IFileStore
         {

@@ -6,6 +6,7 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Common
 
 
 type alias State =
@@ -35,13 +36,12 @@ processEvent hostEvent stateBefore =
                     , response =
                         { statusCode = 200
                         , bodyAsString =
-                            Just
-                                ("You are seeing the default configuration for the web app."
-                                    ++ "\nFor information on how to configure the web app, see https://github.com/elm-fullstack/elm-fullstack"
-                                    ++ "\nThis web app received "
-                                    ++ (state.httpRequestsCount |> String.fromInt)
-                                    ++ " HTTP requests."
-                                )
+                            [ Common.guideMarkdown
+                            , ""
+                            , "This backend process received " ++ (state.httpRequestsCount |> String.fromInt) ++ " HTTP requests."
+                            ]
+                                |> String.join "\n"
+                                |> Just
                         , headersToAdd = []
                         }
                     }

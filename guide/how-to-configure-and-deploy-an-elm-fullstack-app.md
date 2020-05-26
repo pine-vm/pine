@@ -59,7 +59,7 @@ This section covers the conventions for structuring the app code so that we can 
 
 ### `elm-app/src/Backend/Main.elm`
 
-The [main Elm module of the backend](/implement/example-apps/default-full-stack-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
+The [main Elm module of the backend](/implement/example-apps/docker-image-default-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
 + `interfaceToHost_initState : State`
 + `interfaceToHost_processEvent : String -> State -> ( State, String )`
@@ -183,7 +183,7 @@ In this report, we can see if the deployment was successful and how much time it
 
 ## Configure the Admin Password via Environment Variable
 
-If you do not use the `--admin-root-password` option with the `run-server` command, the program will get the password from the environment variable `APPSETTING_adminRootPassword`.
+If you do not use the `--admin-password` option with the `run-server` command, the program will get the password from the environment variable `APPSETTING_adminRootPassword`.
 Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
 
 ```cmd

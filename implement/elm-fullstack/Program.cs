@@ -195,7 +195,7 @@ namespace elm_fullstack
 
             Func<(string site, string sitePassword)> siteAndSitePasswordOptionsOnCommand(CommandLineApplication cmd)
             {
-                var siteOption = cmd.Option("--site", "Site where to apply the changes. Usually an URL to the admin interface of a server.", CommandOptionType.SingleValue).IsRequired();
+                var siteOption = cmd.Option("--site", "Site where to apply the changes. Can be an URL to the admin interface of a server or a path in the local file system.", CommandOptionType.SingleValue).IsRequired();
                 var sitePasswordOption = cmd.Option("--site-password", "Password to access the site where to apply the changes.", CommandOptionType.SingleValue);
 
                 return () =>
@@ -350,7 +350,7 @@ namespace elm_fullstack
             return app.Execute(args);
         }
 
-        class DeployAppConfigReport
+        public class DeployAppReport
         {
             public string beginTime;
 
@@ -376,7 +376,7 @@ namespace elm_fullstack
             }
         }
 
-        static DeployAppConfigReport deployApp(
+        static public DeployAppReport deployApp(
             string sourcePath,
             string site,
             string sitePassword,
@@ -408,56 +408,97 @@ namespace elm_fullstack
             Console.WriteLine(
                 "Built app config " + appConfigBuildId + " from " + buildResult.sourceCompositionId + ".");
 
-            DeployAppConfigReport.ResponseFromServerStruct responseFromServer = null;
+            DeployAppReport.ResponseFromServerStruct responseFromServer = null;
 
-            using (var httpClient = new System.Net.Http.HttpClient())
+            if (Regex.IsMatch(site, "^http(|s)\\:"))
             {
-                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Basic",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
-
-                var deployAddress =
-                    (site.TrimEnd('/')) +
-                    (initElmAppState
-                    ?
-                    StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
-                    :
-                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
-
-                Console.WriteLine("Beginning to deploy app '" + appConfigBuildId + "' to '" + deployAddress + "'...");
-
-                var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
-
-                httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
-                httpContent.Headers.ContentDisposition =
-                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigBuildId + ".zip" };
-
-                var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
-
-                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
-
-                Console.WriteLine(
-                    "Server response: " + httpResponse.StatusCode + "\n" +
-                     responseContentString);
-
-                object responseBodyReport = responseContentString;
-
-                try
+                using (var httpClient = new System.Net.Http.HttpClient())
                 {
-                    responseBodyReport =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
+                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                        "Basic",
+                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                            Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
+
+                    var deployAddress =
+                        (site.TrimEnd('/')) +
+                        (initElmAppState
+                        ?
+                        StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
+                        :
+                        StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
+
+                    Console.WriteLine("Beginning to deploy app '" + appConfigBuildId + "' to '" + deployAddress + "'...");
+
+                    var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
+
+                    httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+                    httpContent.Headers.ContentDisposition =
+                        new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigBuildId + ".zip" };
+
+                    var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
+
+                    var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+                    Console.WriteLine(
+                        "Server response: " + httpResponse.StatusCode + "\n" +
+                         responseContentString);
+
+                    object responseBodyReport = responseContentString;
+
+                    try
+                    {
+                        responseBodyReport =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
+                    }
+                    catch { }
+
+                    responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                    {
+                        statusCode = (int)httpResponse.StatusCode,
+                        body = responseBodyReport,
+                    };
                 }
-                catch { }
+            }
+            else
+            {
+                var processStoreFileStore = new Kalmit.FileStoreFromSystemIOFile(site);
 
-                responseFromServer = new DeployAppConfigReport.ResponseFromServerStruct
+                var processStoreWriter =
+                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                        processStoreFileStore);
+
+                var appConfigTree =
+                    Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                        ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
+
+                var appConfigComponent = Composition.FromTree(appConfigTree);
+
+                processStoreWriter.StoreComponent(appConfigComponent);
+
+                var appConfigValueInFile =
+                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                    {
+                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                    };
+
+                var compositionLogEvent =
+                    Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                        appConfigValueInFile: appConfigValueInFile,
+                        initElmAppState: initElmAppState);
+
+                var attemptDeployReport =
+                    Kalmit.PersistentProcess.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
+                        compositionLogEvent,
+                        processStoreFileStore);
+
+                responseFromServer = new DeployAppReport.ResponseFromServerStruct
                 {
-                    statusCode = (int)httpResponse.StatusCode,
-                    body = responseBodyReport,
+                    statusCode = attemptDeployReport.statusCode,
+                    body = attemptDeployReport.responseReport,
                 };
             }
 
-            return new DeployAppConfigReport
+            return new DeployAppReport
             {
                 beginTime = beginTime,
                 appConfigSourcePath = sourcePath,

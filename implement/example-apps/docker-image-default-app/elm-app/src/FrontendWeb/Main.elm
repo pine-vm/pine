@@ -2,6 +2,7 @@ module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 
 import Browser
 import Browser.Navigation as Navigation
+import Common
 import Html
 import Html.Attributes as HA
 import Html.Events
@@ -211,24 +212,12 @@ view state =
 
 viewGuide : Html.Html event
 viewGuide =
-    guideMarkdown
+    Common.guideMarkdown
         |> Markdown.Parser.parse
         |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
         |> Result.andThen (Markdown.Parser.render Markdown.Parser.defaultHtmlRenderer)
         |> Result.map (Html.div [])
         |> Result.Extra.extract Html.text
-
-
-guideMarkdown : String
-guideMarkdown =
-    """
-Welcome to the Elm-fullstack example app.
-This app comes as default with the [docker image](https://hub.docker.com/r/elmfullstack/elm-fullstack/tags). You can replace it with your own app.
-
-You can find the source code for this app at [https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/default-full-stack-app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/default-full-stack-app)
-
-To learn more, have a look at the guide at [https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md](https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md)
-"""
 
 
 viewNavigation : Html.Html Event

@@ -12,21 +12,15 @@ FROM mcr.microsoft.com/dotnet/core/aspnet:3.1 AS binaries
 
 COPY --from=build-env /app/elm-fullstack/out /elm-fullstack/dotnet/
 
-# Build the `web-app-config.zip` for the default app.
+# Build the process with a deployment for the default app.
 FROM binaries AS build-default-config
 
-COPY ./example-apps/default-full-stack-app /default-app/
+COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
-WORKDIR /default-app
-RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll" build-config --output="/build-output/web-app-config.zip"
-
-# Reduce startup cost: Produce an image which has popular blobs already in cache: Continue with state after having built a configuration.
-FROM build-default-config AS with-default-app
-
-# COPY --from=build-default-config /build-output/web-app-config.zip /elm-fullstack/
+RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll"  deploy-app --from=/docker-image-default-app/  --site=/elm-fullstack/process-store  --init-elm-app-state
 
 WORKDIR /elm-fullstack
 
 ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store"]
 
-# ENV APPSETTING_adminRootPassword="password-for-elm-fullstack-root"
+# ENV APPSETTING_adminRootPassword="password-for-admin-interface-user-root"
