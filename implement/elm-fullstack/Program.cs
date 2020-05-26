@@ -48,7 +48,7 @@ namespace elm_fullstack
                         null;
 
                     BuildConfiguration(
-                        fromPath: fromOption.Value(),
+                        sourcePath: fromOption.Value(),
                         outputOption: outputOption.Value(),
                         loweredElmOutputOption: loweredElmOutputOption.Value(),
                         verboseLogWriteLine: verboseLogWriteLine);
@@ -82,9 +82,9 @@ namespace elm_fullstack
                 var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
-                var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Source to replicate a process from. Can be a URL to a another host admin interface or a path to an archive containing files representing the process state. This option also erases any previously-stored history like '--delete-previous-process'.", CommandOptionType.SingleValue);
-                var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if the source requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployAppFromOption = runServerCmd.Option("--deploy-app-from", "Perform a deployment on startup, analogous to deploying with the `deploy-app` command. Can be combined with '--replicate-process-from'.", CommandOptionType.SingleValue);
+                var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Path to a process to replicate. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
+                var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if that location requires a password to authenticate.", CommandOptionType.SingleValue);
+                var deployAppFromOption = runServerCmd.Option("--deploy-app-from", "Path to an app to deploy on startup, analogous to the '--from' path on the `deploy-app` command. Can be combined with '--replicate-process-from'.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -94,12 +94,12 @@ namespace elm_fullstack
                         publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
                         publicWebHostUrlsDefault;
 
-                    var replicateProcessSource = replicateProcessFromOption.Value();
+                    var replicateProcessFrom = replicateProcessFromOption.Value();
 
                     var replicateProcessAdminPassword =
-                        replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessSource);
+                        replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessFrom);
 
-                    if (deletePreviousProcessOption.HasValue() || replicateProcessFromOption.HasValue())
+                    if (deletePreviousProcessOption.HasValue() || replicateProcessFrom != null)
                     {
                         Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'...");
 
@@ -111,11 +111,12 @@ namespace elm_fullstack
 
                     var processStoreFileStore = new FileStoreFromSystemIOFile(processStoreDirectoryPath);
 
-                    if (replicateProcessSource != null)
+                    if (replicateProcessFrom != null)
                     {
                         var replicateFiles =
-                            LoadFilesForRestoreFromSourceAndLogToConsole(
-                                replicateProcessSource, replicateProcessAdminPassword);
+                            LoadFilesForRestoreFromPathAndLogToConsole(
+                                sourcePath: replicateProcessFrom,
+                                sourcePassword: replicateProcessAdminPassword);
 
                         foreach (var file in replicateFiles)
                             processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
@@ -129,7 +130,7 @@ namespace elm_fullstack
 
                         var appConfigZipArchive =
                             Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                                fromPath: deployAppFromOption.Value(),
+                                sourcePath: deployAppFromOption.Value(),
                                 _ => { }).compileConfigZipArchive();
 
                         var appConfigTree =
@@ -214,9 +215,9 @@ namespace elm_fullstack
                 deployAppCmd.ThrowOnUnexpectedArgument = true;
 
                 var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);
-                var fromOption = deployAppCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var fromOption = deployAppCmd.Option("--from", "Path to the app to deploy.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
-                var initElmAppStateOption = deployAppCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function. Defaults to false.", CommandOptionType.NoValue);
+                var initElmAppStateOption = deployAppCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
 
                 deployAppCmd.OnExecute(() =>
                 {
@@ -224,7 +225,7 @@ namespace elm_fullstack
 
                     var deployReport =
                         deployApp(
-                            fromPath: fromOption.Value(),
+                            sourcePath: fromOption.Value(),
                             site: site,
                             sitePassword: sitePassword,
                             initElmAppState: initElmAppStateOption.HasValue());
@@ -242,7 +243,7 @@ namespace elm_fullstack
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
 
-                var sourceOption = setElmAppStateCmd.Option("--source", "Source to load the serialized state representation from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var fromOption = setElmAppStateCmd.Option("--from", "Path to the serialized state representation to load.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
                 setElmAppStateCmd.OnExecute(() =>
                 {
@@ -252,7 +253,7 @@ namespace elm_fullstack
                         setElmAppState(
                             site: site,
                             sitePassword: sitePassword,
-                            source: sourceOption.Value());
+                            sourcePath: fromOption.Value());
 
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
@@ -353,9 +354,11 @@ namespace elm_fullstack
         {
             public string beginTime;
 
-            public string appConfigSource;
+            public string appConfigSourcePath;
 
-            public string appConfigId;
+            public string appConfigSourceId;
+
+            public string appConfigBuildId;
 
             public bool initElmAppState;
 
@@ -374,7 +377,7 @@ namespace elm_fullstack
         }
 
         static DeployAppConfigReport deployApp(
-            string fromPath,
+            string sourcePath,
             string site,
             string sitePassword,
             bool initElmAppState)
@@ -387,23 +390,23 @@ namespace elm_fullstack
 
             Console.WriteLine("Beginning to build configuration...");
 
-            var (compileConfigZipArchive, loweredElmAppFiles) =
+            var buildResult =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                    fromPath: fromPath,
+                    sourcePath: sourcePath,
                     buildConfigurationLog.Add);
 
-            var appConfigZipArchive = compileConfigZipArchive();
+            var appConfigZipArchive = buildResult.compileConfigZipArchive();
 
             var appConfigZipArchiveFileId =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
 
-            var appConfigId =
+            var appConfigBuildId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
                         Kalmit.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
-                "Built zip archive " + appConfigZipArchiveFileId + " containing app config " + appConfigId + ".");
+                "Built app config " + appConfigBuildId + " from " + buildResult.sourceCompositionId + ".");
 
             DeployAppConfigReport.ResponseFromServerStruct responseFromServer = null;
 
@@ -422,13 +425,13 @@ namespace elm_fullstack
                     :
                     StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
 
-                Console.WriteLine("Beginning to deploy app '" + appConfigId + "' to '" + deployAddress + "'...");
+                Console.WriteLine("Beginning to deploy app '" + appConfigBuildId + "' to '" + deployAddress + "'...");
 
                 var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
 
                 httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
                 httpContent.Headers.ContentDisposition =
-                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigId + ".zip" };
+                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigBuildId + ".zip" };
 
                 var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
 
@@ -457,8 +460,9 @@ namespace elm_fullstack
             return new DeployAppConfigReport
             {
                 beginTime = beginTime,
-                appConfigSource = "current-directory",
-                appConfigId = appConfigId,
+                appConfigSourcePath = sourcePath,
+                appConfigSourceId = buildResult.sourceCompositionId,
+                appConfigBuildId = appConfigBuildId,
                 initElmAppState = initElmAppState,
                 site = site,
                 responseFromServer = responseFromServer,
@@ -470,7 +474,7 @@ namespace elm_fullstack
         {
             public string beginTime;
 
-            public string elmAppStateSource;
+            public string elmAppStateSourcePath;
 
             public string elmAppStateId;
 
@@ -488,15 +492,15 @@ namespace elm_fullstack
             }
         }
 
-        static SetElmAppStateReport setElmAppState(string site, string sitePassword, string source)
+        static SetElmAppStateReport setElmAppState(string site, string sitePassword, string sourcePath)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            // For now only support a file path as source.
+            // For now only support a file as source.
 
-            var elmAppStateSerialized = File.ReadAllBytes(source);
+            var elmAppStateSerialized = File.ReadAllBytes(sourcePath);
 
             var elmAppStateComponent = Composition.Component.Blob(elmAppStateSerialized);
 
@@ -543,7 +547,7 @@ namespace elm_fullstack
             return new SetElmAppStateReport
             {
                 beginTime = beginTime,
-                elmAppStateSource = source,
+                elmAppStateSourcePath = sourcePath,
                 elmAppStateId = elmAppStateId,
                 site = site,
                 responseFromServer = responseFromServer,
@@ -655,23 +659,23 @@ namespace elm_fullstack
             }
         }
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoadFilesForRestoreFromSourceAndLogToConsole(
-            string source, string sourcePassword)
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
+            string sourcePath, string sourcePassword)
         {
-            if (Regex.IsMatch(source, "http(|s)://", RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(sourcePath, "http(|s)://", RegexOptions.IgnoreCase))
             {
-                Console.WriteLine("Begin reading process history from '" + source + "' ...");
+                Console.WriteLine("Begin reading process history from '" + sourcePath + "' ...");
 
                 var restoreResult = readFilesForRestoreProcessFromAdminInterface(
-                    sourceAdminInterface: source,
+                    sourceAdminInterface: sourcePath,
                     sourceAdminRootPassword: sourcePassword);
 
-                Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + source + "'.");
+                Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + sourcePath + "'.");
 
                 return restoreResult.files;
             }
 
-            var archive = File.ReadAllBytes(source);
+            var archive = File.ReadAllBytes(sourcePath);
 
             var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
 
@@ -687,11 +691,11 @@ namespace elm_fullstack
         static public void replicateProcessAndLogToConsole(
             string site,
             string sitePassword,
-            string source,
+            string sourcePath,
             string sourcePassword)
         {
             var restoreFiles =
-                LoadFilesForRestoreFromSourceAndLogToConsole(source, sourcePassword);
+                LoadFilesForRestoreFromPathAndLogToConsole(sourcePath: sourcePath, sourcePassword: sourcePassword);
 
             var processHistoryTree =
                 Composition.TreeFromSetOfBlobsWithStringPath(restoreFiles);
@@ -768,21 +772,21 @@ namespace elm_fullstack
         }
 
         static public void BuildConfiguration(
-            string fromPath,
+            string sourcePath,
             string outputOption,
             string loweredElmOutputOption,
             Action<string> verboseLogWriteLine)
         {
-            var (compileConfigZipArchive, loweredElmAppFiles) =
+            var buildResult =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                    fromPath: fromPath,
+                    sourcePath: sourcePath,
                     verboseLogWriteLine);
 
             if (0 < loweredElmOutputOption?.Length)
             {
                 Console.WriteLine("I write the lowered Elm app to '" + loweredElmOutputOption + "'.");
 
-                foreach (var file in loweredElmAppFiles)
+                foreach (var file in buildResult.loweredElmAppFiles)
                 {
                     var outputPath = Path.Combine(new[] { loweredElmOutputOption }.Concat(file.Key).ToArray());
                     Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
@@ -790,7 +794,7 @@ namespace elm_fullstack
                 }
             }
 
-            var configZipArchive = compileConfigZipArchive();
+            var configZipArchive = buildResult.compileConfigZipArchive();
 
             var configZipArchiveFileId =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));

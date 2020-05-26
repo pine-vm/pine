@@ -18,28 +18,36 @@ namespace Kalmit.PersistentProcess.WebHost
         public static IImmutableList<string> FrontendElmAppRootFilePath =>
             ImmutableList.Create("src", "FrontendWeb", "Main.elm");
 
-        static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
+        static public (
+            string sourceCompositionId,
+            Func<byte[]> compileConfigZipArchive,
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)
             BuildConfigurationZipArchiveFromPath(
-                string fromPath,
+                string sourcePath,
                 Action<string> verboseLogWriteLine)
         {
-            var loadFromPathResult = LoadFromPath.LoadTreeFromPath(fromPath);
+            var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
 
             if (loadFromPathResult?.Ok == null)
             {
-                throw new Exception("Failed to load from path '" + fromPath + "': " + loadFromPathResult?.Err);
+                throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
             }
 
             var sourceComposition = Composition.FromTree(loadFromPathResult.Ok);
 
-            Console.WriteLine(
-                "Loaded source composition " +
-                CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition)) +
-                " from '" + fromPath + "'.");
+            var sourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition));
 
-            return BuildConfigurationZipArchive(
-                sourceComposition: sourceComposition,
-                verboseLogWriteLine: verboseLogWriteLine);
+            Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'.");
+
+            var compileActionAndLoweredElmAppFiles =
+                BuildConfigurationZipArchive(
+                    sourceComposition: sourceComposition,
+                    verboseLogWriteLine: verboseLogWriteLine);
+
+            return
+                (sourceCompositionId: sourceCompositionId,
+                compileActionAndLoweredElmAppFiles.compileConfigZipArchive,
+                compileActionAndLoweredElmAppFiles.loweredElmAppFiles);
         }
 
         static public (Func<byte[]> compileConfigZipArchive, IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> loweredElmAppFiles)

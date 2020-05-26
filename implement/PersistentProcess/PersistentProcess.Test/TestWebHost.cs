@@ -1065,7 +1065,7 @@ namespace Kalmit.PersistentProcess.Test
                         elm_fullstack.Program.replicateProcessAndLogToConsole(
                             site: replicaAdminInterfaceUrl,
                             sitePassword: replicaAdminPassword,
-                            source: testSetup.AdminWebHostUrl,
+                            sourcePath: testSetup.AdminWebHostUrl,
                             sourcePassword: originalHostAdminPassword);
                     }
                 }
