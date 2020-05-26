@@ -227,7 +227,7 @@ This app comes as default with the [docker image](https://hub.docker.com/r/elmfu
 
 You can find the source code for this app at [https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/default-full-stack-app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/default-full-stack-app)
 
-To learn more, have a look at the guide at [https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md](https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-your-elm-full-stack-app.md)
+To learn more, have a look at the guide at [https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md](https://github.com/elm-fullstack/elm-fullstack/blob/master/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md)
 """
 
 
