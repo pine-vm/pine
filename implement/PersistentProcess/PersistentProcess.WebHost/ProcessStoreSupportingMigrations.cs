@@ -144,14 +144,19 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         public class CompositionEvent
         {
+            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
             public ValueInFileStructure UpdateElmAppStateForEvent;
 
+            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
             public ValueInFileStructure SetElmAppState;
 
+            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
             public ValueInFileStructure DeployAppConfigAndInitElmAppState;
 
+            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
             public ValueInFileStructure DeployAppConfigAndMigrateElmAppState;
 
+            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
             public ValueInFileStructure RevertProcessTo;
 
             static public CompositionEvent EventForDeployAppConfig(
