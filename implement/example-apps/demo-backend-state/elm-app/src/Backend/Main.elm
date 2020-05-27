@@ -8,6 +8,8 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Bytes
+import Bytes.Encode
 import Common
 import Dict
 import ListDict
@@ -31,6 +33,7 @@ type alias State =
     , empty_tuple : ()
     , customTypeInstance : CustomTypeWithTypeParameter Int
     , listDict : ListDict.Dict { orig : Int, dest : Int } String
+    , bytes : Bytes.Bytes
     }
 
 
@@ -83,13 +86,16 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsString =
-                            Just
-                                (Common.describeApp
-                                    ++ "\nI received "
-                                    ++ (state.httpRequestsCount |> String.fromInt)
-                                    ++ " HTTP requests."
-                                )
+                        , body =
+                            [ Common.describeApp
+                            , "I received "
+                                ++ (state.httpRequestsCount |> String.fromInt)
+                                ++ " HTTP requests."
+                            ]
+                                |> String.join "\n"
+                                |> Bytes.Encode.string
+                                |> Bytes.Encode.encode
+                                |> Just
                         , headersToAdd = []
                         }
                     }
@@ -131,4 +137,5 @@ interfaceToHost_initState =
         , ( { orig = 3, dest = 4 }, "Edge B" )
         ]
             |> ListDict.fromList
+    , bytes = "Hello World!" |> Bytes.Encode.string |> Bytes.Encode.encode
     }

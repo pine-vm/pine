@@ -245,7 +245,7 @@ namespace Kalmit.PersistentProcess.WebHost
                 var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
 
                 {
-                    var httpEvent = AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
+                    var httpEvent = await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
 
                     var httpRequestInterfaceEvent = new InterfaceToHost.Event
                     {
@@ -276,7 +276,11 @@ namespace Kalmit.PersistentProcess.WebHost
                             context.Response.ContentType = headerContentType;
 
                         var contentAsByteArray =
-                            httpResponse?.bodyAsString == null ? null : System.Text.Encoding.UTF8.GetBytes(httpResponse.bodyAsString);
+                            httpResponse?.bodyAsBase64 == null
+                            ?
+                            (httpResponse?.bodyAsString == null ? null : System.Text.Encoding.UTF8.GetBytes(httpResponse.bodyAsString))
+                            :
+                            Convert.FromBase64String(httpResponse.bodyAsBase64);
 
                         context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
 
@@ -304,7 +308,7 @@ namespace Kalmit.PersistentProcess.WebHost
             DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
         };
 
-        static InterfaceToHost.HttpRequestEvent AsPersistentProcessInterfaceHttpRequestEvent(
+        static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEvent> AsPersistentProcessInterfaceHttpRequestEvent(
             HttpContext httpContext,
             string httpRequestId,
             DateTimeOffset time)
@@ -320,7 +324,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     clientAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
                 },
 
-                request = Asp.AsPersistentProcessInterfaceHttpRequest(httpContext.Request),
+                request = await Asp.AsPersistentProcessInterfaceHttpRequest(httpContext.Request),
             };
         }
     }

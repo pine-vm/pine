@@ -472,7 +472,7 @@ namespace Kalmit.PersistentProcess.Test
                 {
                     app.Run(async (context) =>
                     {
-                        var requestRecord = Asp.AsPersistentProcessInterfaceHttpRequest(context.Request);
+                        var requestRecord = await Asp.AsPersistentProcessInterfaceHttpRequest(context.Request);
 
                         context.Response.StatusCode = 200;
 

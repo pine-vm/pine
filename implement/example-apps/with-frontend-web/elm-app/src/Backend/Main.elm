@@ -6,6 +6,9 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
 
 
 type alias State =
@@ -23,7 +26,11 @@ processEvent hostEvent stateBefore =
                             stateBefore
 
                         "post" ->
-                            stateBefore ++ (httpRequestEvent.request.bodyAsString |> Maybe.withDefault "")
+                            stateBefore
+                                ++ (httpRequestEvent.request.body
+                                        |> Maybe.andThen (\bytes -> bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width)))
+                                        |> Maybe.withDefault ""
+                                   )
 
                         _ ->
                             stateBefore
@@ -32,13 +39,14 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsString =
-                            Just
-                                ("The request uri was: "
-                                    ++ httpRequestEvent.request.uri
-                                    ++ "\nThe current state is:"
-                                    ++ state
-                                )
+                        , body =
+                            [ "The request uri was: " ++ httpRequestEvent.request.uri
+                            , "The current state is:" ++ state
+                            ]
+                                |> String.join "\n"
+                                |> Bytes.Encode.string
+                                |> Bytes.Encode.encode
+                                |> Just
                         , headersToAdd = []
                         }
                     }

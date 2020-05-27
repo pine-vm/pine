@@ -115,7 +115,7 @@ namespace Kalmit.PersistentProcess.WebHost
             });
         }
 
-        static public InterfaceToHost.HttpRequest AsPersistentProcessInterfaceHttpRequest(
+        static public async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(
             HttpRequest httpRequest)
         {
             var httpHeaders =
@@ -123,11 +123,21 @@ namespace Kalmit.PersistentProcess.WebHost
                 .Select(header => new InterfaceToHost.HttpHeader { name = header.Key, values = header.Value.ToArray() })
                 .ToArray();
 
+            byte[] httpRequestBody = null;
+
+            using (var stream = new MemoryStream())
+            {
+                await httpRequest.Body.CopyToAsync(stream);
+
+                httpRequestBody = stream.ToArray();
+            }
+
             return new InterfaceToHost.HttpRequest
             {
                 method = httpRequest.Method,
                 uri = httpRequest.GetDisplayUrl(),
-                bodyAsString = new System.IO.StreamReader(httpRequest.Body).ReadToEndAsync().Result,
+                bodyAsBase64 = httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
+                bodyAsString = httpRequestBody == null ? null : Encoding.UTF8.GetString(httpRequestBody),
                 headers = httpHeaders,
             };
         }

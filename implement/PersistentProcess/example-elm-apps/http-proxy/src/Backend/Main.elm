@@ -7,6 +7,7 @@ module Backend.Main exposing
 import Backend.HttpViaVolatileHost as HttpViaVolatileHost
 import Backend.InterfaceToHost as InterfaceToHost
 import Base64
+import Bytes.Encode
 import Json.Decode
 
 
@@ -47,11 +48,14 @@ processEvent hostEvent stateBefore =
 
                         Just httpRequestToForward ->
                             let
+                                bodyFromString =
+                                    Bytes.Encode.string >> Bytes.Encode.encode >> Just
+
                                 httpResponse =
                                     case requestToVolatileHostResponse of
                                         Err _ ->
                                             { statusCode = 500
-                                            , bodyAsString = Just "Error running in volatile host."
+                                            , body = bodyFromString "Error running in volatile host."
                                             , headersToAdd = []
                                             }
 
@@ -59,7 +63,7 @@ processEvent hostEvent stateBefore =
                                             case requestToVolatileHostComplete.exceptionToString of
                                                 Just exceptionToString ->
                                                     { statusCode = 500
-                                                    , bodyAsString = Just ("Exception in volatile host: " ++ exceptionToString)
+                                                    , body = bodyFromString ("Exception in volatile host: " ++ exceptionToString)
                                                     , headersToAdd = []
                                                     }
 
@@ -73,7 +77,8 @@ processEvent hostEvent stateBefore =
                                                     case returnValueAsHttpResponseResult of
                                                         Err decodeError ->
                                                             { statusCode = 500
-                                                            , bodyAsString = Just ("Error decoding response from volatile host: " ++ (decodeError |> Json.Decode.errorToString))
+                                                            , body =
+                                                                bodyFromString ("Error decoding response from volatile host: " ++ (decodeError |> Json.Decode.errorToString))
                                                             , headersToAdd = []
                                                             }
 
@@ -83,25 +88,26 @@ processEvent hostEvent stateBefore =
                                                                     volatileHostHttpResponse.headers
                                                                         |> List.filter (.name >> String.toLower >> (/=) "transfer-encoding")
                                                             in
-                                                            -- TODO: Simplify interface to host, fix assumption here that UTF-8 is used.
-                                                            case volatileHostHttpResponse.bodyAsBase64 |> Maybe.map Base64.decode of
+                                                            case volatileHostHttpResponse.bodyAsBase64 of
                                                                 Nothing ->
                                                                     { statusCode = 200
-                                                                    , bodyAsString = Nothing
+                                                                    , body = Nothing
                                                                     , headersToAdd = headersToAdd
                                                                     }
 
-                                                                Just (Err error) ->
-                                                                    { statusCode = 500
-                                                                    , bodyAsString = Just ("Failed to decode body from base64: " ++ error)
-                                                                    , headersToAdd = []
-                                                                    }
+                                                                Just bodyAsBase64 ->
+                                                                    case bodyAsBase64 |> Base64.toBytes of
+                                                                        Nothing ->
+                                                                            { statusCode = 500
+                                                                            , body = bodyFromString "Failed to decode body from base64"
+                                                                            , headersToAdd = []
+                                                                            }
 
-                                                                Just (Ok bodyAsString) ->
-                                                                    { statusCode = 200
-                                                                    , bodyAsString = Just bodyAsString
-                                                                    , headersToAdd = headersToAdd
-                                                                    }
+                                                                        Just body ->
+                                                                            { statusCode = 200
+                                                                            , body = Just body
+                                                                            , headersToAdd = headersToAdd
+                                                                            }
 
                                 state =
                                     { stateBefore | httpRequestToForward = Nothing }
@@ -149,7 +155,11 @@ httpRequestForwardRequestsFromState state =
                                 { httpRequestId = httpRequestToForward.httpRequestId
                                 , response =
                                     { statusCode = 400
-                                    , bodyAsString = Just "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
+                                    , body =
+                                        "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
+                                            |> Bytes.Encode.string
+                                            |> Bytes.Encode.encode
+                                            |> Just
                                     , headersToAdd = []
                                     }
                                 }
@@ -158,8 +168,7 @@ httpRequestForwardRequestsFromState state =
                         Just forwardTo ->
                             let
                                 bodyAsBase64 =
-                                    -- TODO: Simplify interface to host, fix assumption here that UTF-8 is used.
-                                    httpRequestToForward.request.bodyAsString |> Maybe.map Base64.encode
+                                    httpRequestToForward.request.body |> Maybe.andThen Base64.fromBytes
 
                                 httpRequest =
                                     { uri = forwardTo

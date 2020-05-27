@@ -34,7 +34,8 @@ namespace Kalmit
             .Add("Bool", ("Json.Encode.bool " + encodeParamName, "Json.Decode.bool"))
             .Add("Float", ("Json.Encode.float " + encodeParamName, "Json.Decode.float"))
             .Add("()", ("Json.Encode.list (always (Json.Encode.object [])) []", "Json.Decode.succeed ()"))
-            .Add("{}", ("Json.Encode.object []", "Json.Decode.succeed {}"));
+            .Add("{}", ("Json.Encode.object []", "Json.Decode.succeed {}"))
+            .Add("Bytes.Bytes", ("json_encode_Bytes " + encodeParamName, "json_decode_Bytes"));
 
         static IImmutableDictionary<string, string> InstantiationSpecialCases =>
             ImmutableDictionary<string, string>.Empty
@@ -1156,6 +1157,21 @@ namespace Kalmit
 jsonDecode_andMap : Json.Decode.Decoder a -> Json.Decode.Decoder (a -> b) -> Json.Decode.Decoder b
 jsonDecode_andMap =
     Json.Decode.map2 (|>)
+",
+$@"
+json_encode_Bytes : Bytes.Bytes -> Json.Encode.Value
+json_encode_Bytes bytes =
+    [ ( ""AsBase64"", bytes |> Base64.fromBytes |> Maybe.withDefault ""Error encoding to base64"" |> Json.Encode.string ) ]
+        |> Json.Encode.object
+",
+$@"
+json_decode_Bytes : Json.Decode.Decoder Bytes.Bytes
+json_decode_Bytes =
+    Json.Decode.field ""AsBase64""
+        (Json.Decode.string
+            |> Json.Decode.andThen
+                (Base64.toBytes >> Maybe.map Json.Decode.succeed >> Maybe.withDefault (Json.Decode.fail ""Failed to decode base64.""))
+        )
 "
         }.ToImmutableList();
     }

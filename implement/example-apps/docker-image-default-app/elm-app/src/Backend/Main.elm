@@ -6,6 +6,7 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Bytes.Encode
 import Common
 
 
@@ -35,12 +36,14 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsString =
+                        , body =
                             [ Common.guideMarkdown
                             , ""
                             , "This backend process received " ++ (state.httpRequestsCount |> String.fromInt) ++ " HTTP requests."
                             ]
                                 |> String.join "\n"
+                                |> Bytes.Encode.string
+                                |> Bytes.Encode.encode
                                 |> Just
                         , headersToAdd = []
                         }

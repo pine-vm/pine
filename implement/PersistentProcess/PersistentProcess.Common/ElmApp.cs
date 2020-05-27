@@ -383,7 +383,11 @@ namespace Kalmit
                 .Add(new[] { "Set" })
                 .Add(new[] { "Dict" })
                 .Add(new[] { "Json.Decode" })
-                .Add(new[] { "Json.Encode" });
+                .Add(new[] { "Json.Encode" })
+                .Add(new[] { "Base64" })
+                .Add(new[] { "Bytes" })
+                .Add(new[] { "Bytes.Encode" })
+                .Add(new[] { "Bytes.Decode" });
 
             var interfaceModuleWithImports =
                 CompileElm.WithImportsAdded(interfaceModuleOriginalFileText, modulesToImport);
