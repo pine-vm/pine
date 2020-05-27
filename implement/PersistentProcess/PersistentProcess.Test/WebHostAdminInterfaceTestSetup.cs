@@ -27,7 +27,7 @@ namespace Kalmit.PersistentProcess.Test
 
         readonly string testDirectory;
 
-        readonly string adminRootPassword;
+        readonly string adminPassword;
 
         readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
 
@@ -43,7 +43,7 @@ namespace Kalmit.PersistentProcess.Test
                 (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                 .UseUrls(AdminWebHostUrl)
                 .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
-                .WithSettingAdminRootPassword(adminRootPassword)
+                .WithSettingAdminPassword(adminPassword)
                 .UseStartup<StartupAdminInterface>()
                 .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore))
                 .Build();
@@ -56,10 +56,10 @@ namespace Kalmit.PersistentProcess.Test
         static public WebHostAdminInterfaceTestSetup Setup(
             WebAppConfiguration deployAppConfigAndInitElmState,
             Func<DateTimeOffset> persistentProcessHostDateTime = null,
-            string adminRootPassword = null) =>
+            string adminPassword = null) =>
             Setup(
                 persistentProcessHostDateTime: persistentProcessHostDateTime,
-                adminRootPassword: adminRootPassword,
+                adminPassword: adminPassword,
                 deployAppConfigAndInitElmState:
                     deployAppConfigAndInitElmState == null
                     ?
@@ -69,16 +69,16 @@ namespace Kalmit.PersistentProcess.Test
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<DateTimeOffset> persistentProcessHostDateTime = null,
-            string adminRootPassword = null,
+            string adminPassword = null,
             Composition.Component deployAppConfigAndInitElmState = null) =>
             Setup(
-                adminRootPassword: adminRootPassword,
+                adminPassword: adminPassword,
                 deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
-            string adminRootPassword = null,
+            string adminPassword = null,
             Composition.Component deployAppConfigAndInitElmState = null,
             string adminWebHostUrlOverride = null,
             string publicWebHostUrlOverride = null)
@@ -87,7 +87,7 @@ namespace Kalmit.PersistentProcess.Test
 
             var setup = new WebHostAdminInterfaceTestSetup(
                 testDirectory,
-                adminRootPassword: adminRootPassword,
+                adminPassword: adminPassword,
                 deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: webHostBuilderMap,
                 adminWebHostUrlOverride: adminWebHostUrlOverride,
@@ -112,15 +112,15 @@ namespace Kalmit.PersistentProcess.Test
             };
         }
 
-        public System.Net.Http.HttpClient SetDefaultRequestHeaderAuthorizeForAdminRoot(System.Net.Http.HttpClient client)
+        public System.Net.Http.HttpClient SetDefaultRequestHeaderAuthorizeForAdmin(System.Net.Http.HttpClient client)
         {
-            if (adminRootPassword == null)
+            if (adminPassword == null)
                 return client;
 
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                 "Basic",
                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                    WebHost.Configuration.BasicAuthenticationForAdminRoot(adminRootPassword))));
+                    WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
             return client;
         }
@@ -132,14 +132,14 @@ namespace Kalmit.PersistentProcess.Test
 
         WebHostAdminInterfaceTestSetup(
             string testDirectory,
-            string adminRootPassword,
+            string adminPassword,
             Composition.Component deployAppConfigAndInitElmState,
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminWebHostUrlOverride,
             string publicWebHostUrlOverride)
         {
             this.testDirectory = testDirectory;
-            this.adminRootPassword = adminRootPassword ?? "notempty";
+            this.adminPassword = adminPassword ?? "notempty";
             this.webHostBuilderMap = webHostBuilderMap;
             this.adminWebHostUrlOverride = adminWebHostUrlOverride;
             this.publicWebHostUrlOverride = publicWebHostUrlOverride;

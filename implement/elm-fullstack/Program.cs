@@ -179,7 +179,7 @@ namespace elm_fullstack
                         .WithProcessStoreFileStore(processStoreFileStore);
 
                     if (adminPasswordOption.HasValue())
-                        webHostBuilder = webHostBuilder.WithSettingAdminRootPassword(adminPasswordOption.Value());
+                        webHostBuilder = webHostBuilder.WithSettingAdminPassword(adminPasswordOption.Value());
 
                     var webHost = webHostBuilder.Build();
 
@@ -417,7 +417,7 @@ namespace elm_fullstack
                     httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                         "Basic",
                         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                            Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
+                            Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
 
                     var deployAddress =
                         (site.TrimEnd('/')) +
@@ -554,7 +554,7 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
 
                 var httpContent = new System.Net.Http.ByteArrayContent(elmAppStateSerialized);
 
@@ -625,7 +625,7 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
 
                 var requestUrl =
                     site.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
@@ -667,14 +667,14 @@ namespace elm_fullstack
 
         static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16) readFilesForRestoreProcessFromAdminInterface(
             string sourceAdminInterface,
-            string sourceAdminRootPassword)
+            string sourceAdminPassword)
         {
             using (var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) })
             {
                 sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sourceAdminRootPassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sourceAdminPassword))));
 
                 var processHistoryFileStoreRemoteReader = new Kalmit.DelegatingFileStoreReader
                 {
@@ -709,7 +709,7 @@ namespace elm_fullstack
 
                 var restoreResult = readFilesForRestoreProcessFromAdminInterface(
                     sourceAdminInterface: sourcePath,
-                    sourceAdminRootPassword: sourcePassword);
+                    sourceAdminPassword: sourcePassword);
 
                 Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + sourcePath + "'.");
 
@@ -751,7 +751,7 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdminRoot(sitePassword))));
+                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
 
                 var deployAddress =
                     site.TrimEnd('/') +

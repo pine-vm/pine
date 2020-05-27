@@ -76,7 +76,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
-            var rootPassword = configuration.GetValue<string>(Configuration.AdminRootPasswordSettingKey);
+            var adminPassword = configuration.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
             var publicWebHostUrls =
                 configuration.GetValue<string>(Configuration.PublicWebHostUrlsSettingKey).Split(new[] { ',', ';' });
@@ -249,14 +249,12 @@ namespace Kalmit.PersistentProcess.WebHost
                     }
 
                     {
-                        var expectedAuthorization = Configuration.BasicAuthenticationForAdminRoot(rootPassword);
-
                         context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
 
                         AuthenticationHeaderValue.TryParse(
                             requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
 
-                        if (!(0 < rootPassword?.Length))
+                        if (!(0 < adminPassword?.Length))
                         {
                             context.Response.StatusCode = 403;
                             await context.Response.WriteAsync("Forbidden");
@@ -269,7 +267,10 @@ namespace Kalmit.PersistentProcess.WebHost
                             Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
                             Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
 
-                        if (!(string.Equals(expectedAuthorization, decodedRequestAuthorizationParameter) &&
+                        var requestAuthorizationPassword =
+                            decodedRequestAuthorizationParameter?.Split(':')?.ElementAtOrDefault(1);
+
+                        if (!(string.Equals(adminPassword, requestAuthorizationPassword) &&
                             string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
                         {
                             context.Response.StatusCode = 401;

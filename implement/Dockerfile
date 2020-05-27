@@ -23,4 +23,4 @@ WORKDIR /elm-fullstack
 
 ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store"]
 
-# ENV APPSETTING_adminRootPassword="password-for-admin-interface-user-root"
+# ENV APPSETTING_adminPassword="password-for-admin-interface"

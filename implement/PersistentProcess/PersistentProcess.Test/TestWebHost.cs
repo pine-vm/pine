@@ -337,7 +337,7 @@ namespace Kalmit.PersistentProcess.Test
         [TestMethod]
         public void Web_host_supports_setting_elm_app_state_only_after_authorization()
         {
-            const string rootPassword = "Root-Password_1234567";
+            const string adminPassword = "Password_1234567";
 
             static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppState(
                 HttpClient client, string state) =>
@@ -347,7 +347,7 @@ namespace Kalmit.PersistentProcess.Test
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
                 deployAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
-                adminRootPassword: rootPassword))
+                adminPassword: adminPassword))
             {
                 using (var server = testSetup.StartWebHost())
                 {
@@ -382,7 +382,7 @@ namespace Kalmit.PersistentProcess.Test
                             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                                 "Basic",
                                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                                    WebHost.Configuration.BasicAuthenticationForAdminRoot(rootPassword))));
+                                    WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
                             Assert.AreEqual(
                                 HttpStatusCode.OK,
@@ -670,7 +670,7 @@ namespace Kalmit.PersistentProcess.Test
             {
                 using (var server = testSetup.StartWebHost())
                 {
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var deployAppConfigResponse = adminClient.PostAsync(
@@ -708,7 +708,7 @@ namespace Kalmit.PersistentProcess.Test
                         }
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var deployHttpResponse = adminClient.PostAsync(
@@ -721,7 +721,7 @@ namespace Kalmit.PersistentProcess.Test
                 {
                     using (var server = testSetup.StartWebHost())
                     {
-                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                             testSetup.BuildAdminInterfaceHttpClient()))
                         {
                             var deployHttpResponse = adminClient.PostAsync(
@@ -784,7 +784,7 @@ namespace Kalmit.PersistentProcess.Test
                             "Get same state back.");
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
@@ -824,7 +824,7 @@ namespace Kalmit.PersistentProcess.Test
                             "Set state httpResponse.IsSuccessStatusCode (" + httpResponse.Content?.ReadAsStringAsync().Result + ")");
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var migrateHttpResponse = adminClient.PostAsync(
@@ -889,7 +889,7 @@ namespace Kalmit.PersistentProcess.Test
                         }
                     }
 
-                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                    using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                         testSetup.BuildAdminInterfaceHttpClient()))
                     {
                         var deployAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
@@ -977,7 +977,7 @@ namespace Kalmit.PersistentProcess.Test
                             Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
                         }
 
-                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                             testSetup.BuildAdminInterfaceHttpClient()))
                         {
                             var revertResponse = adminClient.PostAsync(
@@ -1037,7 +1037,7 @@ namespace Kalmit.PersistentProcess.Test
             WebHostAdminInterfaceTestSetup replicaSetup = null;
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                adminRootPassword: originalHostAdminPassword,
+                adminPassword: originalHostAdminPassword,
                 deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
             {
                 using (var server = testSetup.StartWebHost())
@@ -1058,7 +1058,7 @@ namespace Kalmit.PersistentProcess.Test
                         webHostBuilderMap: null,
                         adminWebHostUrlOverride: replicaAdminInterfaceUrl,
                         publicWebHostUrlOverride: replicaPublicAppUrl,
-                        adminRootPassword: replicaAdminPassword);
+                        adminPassword: replicaAdminPassword);
 
                     using (var replicaHost = replicaSetup.StartWebHost())
                     {
@@ -1156,7 +1156,7 @@ namespace Kalmit.PersistentProcess.Test
 
                         var numberOfFilesBefore = countFilesInProcessFileStore();
 
-                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdminRoot(
+                        using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
                             testSetup.BuildAdminInterfaceHttpClient()))
                         {
                             var truncateResponse = adminClient.PostAsync(
