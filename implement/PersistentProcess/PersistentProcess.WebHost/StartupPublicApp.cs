@@ -275,7 +275,14 @@ namespace Kalmit.PersistentProcess.WebHost
                         if (headerContentType != null)
                             context.Response.ContentType = headerContentType;
 
-                        await context.Response.WriteAsync(httpResponse?.bodyAsString ?? "");
+                        var contentAsByteArray =
+                            httpResponse?.bodyAsString == null ? null : System.Text.Encoding.UTF8.GetBytes(httpResponse.bodyAsString);
+
+                        context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
+
+                        if (contentAsByteArray != null)
+                            await context.Response.Body.WriteAsync(contentAsByteArray);
+
                         break;
                     }
 

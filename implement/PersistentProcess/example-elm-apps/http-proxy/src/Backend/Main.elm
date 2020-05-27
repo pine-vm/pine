@@ -78,12 +78,17 @@ processEvent hostEvent stateBefore =
                                                             }
 
                                                         Ok volatileHostHttpResponse ->
+                                                            let
+                                                                headersToAdd =
+                                                                    volatileHostHttpResponse.headers
+                                                                        |> List.filter (.name >> String.toLower >> (/=) "transfer-encoding")
+                                                            in
                                                             -- TODO: Simplify interface to host, fix assumption here that UTF-8 is used.
                                                             case volatileHostHttpResponse.bodyAsBase64 |> Maybe.map Base64.decode of
                                                                 Nothing ->
                                                                     { statusCode = 200
                                                                     , bodyAsString = Nothing
-                                                                    , headersToAdd = volatileHostHttpResponse.headers
+                                                                    , headersToAdd = headersToAdd
                                                                     }
 
                                                                 Just (Err error) ->
@@ -95,7 +100,7 @@ processEvent hostEvent stateBefore =
                                                                 Just (Ok bodyAsString) ->
                                                                     { statusCode = 200
                                                                     , bodyAsString = Just bodyAsString
-                                                                    , headersToAdd = volatileHostHttpResponse.headers
+                                                                    , headersToAdd = headersToAdd
                                                                     }
 
                                 state =

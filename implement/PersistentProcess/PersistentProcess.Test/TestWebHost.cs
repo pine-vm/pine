@@ -461,12 +461,6 @@ namespace Kalmit.PersistentProcess.Test
             }
         }
 
-        [Ignore("TODO. The problem here might have been masked by the use of a client from `TestServer.CreateClient` before.")]
-        /*
-        2020-04-29
-        Observing problem at publicAppClient.SendAsync:
-        One or more errors occurred. (A task was canceled.) ---> System.Threading.Tasks.TaskCanceledException: A task was canceled.
-        */
         [TestMethod]
         public void Host_supports_sending_HTTP_requests()
         {
