@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.0.0" />
+    <PackageReference Include="ReadLine" Version="2.0.1" />
   </ItemGroup>
 
   <ItemGroup>

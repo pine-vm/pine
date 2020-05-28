@@ -1190,8 +1190,9 @@ namespace Kalmit.PersistentProcess.Test
             var deployReport = elm_fullstack.Program.deployApp(
                 sourcePath: "./../../../../../example-apps/docker-image-default-app",
                 site: testDirectory,
-                sitePassword: null,
-                initElmAppState: true);
+                siteDefaultPassword: null,
+                initElmAppState: true,
+                promptForPasswordOnConsole: false);
 
             using (var restoredProcess =
                 Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.Restore(

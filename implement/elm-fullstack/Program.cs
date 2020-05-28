@@ -227,8 +227,9 @@ namespace elm_fullstack
                         deployApp(
                             sourcePath: fromOption.Value(),
                             site: site,
-                            sitePassword: sitePassword,
-                            initElmAppState: initElmAppStateOption.HasValue());
+                            siteDefaultPassword: sitePassword,
+                            initElmAppState: initElmAppStateOption.HasValue(),
+                            promptForPasswordOnConsole: true);
 
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
@@ -252,8 +253,9 @@ namespace elm_fullstack
                     var attemptReport =
                         setElmAppState(
                             site: site,
-                            sitePassword: sitePassword,
-                            sourcePath: fromOption.Value());
+                            siteDefaultPassword: sitePassword,
+                            sourcePath: fromOption.Value(),
+                            promptForPasswordOnConsole: true);
 
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
@@ -416,8 +418,9 @@ namespace elm_fullstack
         static public DeployAppReport deployApp(
             string sourcePath,
             string site,
-            string sitePassword,
-            bool initElmAppState)
+            string siteDefaultPassword,
+            bool initElmAppState,
+            bool promptForPasswordOnConsole)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
@@ -449,52 +452,53 @@ namespace elm_fullstack
 
             if (Regex.IsMatch(site, "^http(|s)\\:"))
             {
-                using (var httpClient = new System.Net.Http.HttpClient())
+                var deployAddress =
+                    (site.TrimEnd('/')) +
+                    (initElmAppState
+                    ?
+                    StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
+                    :
+                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
+
+                Console.WriteLine("Attempting to deploy app '" + appConfigBuildId + "' to '" + deployAddress + "'...");
+
+                var httpResponse = AttemptHttpRequest(() =>
+                    {
+                        var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
+
+                        httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+                        httpContent.Headers.ContentDisposition =
+                            new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigBuildId + ".zip" };
+
+                        return new System.Net.Http.HttpRequestMessage
+                        {
+                            Method = System.Net.Http.HttpMethod.Post,
+                            RequestUri = new Uri(deployAddress),
+                            Content = httpContent,
+                        };
+                    },
+                    defaultPassword: siteDefaultPassword,
+                    promptForPasswordOnConsole: promptForPasswordOnConsole).Result;
+
+                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+                Console.WriteLine(
+                    "Server response: " + httpResponse.StatusCode + "\n" + responseContentString);
+
+                object responseBodyReport = responseContentString;
+
+                try
                 {
-                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                        "Basic",
-                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                            Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
-
-                    var deployAddress =
-                        (site.TrimEnd('/')) +
-                        (initElmAppState
-                        ?
-                        StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
-                        :
-                        StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
-
-                    Console.WriteLine("Beginning to deploy app '" + appConfigBuildId + "' to '" + deployAddress + "'...");
-
-                    var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
-
-                    httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
-                    httpContent.Headers.ContentDisposition =
-                        new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigBuildId + ".zip" };
-
-                    var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
-
-                    var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
-
-                    Console.WriteLine(
-                        "Server response: " + httpResponse.StatusCode + "\n" +
-                         responseContentString);
-
-                    object responseBodyReport = responseContentString;
-
-                    try
-                    {
-                        responseBodyReport =
-                            Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
-                    }
-                    catch { }
-
-                    responseFromServer = new DeployAppReport.ResponseFromServerStruct
-                    {
-                        statusCode = (int)httpResponse.StatusCode,
-                        body = responseBodyReport,
-                    };
+                    responseBodyReport =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>((string)responseBodyReport);
                 }
+                catch { }
+
+                responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                {
+                    statusCode = (int)httpResponse.StatusCode,
+                    body = responseBodyReport,
+                };
             }
             else
             {
@@ -548,6 +552,45 @@ namespace elm_fullstack
             };
         }
 
+        static async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage>
+            AttemptHttpRequest(
+            Func<System.Net.Http.HttpRequestMessage> buildRequest,
+            string defaultPassword,
+            bool promptForPasswordOnConsole)
+        {
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                void setHttpClientPassword(string password)
+                {
+                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                        "Basic",
+                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                            Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(password))));
+                }
+
+                setHttpClientPassword(defaultPassword);
+
+                var httpResponse = await httpClient.SendAsync(buildRequest());
+
+                if (promptForPasswordOnConsole &&
+                    httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
+                     httpResponse.Headers.WwwAuthenticate.Any())
+                {
+                    Console.WriteLine("The server at '" + httpResponse.RequestMessage.RequestUri.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
+
+                    var password = ReadLine.ReadPassword("> ").Trim();
+
+                    Console.WriteLine("I retry using this password...");
+
+                    setHttpClientPassword(password);
+
+                    httpResponse = await httpClient.SendAsync(buildRequest());
+                }
+
+                return httpResponse;
+            }
+        }
+
         class SetElmAppStateReport
         {
             public string beginTime;
@@ -570,7 +613,11 @@ namespace elm_fullstack
             }
         }
 
-        static SetElmAppStateReport setElmAppState(string site, string sitePassword, string sourcePath)
+        static SetElmAppStateReport setElmAppState(
+            string site,
+            string siteDefaultPassword,
+            string sourcePath,
+            bool promptForPasswordOnConsole)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
@@ -586,41 +633,42 @@ namespace elm_fullstack
 
             SetElmAppStateReport.ResponseFromServerStruct responseFromServer = null;
 
-            using (var httpClient = new System.Net.Http.HttpClient())
+            var httpResponse = AttemptHttpRequest(() =>
+                {
+                    var httpContent = new System.Net.Http.ByteArrayContent(elmAppStateSerialized);
+
+                    httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+                    return new System.Net.Http.HttpRequestMessage
+                    {
+                        Method = System.Net.Http.HttpMethod.Post,
+                        RequestUri = new Uri(site.TrimEnd('/') + StartupAdminInterface.PathApiElmAppState),
+                        Content = httpContent,
+                    };
+                },
+                defaultPassword: siteDefaultPassword,
+                promptForPasswordOnConsole: promptForPasswordOnConsole).Result;
+
+            var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+            Console.WriteLine(
+                "Server response: " + httpResponse.StatusCode + "\n" +
+                 responseContentString);
+
+            object responseBodyReport = responseContentString;
+
+            try
             {
-                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Basic",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
-
-                var httpContent = new System.Net.Http.ByteArrayContent(elmAppStateSerialized);
-
-                httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-
-                var httpResponse = httpClient.PostAsync(
-                    site.TrimEnd('/') + StartupAdminInterface.PathApiElmAppState, httpContent).Result;
-
-                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
-
-                Console.WriteLine(
-                    "Server response: " + httpResponse.StatusCode + "\n" +
-                     responseContentString);
-
-                object responseBodyReport = responseContentString;
-
-                try
-                {
-                    responseBodyReport =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
-                }
-                catch { }
-
-                responseFromServer = new SetElmAppStateReport.ResponseFromServerStruct
-                {
-                    statusCode = (int)httpResponse.StatusCode,
-                    body = responseBodyReport,
-                };
+                responseBodyReport =
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>((string)responseBodyReport);
             }
+            catch { }
+
+            responseFromServer = new SetElmAppStateReport.ResponseFromServerStruct
+            {
+                statusCode = (int)httpResponse.StatusCode,
+                body = responseBodyReport,
+            };
 
             return new SetElmAppStateReport
             {
@@ -838,8 +886,8 @@ namespace elm_fullstack
                 //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
                 Console.WriteLine(
-            "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-            "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+                "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+                "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
             });
 
             var executableIsRegisteredOnPath =
