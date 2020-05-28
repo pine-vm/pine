@@ -37,7 +37,7 @@ namespace elm_fullstack
                 var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
                 var fromOption = buildConfigCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
-                buildConfigCmd.ThrowOnUnexpectedArgument = false;
+                buildConfigCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.StopParsingAndCollect;
 
                 buildConfigCmd.OnExecute(() =>
                 {
@@ -60,7 +60,7 @@ namespace elm_fullstack
                 var (commandName, _, registerExecutableDirectoryOnPath) = CheckIfExecutableIsRegisteredOnPath();
 
                 installCmd.Description = "Installs the '" + commandName + "' command for the current user account.";
-                installCmd.ThrowOnUnexpectedArgument = true;
+                installCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 installCmd.OnExecute(() =>
                 {
@@ -71,7 +71,7 @@ namespace elm_fullstack
             app.Command("run-server", runServerCmd =>
             {
                 runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
-                runServerCmd.ThrowOnUnexpectedArgument = true;
+                runServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var adminUrlsDefault = "http://*:4000";
                 string[] publicWebHostUrlsDefault = new[] { "http://*", "https://*" };
@@ -212,7 +212,7 @@ namespace elm_fullstack
             app.Command("deploy-app", deployAppCmd =>
             {
                 deployAppCmd.Description = "Deploy an app to an Elm-fullstack process. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
-                deployAppCmd.ThrowOnUnexpectedArgument = true;
+                deployAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);
                 var fromOption = deployAppCmd.Option("--from", "Path to the app to deploy.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
@@ -239,7 +239,7 @@ namespace elm_fullstack
             app.Command("set-elm-app-state", setElmAppStateCmd =>
             {
                 setElmAppStateCmd.Description = "Attempt to set the state of a backend Elm app using the common serialized representation.";
-                setElmAppStateCmd.ThrowOnUnexpectedArgument = true;
+                setElmAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
 
@@ -264,7 +264,7 @@ namespace elm_fullstack
             app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
                 truncateProcessHistoryCmd.Description = "Remove parts of the process history from the persistent store, which are not needed to restore the process.";
-                truncateProcessHistoryCmd.ThrowOnUnexpectedArgument = true;
+                truncateProcessHistoryCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
 
@@ -286,7 +286,7 @@ namespace elm_fullstack
             app.Command("archive-process", archiveProcessCmd =>
             {
                 archiveProcessCmd.Description = "Copy the files needed to restore the process and store those in a zip-archive.";
-                archiveProcessCmd.ThrowOnUnexpectedArgument = true;
+                archiveProcessCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(archiveProcessCmd);
 
@@ -315,11 +315,11 @@ namespace elm_fullstack
             app.Command("user-secrets", userSecretsCmd =>
             {
                 userSecretsCmd.Description = "Manage passwords for accessing the admin interfaces of servers.";
-                userSecretsCmd.ThrowOnUnexpectedArgument = true;
+                userSecretsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 userSecretsCmd.Command("store", storeCmd =>
                 {
-                    storeCmd.ThrowOnUnexpectedArgument = true;
+                    storeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                     var siteArgument = storeCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
                     var passwordArgument = storeCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
