@@ -347,7 +347,44 @@ namespace elm_fullstack
                 return 1;
             });
 
-            return app.Execute(args);
+            int executeAndGuideInCaseOfException()
+            {
+                try
+                {
+                    return app.Execute(args);
+                }
+                catch (CommandParsingException ex)
+                {
+                    DotNetConsoleWriteProblemCausingAbort(ex.Message);
+
+                    if (ex is UnrecognizedCommandParsingException uex && uex.NearestMatches.Any())
+                    {
+                        DotNetConsoleWriteProblemCausingAbort("\nDid you mean '" + uex.NearestMatches.FirstOrDefault() + "'?");
+                    }
+
+                    return 430;
+                }
+            }
+
+            return executeAndGuideInCaseOfException();
+        }
+
+        static public void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
+        {
+            var colorBefore = Console.ForegroundColor;
+
+            Console.ForegroundColor = color;
+
+            Console.WriteLine(line);
+
+            Console.ForegroundColor = colorBefore;
+        }
+
+        static public void DotNetConsoleWriteProblemCausingAbort(string line)
+        {
+            Console.WriteLine("");
+
+            DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
         }
 
         public class DeployAppReport
