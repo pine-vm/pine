@@ -4,8 +4,8 @@ In this guide, I use the elm-fullstack command-line interface (CLI) program. You
 
 Here are direct links to the downloads, containing the `elm-fullstack` executable file contained in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-05-26/elm-fullstack-bin-1d4079332e5eddbd74bae602c7fb5a9bbd61410b-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-05-26/elm-fullstack-bin-1d4079332e5eddbd74bae602c7fb5a9bbd61410b-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-05-28/elm-fullstack-bin-3b7f24fa14f0baca0269081226fdcb1b5228fe0a-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-05-28/elm-fullstack-bin-3b7f24fa14f0baca0269081226fdcb1b5228fe0a-linux-x64.zip
 
 To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack install-command` command.
 
@@ -13,12 +13,12 @@ To register the elm-fullstack executable on your systems PATH environment variab
 
 To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/1d4079332e5eddbd74bae602c7fb5a9bbd61410b/implement/example-apps/default-full-stack-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fullstack  run-server  --process-store-directory-path=./process-store  --delete-previous-process  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/1d4079332e5eddbd74bae602c7fb5a9bbd61410b/implement/example-apps/default-full-stack-app
+elm-fullstack  run-server  --process-store-directory-path=./process-store  --delete-previous-process  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -27,9 +27,9 @@ When running this command, we get an output like this:
 Deleting the previous process state from './process-store'...
 Completed deleting the previous process state from './process-store'.
 Loading app config to deploy...
-Loaded source composition 799fa698663abbf438dc4a96933bc9e6a37031c880f71b4871f3f01244a646da from 'https://github.com/elm-fullstack/elm-fullstack/tree/1d4079332e5eddbd74bae602c7fb5a9bbd61410b/implement/example-apps/default-full-stack-app'.
-Starting to build app from '799fa698663abbf438dc4a96933bc9e6a37031c880f71b4871f3f01244a646da'.
-I found 4 files to build the Elm app.
+Loaded source composition 3d834d0e4ecd1046ec6b358afef3eff82dc4dda9efe79d30feb285893a8691fe from 'https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app'.
+Starting to build app from '3d834d0e4ecd1046ec6b358afef3eff82dc4dda9efe79d30feb285893a8691fe'.
+I found 6 files to build the Elm app.
 This Elm app contains a frontend at 'src/FrontendWeb/Main.elm'.
 I found a file at 'elm-fullstack.json'. I use this to build the configuration.
 I found 0 static files to include.
@@ -91,7 +91,7 @@ migrate backendState =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/46c6172fd3bf3827dfa2de47297d1a46b51d1cf2/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-app/src/FrontendWeb/Main.elm`
 
@@ -157,7 +157,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2020-05-26.
+Welcome to Elm-fullstack version 2020-05-28.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -170,12 +170,21 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fullstack  deploy-app  --site=http://localhost:4000  --site-password=secret  --from=https://github.com/elm-fullstack/elm-fullstack/tree/1d4079332e5eddbd74bae602c7fb5a9bbd61410b/implement/example-apps/default-full-stack-app  --init-elm-app-state
+elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app  --init-elm-app-state
 ```
 
 The `--init-elm-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
 
-The `deploy-app` also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
+Since the server requires us to authenticate for deployment, we will get this prompt when running the command from above:
+
+```text
+The server at 'http://localhost:4000/api/deploy-app-config-and-init-elm-app-state' is asking for authentication. Please enter the password we should use to authenticate there:
+>
+```
+
+We enter the same password we gave with the `--admin-password` option on the command to run the server.
+
+The `deploy-app` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
 ```text
 Saved report to file 'C:\Users\John\elm-fullstack-tool\report\2020-05-26T09-26-34_deploy-app.json'.
 ```
@@ -183,11 +192,11 @@ In this report, we can see if the deployment was successful and how much time it
 
 ## Configure the Admin Password via Environment Variable
 
-If you do not use the `--admin-password` option with the `run-server` command, the program will get the password from the environment variable `APPSETTING_adminRootPassword`.
+If you do not use the `--admin-password` option with the `run-server` command, the program will get the password from the environment variable `APPSETTING_adminPassword`.
 Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
 
 ```cmd
-docker run -p 80:80 -p 4000:4000 --env "APPSETTING_adminRootPassword=secret" elmfullstack/elm-fullstack
+docker run -p 80:80 -p 4000:4000 --env "APPSETTING_adminPassword=secret" elmfullstack/elm-fullstack
 ```
 
 ## Manage the Process Store
