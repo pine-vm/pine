@@ -22,38 +22,13 @@ namespace elm_fullstack
             };
 
             app.HelpOption(inherited: true);
+            app.HelpTextGenerator =
+                new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false };
 
             app.VersionOption(template: "-v|--version", shortFormVersion: "version " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId);
 
             CommandOption verboseLogOptionFromCommand(CommandLineApplication command) =>
                 command.Option("--verbose-log", "", CommandOptionType.NoValue);
-
-            app.Command("build-config", buildConfigCmd =>
-            {
-                buildConfigCmd.Description = "Build a configuration file that can be used to run a server.";
-
-                var verboseLogOption = verboseLogOptionFromCommand(buildConfigCmd);
-                var outputOption = buildConfigCmd.Option("--output", "Path to write the zip-archive to.", CommandOptionType.SingleValue);
-                var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
-                var fromOption = buildConfigCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
-
-                buildConfigCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.StopParsingAndCollect;
-
-                buildConfigCmd.OnExecute(() =>
-                {
-                    var verboseLogWriteLine =
-                        verboseLogOption.HasValue() ?
-                        (Action<string>)Console.WriteLine
-                        :
-                        null;
-
-                    BuildConfiguration(
-                        sourcePath: fromOption.Value(),
-                        outputOption: outputOption.Value(),
-                        loweredElmOutputOption: loweredElmOutputOption.Value(),
-                        verboseLogWriteLine: verboseLogWriteLine);
-                });
-            });
 
             app.Command("install-command", installCmd =>
             {
@@ -277,7 +252,8 @@ namespace elm_fullstack
                     var report =
                         truncateProcessHistory(
                             site: site,
-                            sitePassword: sitePassword);
+                            siteDefaultPassword: sitePassword,
+                            promptForPasswordOnConsole: true);
 
                     writeReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
@@ -295,6 +271,12 @@ namespace elm_fullstack
                 archiveProcessCmd.OnExecute(() =>
                 {
                     var (site, sitePassword) = siteAndPasswordFromCmd();
+
+                    sitePassword =
+                        AttemptHttpRequest(
+                        () => new System.Net.Http.HttpRequestMessage { RequestUri = new Uri(site) },
+                        defaultPassword: sitePassword,
+                        promptForPasswordOnConsole: true).Result.enteredPassword ?? sitePassword;
 
                     Console.WriteLine("Begin reading process history from '" + site + "' ...");
 
@@ -338,6 +320,31 @@ namespace elm_fullstack
                     userSecretsCmd.ShowHelp();
 
                     return 1;
+                });
+            });
+
+            app.Command("inspect-build-deploy", buildConfigCmd =>
+            {
+                var verboseLogOption = verboseLogOptionFromCommand(buildConfigCmd);
+                var outputOption = buildConfigCmd.Option("--output", "Path to write the zip-archive to.", CommandOptionType.SingleValue);
+                var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
+                var fromOption = buildConfigCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+
+                buildConfigCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.StopParsingAndCollect;
+
+                buildConfigCmd.OnExecute(() =>
+                {
+                    var verboseLogWriteLine =
+                        verboseLogOption.HasValue() ?
+                        (Action<string>)Console.WriteLine
+                        :
+                        null;
+
+                    BuildConfiguration(
+                        sourcePath: fromOption.Value(),
+                        outputOption: outputOption.Value(),
+                        loweredElmOutputOption: loweredElmOutputOption.Value(),
+                        verboseLogWriteLine: verboseLogWriteLine);
                 });
             });
 
@@ -478,7 +485,7 @@ namespace elm_fullstack
                         };
                     },
                     defaultPassword: siteDefaultPassword,
-                    promptForPasswordOnConsole: promptForPasswordOnConsole).Result;
+                    promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
 
                 var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
 
@@ -552,7 +559,7 @@ namespace elm_fullstack
             };
         }
 
-        static async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage>
+        static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string enteredPassword)>
             AttemptHttpRequest(
             Func<System.Net.Http.HttpRequestMessage> buildRequest,
             string defaultPassword,
@@ -572,22 +579,24 @@ namespace elm_fullstack
 
                 var httpResponse = await httpClient.SendAsync(buildRequest());
 
+                string enteredPassword = null;
+
                 if (promptForPasswordOnConsole &&
                     httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
                      httpResponse.Headers.WwwAuthenticate.Any())
                 {
                     Console.WriteLine("The server at '" + httpResponse.RequestMessage.RequestUri.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
 
-                    var password = ReadLine.ReadPassword("> ").Trim();
+                    enteredPassword = ReadLine.ReadPassword("> ").Trim();
 
                     Console.WriteLine("I retry using this password...");
 
-                    setHttpClientPassword(password);
+                    setHttpClientPassword(enteredPassword);
 
                     httpResponse = await httpClient.SendAsync(buildRequest());
                 }
 
-                return httpResponse;
+                return (httpResponse, enteredPassword);
             }
         }
 
@@ -647,7 +656,7 @@ namespace elm_fullstack
                     };
                 },
                 defaultPassword: siteDefaultPassword,
-                promptForPasswordOnConsole: promptForPasswordOnConsole).Result;
+                promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
 
             var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
 
@@ -699,55 +708,56 @@ namespace elm_fullstack
             }
         }
 
-        static TruncateProcessHistoryReport truncateProcessHistory(string site, string sitePassword)
+        static TruncateProcessHistoryReport truncateProcessHistory(
+            string site,
+            string siteDefaultPassword,
+            bool promptForPasswordOnConsole)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
-
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            using (var httpClient = new System.Net.Http.HttpClient())
+            var requestUrl =
+                site.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
+
+            Console.WriteLine("Beginning to truncate process history at '" + site + "'...");
+
+            var httpResponse = AttemptHttpRequest(() =>
+                    new System.Net.Http.HttpRequestMessage
+                    {
+                        Method = System.Net.Http.HttpMethod.Post,
+                        RequestUri = new Uri(requestUrl),
+                    },
+                defaultPassword: siteDefaultPassword,
+                promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
+
+            var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+            Console.WriteLine(
+                "Server response: " + httpResponse.StatusCode + "\n" +
+                 responseContentString);
+
+            object responseBodyReport = responseContentString;
+
+            try
             {
-                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Basic",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
-
-                var requestUrl =
-                    site.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
-
-                Console.WriteLine("Beginning to truncate process history at '" + site + "'...");
-
-                var httpResponse = httpClient.PostAsync(requestUrl, null).Result;
-
-                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
-
-                Console.WriteLine(
-                    "Server response: " + httpResponse.StatusCode + "\n" +
-                     responseContentString);
-
-                object responseBodyReport = responseContentString;
-
-                try
-                {
-                    responseBodyReport =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
-                }
-                catch { }
-
-                var responseFromServer = new TruncateProcessHistoryReport.ResponseFromServerStruct
-                {
-                    statusCode = (int)httpResponse.StatusCode,
-                    body = responseBodyReport,
-                };
-
-                return new TruncateProcessHistoryReport
-                {
-                    beginTime = beginTime,
-                    site = site,
-                    responseFromServer = responseFromServer,
-                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                };
+                responseBodyReport =
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
             }
+            catch { }
+
+            var responseFromServer = new TruncateProcessHistoryReport.ResponseFromServerStruct
+            {
+                statusCode = (int)httpResponse.StatusCode,
+                body = responseBodyReport,
+            };
+
+            return new TruncateProcessHistoryReport
+            {
+                beginTime = beginTime,
+                site = site,
+                responseFromServer = responseFromServer,
+                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+            };
         }
 
         static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16) readFilesForRestoreProcessFromAdminInterface(
