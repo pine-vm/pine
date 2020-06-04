@@ -1,6 +1,10 @@
 module Conversation exposing (..)
 
 
+type alias UserId =
+    Int
+
+
 type EventOrigin
     = FromUser EventOriginUser
     | FromSystem
@@ -21,5 +25,5 @@ type EventContentNode
 
 
 type alias EventOriginUser =
-    { userId : Int
+    { userId : UserId
     }

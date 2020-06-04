@@ -3,7 +3,7 @@ module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 import Browser
 import Browser.Dom
 import Browser.Navigation as Navigation
-import Conversation
+import Conversation exposing (UserId)
 import Dict
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import FrontendBackendInterface
@@ -38,7 +38,10 @@ type alias State =
     , editingChosenName : Maybe String
     , lastRequestToBackendResult : Maybe { time : Time.Posix, result : RequestToBackendResultStructure }
     , lastMessageFromBackend : Maybe { time : Time.Posix, message : FrontendBackendInterface.MessageToClient }
+    , lastSeeingLobby : Maybe { time : Time.Posix, message : FrontendBackendInterface.SeeingLobbyStructure }
+    , usersProfiles : Dict.Dict UserId { chosenName : String }
     , conversationHistory : List Conversation.Event
+    , showChangeNameGuide : Bool
     }
 
 
@@ -50,10 +53,21 @@ type Event
     | UserEnterMessageText String
     | UserInputAddMessage
     | DomTaskResult (Result Browser.Dom.Error ())
+    | UserInputContinueEditChosenName String
+    | UserInputStopEditChosenName
+    | EnterKeyDownOnChooseNameTextbox
+    | UserInputCompleteEnterChosenName
+    | UserInputShowChangeNameGuide Bool
 
 
 type alias RequestToBackendResultStructure =
-    Result Http.Error FrontendBackendInterface.MessageToClient
+    Result Http.Error RequestToBackendResultOkStructure
+
+
+type alias RequestToBackendResultOkStructure =
+    { originatingRequest : FrontendBackendInterface.RequestFromUser
+    , messageFromBackend : FrontendBackendInterface.MessageToClient
+    }
 
 
 type alias ViewConfiguration =
@@ -69,17 +83,25 @@ init _ url navigationKey =
     , lastRequestToBackendTime = Nothing
     , lastRequestToBackendResult = Nothing
     , lastMessageFromBackend = Nothing
+    , lastSeeingLobby = Nothing
     , conversationHistory = []
+    , usersProfiles = Dict.empty
+    , showChangeNameGuide = False
     }
         |> update (UrlChange url)
 
 
 requestToBackendCmd : FrontendBackendInterface.RequestFromUser -> Cmd Event
 requestToBackendCmd request =
+    let
+        jsonDecoder =
+            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageToClient
+                |> Json.Decode.map (\messageFromBackend -> { originatingRequest = request, messageFromBackend = messageFromBackend })
+    in
     Http.post
         { url = Url.Builder.relative [ "api" ] []
         , body = Http.jsonBody (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestFromUser)
-        , expect = Http.expectJson RequestToBackendResult ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageToClient
+        , expect = Http.expectJson RequestToBackendResult jsonDecoder
         }
 
 
@@ -114,7 +136,7 @@ updateLessScrolling : Event -> State -> ( State, Cmd Event )
 updateLessScrolling event stateBefore =
     case event of
         ArrivedAtTime time ->
-            ( { stateBefore | time = time }, requestToBackendCmd FrontendBackendInterface.BeOnline )
+            ( { stateBefore | time = time }, requestToBackendCmd FrontendBackendInterface.ShowUpRequest )
 
         RequestToBackendResult requestToBackendResult ->
             let
@@ -133,7 +155,7 @@ updateLessScrolling event stateBefore =
             in
             ( state, Cmd.none )
 
-        UrlChange url ->
+        UrlChange _ ->
             ( stateBefore, Cmd.none )
 
         UrlRequest urlRequest ->
@@ -145,7 +167,7 @@ updateLessScrolling event stateBefore =
                     ( stateBefore, Navigation.load url )
 
         UserEnterMessageText messageText ->
-            ( { stateBefore | messageToAddText = messageText }, Cmd.none )
+            ( { stateBefore | messageToAddText = messageText, showChangeNameGuide = False }, Cmd.none )
 
         UserInputAddMessage ->
             if not (stateBefore |> offerUserToSendMessage) then
@@ -154,7 +176,7 @@ updateLessScrolling event stateBefore =
             else
                 let
                     requestToServerCmd =
-                        requestToBackendCmd (FrontendBackendInterface.AddTextMessage stateBefore.messageToAddText)
+                        requestToBackendCmd (FrontendBackendInterface.AddTextMessageRequest stateBefore.messageToAddText)
 
                     focusCmd =
                         Browser.Dom.focus messageToAddTextboxId |> Task.attempt DomTaskResult
@@ -163,47 +185,100 @@ updateLessScrolling event stateBefore =
                 , [ requestToServerCmd, focusCmd ] |> Cmd.batch
                 )
 
+        UserInputShowChangeNameGuide showGuide ->
+            ( { stateBefore | showChangeNameGuide = showGuide }, Cmd.none )
+
+        UserInputContinueEditChosenName nameBefore ->
+            ( { stateBefore | editingChosenName = Just nameBefore, showChangeNameGuide = False }
+            , Browser.Dom.focus chosenNameTextboxId |> Task.attempt DomTaskResult
+            )
+
+        UserInputStopEditChosenName ->
+            ( { stateBefore | editingChosenName = Nothing }, Cmd.none )
+
+        EnterKeyDownOnChooseNameTextbox ->
+            stateBefore
+                |> updateLessScrolling UserInputCompleteEnterChosenName
+                |> Tuple.mapSecond (List.singleton >> (::) (Browser.Dom.focus messageToAddTextboxId |> Task.attempt DomTaskResult) >> Cmd.batch)
+
+        UserInputCompleteEnterChosenName ->
+            ( { stateBefore | editingChosenName = Nothing }
+            , stateBefore.editingChosenName
+                |> Maybe.map (FrontendBackendInterface.ChooseNameRequest >> requestToBackendCmd)
+                |> Maybe.withDefault Cmd.none
+            )
+
         DomTaskResult _ ->
             ( stateBefore, Cmd.none )
 
 
-updateForMessageFromServer : FrontendBackendInterface.MessageToClient -> State -> State
-updateForMessageFromServer messageFromServer stateBefore =
+updateForMessageFromServer : RequestToBackendResultOkStructure -> State -> State
+updateForMessageFromServer { originatingRequest, messageFromBackend } stateBeforeGeneralUpdate =
     let
-        ( eventsToAdd, eventRepresentsMessageToSend ) =
+        stateBefore =
+            { stateBeforeGeneralUpdate
+                | lastMessageFromBackend = Just { time = stateBeforeGeneralUpdate.time, message = messageFromBackend }
+            }
+    in
+    case messageFromBackend.responseToUser of
+        FrontendBackendInterface.SeeingLobby seeingLobby ->
+            { stateBefore | lastSeeingLobby = Just { time = stateBefore.time, message = seeingLobby } }
+                |> updateAddingToConversationHistory
+                    { currentUserId = messageFromBackend.currentUserId, backendPosixTimeMilli = messageFromBackend.currentPosixTimeMilli }
+                    seeingLobby.conversationHistory
+
+        FrontendBackendInterface.ReadUserProfile userProfile ->
             let
-                innerEventRepresentsMessageToSend historyEvent =
-                    case messageFromServer.currentUserId of
+                maybeUserId =
+                    case originatingRequest of
+                        FrontendBackendInterface.ReadUserProfileRequest userId ->
+                            Just userId
+
+                        FrontendBackendInterface.ChooseNameRequest _ ->
+                            messageFromBackend.currentUserId
+
+                        _ ->
+                            Nothing
+
+                usersProfiles =
+                    case maybeUserId of
                         Nothing ->
-                            False
+                            stateBefore.usersProfiles
 
-                        Just currentUserId ->
-                            ((messageFromServer.currentPosixTimeMilli - historyEvent.posixTimeMilli) < addMessageWaitTimeMaxMilli)
-                                && (historyEvent.message == Conversation.LeafPlainText stateBefore.messageToAddText)
-                                && (historyEvent.origin == Conversation.FromUser { userId = currentUserId })
-
-                eventsToAddFromErrorMessage =
-                    case messageFromServer.messageToUser of
-                        Nothing ->
-                            []
-
-                        Just messageToUser ->
-                            [ { origin = Conversation.FromSystem
-                              , message = messageToUser
-                              , posixTimeMilli = messageFromServer.currentPosixTimeMilli
-                              }
-                            ]
-
-                -- Also, add a 'connection lost' notification to `eventsToAdd` when we have not heard from the server in a while.
+                        Just requestUserId ->
+                            stateBefore.usersProfiles |> Dict.insert requestUserId userProfile
             in
-            ( messageFromServer.conversationHistory ++ eventsToAddFromErrorMessage, innerEventRepresentsMessageToSend )
+            { stateBefore | usersProfiles = usersProfiles }
+
+        FrontendBackendInterface.MessageToUser messageToUser ->
+            stateBefore
+                |> updateAddingToConversationHistory
+                    { currentUserId = messageFromBackend.currentUserId, backendPosixTimeMilli = messageFromBackend.currentPosixTimeMilli }
+                    [ { origin = Conversation.FromSystem
+                      , message = messageToUser
+                      , posixTimeMilli = messageFromBackend.currentPosixTimeMilli
+                      }
+                    ]
+
+
+updateAddingToConversationHistory : { currentUserId : Maybe UserId, backendPosixTimeMilli : Int } -> List Conversation.Event -> State -> State
+updateAddingToConversationHistory { currentUserId, backendPosixTimeMilli } eventsToAddToHistory stateBefore =
+    let
+        eventRepresentsMessageToAdd historyEvent =
+            case currentUserId of
+                Nothing ->
+                    False
+
+                Just selfUserId ->
+                    ((backendPosixTimeMilli - historyEvent.posixTimeMilli) < addMessageWaitTimeMaxMilli)
+                        && (historyEvent.message == Conversation.LeafPlainText stateBefore.messageToAddText)
+                        && (historyEvent.origin == Conversation.FromUser { userId = selfUserId })
 
         history =
-            eventsToAdd
-                |> List.foldr addEventIntoHistory stateBefore.conversationHistory
+            eventsToAddToHistory |> List.foldr addEventIntoHistory stateBefore.conversationHistory
 
         historyContainsMessageToAdd =
-            history |> List.any eventRepresentsMessageToSend
+            history |> List.any eventRepresentsMessageToAdd
 
         truncatedHistory =
             history |> List.take historyRetainedLength
@@ -218,7 +293,6 @@ updateForMessageFromServer messageFromServer stateBefore =
     { stateBefore
         | conversationHistory = truncatedHistory
         , messageToAddText = messageToAddText
-        , lastMessageFromBackend = Just { time = stateBefore.time, message = messageFromServer }
     }
 
 
@@ -234,6 +308,9 @@ addEventIntoHistory event historyBefore =
 view : State -> Browser.Document Event
 view state =
     let
+        viewConfiguration =
+            { usersProfiles = state.usersProfiles }
+
         messageTextboxAttributes =
             [ HA.id messageToAddTextboxId
             , HA.value state.messageToAddText
@@ -261,13 +338,11 @@ view state =
                 |> Visuals.button sendMessageButtonAttributes
 
         participateControlView =
-            [ [] |> Html.input messageTextboxAttributes
+            [ [ nameSection |> Html.span [], historyEventSeparatorBetweenOriginAndText ] |> placedVerticallyCentered
+            , [] |> Html.input messageTextboxAttributes
             , sendMessageButton
             ]
                 |> Html.div [ HA.style "display" "flex", HA.style "flex-direction" "row", HA.style "margin" "2px" ]
-
-        viewConfiguration =
-            { usersProfiles = Dict.empty }
 
         historyView =
             state.conversationHistory
@@ -284,10 +359,11 @@ view state =
                 |> Html.div (htmlAttributesStyles [ ( "font-size", "120%" ), ( "margin", "4px" ) ])
 
         peopleOnlineViewBeforeStyle =
-            case state.lastMessageFromBackend of
-                Just lastMessageFromBackend ->
-                    lastMessageFromBackend.message.usersOnline
-                        |> List.map (Conversation.FromUser >> viewDialogEventOrigin viewConfiguration state)
+            case state.lastSeeingLobby of
+                Just lastSeeingLobby ->
+                    lastSeeingLobby.message.usersOnline
+                        |> List.map
+                            (\userId -> Conversation.FromUser { userId = userId } |> viewDialogEventOrigin viewConfiguration state)
                         |> List.map (List.singleton >> Html.div [])
 
                 Nothing ->
@@ -299,6 +375,57 @@ view state =
         peopleOnlineColumn =
             [ peopleOnlineCaption, peopleOnlineView ]
                 |> Html.div (htmlAttributesStyles [ ( "display", "flex" ), ( "flex-direction", "column" ), ( "width", "25%" ), ( "padding", "4px" ) ])
+
+        nameSection =
+            case state.editingChosenName of
+                Just editingChosenName ->
+                    let
+                        keyDownEventHandler =
+                            HE.on "keydown"
+                                (HE.keyCode
+                                    |> Json.Decode.andThen
+                                        (\keyCode ->
+                                            if keyCode == 13 then
+                                                Json.Decode.succeed EnterKeyDownOnChooseNameTextbox
+
+                                            else if keyCode == 27 then
+                                                Json.Decode.succeed UserInputStopEditChosenName
+
+                                            else
+                                                Json.Decode.fail "Another key code"
+                                        )
+                                )
+
+                        chosenNameTextboxAttributes =
+                            [ HA.id chosenNameTextboxId
+                            , HA.value editingChosenName
+                            , HA.placeholder "Enter your name here"
+                            , HE.onInput UserInputContinueEditChosenName
+                            , keyDownEventHandler
+                            , HE.onBlur UserInputCompleteEnterChosenName
+                            ]
+                                ++ htmlAttributesStyles chosenNameTextboxStyle
+                    in
+                    [ { userId = state |> getCurrentUserId |> Maybe.withDefault -1 }
+                        |> Conversation.FromUser
+                        |> viewDialogEventOrigin { viewConfiguration | usersProfiles = Dict.empty } state
+                    , [] |> Html.input chosenNameTextboxAttributes
+                    ]
+
+                Nothing ->
+                    [ { userId = state |> getCurrentUserId |> Maybe.withDefault -1 }
+                        |> Conversation.FromUser
+                        |> viewDialogEventOrigin viewConfiguration state
+                    , startEditChosenNameButton
+                        { currentName =
+                            state.editingChosenName
+                                |> Maybe.withDefault
+                                    (state.editingChosenName
+                                        |> Maybe.withDefault (getCurrentUserName viewConfiguration state |> Maybe.withDefault "")
+                                    )
+                        , showGuide = state.showChangeNameGuide
+                        }
+                    ]
 
         connectionStateHtml =
             case state.lastRequestToBackendResult of
@@ -338,6 +465,69 @@ view state =
     { title = "Chat demo Elm-fullstack app", body = body }
 
 
+getCurrentUserName : ViewConfiguration -> State -> Maybe String
+getCurrentUserName viewConfiguration =
+    getCurrentUserId
+        >> Maybe.andThen
+            (\currentUserId -> viewConfiguration.usersProfiles |> Dict.get currentUserId |> Maybe.map .chosenName)
+
+
+getCurrentUserId : State -> Maybe UserId
+getCurrentUserId =
+    .lastMessageFromBackend >> Maybe.andThen (.message >> .currentUserId)
+
+
+startEditChosenNameButton : { currentName : String, showGuide : Bool } -> Html.Html Event
+startEditChosenNameButton { currentName, showGuide } =
+    let
+        buttonStyle =
+            [ ( "cursor", "pointer" )
+            , ( "transform", "scale(-1,1)" )
+            , ( "display", "inline-block" )
+            , ( "margin-left", "10px" )
+            ]
+
+        button =
+            [ "✎" |> Html.text ]
+                |> Html.span
+                    ([ HA.tabindex 0
+                     , HE.onClick (UserInputContinueEditChosenName currentName)
+                     , HE.onMouseEnter (UserInputShowChangeNameGuide True)
+                     , HE.onMouseLeave (UserInputShowChangeNameGuide False)
+                     ]
+                        ++ htmlAttributesStyles buttonStyle
+                    )
+
+        guideWidthInEm =
+            12
+
+        guidePopupStyle =
+            [ ( "z-index", "1" )
+            , ( "position", "absolute" )
+            , ( "text-align", "center" )
+            , ( "width", (guideWidthInEm |> String.fromFloat) ++ "em" )
+            , ( "margin-left", "-" ++ ((guideWidthInEm / 2) |> String.fromFloat) ++ "em" )
+            , ( "bottom", "2em" )
+            , ( "left", "50%" )
+            , ( "padding", "0.4em" )
+            , ( "color", "whitesmoke" )
+            , ( "background-color", "#111" )
+            ]
+
+        guide =
+            if showGuide then
+                [ "Click here to change your display name" |> Html.text ]
+                    |> Html.span (htmlAttributesStyles guidePopupStyle)
+
+            else
+                "" |> Html.text
+    in
+    [ button
+    , guide
+    ]
+        |> Html.span [ HA.style "position" "relative" ]
+
+
 historyViewStyle : HtmlStyle
 historyViewStyle =
     [ ( "overflow-y", "auto" )
@@ -360,6 +550,22 @@ peopleOnlineViewStyle =
     , ( "flex", "1" )
     , ( "white-space", "nowrap" )
     ]
+
+
+placedVerticallyCentered : List (Html.Html a) -> Html.Html a
+placedVerticallyCentered =
+    Html.span (htmlAttributesStyles [ ( "display", "flex" ), ( "justify-content", "center" ), ( "align-items", "center" ) ])
+
+
+historyEventSeparatorBetweenOriginAndText : Html.Html a
+historyEventSeparatorBetweenOriginAndText =
+    [ " : " |> Html.text ] |> Html.span []
+
+
+chosenNameTextboxStyle : HtmlStyle
+chosenNameTextboxStyle =
+    textboxStyle
+        ++ [ ( "color", playerNameColor ) ]
 
 
 messageTextboxStyle : HtmlStyle
@@ -539,3 +745,8 @@ historyViewContainerId =
 messageToAddTextboxId : String
 messageToAddTextboxId =
     "message-to-add-input"
+
+
+chosenNameTextboxId : String
+chosenNameTextboxId =
+    "chosen-name-input"

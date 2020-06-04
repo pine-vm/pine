@@ -9,7 +9,7 @@ import Backend.InterfaceToHost as InterfaceToHost
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
-import Conversation
+import Conversation exposing (UserId)
 import Dict
 import ElmFullstackCompilerInterface.GenerateJsonCoders as GenerateJsonCoders
 import FrontendBackendInterface
@@ -22,15 +22,21 @@ type alias State =
     { posixTimeMilli : Int
     , conversationHistory : List Conversation.Event
     , usersSessions : Dict.Dict String UserSessionState
-    , usersProfiles : Dict.Dict Int {}
+    , usersProfiles : Dict.Dict UserId UserProfile
+    , usersLastSeen : Dict.Dict UserId { posixTime : Int }
     }
 
 
 type alias UserSessionState =
     { beginPosixTime : Int
     , clientAddress : Maybe String
-    , userId : Maybe Int
+    , userId : Maybe UserId
     , lastUsePosixTime : Int
+    }
+
+
+type alias UserProfile =
+    { chosenName : String
     }
 
 
@@ -78,23 +84,36 @@ processEventHttpRequest httpRequestEvent stateBefore =
                 ( userSessionId, userSessionStateBefore ) =
                     userSessionIdAndStateFromRequestOrCreateNew httpRequestEvent.request stateBefore
 
-                usersProfiles =
+                userSessionState =
+                    userSessionStateBefore
+
+                usersLastSeen =
                     case userSessionStateBefore.userId of
                         Nothing ->
-                            stateBefore.usersProfiles
+                            stateBefore.usersLastSeen
 
                         Just userId ->
-                            stateBefore.usersProfiles |> Dict.insert userId {}
+                            stateBefore.usersLastSeen
+                                |> Dict.insert userId { posixTime = stateBefore.posixTimeMilli // 1000 }
 
                 usersSessions =
                     stateBefore.usersSessions
-                        |> Dict.insert userSessionId userSessionStateBefore
+                        |> Dict.insert userSessionId userSessionState
 
-                ( state, responseToClient ) =
+                ( state, responseToUser ) =
                     processMessageFromClient
                         { posixTimeMilli = stateBefore.posixTimeMilli, userId = userSessionStateBefore.userId, loginUrl = "" }
                         requestFromUser
-                        { stateBefore | usersSessions = usersSessions, usersProfiles = usersProfiles }
+                        { stateBefore
+                            | usersSessions = usersSessions
+                            , usersLastSeen = usersLastSeen
+                        }
+
+                responseToClient =
+                    { currentPosixTimeMilli = state.posixTimeMilli
+                    , currentUserId = userSessionState.userId
+                    , responseToUser = responseToUser
+                    }
 
                 httpResponse =
                     { httpRequestId = httpRequestEvent.httpRequestId
@@ -115,19 +134,36 @@ processEventHttpRequest httpRequestEvent stateBefore =
             ( state, [ httpResponse ] )
 
 
-processMessageFromClient : { userId : Maybe Int, posixTimeMilli : Int, loginUrl : String } -> FrontendBackendInterface.RequestFromUser -> State -> ( State, FrontendBackendInterface.MessageToClient )
+seeingLobbyFromState : State -> FrontendBackendInterface.SeeingLobbyStructure
+seeingLobbyFromState state =
+    let
+        usersOnline =
+            state.usersLastSeen
+                |> Dict.filter (\_ lastSeen -> state.posixTimeMilli // 1000 - 10 < lastSeen.posixTime)
+                |> Dict.keys
+    in
+    { conversationHistory = state.conversationHistory
+    , usersOnline = usersOnline
+    }
+
+
+processMessageFromClient :
+    { userId : Maybe Int, posixTimeMilli : Int, loginUrl : String }
+    -> FrontendBackendInterface.RequestFromUser
+    -> State
+    -> ( State, FrontendBackendInterface.ResponseToUser )
 processMessageFromClient context requestFromUser stateBefore =
     let
-        ( state, messageToUser ) =
+        ( state, responseToUser ) =
             case requestFromUser of
-                FrontendBackendInterface.BeOnline ->
-                    ( stateBefore, Nothing )
+                FrontendBackendInterface.ShowUpRequest ->
+                    ( stateBefore, stateBefore |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby )
 
-                FrontendBackendInterface.AddTextMessage message ->
+                FrontendBackendInterface.AddTextMessageRequest message ->
                     case context.userId of
                         Nothing ->
                             ( stateBefore
-                            , Just
+                            , FrontendBackendInterface.MessageToUser
                                 ([ Conversation.LeafPlainText "⚠️ To add a message, please sign in first at "
                                  , Conversation.LeafLinkToUrl { url = context.loginUrl }
                                  ]
@@ -143,18 +179,55 @@ processMessageFromClient context requestFromUser stateBefore =
                                     , message = Conversation.LeafPlainText message
                                     }
                                         :: stateBefore.conversationHistory
-                            in
-                            ( { stateBefore | conversationHistory = conversationHistory }, Nothing )
 
-        messageToClient =
-            { currentPosixTimeMilli = context.posixTimeMilli
-            , conversationHistory = state.conversationHistory
-            , usersOnline = []
-            , currentUserId = context.userId
-            , messageToUser = messageToUser
-            }
+                                stateAfterAddingMessage =
+                                    { stateBefore | conversationHistory = conversationHistory }
+                            in
+                            ( stateAfterAddingMessage
+                            , stateAfterAddingMessage |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby
+                            )
+
+                FrontendBackendInterface.ChooseNameRequest chosenName ->
+                    case context.userId of
+                        Nothing ->
+                            ( stateBefore
+                            , FrontendBackendInterface.MessageToUser
+                                ([ Conversation.LeafPlainText "⚠️ To choose a name, please sign in first at "
+                                 , Conversation.LeafLinkToUrl { url = context.loginUrl }
+                                 ]
+                                    |> Conversation.SequenceOfNodes
+                                )
+                            )
+
+                        Just userId ->
+                            let
+                                userProfileBefore =
+                                    stateBefore.usersProfiles |> Dict.get userId |> Maybe.withDefault initUserProfile
+
+                                userProfile =
+                                    { userProfileBefore | chosenName = chosenName }
+
+                                usersProfiles =
+                                    stateBefore.usersProfiles |> Dict.insert userId userProfile
+                            in
+                            ( { stateBefore | usersProfiles = usersProfiles }
+                            , FrontendBackendInterface.ReadUserProfile userProfile
+                            )
+
+                FrontendBackendInterface.ReadUserProfileRequest userId ->
+                    ( stateBefore
+                    , stateBefore.usersProfiles
+                        |> Dict.get userId
+                        |> Maybe.withDefault initUserProfile
+                        |> FrontendBackendInterface.ReadUserProfile
+                    )
     in
-    ( state, messageToClient )
+    ( state, responseToUser )
+
+
+initUserProfile : UserProfile
+initUserProfile =
+    { chosenName = "" }
 
 
 userSessionIdAndStateFromRequestOrCreateNew : InterfaceToHost.HttpRequestProperties -> State -> ( String, UserSessionState )
@@ -224,6 +297,7 @@ getNextUserSessionIdAndState state =
 getLastUserId : State -> Maybe Int
 getLastUserId state =
     [ state.usersProfiles |> Dict.keys
+    , state.usersSessions |> Dict.values |> List.filterMap .userId
     ]
         |> List.concat
         |> List.maximum
@@ -271,4 +345,5 @@ interfaceToHost_initState =
     , conversationHistory = []
     , usersProfiles = Dict.empty
     , usersSessions = Dict.empty
+    , usersLastSeen = Dict.empty
     }
