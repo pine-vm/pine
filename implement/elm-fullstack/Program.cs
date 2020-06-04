@@ -561,10 +561,13 @@ namespace elm_fullstack
 
         static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string enteredPassword)>
             AttemptHttpRequest(
-            Func<System.Net.Http.HttpRequestMessage> buildRequest,
+            Func<System.Net.Http.HttpRequestMessage> buildRequestBeforeAddingCommonHeaders,
             string defaultPassword,
             bool promptForPasswordOnConsole)
         {
+            System.Net.Http.HttpRequestMessage buildRequest() =>
+                AddUserAgentHeader(buildRequestBeforeAddingCommonHeaders());
+
             using (var httpClient = new System.Net.Http.HttpClient())
             {
                 void setHttpClientPassword(string password)
@@ -981,6 +984,16 @@ namespace elm_fullstack
             var filePath = GetCurrentProcessExecutableFilePath();
 
             return (filePath, System.IO.Path.GetDirectoryName(filePath), System.IO.Path.GetFileName(filePath));
+        }
+
+        static System.Net.Http.HttpRequestMessage AddUserAgentHeader(
+            System.Net.Http.HttpRequestMessage httpRequest)
+        {
+            httpRequest.Headers.UserAgent.Add(
+                new System.Net.Http.Headers.ProductInfoHeaderValue(
+                    new System.Net.Http.Headers.ProductHeaderValue("elm-fullstack-cli", Kalmit.PersistentProcess.WebHost.Program.AppVersionId)));
+
+            return httpRequest;
         }
     }
 }
