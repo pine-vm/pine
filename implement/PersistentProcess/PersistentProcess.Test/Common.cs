@@ -37,13 +37,16 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         static public Kalmit.IDisposableProcessWithStringInterface BuildInstanceOfCounterProcess() =>
-            Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(CounterElmApp).process;
+            Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(AsLoweredElmApp(CounterElmApp)).process;
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CounterElmApp =
             GetElmAppFromExampleName("counter");
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CounterElmWebApp =
             GetElmAppFromExampleName("counter-webapp");
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ReadSourceFileWebApp =
+            GetElmAppFromExampleName("read-source-file-webapp");
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> StringBuilderElmWebApp =
             GetElmAppFromExampleName("string-builder-webapp");
@@ -56,11 +59,16 @@ namespace Kalmit.PersistentProcess.Test
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromExampleName(
             string exampleName) =>
-            ElmApp.AsCompletelyLoweredElmApp(
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     ElmApp.FilesFilteredForElmApp(
                         Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
-                    .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent))),
+                    .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent)));
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles) =>
+                ElmApp.AsCompletelyLoweredElmApp(
+                    originalAppFiles: originalAppFiles,
+                    originalSourceFiles: originalAppFiles,
                     ElmAppInterfaceConfig.Default,
                     Console.WriteLine);
 

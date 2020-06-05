@@ -15,7 +15,7 @@ namespace Kalmit.PersistentProcess.Test
         [TestMethod]
         public void Get_echo_from_elm_process()
         {
-            var elmApp = TestSetup.GetElmAppFromExampleName("echo");
+            var elmApp = TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromExampleName("echo"));
 
             using (var process = Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 elmCodeFiles: elmApp).process)
@@ -96,7 +96,10 @@ namespace Kalmit.PersistentProcess.Test
                     new FileStoreFromSystemIOFile(processStoreDirectory), null);
 
                 return new PersistentProcessWithControlFlowOverStoreWriter(
-                    new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmApp, logger: null),
+                    new PersistentProcessWithHistoryOnFileFromElm019Code(
+                        storeReader,
+                        TestSetup.AsLoweredElmApp(TestSetup.CounterElmApp),
+                        logger: null),
                     storeWriter: storeWriter);
             }
 
@@ -139,7 +142,10 @@ namespace Kalmit.PersistentProcess.Test
                     GetReductionDelegate = hash => null,
                 };
 
-                return new PersistentProcessWithHistoryOnFileFromElm019Code(storeReader, TestSetup.CounterElmApp, logger: null);
+                return new PersistentProcessWithHistoryOnFileFromElm019Code(
+                    storeReader,
+                    TestSetup.AsLoweredElmApp(TestSetup.CounterElmApp),
+                    logger: null);
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
@@ -192,7 +198,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 return new PersistentProcessWithHistoryOnFileFromElm019Code(
                     storeReader,
-                    TestSetup.CounterElmApp,
+                    TestSetup.AsLoweredElmApp(TestSetup.CounterElmApp),
                     logger: null);
             }
 
@@ -243,7 +249,7 @@ namespace Kalmit.PersistentProcess.Test
             PersistentProcessWithHistoryOnFileFromElm019Code InstantiatePersistentProcess(IProcessStoreReader storeReader) =>
                 new PersistentProcessWithHistoryOnFileFromElm019Code(
                     storeReader,
-                    TestSetup.CounterElmApp,
+                    TestSetup.AsLoweredElmApp(TestSetup.CounterElmApp),
                     logger: null);
 
             void AssertProcessIsInFinalState(IPersistentProcess process, IList<byte[]> processStoreCompositions)

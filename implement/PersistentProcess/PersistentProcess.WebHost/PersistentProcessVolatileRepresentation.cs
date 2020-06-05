@@ -45,21 +45,44 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
         }
 
         static public (IDisposableProcessWithStringInterface process,
-            (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
+            (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts,
+            IReadOnlyList<string> log)
             ProcessFromWebAppConfig(
             Composition.TreeComponent appConfig,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
-            var elmAppFilesNamesAndContents =
-                SubtreeElmAppFromAppConfig(appConfig).EnumerateBlobsTransitive()
-                .Select(blobPathAndContent => (
-                    fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                    fileContent: blobPathAndContent.blobContent))
-                .ToImmutableList();
+            var log = new List<string>();
 
-            return ProcessFromElm019Code.ProcessFromElmCodeFiles(
+            var sourceFiles = TreeToFlatDictionaryWithPathComparer(appConfig);
+
+            var elmAppFilesBeforeLowering =
+                TreeToFlatDictionaryWithPathComparer(SubtreeElmAppFromAppConfig(appConfig));
+
+            var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                originalAppFiles: elmAppFilesBeforeLowering,
+                originalSourceFiles: sourceFiles,
+                ElmAppInterfaceConfig.Default,
+                log.Add);
+
+            var elmAppFilesNamesAndContents = loweredElmAppFiles;
+
+            var processFromLoweredElmApp =
+                ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 elmAppFilesNamesAndContents,
                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+            return (processFromLoweredElmApp.process, processFromLoweredElmApp.buildArtifacts, log);
+        }
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> TreeToFlatDictionaryWithPathComparer(
+            Composition.TreeComponent tree)
+        {
+            return
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    tree.EnumerateBlobsTransitive()
+                    .Select(blobPathAndContent => (
+                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
+                        fileContent: blobPathAndContent.blobContent)));
         }
 
         static Composition.TreeComponent SubtreeElmAppFromAppConfig(Composition.TreeComponent appConfig) =>
@@ -214,7 +237,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
                     if (compositionLogRecord.reduction != null)
                     {
-                        var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun)) =
+                        var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun), _) =
                             ProcessFromWebAppConfig(
                                 compositionLogRecord.reduction.appConfigAsTree,
                                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
@@ -388,7 +411,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 var prepareMigrateResult =
                     PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig);
 
-                var (newElmAppProcess, buildArtifacts) =
+                var (newElmAppProcess, buildArtifacts, _) =
                     ProcessFromWebAppConfig(
                         appConfig,
                         overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
@@ -432,7 +455,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 var appConfig = loadComponentFromStoreAndAssertIsTree(
                     compositionEvent.DeployAppConfigAndInitElmAppState.HashBase16);
 
-                var (newElmAppProcess, buildArtifacts) =
+                var (newElmAppProcess, buildArtifacts, _) =
                     ProcessFromWebAppConfig(
                         appConfig,
                         overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);

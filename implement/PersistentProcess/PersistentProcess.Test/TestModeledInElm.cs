@@ -16,15 +16,22 @@ namespace Kalmit.PersistentProcess.Test
         static string FilePathStringFromPath(IImmutableList<string> path) =>
             Path.Combine(path.ToArray());
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromDirectoryPath(
-            IImmutableList<string> directoryPath) =>
-            ElmApp.AsCompletelyLoweredElmApp(
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetLoweredElmAppFromDirectoryPath(
+            IImmutableList<string> directoryPath)
+        {
+            var originalFiles =
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     ElmApp.FilesFilteredForElmApp(
                         Filesystem.GetAllFilesFromDirectory(FilePathStringFromPath(directoryPath)))
-                    .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent))),
+                        .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent)));
+
+            return
+                ElmApp.AsCompletelyLoweredElmApp(
+                    originalAppFiles: originalFiles,
+                    originalSourceFiles: originalFiles,
                     ElmAppInterfaceConfig.Default,
                     Console.WriteLine);
+        }
 
         /*
         Get the value from `tests` in the Elm module `Main`.
@@ -70,7 +77,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 try
                 {
-                    var elmCodeFiles = GetElmAppFromDirectoryPath(
+                    var elmCodeFiles = GetLoweredElmAppFromDirectoryPath(
                         PathToDirectoryWithTestsModeledInElm.Add(elmAppSubdirectory));
 
                     var testsValue = GetTestsValueFromModuleMain(elmCodeFiles);

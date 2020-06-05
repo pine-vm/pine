@@ -96,124 +96,36 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void Web_host_serves_static_files_besides_hosting_persistent_process()
+        public void Web_host_serves_static_content_from_source_file()
         {
-            var defaultStaticFile =
+            var defaultAppSourceFiles = TestSetup.ReadSourceFileWebApp;
+
+            var demoSourceFilePath = ImmutableList.Create("static-content", "demo-file.mp3");
+
+            var staticContent =
                 Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
                 .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
                 .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem)))
-                .ToArray();
+                .ToImmutableList();
 
-            var defaultStaticFileInSubdirectory = System.Text.Encoding.UTF8.GetBytes("Default static file in 'subdirectory/'.");
+            var webAppSourceFiles =
+                defaultAppSourceFiles.SetItem(demoSourceFilePath, staticContent);
 
-            const string processEventPath = "process-event";
+            var webAppSource =
+                Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
 
-            var webAppConfig =
-                TestElmWebAppHttpServer.CounterWebApp
-                .WithJsonStructure(
-                    new WebAppConfigurationJsonStructure
-                    {
-                        mapsFromRequestUrlToStaticFileName = new[]
-                        {
-                            new WebAppConfigurationJsonStructure.ConditionalMapFromStringToString
-                            {
-                                matchingRegexPattern = "^.+/subdirectory/(.+)$",
-                                resultString = nameof(defaultStaticFileInSubdirectory),
-                            },
-                            new WebAppConfigurationJsonStructure.ConditionalMapFromStringToString
-                            {
-                                matchingRegexPattern = "^(?!.+/" + processEventPath + "$).*",
-                                resultString = nameof(defaultStaticFile),
-                            },
-                        },
-                    })
-                .WithStaticFiles(
-                    new[]
-                    {
-                        ((IImmutableList<string>)ImmutableList.Create(nameof(defaultStaticFile)), (IImmutableList<byte>)defaultStaticFile.ToImmutableList()),
-                        (ImmutableList.Create(nameof(defaultStaticFileInSubdirectory)), defaultStaticFileInSubdirectory.ToImmutableList()),
-                    });
-
-            var allEventsAndExpectedResponses =
-                TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                    new (int addition, int expectedResponse)[]
-                    {
-                        (0, 0),
-                        (1, 1),
-                        (3, 4),
-                        (5, 9),
-                        (7, 16),
-                        (11, 27),
-                        (-13, 14),
-                    }).ToList();
-
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppConfig))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource))
             {
-                string PostEventToPublicAppAndGetResponseString(string appEvent)
-                {
-                    using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
-                    {
-                        var httpResponse =
-                            publicAppClient.PostAsync(processEventPath, new StringContent(appEvent, System.Text.Encoding.UTF8)).Result;
-
-                        return httpResponse.Content.ReadAsStringAsync().Result;
-                    }
-                }
-
                 using (var server = testSetup.StartWebHost())
                 {
                     using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
                     {
-                        void assertHttpResponseForStaticFile(string path, byte[] expectedFile)
-                        {
-                            try
-                            {
-                                var httpResponse = publicAppClient.GetAsync(path).Result;
+                        var httpResponse = publicAppClient.GetAsync("").Result;
 
-                                Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode, "HTTP GET response status code.");
+                        var responseContent =
+                            httpResponse.Content.ReadAsByteArrayAsync().Result;
 
-                                var responseContent = httpResponse.Content.ReadAsByteArrayAsync().Result;
-
-                                CollectionAssert.AreEqual(expectedFile, responseContent, "HTTP GET response content.");
-
-                                Assert.AreEqual(
-                                    HttpStatusCode.MethodNotAllowed,
-                                    publicAppClient.PostAsync(path, new StringContent("")).Result.StatusCode,
-                                    "HTTP POST response status code.");
-
-                                Assert.AreEqual(
-                                    HttpStatusCode.MethodNotAllowed,
-                                    publicAppClient.PutAsync(path, new StringContent("")).Result.StatusCode,
-                                    "HTTP PUT response status code.");
-                            }
-                            catch (Exception e)
-                            {
-                                throw new Exception("Failed for static file at path '" + path + "'", e);
-                            }
-                        }
-
-                        Assert.ThrowsException<Exception>(
-                            () => assertHttpResponseForStaticFile(
-                                "", System.Text.Encoding.UTF8.GetBytes("This should not match")));
-
-                        foreach (var pathWhichShouldBeMappedToDefaultStaticFile in new[] { "", "index.html", "almost-anything-else-too" })
-                        {
-                            assertHttpResponseForStaticFile(
-                                pathWhichShouldBeMappedToDefaultStaticFile, defaultStaticFile);
-                        }
-
-                        foreach (var pathWhichShouldBeMappedToDefaultStaticFile in new[] { "subdirectory/a-path", "subdirectory/another-path" })
-                        {
-                            assertHttpResponseForStaticFile(
-                                pathWhichShouldBeMappedToDefaultStaticFile, defaultStaticFileInSubdirectory);
-                        }
-                    }
-
-                    foreach (var (serializedEvent, expectedResponse) in allEventsAndExpectedResponses)
-                    {
-                        var httpResponseContent = PostEventToPublicAppAndGetResponseString(serializedEvent);
-
-                        Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                        CollectionAssert.AreEqual(staticContent, responseContent);
                     }
                 }
             }

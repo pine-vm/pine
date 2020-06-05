@@ -330,9 +330,13 @@ type Dict key value
                             (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(module.Value).ToImmutableList()))
                         .ToImmutableList();
 
+                    var originalAppFiles =
+                        ElmApp.ToFlatDictionaryWithPathComparer(originalAppFilesList);
+
                     var loweredElmApp =
                         ElmApp.AsCompletelyLoweredElmApp(
-                            ElmApp.ToFlatDictionaryWithPathComparer(originalAppFilesList),
+                            originalAppFiles: originalAppFiles,
+                            originalSourceFiles: originalAppFiles,
                             new ElmAppInterfaceConfig { RootModuleName = "RootModule" },
                             Console.WriteLine);
                 }

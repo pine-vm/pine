@@ -93,7 +93,8 @@ namespace Kalmit.PersistentProcess.WebHost
             Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", FrontendElmAppRootFilePath) + "'.");
 
             var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
-                elmAppFilesBeforeLowering,
+                originalAppFiles: elmAppFilesBeforeLowering,
+                originalSourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default,
                 verboseLogWriteLine);
 
@@ -143,7 +144,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 var webAppConfig =
                     new WebAppConfiguration()
-                    .WithElmApp(loweredElmAppFiles)
+                    .WithElmApp(elmAppFilesBeforeLowering)
                     .WithStaticFiles(staticFiles)
                     .WithJsonStructure(jsonStructure);
 
