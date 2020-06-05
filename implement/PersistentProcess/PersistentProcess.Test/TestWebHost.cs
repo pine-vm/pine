@@ -168,8 +168,9 @@ namespace Kalmit.PersistentProcess.Test
             {
                 IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
                     testSetup.EnumerateStoredUpdateElmAppStateForEvents()
-                    .Select(processEvent => processEvent?.httpRequest?.request?.bodyAsString)
-                    .WhereNotNull();
+                    .Select(processEvent => processEvent?.httpRequest?.request?.bodyAsBase64)
+                    .WhereNotNull()
+                    .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
                 HttpResponseMessage PostStringContentToPublicApp(string requestContent)
                 {
@@ -405,11 +406,12 @@ namespace Kalmit.PersistentProcess.Test
                         {
                             var customHeaderName = "My-custom-header";
                             var customHeaderValue = "Hello!";
-                            var requestContentString = "HTTP request content.";
+                            var requestContentBytes =
+                                Enumerable.Range(0, 777).Select(i => (UInt16)i).SelectMany(BitConverter.GetBytes).ToArray();
 
                             var httpRequestMessage = new HttpRequestMessage(new HttpMethod("post"), "")
                             {
-                                Content = new StringContent(requestContentString),
+                                Content = new ByteArrayContent(requestContentBytes),
                             };
 
                             httpRequestMessage.Headers.Add("forward-to", echoServerUrl);
@@ -424,8 +426,8 @@ namespace Kalmit.PersistentProcess.Test
                                 Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.HttpRequest>(responseContentString);
 
                             Assert.AreEqual(
-                                requestContentString,
-                                echoRequestStructure.bodyAsString,
+                                Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
+                                echoRequestStructure.bodyAsBase64?.ToLowerInvariant(),
                                 "Request body is propagated.");
 
                             var echoCustomHeaderValues =

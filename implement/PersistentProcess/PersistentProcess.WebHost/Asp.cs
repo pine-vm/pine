@@ -137,7 +137,6 @@ namespace Kalmit.PersistentProcess.WebHost
                 method = httpRequest.Method,
                 uri = httpRequest.GetDisplayUrl(),
                 bodyAsBase64 = httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
-                bodyAsString = httpRequestBody == null ? null : Encoding.UTF8.GetString(httpRequestBody),
                 headers = httpHeaders,
             };
         }

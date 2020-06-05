@@ -5,6 +5,9 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
 import Json.Encode
 
 
@@ -19,10 +22,14 @@ processEvent hostEvent stateBefore =
             let
                 headerToPropagateBody =
                     { name = "response-header-name"
-                    , values = [ httpRequestEvent.request.bodyAsString |> Maybe.withDefault "" ]
+                    , values =
+                        [ httpRequestEvent.request.body
+                            |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
+                            |> Maybe.withDefault ""
+                        ]
                     }
 
-                responseBody =
+                httpResponseBodyString =
                     httpRequestEvent.request.headers
                         |> Json.Encode.list
                             (\requestHeader ->
@@ -37,7 +44,7 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsString = Just responseBody
+                        , body = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Just
                         , headersToAdd = [ headerToPropagateBody, { name = "content-type", values = [ "application/json" ] } ]
                         }
                     }
@@ -47,6 +54,11 @@ processEvent hostEvent stateBefore =
 
         InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
+
+
+decodeBytesToString : Bytes.Bytes -> Maybe String
+decodeBytesToString bytes =
+    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 interfaceToHost_initState : State

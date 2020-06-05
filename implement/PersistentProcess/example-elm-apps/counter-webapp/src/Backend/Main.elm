@@ -5,6 +5,9 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
 import Json.Decode
 
 
@@ -22,14 +25,19 @@ processEvent hostEvent stateBefore =
         InterfaceToHost.HttpRequest httpRequestEvent ->
             let
                 ( state, result ) =
-                    case (httpRequestEvent.request.bodyAsString |> Maybe.withDefault "") |> deserializeCounterEvent of
+                    case
+                        httpRequestEvent.request.body
+                            |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
+                            |> Maybe.withDefault "Missing HTTP body"
+                            |> deserializeCounterEvent
+                    of
                         Err error ->
                             ( stateBefore, Err ("Failed to deserialize counter event from HTTP Request content: " ++ error) )
 
                         Ok counterEvent ->
                             stateBefore |> processCounterEvent counterEvent |> Tuple.mapSecond Ok
 
-                ( httpResponseCode, httpResponseBody ) =
+                ( httpResponseCode, httpResponseBodyString ) =
                     case result of
                         Err error ->
                             ( 400, error )
@@ -41,7 +49,7 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = httpResponseCode
-                        , bodyAsString = Just httpResponseBody
+                        , body = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Just
                         , headersToAdd = []
                         }
                     }
@@ -67,6 +75,11 @@ deserializeCounterEvent serializedEvent =
     serializedEvent
         |> Json.Decode.decodeString (Json.Decode.field "addition" Json.Decode.int |> Json.Decode.map CounterEvent)
         |> Result.mapError Json.Decode.errorToString
+
+
+decodeBytesToString : Bytes.Bytes -> Maybe String
+decodeBytesToString bytes =
+    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 interfaceToHost_initState : State

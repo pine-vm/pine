@@ -5,6 +5,9 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
 
 
 type alias State =
@@ -22,7 +25,7 @@ processEvent hostEvent stateBefore =
                             stateBefore
 
                         "post" ->
-                            stateBefore ++ (httpRequestEvent.request.bodyAsString |> Maybe.withDefault "")
+                            stateBefore ++ (httpRequestEvent.request.body |> Maybe.andThen decodeBytesToString |> Maybe.withDefault "")
 
                         _ ->
                             stateBefore
@@ -31,7 +34,7 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsString = Just state
+                        , body = state |> Bytes.Encode.string |> Bytes.Encode.encode |> Just
                         , headersToAdd = []
                         }
                     }
@@ -41,6 +44,11 @@ processEvent hostEvent stateBefore =
 
         InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
+
+
+decodeBytesToString : Bytes.Bytes -> Maybe String
+decodeBytesToString bytes =
+    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 interfaceToHost_initState : State

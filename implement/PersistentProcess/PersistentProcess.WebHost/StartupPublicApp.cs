@@ -278,7 +278,7 @@ namespace Kalmit.PersistentProcess.WebHost
                         var contentAsByteArray =
                             httpResponse?.bodyAsBase64 == null
                             ?
-                            (httpResponse?.bodyAsString == null ? null : System.Text.Encoding.UTF8.GetBytes(httpResponse.bodyAsString))
+                            null
                             :
                             Convert.FromBase64String(httpResponse.bodyAsBase64);
 

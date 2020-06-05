@@ -45,9 +45,6 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
 
         public string uri;
 
-        // TODO: Remove bodyAsString
-        public string bodyAsString;
-
         public string bodyAsBase64;
 
         public HttpHeader[] headers;
@@ -70,9 +67,6 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
     public class HttpResponse
     {
         public int statusCode;
-
-        // TODO: Remove bodyAsString
-        public string bodyAsString;
 
         public string bodyAsBase64;
 

@@ -6,6 +6,9 @@ module Backend.Main exposing
 
 import Backend.InterfaceToHost as InterfaceToHost
 import Backend.StateType
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import Json.Decode
 import Json.Encode
@@ -23,7 +26,7 @@ processEvent hostEvent stateBefore =
     case hostEvent of
         InterfaceToHost.HttpRequest httpRequestEvent ->
             let
-                ( state, httpResponseCode, httpResponseBody ) =
+                ( state, httpResponseCode, httpResponseBodyString ) =
                     case httpRequestEvent.request.method |> String.toLower of
                         "get" ->
                             ( stateBefore
@@ -35,7 +38,8 @@ processEvent hostEvent stateBefore =
 
                         "post" ->
                             case
-                                httpRequestEvent.request.bodyAsString
+                                httpRequestEvent.request.body
+                                    |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
                                     |> Maybe.withDefault ""
                                     |> Json.Decode.decodeString ElmFullstackCompilerInterface.GenerateJsonCoders.decodeBackendState
                             of
@@ -58,7 +62,7 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = httpResponseCode
-                        , bodyAsString = Just httpResponseBody
+                        , body = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Just
                         , headersToAdd = []
                         }
                     }
@@ -68,6 +72,11 @@ processEvent hostEvent stateBefore =
 
         InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
+
+
+decodeBytesToString : Bytes.Bytes -> Maybe String
+decodeBytesToString bytes =
+    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 interfaceToHost_initState : Backend.StateType.State
