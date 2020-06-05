@@ -15,9 +15,6 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static string StaticFilesSubdirectoryName => WebAppConfiguration.staticFilesDirectoryName;
 
-        public static IImmutableList<string> FrontendElmAppRootFilePath =>
-            ImmutableList.Create("src", "FrontendWeb", "Main.elm");
-
         static public (
             string sourceCompositionId,
             Func<byte[]> compileConfigZipArchive,
@@ -88,9 +85,9 @@ namespace Kalmit.PersistentProcess.WebHost
 
             Console.WriteLine("I found " + elmAppFilesBeforeLowering.Count + " files to build the Elm app.");
 
-            var elmAppContainsFrontend = elmAppFilesBeforeLowering.ContainsKey(FrontendElmAppRootFilePath);
+            var elmAppContainsFrontend = elmAppFilesBeforeLowering.ContainsKey(ElmAppInterfaceConvention.FrontendElmAppRootFilePath);
 
-            Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", FrontendElmAppRootFilePath) + "'.");
+            Console.WriteLine("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", ElmAppInterfaceConvention.FrontendElmAppRootFilePath) + "'.");
 
             var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
                 originalAppFiles: elmAppFilesBeforeLowering,
@@ -120,12 +117,13 @@ namespace Kalmit.PersistentProcess.WebHost
                 {
                     var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
                         loweredElmAppFiles,
-                        FrontendElmAppRootFilePath,
+                        ElmAppInterfaceConvention.FrontendElmAppRootFilePath,
                         elmMakeCommandAppendix: jsonStructure?.frontendWebElmMakeCommandAppendix);
 
                     frontendWebFile = Encoding.UTF8.GetBytes(frontendWebHtml);
                 }
 
+                // TODO: Simplify: Remove static files when apps are migrated to the new interface.
                 var staticFilesFromFrontendWeb =
                     frontendWebFile == null ?
                     Array.Empty<(IImmutableList<string> name, IImmutableList<byte> content)>() :

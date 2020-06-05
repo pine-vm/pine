@@ -8,6 +8,8 @@ module Backend.Main exposing
 import Backend.InterfaceToHost as InterfaceToHost
 import Bytes.Encode
 import Common
+import ElmFullstackCompilerInterface.ElmMakeFrontendWeb
+import Url
 
 
 type alias State =
@@ -33,8 +35,18 @@ processEvent hostEvent stateBefore =
                     }
 
                 httpResponse =
-                    { httpRequestId = httpRequestEvent.httpRequestId
-                    , response =
+                    if
+                        httpRequestEvent.request.uri
+                            |> Url.fromString
+                            |> Maybe.map urlLeadsToFrontendHtmlDocument
+                            |> Maybe.withDefault False
+                    then
+                        { statusCode = 200
+                        , body = Just ElmFullstackCompilerInterface.ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug
+                        , headersToAdd = []
+                        }
+
+                    else
                         { statusCode = 200
                         , body =
                             [ Common.guideMarkdown
@@ -47,13 +59,22 @@ processEvent hostEvent stateBefore =
                                 |> Just
                         , headersToAdd = []
                         }
-                    }
-                        |> InterfaceToHost.CompleteHttpResponse
             in
-            ( state, [ httpResponse ] )
+            ( state
+            , [ { httpRequestId = httpRequestEvent.httpRequestId
+                , response = httpResponse
+                }
+                    |> InterfaceToHost.CompleteHttpResponse
+              ]
+            )
 
         InterfaceToHost.TaskComplete _ ->
             ( stateBefore, [] )
+
+
+urlLeadsToFrontendHtmlDocument : Url.Url -> Bool
+urlLeadsToFrontendHtmlDocument url =
+    not (url.path == "/api" || (url.path |> String.startsWith "/api/"))
 
 
 interfaceToHost_initState : State

@@ -11,11 +11,13 @@ import Bytes.Decode
 import Bytes.Encode
 import Conversation exposing (UserId)
 import Dict
+import ElmFullstackCompilerInterface.ElmMakeFrontendWeb as ElmMakeFrontendWeb
 import ElmFullstackCompilerInterface.GenerateJsonCoders as GenerateJsonCoders
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
 import SHA1
+import Url
 
 
 type alias State =
@@ -57,81 +59,105 @@ processEvent hostEvent stateBefore =
 
 processEventHttpRequest : InterfaceToHost.HttpRequestEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
 processEventHttpRequest httpRequestEvent stateBefore =
-    case
-        httpRequestEvent.request.body
-            |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
-            |> Maybe.withDefault "Missing HTTP body"
-            |> Json.Decode.decodeString GenerateJsonCoders.jsonDecodeRequestFromUser
-    of
-        Err decodeError ->
-            let
-                httpResponse =
-                    { httpRequestId = httpRequestEvent.httpRequestId
-                    , response =
-                        { statusCode = 400
-                        , body =
-                            ("Failed to decode request: " ++ (decodeError |> Json.Decode.errorToString))
-                                |> encodeStringToBytes
-                                |> Just
-                        , headersToAdd = []
+    if
+        httpRequestEvent.request.uri
+            |> Url.fromString
+            |> Maybe.map urlLeadsToFrontendHtmlDocument
+            |> Maybe.withDefault False
+    then
+        ( stateBefore
+        , [ { httpRequestId = httpRequestEvent.httpRequestId
+            , response =
+                { statusCode = 200
+                , body = Just ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug
+                , headersToAdd = []
+                }
+            }
+                |> InterfaceToHost.CompleteHttpResponse
+          ]
+        )
+
+    else
+        case
+            httpRequestEvent.request.body
+                |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
+                |> Maybe.withDefault "Missing HTTP body"
+                |> Json.Decode.decodeString GenerateJsonCoders.jsonDecodeRequestFromUser
+        of
+            Err decodeError ->
+                let
+                    httpResponse =
+                        { httpRequestId = httpRequestEvent.httpRequestId
+                        , response =
+                            { statusCode = 400
+                            , body =
+                                ("Failed to decode request: " ++ (decodeError |> Json.Decode.errorToString))
+                                    |> encodeStringToBytes
+                                    |> Just
+                            , headersToAdd = []
+                            }
                         }
-                    }
-            in
-            ( stateBefore, [ httpResponse |> InterfaceToHost.CompleteHttpResponse ] )
+                in
+                ( stateBefore, [ httpResponse |> InterfaceToHost.CompleteHttpResponse ] )
 
-        Ok requestFromUser ->
-            let
-                ( userSessionId, userSessionStateBefore ) =
-                    userSessionIdAndStateFromRequestOrCreateNew httpRequestEvent.request stateBefore
+            Ok requestFromUser ->
+                let
+                    ( userSessionId, userSessionStateBefore ) =
+                        userSessionIdAndStateFromRequestOrCreateNew httpRequestEvent.request stateBefore
 
-                userSessionState =
-                    userSessionStateBefore
+                    userSessionState =
+                        userSessionStateBefore
 
-                usersLastSeen =
-                    case userSessionStateBefore.userId of
-                        Nothing ->
-                            stateBefore.usersLastSeen
+                    usersLastSeen =
+                        case userSessionStateBefore.userId of
+                            Nothing ->
+                                stateBefore.usersLastSeen
 
-                        Just userId ->
-                            stateBefore.usersLastSeen
-                                |> Dict.insert userId { posixTime = stateBefore.posixTimeMilli // 1000 }
+                            Just userId ->
+                                stateBefore.usersLastSeen
+                                    |> Dict.insert userId { posixTime = stateBefore.posixTimeMilli // 1000 }
 
-                usersSessions =
-                    stateBefore.usersSessions
-                        |> Dict.insert userSessionId userSessionState
+                    usersSessions =
+                        stateBefore.usersSessions
+                            |> Dict.insert userSessionId userSessionState
 
-                ( state, responseToUser ) =
-                    processMessageFromClient
-                        { posixTimeMilli = stateBefore.posixTimeMilli, userId = userSessionStateBefore.userId, loginUrl = "" }
-                        requestFromUser
-                        { stateBefore
-                            | usersSessions = usersSessions
-                            , usersLastSeen = usersLastSeen
+                    ( state, responseToUser ) =
+                        processMessageFromClient
+                            { posixTimeMilli = stateBefore.posixTimeMilli, userId = userSessionStateBefore.userId, loginUrl = "" }
+                            requestFromUser
+                            { stateBefore
+                                | usersSessions = usersSessions
+                                , usersLastSeen = usersLastSeen
+                            }
+
+                    responseToClient =
+                        { currentPosixTimeMilli = state.posixTimeMilli
+                        , currentUserId = userSessionState.userId
+                        , responseToUser = responseToUser
                         }
 
-                responseToClient =
-                    { currentPosixTimeMilli = state.posixTimeMilli
-                    , currentUserId = userSessionState.userId
-                    , responseToUser = responseToUser
-                    }
-
-                httpResponse =
-                    { httpRequestId = httpRequestEvent.httpRequestId
-                    , response =
-                        { statusCode = 200
-                        , body =
-                            responseToClient
-                                |> GenerateJsonCoders.jsonEncodeMessageToClient
-                                |> Json.Encode.encode 0
-                                |> encodeStringToBytes
-                                |> Just
-                        , headersToAdd = []
+                    httpResponse =
+                        { httpRequestId = httpRequestEvent.httpRequestId
+                        , response =
+                            { statusCode = 200
+                            , body =
+                                responseToClient
+                                    |> GenerateJsonCoders.jsonEncodeMessageToClient
+                                    |> Json.Encode.encode 0
+                                    |> encodeStringToBytes
+                                    |> Just
+                            , headersToAdd = []
+                            }
+                                |> addCookieUserSessionId userSessionId
                         }
-                            |> addCookieUserSessionId userSessionId
-                    }
-                        |> InterfaceToHost.CompleteHttpResponse
-            in
-            ( state, [ httpResponse ] )
+                            |> InterfaceToHost.CompleteHttpResponse
+                in
+                ( state, [ httpResponse ] )
+
+
+urlLeadsToFrontendHtmlDocument : Url.Url -> Bool
+urlLeadsToFrontendHtmlDocument url =
+    not (url.path == "/api" || (url.path |> String.startsWith "/api/"))
 
 
 seeingLobbyFromState : State -> FrontendBackendInterface.SeeingLobbyStructure

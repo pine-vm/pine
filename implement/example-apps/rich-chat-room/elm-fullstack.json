@@ -1,9 +1,0 @@
-{
-    "mapsFromRequestUrlToStaticFileName": [
-        {
-            "matchingRegexPattern": "^.*//[^/]+(|/(?!(api))(.*|/))$",
-            "resultString": "FrontendWeb.html"
-        }
-    ],
-    "frontendWebElmMakeCommandAppendix": "--debug"
-}

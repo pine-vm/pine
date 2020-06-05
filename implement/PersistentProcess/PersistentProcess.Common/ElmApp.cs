@@ -28,9 +28,14 @@ namespace Kalmit
 
         public const string DeserializeStateFunctionName = "interfaceToHost_deserializeState";
 
+        static public string ElmMakeFrontendWebInterfaceModuleName => "ElmFullstackCompilerInterface.ElmMakeFrontendWeb";
+
         static public string GenerateJsonCodersInterfaceModuleName => "ElmFullstackCompilerInterface.GenerateJsonCoders";
 
         static public string SourceFilesInterfaceModuleName => "ElmFullstackCompilerInterface.SourceFiles";
+
+        public static IImmutableList<string> FrontendElmAppRootFilePath =>
+            ImmutableList.Create("src", "FrontendWeb", "Main.elm");
     }
 
     public class ElmApp
@@ -58,10 +63,12 @@ namespace Kalmit
             ElmAppInterfaceConfig interfaceConfig,
             Action<string> logWriteLine) =>
             LoweredElmAppForBackendStateSerializer(
-                LoweredElmAppToGenerateJsonCoders(
-                    LoweredElmAppForSourceFiles(originalAppFiles, originalSourceFiles),
-                    logWriteLine),
-                interfaceConfig, logWriteLine);
+                LoweredElmAppForElmMakeFrontendWeb(
+                    originalAppFiles: LoweredElmAppToGenerateJsonCoders(
+                        LoweredElmAppForSourceFiles(originalAppFiles, originalSourceFiles),
+                        logWriteLine),
+                    logWriteLine: logWriteLine),
+                    interfaceConfig, logWriteLine);
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForBackendStateSerializer(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
@@ -115,6 +122,85 @@ namespace Kalmit
             return appFilesWithSupportAdded.SetItem(
                 InterfaceToHostRootModuleFilePath,
                 Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
+        }
+
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForElmMakeFrontendWeb(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
+            Action<string> logWriteLine)
+        {
+            var interfaceModuleFilePath = FilePathFromModuleName(ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName);
+
+            var elmAppContainsFrontend = originalAppFiles.ContainsKey(interfaceModuleFilePath);
+
+            logWriteLine?.Invoke("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + string.Join("/", ElmAppInterfaceConvention.FrontendElmAppRootFilePath) + "'.");
+
+            if (!elmAppContainsFrontend)
+            {
+                return originalAppFiles;
+            }
+
+            var interfaceModuleOriginalFile = originalAppFiles[interfaceModuleFilePath];
+
+            var interfaceModuleOriginalFileText =
+                Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
+
+            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
+
+            byte[] BuildFrontendWebHtml(string elmMakeCommandAppendix)
+            {
+                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
+                    originalAppFiles,
+                    ElmAppInterfaceConvention.FrontendElmAppRootFilePath,
+                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                return Encoding.UTF8.GetBytes(frontendWebHtml);
+            }
+
+            var elmMakeCommandFromFunctionName =
+                ImmutableDictionary.Create<string, string>()
+                .SetItem("elm_make_frontendWeb_html", null)
+                .SetItem("elm_make_frontendWeb_html_debug", "--debug");
+
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunction(
+                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
+                string functionName,
+                string originalFunctionText)
+            {
+                if (!elmMakeCommandFromFunctionName.TryGetValue(functionName, out var elmMakeCommandAppendix))
+                    return previousAppFiles;
+
+                var htmlFile = BuildFrontendWebHtml(elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                var fileAsBase64 = Convert.ToBase64String(htmlFile);
+
+                var fileExpression = "\"" + fileAsBase64 + @"""|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
+
+                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, fileExpression);
+
+                var originalFunctionTextLines =
+                    originalFunctionText.Replace("\r", "").Split("\n");
+
+                var newFunctionText =
+                    String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { newFunctionBody }));
+
+                return
+                    ReplaceFunctionInModule(
+                        previousAppFiles: ImportModuleInModule(
+                            previousAppFiles: previousAppFiles,
+                            moduleName: ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName,
+                            moduleToImport: ImmutableList.Create("Base64")),
+                        moduleName: ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName,
+                        functionName: functionName,
+                        newFunctionText: newFunctionText);
+            }
+
+            return
+                originalFunctions
+                .Aggregate(originalAppFiles, (intermediateAppFiles, originalFunction) =>
+                    replaceFunction(
+                        intermediateAppFiles,
+                        originalFunction.functionName,
+                        originalFunction.functionText));
         }
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppToGenerateJsonCoders(
@@ -413,21 +499,6 @@ namespace Kalmit
 
             var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
 
-            static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> importModuleInModule(
-                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
-                string moduleName, IEnumerable<string> moduleToImport)
-            {
-                var moduleFilePath = FilePathFromModuleName(moduleName);
-
-                var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
-
-                var moduleText = CompileElm.WithImportsAdded(moduleTextBefore, ImmutableHashSet.Create(moduleToImport));
-
-                return
-                    previousAppFiles
-                    .SetItem(moduleFilePath, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
-            }
-
             string functionNameFromFilePath(IImmutableList<string> filePath) =>
                 Regex.Replace(string.Join(".", filePath), "[^a-zA-Z0-9]", "_");
 
@@ -465,7 +536,7 @@ namespace Kalmit
 
                 return
                     ReplaceFunctionInModule(
-                        previousAppFiles: importModuleInModule(
+                        previousAppFiles: ImportModuleInModule(
                             previousAppFiles: previousAppFiles,
                             moduleName: ElmAppInterfaceConvention.SourceFilesInterfaceModuleName,
                             moduleToImport: ImmutableList.Create("Base64")),
@@ -481,6 +552,21 @@ namespace Kalmit
                         intermediateAppFiles,
                         originalFunction.functionName,
                         originalFunction.functionText));
+        }
+
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ImportModuleInModule(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
+            string moduleName, IEnumerable<string> moduleToImport)
+        {
+            var moduleFilePath = FilePathFromModuleName(moduleName);
+
+            var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
+
+            var moduleText = CompileElm.WithImportsAdded(moduleTextBefore, ImmutableHashSet.Create(moduleToImport));
+
+            return
+                previousAppFiles
+                .SetItem(moduleFilePath, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
         }
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ReplaceFunctionInModule(
