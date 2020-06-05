@@ -462,7 +462,7 @@ view state =
                     ]
             ]
     in
-    { title = "Chat demo Elm-fullstack app", body = body }
+    { title = "Rich chat room example app", body = body }
 
 
 getCurrentUserName : ViewConfiguration -> State -> Maybe String
