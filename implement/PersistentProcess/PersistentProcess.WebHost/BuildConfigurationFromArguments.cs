@@ -147,7 +147,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     .WithJsonStructure(jsonStructure);
 
                 var webAppConfigFiles =
-                    webAppConfig.AsFiles();
+                    sourceFiles.SetItems(webAppConfig.AsFiles());
 
                 var webAppConfigFile = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
 

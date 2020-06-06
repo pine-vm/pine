@@ -533,7 +533,7 @@ namespace Kalmit
             var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
 
             string functionNameFromFilePath(IImmutableList<string> filePath) =>
-                Regex.Replace(string.Join(".", filePath), "[^a-zA-Z0-9]", "_");
+                Regex.Replace(string.Join("/", filePath), "[^a-zA-Z0-9]", "_");
 
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFileFunction(
                 IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
