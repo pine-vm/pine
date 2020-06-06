@@ -1,71 +1,25 @@
 module Backend.Main exposing
     ( State
-    , Tuple2
-    , Tuple3
     , interfaceToHost_initState
     , interfaceToHost_processEvent
     , processEvent
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
-import Bytes
+import Backend.State exposing (CustomType(..), CustomTypeWithTypeParameter(..), RecursiveType(..), valueForOpaqueCustomType)
 import Bytes.Encode
 import Common
 import Dict
 import ElmFullstackCompilerInterface.ElmMakeFrontendWeb
+import ElmFullstackCompilerInterface.GenerateJsonCoders
+import Json.Encode
 import ListDict
 import Set
 import Url
 
 
 type alias State =
-    { httpRequestsCount : Int
-    , lastHttpRequests : List InterfaceToHost.HttpRequestEvent
-    , tuple2 : Tuple2
-    , tuple3 : Tuple3
-    , list_custom_type : List CustomType
-    , opaque_custom_type : OpaqueCustomType
-    , recursive_type : RecursiveType
-    , bool : Bool
-    , maybe : Maybe String
-    , result : Result String Int
-    , set : Set.Set Int
-    , dict : Dict.Dict Int String
-    , empty_record : {}
-    , empty_tuple : ()
-    , customTypeInstance : CustomTypeWithTypeParameter Int
-    , listDict : ListDict.Dict { orig : Int, dest : Int } String
-    , bytes : Bytes.Bytes
-    }
-
-
-type RecursiveType
-    = TagTerminate Int
-    | TagRecurse RecursiveType
-
-
-type OpaqueCustomType
-    = OpaqueCustomType String
-
-
-type alias Tuple2 =
-    ( Int, String )
-
-
-type alias Tuple3 =
-    ( Int, String, Int )
-
-
-type CustomType
-    = CustomTagWithoutParameter
-    | CustomTagWithOneParameter Int
-    | CustomTagWithTwoParameters String Int
-    | CustomTagWithMaybeInstance (Maybe Int)
-    | CustomTagWithResultInstance (Result String Int)
-
-
-type CustomTypeWithTypeParameter a
-    = CustomTypeWithTypeParameter a
+    Backend.State.State
 
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
@@ -103,6 +57,8 @@ processEvent hostEvent stateBefore =
                             , "I received "
                                 ++ (state.httpRequestsCount |> String.fromInt)
                                 ++ " HTTP requests."
+                            , "Here is a serialized representation of the backend state:"
+                            , state |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeBackendState |> Json.Encode.encode 4
                             ]
                                 |> String.join "\n"
                                 |> Bytes.Encode.string
@@ -141,7 +97,7 @@ interfaceToHost_initState =
         , CustomTagWithResultInstance (Err "error string")
         , CustomTagWithResultInstance (Ok 678)
         ]
-    , opaque_custom_type = OpaqueCustomType "content"
+    , opaque_custom_type = valueForOpaqueCustomType "content"
     , recursive_type = TagRecurse (TagRecurse (TagRecurse (TagTerminate 4)))
     , bool = True
     , maybe = Just "Hello"
