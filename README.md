@@ -11,8 +11,7 @@ This repository also contains the implementation of the Elm-fullstack web host, 
 + Generating the functions to serialize and deserialize the messages exchanged between frontend and backend.
 + Atomic backend state migrations: Model your backend state migrations with an Elm function that maps from the previous backend state type to the new one. The framework uses this function to migrate the backend state during deployment.
 + [HTTPS support](./guide/how-to-configure-and-deploy-an-elm-fullstack-app.md#support-https): Choose a list of domains, and the server automatically acquires and renews an SSL certificate from [Let's Encrypt](https://letsencrypt.org/).
-+ Rate-limit client HTTP requests which result in updates in the backend app.
-+ Serve static files on selected paths.
++ Rate-limit HTTP requests to the backend app.
 
 ## Getting Started
 

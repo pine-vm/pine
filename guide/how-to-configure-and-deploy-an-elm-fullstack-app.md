@@ -2,10 +2,10 @@
 
 In this guide, I use the elm-fullstack command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-fullstack/elm-fullstack/releases
 
-Here are direct links to the downloads, containing the `elm-fullstack` executable file contained in a zip-archive:
+Here are direct links to the downloads, containing the `elm-fullstack` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-05-28/elm-fullstack-bin-3b7f24fa14f0baca0269081226fdcb1b5228fe0a-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-05-28/elm-fullstack-bin-3b7f24fa14f0baca0269081226fdcb1b5228fe0a-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-06/elm-fullstack-bin-f60c4977449fdbc87de493b3286608380f2b2a95-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-06/elm-fullstack-bin-f60c4977449fdbc87de493b3286608380f2b2a95-linux-x64.zip
 
 To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack install-command` command.
 
@@ -13,12 +13,12 @@ To register the elm-fullstack executable on your systems PATH environment variab
 
 To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fullstack  run-server  --process-store-directory-path=./process-store  --delete-previous-process  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app
+elm-fullstack  run-server  --process-store-directory-path=./process-store  --delete-previous-process  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -27,11 +27,11 @@ When running this command, we get an output like this:
 Deleting the previous process state from './process-store'...
 Completed deleting the previous process state from './process-store'.
 Loading app config to deploy...
-Loaded source composition 3d834d0e4ecd1046ec6b358afef3eff82dc4dda9efe79d30feb285893a8691fe from 'https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app'.
-Starting to build app from '3d834d0e4ecd1046ec6b358afef3eff82dc4dda9efe79d30feb285893a8691fe'.
-I found 6 files to build the Elm app.
+Loaded source composition c1f73d0c7b1061ce7fc6a172b4a14d35f68308896114dd933b3645d7073377c9 from 'https://github.com/elm-fullstack/elm-fullstack/tree/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app'.
+Starting to build app from 'c1f73d0c7b1061ce7fc6a172b4a14d35f68308896114dd933b3645d7073377c9'.
+I found 7 files to build the Elm app.
 This Elm app contains a frontend at 'src/FrontendWeb/Main.elm'.
-I found a file at 'elm-fullstack.json'. I use this to build the configuration.
+I did not find a file at 'elm-fullstack.json'. I build the configuration without the 'elm-fullstack.json'.
 I found 0 static files to include.
 Starting the web server with the admin interface...
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
@@ -53,11 +53,11 @@ Completed starting the web server with the admin interface at 'http://*:4000'.
 
 When this server has completed starting, we can see the deployed app at http://localhost:5000/
 
-## App File and Module Name Conventions
+## App Code Structure Conventions
 
 This section covers the conventions for structuring the app code so that we can deploy it to an Elm-fullstack process. The [example apps](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
 
-### `elm-app/src/Backend/Main.elm`
+### `Backend.Main` Elm Module
 
 The [main Elm module of the backend](/implement/example-apps/docker-image-default-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
@@ -72,7 +72,67 @@ processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceT
 
 Analogous to the update function in a front-end Elm app, this function returns the new state of the back-end app as the first element in the tuple.
 
-### `elm-app/src/MigrateBackendState.elm`
+### `ElmFullstackCompilerInterface.ElmMakeFrontendWeb` Elm Module
+
+The functions in this module provide the output from the `elm make` command for the module `FrontendWeb.Main`:
+
+```Elm
+elm_make_frontendWeb_html : Bytes.Bytes
+elm_make_frontendWeb_html =
+    "The Elm-fullstack compiler replaces this function."
+        |> Bytes.Encode.string
+        |> Bytes.Encode.encode
+```
+
+If a function with this name is present in the module, the full-stack compiler replaces the function to provide the contents of the output file from `elm make`.
+
+Backend apps often use this `Bytes.Bytes` value to send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app/elm-app/src/Backend/Main.elm#L37-L47) mentioned earlier:
+
+```Elm
+      httpResponse =
+            if
+            httpRequestEvent.request.uri
+                  |> Url.fromString
+                  |> Maybe.map urlLeadsToFrontendHtmlDocument
+                  |> Maybe.withDefault False
+            then
+            { statusCode = 200
+            , body = Just ElmFullstackCompilerInterface.ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug
+            , headersToAdd = []
+            }
+
+            else
+```
+
+To enable the `--debug` flag with `elm make`, use the function name `elm_make_frontendWeb_html_debug` instead.
+
+If your app does not contain a frontend, you don't need this Elm module at all.
+
+### `ElmFullstackCompilerInterface.SourceFiles` Elm Module
+
+This module provides access to the app source code files.
+
+By adding a function to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the frontend. Therefore the source files are available to both front-end and back-end apps.
+
+The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/rich-chat-room/elm-app/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+
+```Elm
+file____readme_md : Bytes.Bytes
+file____readme_md =
+    "The Elm-fullstack compiler replaces this function."
+        |> Bytes.Encode.string
+        |> Bytes.Encode.encode
+```
+
+To map the source file path to a function name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
+
++ `readme.md` -> `file____readme_md`
++ `static/readme.md` -> `file____static_readme_md`
++ `static/command-from-player.mp3` -> `file____static_command_from_player_mp3`
+
+If you use a function name that matches more than one of the source files, the compilation will fail.
+
+### `MigrateBackendState` Elm Module
 
 We need to add the `MigrateBackendState` module when we choose to migrate the back-end state during an app's deployment. We encode the migration in a function named `migrate` with types matching previous app and new app accordingly.
 
@@ -91,37 +151,19 @@ migrate backendState =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
-
-### `elm-app/src/FrontendWeb/Main.elm`
-
-This file is optional. If it exists in your app, the build process compiles it to an HTML file and adds it to the static files as `FrontendWeb.html`.
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-fullstack.json`
 
-The `elm-fullstack.json` file is where you can configure the acquisition of SSL certificates, rate-limiting, and other features.
-Since all of these features are optional to use, in the simplest case, this file is not present at all.
-
-If your app includes a front-end, you need to decide on which paths the server should serve the HTML document containing the front-end.
-
-Below is an example which directs HTTP requests to the static file of the front-end if the path does not start with `/api/`:
-```JSON
-{
-    "mapsFromRequestUrlToStaticFileName": [
-        {
-            "matchingRegexPattern": "^.*//[^/]+(|/(?!(api/)).*)$",
-            "resultString": "FrontendWeb.html"
-        }
-    ]
-}
-```
+The `elm-fullstack.json` file is where you can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
+Since these features are optional to use, in the simplest case, this file is not present at all.
 
 ## Running a Server With an Elm-Fullstack Process
 
 At the beginning of this guide, we ran a server and deployed an app in a single command. But combining these two operations is not necessary. Deployments are part of the process history, which means the last deployment follows from the state of the process store. (To learn more about the persistence, see [persistence-in-elm-fullstack.md](./persistence-in-elm-fullstack.md))
 
 When running a server, we want to configure two aspects: The location where to persist the process state, and the password to access the admin interface.
-On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the local file system.
+On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the file system.
 
 Here is a complete command to run a server:
 
@@ -157,7 +199,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2020-05-28.
+Welcome to Elm-fullstack version 2020-06-06.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
