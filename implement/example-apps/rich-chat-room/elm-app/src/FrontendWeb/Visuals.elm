@@ -118,6 +118,23 @@ margin: 0;
 background: #111;
 color: whitesmoke;
 }
+
+a:link {
+  color: whitesmoke;
+}
+
+a:visited {
+  color: whitesmoke;
+}
+
+a:hover {
+  color: whitesmoke;
+}
+
+a:active {
+  color: whitesmoke;
+}
+
 """
         |> Html.text
         |> List.singleton

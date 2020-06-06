@@ -3,9 +3,12 @@ module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 import Browser
 import Browser.Dom
 import Browser.Navigation as Navigation
+import Bytes
+import Bytes.Decode
 import Conversation exposing (UserId)
 import Dict
 import ElmFullstackCompilerInterface.GenerateJsonCoders
+import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
 import FrontendWeb.Visuals as Visuals exposing (HtmlStyle, htmlAttributesStyles)
 import Html
@@ -13,6 +16,8 @@ import Html.Attributes as HA
 import Html.Events as HE
 import Http
 import Json.Decode
+import Markdown.Parser
+import Markdown.Renderer
 import Task
 import Time
 import Url
@@ -454,15 +459,37 @@ view state =
 
         body =
             [ Visuals.globalStylesHtmlElement
-            , [ chatHtml
+            , [ [ appDescriptionHtml ] |> Html.div [ HA.style "margin" "1em" ]
+              , [ chatHtml ] |> Html.div [ HA.style "flex" "1", HA.style "margin" "1em" ]
               ]
                 |> Html.div
                     [ HA.style "margin" "0"
                     , HA.style "height" "99vh"
+                    , HA.style "display" "flex"
+                    , HA.style "flex-direction" "column"
                     ]
             ]
     in
     { title = "Rich chat room example app", body = body }
+
+
+appDescriptionHtml : Html.Html a
+appDescriptionHtml =
+    ElmFullstackCompilerInterface.SourceFiles.file____readme_md
+        |> decodeBytesToString
+        |> Maybe.withDefault "Failed to decode file content to string"
+        |> Markdown.Parser.parse
+        |> Result.map
+            (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer
+                >> Result.withDefault [ "Failed to render markdown" |> Html.text ]
+            )
+        |> Result.withDefault [ "Failed to parse markdown" |> Html.text ]
+        |> Html.div []
+
+
+decodeBytesToString : Bytes.Bytes -> Maybe String
+decodeBytesToString bytes =
+    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 getCurrentUserName : ViewConfiguration -> State -> Maybe String
