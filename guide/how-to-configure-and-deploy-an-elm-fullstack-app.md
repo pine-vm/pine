@@ -89,19 +89,19 @@ If a function with this name is present in the module, the full-stack compiler r
 Backend apps often use this `Bytes.Bytes` value to send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app/elm-app/src/Backend/Main.elm#L37-L47) mentioned earlier:
 
 ```Elm
-      httpResponse =
-            if
+    httpResponse =
+        if
             httpRequestEvent.request.uri
-                  |> Url.fromString
-                  |> Maybe.map urlLeadsToFrontendHtmlDocument
-                  |> Maybe.withDefault False
-            then
+                |> Url.fromString
+                |> Maybe.map urlLeadsToFrontendHtmlDocument
+                |> Maybe.withDefault False
+        then
             { statusCode = 200
             , body = Just ElmFullstackCompilerInterface.ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug
             , headersToAdd = []
             }
 
-            else
+        else
 ```
 
 To enable the `--debug` flag with `elm make`, use the function name `elm_make_frontendWeb_html_debug` instead.
