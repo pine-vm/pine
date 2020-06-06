@@ -219,9 +219,7 @@ namespace Kalmit
             var interfaceModuleOriginalFileText =
                 Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
 
-            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
-
-            static (string typeCanonicalName, bool isDecoder) parseFunctionType(string functionText)
+            static (IImmutableList<string> parametersTexts, string parameterTexts) parseParametersTextsFromFunctionText(string functionText)
             {
                 //  Assume all are on one line:
                 var parametersTextMatch = Regex.Match(functionText, @"^[^\s]+\s*\:(.*)$", RegexOptions.Multiline);
@@ -231,9 +229,14 @@ namespace Kalmit
 
                 var parameterTexts = parametersTextMatch.Groups[1].Value;
 
-                var parametersTexts =
-                    parameterTexts.Split("->").Select(paramText => paramText.Trim())
-                    .ToImmutableList();
+                return
+                    (parameterTexts.Split("->").Select(paramText => paramText.Trim()).ToImmutableList(),
+                    parameterTexts);
+            }
+
+            static (string typeCanonicalName, bool isDecoder) parseFunctionType(string functionText)
+            {
+                var (parametersTexts, parameterTexts) = parseParametersTextsFromFunctionText(functionText);
 
                 if (parametersTexts.Count == 1)
                 {
@@ -292,6 +295,36 @@ namespace Kalmit
                         moduleName: ElmAppInterfaceConvention.GenerateJsonCodersInterfaceModuleName,
                         functionName: codingFunctionName,
                         newFunctionText: newFunctionText);
+            }
+
+            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
+
+            {
+                if (originalFunctions.Any(originalFunction =>
+                {
+                    var (parametersTexts, parameterTexts) = parseParametersTextsFromFunctionText(originalFunction.functionText);
+
+                    if (parametersTexts.Count == 2)
+                    {
+                        if (parametersTexts[1].Trim() == "(Json.Encode.Value)")
+                        {
+                            // Elm format would remove the parentheses in '(Json.Encode.Value)': Assume this module already went through lowering.
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }))
+                {
+                    /*
+                    2020-06-06
+                    Support smooth migration of apps in production with short interruptions.
+
+                    TODO: Remove the temporary branch to support also deployed app configurations from older versions where this lowering happened in an earlier stage.
+                    */
+
+                    return originalAppFiles;
+                }
             }
 
             return
