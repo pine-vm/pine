@@ -108,11 +108,33 @@ To enable the `--debug` flag with `elm make`, use the function name `elm_make_fr
 
 If your app does not contain a frontend, you don't need this Elm module at all.
 
+### `ElmFullstackCompilerInterface.GenerateJsonCoders` Elm Module
+
+This module provides automatically generated JSON encoders end decoders for Elm types, except types containing functions.
+
+By adding a function to this module, we can select a type to generate a JSON encoder or decoder. A common use case for this automation are types used at the interface between the front-end and the back-end.
+
+In this module, we can freely choose the names for functions, as we only need type annotations to tell the compiler what we want to have generated. To encode to JSON, add a function which takes this type and returns a `Json.Encode.Value`:
+
+```Elm
+jsonEncodeMessageToClient : FrontendBackendInterface.MessageToClient -> Json.Encode.Value
+jsonEncodeMessageToClient =
+    always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
+```
+
+To get a decoder, add a 'function' that takes no parameters and returns an instance of `Json.Decode.Decoder`:
+
+```Elm
+jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
+jsonDecodeMessageToClient =
+    Json.Decode.fail "The Elm-fullstack compiler replaces this function."
+```
+
 ### `ElmFullstackCompilerInterface.SourceFiles` Elm Module
 
 This module provides access to the app source code files.
 
-By adding a function to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the frontend. Therefore the source files are available to both front-end and back-end apps.
+By adding a function to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
 The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/rich-chat-room/elm-app/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
@@ -130,7 +152,7 @@ To map the source file path to a function name in this module, replace any non-a
 + `static/readme.md` -> `file____static_readme_md`
 + `static/command-from-player.mp3` -> `file____static_command_from_player_mp3`
 
-If you use a function name that matches more than one of the source files, the compilation will fail.
+The compilation will fail if this module contains a function name that matches more than one or none of the source files.
 
 ### `MigrateBackendState` Elm Module
 
