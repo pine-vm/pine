@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace Kalmit.PersistentProcess.Test
@@ -7,21 +8,33 @@ namespace Kalmit.PersistentProcess.Test
     [TestClass]
     public class TestElmWebAppHttpServer
     {
-        static public WebAppConfiguration CounterWebApp =>
-            new WebAppConfiguration()
-            .WithElmApp(TestSetup.CounterElmWebApp);
+        static public Composition.Component AppConfigComponentFromElmAppFiles(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles) =>
+            Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(AppConfigFilesFromElmAppFiles(elmAppFiles)));
 
-        static public WebAppConfiguration StringBuilderWebApp =>
-            new WebAppConfiguration()
-            .WithElmApp(TestSetup.StringBuilderElmWebApp);
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AppConfigFilesFromElmAppFiles(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles)
+        {
+            var dict = ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty;
 
-        static public WebAppConfiguration CrossPropagateHttpHeadersToAndFromBody =>
-            new WebAppConfiguration()
-            .WithElmApp(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
+            foreach (var elmAppFile in elmAppFiles)
+                dict = dict.SetItem(
+                    elmAppFile.Key.Insert(0, WebHost.BuildConfigurationFromArguments.ElmAppSubdirectoryName), elmAppFile.Value);
 
-        static public WebAppConfiguration HttpProxyWebApp =>
-            new WebAppConfiguration()
-            .WithElmApp(TestSetup.HttpProxyWebApp);
+            return dict;
+        }
+
+        static public Composition.Component CounterWebApp =>
+            AppConfigComponentFromElmAppFiles(TestSetup.CounterElmWebApp);
+
+        static public Composition.Component StringBuilderWebApp =>
+            AppConfigComponentFromElmAppFiles(TestSetup.StringBuilderElmWebApp);
+
+        static public Composition.Component CrossPropagateHttpHeadersToAndFromBody =>
+            AppConfigComponentFromElmAppFiles(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
+
+        static public Composition.Component HttpProxyWebApp =>
+            AppConfigComponentFromElmAppFiles(TestSetup.HttpProxyWebApp);
 
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()

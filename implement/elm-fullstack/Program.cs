@@ -27,9 +27,6 @@ namespace elm_fullstack
 
             app.VersionOption(template: "-v|--version", shortFormVersion: "version " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId);
 
-            CommandOption verboseLogOptionFromCommand(CommandLineApplication command) =>
-                command.Option("--verbose-log", "", CommandOptionType.NoValue);
-
             app.Command("install-command", installCmd =>
             {
                 var (commandName, _, registerExecutableDirectoryOnPath) = CheckIfExecutableIsRegisteredOnPath();
@@ -105,8 +102,7 @@ namespace elm_fullstack
 
                         var appConfigZipArchive =
                             Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                                sourcePath: deployAppFromOption.Value(),
-                                _ => { }).compileConfigZipArchive();
+                                sourcePath: deployAppFromOption.Value()).configZipArchive;
 
                         var appConfigTree =
                             Composition.TreeFromSetOfBlobsWithCommonFilePath(
@@ -323,31 +319,6 @@ namespace elm_fullstack
                 });
             });
 
-            app.Command("inspect-build-deploy", buildConfigCmd =>
-            {
-                var verboseLogOption = verboseLogOptionFromCommand(buildConfigCmd);
-                var outputOption = buildConfigCmd.Option("--output", "Path to write the zip-archive to.", CommandOptionType.SingleValue);
-                var loweredElmOutputOption = buildConfigCmd.Option("--lowered-elm-output", "Path to a directory to write the lowered Elm app files.", CommandOptionType.SingleValue);
-                var fromOption = buildConfigCmd.Option("--from", "Location to load the app from.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
-
-                buildConfigCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.StopParsingAndCollect;
-
-                buildConfigCmd.OnExecute(() =>
-                {
-                    var verboseLogWriteLine =
-                        verboseLogOption.HasValue() ?
-                        (Action<string>)Console.WriteLine
-                        :
-                        null;
-
-                    BuildConfiguration(
-                        sourcePath: fromOption.Value(),
-                        outputOption: outputOption.Value(),
-                        loweredElmOutputOption: loweredElmOutputOption.Value(),
-                        verboseLogWriteLine: verboseLogWriteLine);
-                });
-            });
-
             app.OnExecute(() =>
             {
                 Console.WriteLine("Please specify a subcommand.");
@@ -433,16 +404,13 @@ namespace elm_fullstack
 
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var buildConfigurationLog = new System.Collections.Generic.List<String>();
-
             Console.WriteLine("Beginning to build configuration...");
 
             var buildResult =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                    sourcePath: sourcePath,
-                    buildConfigurationLog.Add);
+                    sourcePath: sourcePath);
 
-            var appConfigZipArchive = buildResult.compileConfigZipArchive();
+            var appConfigZipArchive = buildResult.configZipArchive;
 
             var appConfigZipArchiveFileId =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
@@ -912,28 +880,13 @@ namespace elm_fullstack
 
         static public void BuildConfiguration(
             string sourcePath,
-            string outputOption,
-            string loweredElmOutputOption,
-            Action<string> verboseLogWriteLine)
+            string outputOption)
         {
             var buildResult =
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                    sourcePath: sourcePath,
-                    verboseLogWriteLine);
+                    sourcePath: sourcePath);
 
-            if (0 < loweredElmOutputOption?.Length)
-            {
-                Console.WriteLine("I write the lowered Elm app to '" + loweredElmOutputOption + "'.");
-
-                foreach (var file in buildResult.loweredElmAppFiles)
-                {
-                    var outputPath = Path.Combine(new[] { loweredElmOutputOption }.Concat(file.Key).ToArray());
-                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-                    File.WriteAllBytes(outputPath, file.Value.ToArray());
-                }
-            }
-
-            var configZipArchive = buildResult.compileConfigZipArchive();
+            var configZipArchive = buildResult.configZipArchive;
 
             var configZipArchiveFileId =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));

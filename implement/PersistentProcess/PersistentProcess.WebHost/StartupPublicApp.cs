@@ -45,7 +45,7 @@ namespace Kalmit.PersistentProcess.WebHost
             }
 
             {
-                var letsEncryptOptions = webAppAndElmAppConfig.WebAppConfiguration?.JsonStructure?.letsEncryptOptions;
+                var letsEncryptOptions = webAppAndElmAppConfig.WebAppConfiguration?.letsEncryptOptions;
 
                 if (letsEncryptOptions == null)
                 {
@@ -81,7 +81,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var nextHttpRequestIndex = 0;
 
-            if (webAppAndElmAppConfig.WebAppConfiguration.JsonStructure?.letsEncryptOptions != null)
+            if (webAppAndElmAppConfig.WebAppConfiguration?.letsEncryptOptions != null)
                 app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
             var createVolatileHostAttempts = 0;
@@ -331,7 +331,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
     public class WebAppAndElmAppConfig
     {
-        public WebAppConfiguration WebAppConfiguration;
+        public WebAppConfigurationJsonStructure WebAppConfiguration;
 
         public Func<string, string> ProcessEventInElmApp;
     }

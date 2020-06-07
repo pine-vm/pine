@@ -36,6 +36,10 @@ namespace Kalmit.PersistentProcess.WebHost
 
         static public string PathApiProcessHistoryFileStoreGetFileContent => PathApiProcessHistoryFileStore + "/get-file-content";
 
+        static public string JsonFileName => "elm-fullstack.json";
+
+        static public IImmutableList<string> JsonFilePath => ImmutableList.Create(JsonFileName);
+
         private readonly ILogger<StartupAdminInterface> logger;
 
         public StartupAdminInterface(ILogger<StartupAdminInterface> logger)
@@ -178,6 +182,18 @@ namespace Kalmit.PersistentProcess.WebHost
                                 fileContent: blobPathAndContent.blobContent))
                                 .ToImmutableList();
 
+                        var webAppConfigurationFile =
+                            appConfigFilesNamesAndContents
+                            .FirstOrDefault(filePathAndContent => filePathAndContent.fileName.SequenceEqual(JsonFilePath))
+                            .fileContent;
+
+                        var webAppConfiguration =
+                            webAppConfigurationFile == null
+                            ?
+                            null
+                            :
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.ToArray()));
+
                         return
                             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                             .ConfigureLogging((hostingContext, logging) =>
@@ -201,7 +217,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                 services.AddSingleton<WebAppAndElmAppConfig>(
                                     new WebAppAndElmAppConfig
                                     {
-                                        WebAppConfiguration = WebAppConfiguration.FromFiles(appConfigFilesNamesAndContents),
+                                        WebAppConfiguration = webAppConfiguration,
                                         ProcessEventInElmApp = serializedEvent =>
                                         {
                                             lock (avoidConcurrencyLock)

@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Hosting;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
@@ -52,20 +51,6 @@ namespace Kalmit.PersistentProcess.Test
 
             return webHost;
         }
-
-        static public WebHostAdminInterfaceTestSetup Setup(
-            WebAppConfiguration deployAppConfigAndInitElmState,
-            Func<DateTimeOffset> persistentProcessHostDateTime = null,
-            string adminPassword = null) =>
-            Setup(
-                persistentProcessHostDateTime: persistentProcessHostDateTime,
-                adminPassword: adminPassword,
-                deployAppConfigAndInitElmState:
-                    deployAppConfigAndInitElmState == null
-                    ?
-                    null
-                    :
-                    Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(deployAppConfigAndInitElmState.AsFiles())));
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<DateTimeOffset> persistentProcessHostDateTime = null,

@@ -87,7 +87,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
         static Composition.TreeComponent SubtreeElmAppFromAppConfig(Composition.TreeComponent appConfig) =>
             appConfig.TreeContent
-            .FirstOrDefault(c => c.name.SequenceEqual(Encoding.UTF8.GetBytes("elm-app"))).component;
+            .FirstOrDefault(c => c.name.SequenceEqual(Encoding.UTF8.GetBytes(BuildConfigurationFromArguments.ElmAppSubdirectoryName))).component;
 
         PersistentProcessVolatileRepresentation(
             string lastCompositionLogRecordHashBase16,

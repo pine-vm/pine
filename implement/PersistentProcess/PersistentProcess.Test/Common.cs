@@ -57,6 +57,20 @@ namespace Kalmit.PersistentProcess.Test
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> HttpProxyWebApp =
            GetElmAppFromExampleName("http-proxy");
 
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> WithElmFullstackJson(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalWebAppConfig,
+            WebAppConfigurationJsonStructure jsonStructure)
+        {
+            var filePath = WebHost.StartupAdminInterface.JsonFilePath;
+
+            return
+                jsonStructure == null ?
+                originalWebAppConfig.Remove(filePath)
+                :
+                originalWebAppConfig
+                .SetItem(filePath, System.Text.Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(jsonStructure)).ToImmutableList());
+        }
+
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromExampleName(
             string exampleName) =>
                 ElmApp.ToFlatDictionaryWithPathComparer(
