@@ -306,18 +306,10 @@ type Dict key value
                     "interfaceToHost_processEvent : String -> " + testCase.typeToResolve + " -> ( " + testCase.typeToResolve + ", String )\n\n" +
                     module.moduleText);
 
-                string getModuleText(string moduleName)
-                {
-                    if (elmModules.TryGetValue(moduleName, out var moduleText))
-                        return moduleText;
-
-                    return null;
-                }
-
                 var resolvedType = Kalmit.CompileElmValueSerializer.ResolveType(
                     testCase.typeToResolve,
                     testCase.typeToResolveModule,
-                    getModuleText,
+                    elmModules,
                     Console.WriteLine);
 
                 Assert.AreEqual(testCase.expectedCanonicalText, resolvedType.canonicalTypeText);

@@ -386,24 +386,31 @@ namespace Kalmit
                 .OrderBy(module => string.Join(".", module))
                 .ToImmutableHashSet();
 
+            var sourceModules =
+                allOriginalElmModulesNames
+                .Select(moduleName => string.Join(".", moduleName))
+                .ToImmutableDictionary(
+                    moduleName => moduleName,
+                    moduleName =>
+                    {
+                        var originalModuleText = getOriginalModuleText(moduleName);
+
+                        if (moduleName == elmModuleToAddFunctionsIn)
+                        {
+                            return
+                                CompileElm.WithImportsAdded(originalModuleText, allOriginalElmModulesNames);
+                        }
+
+                        return originalModuleText;
+                    });
+
             var getExpressionsAndDependenciesForType = new Func<string, CompileElmValueSerializer.ResolveTypeResult>(canonicalTypeName =>
             {
                 return
                     CompileElmValueSerializer.ResolveType(
                         canonicalTypeName,
                         elmModuleToAddFunctionsIn,
-                        moduleName =>
-                        {
-                            var originalModuleText = getOriginalModuleText(moduleName);
-
-                            if (moduleName == elmModuleToAddFunctionsIn)
-                            {
-                                return
-                                    CompileElm.WithImportsAdded(originalModuleText, allOriginalElmModulesNames);
-                            }
-
-                            return originalModuleText;
-                        },
+                        sourceModules,
                         logWriteLine);
             });
 

@@ -196,14 +196,14 @@ namespace Kalmit
         static public ResolveTypeResult ResolveType(
             string rootTypeText,
             string sourceModuleName,
-            Func<string, string> getModuleText,
+            IImmutableDictionary<string, string> sourceModules,
             Action<string> logWriteLine)
         {
             rootTypeText = rootTypeText.Trim();
 
             logWriteLine?.Invoke("Begin ResolveType for '" + rootTypeText + "' in module '" + sourceModuleName + "'.");
 
-            var sourceModuleText = getModuleText(sourceModuleName);
+            sourceModules.TryGetValue(sourceModuleName, out var sourceModuleText);
 
             if (LeafExpressions.TryGetValue(rootTypeText, out var leafExpressions))
             {
@@ -238,7 +238,7 @@ namespace Kalmit
                 if (StartsWithLowercaseLetter(typeText))
                     return (typeText, ImmutableHashSet<string>.Empty);
 
-                var canonicalTypeText = ResolveType(typeText, sourceModuleName, getModuleText, logWriteLine).canonicalTypeText;
+                var canonicalTypeText = ResolveType(typeText, sourceModuleName, sourceModules, logWriteLine).canonicalTypeText;
 
                 return (canonicalTypeText, ImmutableHashSet.Create(canonicalTypeText));
             }
@@ -252,7 +252,7 @@ namespace Kalmit
                 return ResolveType(
                     rootType.Alias.Value.aliasedText,
                     sourceModuleName,
-                    getModuleText,
+                    sourceModules,
                     logWriteLine);
             }
 
@@ -270,7 +270,7 @@ namespace Kalmit
                         return ResolveType(
                             typeNameInReferencedModule,
                             referencedModuleName,
-                            getModuleText,
+                            sourceModules,
                             logWriteLine);
                     }
 
@@ -281,7 +281,7 @@ namespace Kalmit
                     if (!(0 < referencedTypeText?.Length))
                         throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
 
-                    return ResolveType(referencedTypeText, sourceModuleName, getModuleText, logWriteLine);
+                    return ResolveType(referencedTypeText, sourceModuleName, sourceModules, logWriteLine);
                 }
 
                 logWriteLine?.Invoke("Type '" + rootTypeText + "' is instance of '" +
@@ -292,7 +292,7 @@ namespace Kalmit
                     rootType.Instance.Value.parameters
                     .Select(parameter =>
                     {
-                        var dependencies = ResolveType(parameter, sourceModuleName, getModuleText, logWriteLine);
+                        var dependencies = ResolveType(parameter, sourceModuleName, sourceModules, logWriteLine);
 
                         var (functionNames, typeParametersNames) = GetFunctionNamesAndTypeParametersFromTypeText(dependencies.canonicalTypeText);
 
@@ -317,7 +317,7 @@ namespace Kalmit
                 }
                 else
                 {
-                    var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, getModuleText, logWriteLine);
+                    var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, sourceModules, logWriteLine);
                     instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText;
                     instantiatedTypeFunctionNameCommonPart = GetFunctionNamesAndTypeParametersFromTypeText(instantiatedTypeCanonicalName).functionNames.commonPart;
                     dependenciesFromInstantiatedType = ImmutableHashSet.Create(instantiatedTypeResolution.canonicalTypeText);

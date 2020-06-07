@@ -22,7 +22,17 @@ namespace Kalmit.PersistentProcess.WebHost
                 throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
             }
 
-            var sourceComposition = Composition.FromTree(loadFromPathResult.Ok);
+            /*
+            TODO: Provide a better way to avoid unnecessary files ending up in the config: Get the source files from git.
+            */
+            var filteredTree =
+                loadFromPathResult.Ok.comesFromLocalFilesystem
+                ?
+                RemoveNoiseFromTreeComingFromLocalFileSystem(loadFromPathResult.Ok.tree)
+                :
+                loadFromPathResult.Ok.tree;
+
+            var sourceComposition = Composition.FromTree(filteredTree);
 
             var sourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition));
 
@@ -34,6 +44,34 @@ namespace Kalmit.PersistentProcess.WebHost
             return
                 (sourceCompositionId: sourceCompositionId,
                 configZipArchive: configZipArchive);
+        }
+
+        static public Composition.TreeComponent RemoveNoiseFromTreeComingFromLocalFileSystem(
+            Composition.TreeComponent originalTree)
+        {
+            if (originalTree.TreeContent == null)
+                return originalTree;
+
+            Composition.TreeComponent getComponentFromStringName(string name) =>
+                originalTree.TreeContent.FirstOrDefault(c => c.name.SequenceEqual(Encoding.UTF8.GetBytes(name))).component;
+
+            var elmJson = getComponentFromStringName("elm.json");
+
+            bool keepNode((IImmutableList<byte> name, Composition.TreeComponent component) node)
+            {
+                if (elmJson != null && node.name.SequenceEqual(Encoding.UTF8.GetBytes("elm-stuff")))
+                    return false;
+
+                return true;
+            }
+
+            return new Composition.TreeComponent
+            {
+                TreeContent =
+                    originalTree.TreeContent
+                    .Where(keepNode)
+                    .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList()
+            };
         }
 
         static public byte[] BuildConfigurationZipArchive(Composition.Component sourceComposition)
