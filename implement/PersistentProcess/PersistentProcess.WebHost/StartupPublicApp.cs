@@ -275,12 +275,22 @@ namespace Kalmit.PersistentProcess.WebHost
                         if (headerContentType != null)
                             context.Response.ContentType = headerContentType;
 
-                        var contentAsByteArray =
-                            httpResponse?.bodyAsBase64 == null
-                            ?
-                            null
-                            :
-                            Convert.FromBase64String(httpResponse.bodyAsBase64);
+                        byte[] contentAsByteArray = null;
+
+                        if (httpResponse?.bodyAsBase64 != null)
+                        {
+                            var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
+
+                            if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
+                            {
+                                throw new FormatException(
+                                    "Failed to convert from base64. bytesWritten=" + bytesWritten +
+                                    ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
+                                    httpResponse.bodyAsBase64);
+                            }
+
+                            contentAsByteArray = buffer.AsSpan(0, bytesWritten).ToArray();
+                        }
 
                         context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
 

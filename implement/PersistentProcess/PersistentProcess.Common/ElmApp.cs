@@ -156,26 +156,45 @@ namespace Kalmit
                 return Encoding.UTF8.GetBytes(frontendWebHtml);
             }
 
-            var elmMakeCommandFromFunctionName =
-                ImmutableDictionary.Create<string, string>()
-                .SetItem("elm_make_frontendWeb_html", null)
-                .SetItem("elm_make_frontendWeb_html_debug", "--debug");
+            string fileExpression(string elmMakeCommandAppendix, bool encodingBase64)
+            {
+                var htmlFile = BuildFrontendWebHtml(elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                var fileAsBase64 = Convert.ToBase64String(htmlFile);
+
+                var base64Expression = "\"" + fileAsBase64 + "\"";
+
+                if (encodingBase64)
+                    return base64Expression;
+
+                return
+                    base64Expression +
+                    @"|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
+            }
+
+            /*
+            2020-06-07
+            I saw apps spending a lot of time on encoding the `Bytes.Bytes` value to base64 when building HTTP responses.
+            As a quick way to optimize runtimes expenses, offer a base64 string directly so that apps can avoid the roundtrip to and from `Bytes.Bytes`.
+            This should become obsolete with a better engine running the Elm code: These values could be cached, but the current engine does not do that.
+            */
+
+            var fileExpressionFromFunctionName =
+                ImmutableDictionary.Create<string, Func<string>>()
+                .SetItem("elm_make_frontendWeb_html", () => fileExpression(elmMakeCommandAppendix: null, encodingBase64: false))
+                .SetItem("elm_make_frontendWeb_html_debug", () => fileExpression(elmMakeCommandAppendix: "--debug", encodingBase64: false))
+                .SetItem("elm_make_frontendWeb_html_base64", () => fileExpression(elmMakeCommandAppendix: null, encodingBase64: true))
+                .SetItem("elm_make_frontendWeb_html_debug_base64", () => fileExpression(elmMakeCommandAppendix: "--debug", encodingBase64: true));
 
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunction(
                 IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
                 string functionName,
                 string originalFunctionText)
             {
-                if (!elmMakeCommandFromFunctionName.TryGetValue(functionName, out var elmMakeCommandAppendix))
+                if (!fileExpressionFromFunctionName.TryGetValue(functionName, out var getFileExpression))
                     return previousAppFiles;
 
-                var htmlFile = BuildFrontendWebHtml(elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                var fileAsBase64 = Convert.ToBase64String(htmlFile);
-
-                var fileExpression = "\"" + fileAsBase64 + @"""|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
-
-                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, fileExpression);
+                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, getFileExpression());
 
                 var originalFunctionTextLines =
                     originalFunctionText.Replace("\r", "").Split("\n");

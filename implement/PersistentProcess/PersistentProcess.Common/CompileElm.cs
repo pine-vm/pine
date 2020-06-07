@@ -209,7 +209,16 @@ namespace Kalmit
 
             var firstImportMatch = Regex.Match(originalElmModuleText, @"^import\s", RegexOptions.Multiline);
 
-            return originalElmModuleText.Insert(firstImportMatch.Index, importsText + "\n");
+            var moduleSyntaxMatch = Regex.Match(originalElmModuleText, @"^module\s[\d\w\.\s\(\)_]+$", RegexOptions.Multiline);
+
+            var insertLocation =
+                firstImportMatch.Success
+                ?
+                firstImportMatch.Index
+                :
+                (moduleSyntaxMatch.Index + moduleSyntaxMatch.Length);
+
+            return originalElmModuleText.Insert(insertLocation, "\n" + importsText + "\n");
         }
 
         static public string WithFunctionAdded(
