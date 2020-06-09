@@ -132,7 +132,7 @@ namespace Kalmit
 
             var javascriptFromElmMake = CompileElmToJavascript(
                 elmCodeFiles,
-                ElmApp.InterfaceToHostRootModuleFilePath);
+                ElmApp.FilePathFromModuleNameInElmApp(ElmApp.InterfaceToHostRootModuleName));
 
             var pathToFunctionCommonStart = ElmApp.InterfaceToHostRootModuleName + ".";
 

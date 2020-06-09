@@ -152,7 +152,7 @@ namespace Kalmit.PersistentProcess.Test
 
             var webAppConfig =
                 TestSetup.WithElmFullstackJson(
-                    TestElmWebAppHttpServer.AppConfigFilesFromElmAppFiles(TestSetup.CounterElmWebApp),
+                    TestSetup.CounterElmWebApp,
                     new WebAppConfigurationJsonStructure
                     {
                         singleRateLimitWindowPerClientIPv4Address = new WebAppConfigurationJsonStructure.RateLimitWindow
@@ -566,8 +566,7 @@ namespace Kalmit.PersistentProcess.Test
 
             Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
-            var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(
-                TestElmWebAppHttpServer.AppConfigFilesFromElmAppFiles(TestSetup.CounterElmWebApp));
+            var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
 
             var webAppConfigTree =
                 Composition.TreeFromSetOfBlobsWithCommonFilePath(
@@ -658,14 +657,12 @@ namespace Kalmit.PersistentProcess.Test
         [TestMethod]
         public void Web_host_prevents_damaging_backend_state_with_invalid_migration()
         {
-            var elmApp = TestSetup.GetElmAppFromExampleName("test-prevent-damage-by-migrate-webapp");
-
-            var webAppConfigFiles = TestElmWebAppHttpServer.AppConfigFilesFromElmAppFiles(elmApp);
+            var webAppConfigFiles = TestSetup.GetElmAppFromExampleName("test-prevent-damage-by-migrate-webapp");
 
             var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.AppConfigComponentFromElmAppFiles(elmApp)))
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.AppConfigComponentFromFiles(webAppConfigFiles)))
             {
                 using (var server = testSetup.StartWebHost())
                 {
@@ -762,14 +759,11 @@ namespace Kalmit.PersistentProcess.Test
         {
             var initialWebAppConfig = TestElmWebAppHttpServer.CounterWebApp;
 
-            var migrateAndSecondElmApp =
+            var migrateAndSecondApp =
                 TestSetup.GetElmAppFromExampleName("migrate-from-int-to-string-builder-web-app");
 
-            var migrateAndSecondElmAppWebAppConfigFiles =
-                TestElmWebAppHttpServer.AppConfigFilesFromElmAppFiles(migrateAndSecondElmApp);
-
-            var migrateAndSecondElmAppWebAppConfigZipArchive =
-                ZipArchive.ZipArchiveFromEntries(migrateAndSecondElmAppWebAppConfigFiles);
+            var migrateAndSecondAppWebAppConfigZipArchive =
+                ZipArchive.ZipArchiveFromEntries(migrateAndSecondApp);
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: initialWebAppConfig))
             {
@@ -802,7 +796,7 @@ namespace Kalmit.PersistentProcess.Test
                     {
                         var deployAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
                             StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
-                            new ByteArrayContent(migrateAndSecondElmAppWebAppConfigZipArchive)).Result;
+                            new ByteArrayContent(migrateAndSecondAppWebAppConfigZipArchive)).Result;
 
                         Assert.IsTrue(
                             deployAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode,

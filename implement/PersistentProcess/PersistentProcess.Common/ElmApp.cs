@@ -58,15 +58,12 @@ namespace Kalmit
             .WithComparers(EnumerableExtension.EqualityComparer<string>());
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalSourceFiles,
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig,
             Action<string> logWriteLine) =>
             LoweredElmAppForBackendStateSerializer(
                 LoweredElmAppForElmMakeFrontendWeb(
-                    originalAppFiles: LoweredElmAppToGenerateJsonCoders(
-                        LoweredElmAppForSourceFiles(originalAppFiles, originalSourceFiles),
-                        logWriteLine),
+                    originalAppFiles: LoweredElmAppToGenerateJsonCoders(LoweredElmAppForSourceFiles(sourceFiles), logWriteLine),
                     logWriteLine: logWriteLine),
                     interfaceConfig, logWriteLine);
 
@@ -75,13 +72,15 @@ namespace Kalmit
             ElmAppInterfaceConfig interfaceConfig,
             Action<string> logWriteLine)
         {
-            if (originalAppFiles.ContainsKey(InterfaceToHostRootModuleFilePath))
+            var interfaceToHostRootModuleFilePath = InterfaceToHostRootModuleFilePathFromSourceFiles(originalAppFiles);
+
+            if (originalAppFiles.ContainsKey(interfaceToHostRootModuleFilePath))
             {
                 //  Support integrating applications supplying their own lowered version.
                 return originalAppFiles;
             }
 
-            var backendMainFilePath = FilePathFromModuleName(interfaceConfig.RootModuleName);
+            var backendMainFilePath = FilePathFromModuleName(originalAppFiles, interfaceConfig.RootModuleName);
 
             if (!originalAppFiles.TryGetValue(backendMainFilePath, out var backendMainOriginalFile))
             {
@@ -97,7 +96,7 @@ namespace Kalmit
 
             var appFilesWithInitialRootModule =
                 originalAppFiles
-                .SetItem(InterfaceToHostRootModuleFilePath, Encoding.UTF8.GetBytes(initialRootModuleText).ToImmutableList());
+                .SetItem(interfaceToHostRootModuleFilePath, Encoding.UTF8.GetBytes(initialRootModuleText).ToImmutableList());
 
             var appFilesWithSupportAdded =
                 WithSupportForCodingElmType(
@@ -108,7 +107,7 @@ namespace Kalmit
                     out var functionNames);
 
             var rootModuleTextWithSupportAdded =
-                Encoding.UTF8.GetString(appFilesWithSupportAdded[InterfaceToHostRootModuleFilePath].ToArray());
+                Encoding.UTF8.GetString(appFilesWithSupportAdded[interfaceToHostRootModuleFilePath].ToArray());
 
             var rootModuleText =
                 new[]
@@ -120,7 +119,7 @@ namespace Kalmit
                     CompileElm.WithFunctionAdded(intermediateModuleText, functionToAdd));
 
             return appFilesWithSupportAdded.SetItem(
-                InterfaceToHostRootModuleFilePath,
+                interfaceToHostRootModuleFilePath,
                 Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
         }
 
@@ -128,7 +127,8 @@ namespace Kalmit
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             Action<string> logWriteLine)
         {
-            var interfaceModuleFilePath = FilePathFromModuleName(ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName);
+            var interfaceModuleFilePath =
+                FilePathFromModuleName(originalAppFiles, ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName);
 
             var elmAppContainsFrontend = originalAppFiles.ContainsKey(interfaceModuleFilePath);
 
@@ -146,10 +146,19 @@ namespace Kalmit
 
             var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
 
+            var pathToElmApp =
+                ElmApp.FindPathToElmAppInSourceFiles(originalAppFiles);
+
+            var originalElmAppFiles =
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    originalAppFiles
+                    .Where(appFile => appFile.Key.Take(pathToElmApp.Count).SequenceEqual(pathToElmApp))
+                    .Select(appFile => (path: (IImmutableList<string>)appFile.Key.Skip(pathToElmApp.Count).ToImmutableList(), content: appFile.Value)));
+
             byte[] BuildFrontendWebHtml(string elmMakeCommandAppendix)
             {
                 var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
-                    originalAppFiles,
+                    originalElmAppFiles,
                     ElmAppInterfaceConvention.FrontendElmAppRootFilePath,
                     elmMakeCommandAppendix: elmMakeCommandAppendix);
 
@@ -226,7 +235,8 @@ namespace Kalmit
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             Action<string> logWriteLine)
         {
-            var interfaceModuleFilePath = FilePathFromModuleName(ElmAppInterfaceConvention.GenerateJsonCodersInterfaceModuleName);
+            var interfaceModuleFilePath =
+                FilePathFromModuleName(originalAppFiles, ElmAppInterfaceConvention.GenerateJsonCodersInterfaceModuleName);
 
             if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
             {
@@ -362,7 +372,9 @@ namespace Kalmit
             Action<string> logWriteLine,
             out (string encodeFunctionName, string decodeFunctionName) functionNames)
         {
-            var interfaceModuleFilePath = FilePathFromModuleName(elmModuleToAddFunctionsIn);
+            var pathToElmApp = FindPathToElmAppInSourceFiles(originalAppFiles);
+
+            var interfaceModuleFilePath = FilePathFromModuleName(originalAppFiles, elmModuleToAddFunctionsIn);
 
             if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
             {
@@ -376,7 +388,7 @@ namespace Kalmit
 
             string getOriginalModuleText(string moduleName)
             {
-                var filePath = FilePathFromModuleName(moduleName);
+                var filePath = FilePathFromModuleName(originalAppFiles, moduleName);
 
                 originalAppFiles.TryGetValue(filePath, out var moduleFile);
 
@@ -390,14 +402,19 @@ namespace Kalmit
                 originalAppFiles
                 .Select(originalAppFilePathAndContent =>
                 {
-                    var fileName = originalAppFilePathAndContent.Key.Last();
+                    if (!pathToElmApp.SequenceEqual(originalAppFilePathAndContent.Key.Take(pathToElmApp.Count)))
+                        return null;
 
-                    if (originalAppFilePathAndContent.Key.First() != "src" || !fileName.EndsWith(".elm"))
+                    var remainingPathInElmAppDirectory = originalAppFilePathAndContent.Key.Skip(pathToElmApp.Count);
+
+                    var fileName = remainingPathInElmAppDirectory.Last();
+
+                    if (remainingPathInElmAppDirectory.First() != "src" || !fileName.EndsWith(".elm"))
                         return null;
 
                     return
                         (IEnumerable<string>)
-                        originalAppFilePathAndContent.Key.Skip(1).Reverse().Skip(1).Reverse()
+                        remainingPathInElmAppDirectory.Skip(1).Reverse().Skip(1).Reverse()
                         .Concat(new[] { fileName.Substring(0, fileName.Length - 4) })
                         .ToImmutableList();
                 })
@@ -465,7 +482,7 @@ namespace Kalmit
                         var moduleName = qualifiedMatch.Groups[1].Value;
                         var localTypeName = qualifiedMatch.Groups[2].Value;
 
-                        var expectedFilePath = FilePathFromModuleName(moduleName);
+                        var expectedFilePath = FilePathFromModuleName(originalAppFiles, moduleName);
 
                         var moduleBefore =
                             partiallyUpdatedAppFiles
@@ -536,22 +553,18 @@ namespace Kalmit
                     Encoding.UTF8.GetBytes(interfaceModuleWithSupportingFunctions).ToImmutableList());
         }
 
-        /*
-        TODO: To resolve the distinction between 'originalAppFiles' and 'originalSourceFiles' in 'LoweredElmAppForSourceFiles':
-        Use the complete app config tree as the argument to pass through the pipeline.
-        */
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForSourceFiles(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalSourceFiles)
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles)
         {
-            var interfaceModuleFilePath = FilePathFromModuleName(ElmAppInterfaceConvention.SourceFilesInterfaceModuleName);
+            var interfaceModuleFilePath = FilePathFromModuleName(
+                sourceFiles, ElmAppInterfaceConvention.SourceFilesInterfaceModuleName);
 
-            if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
+            if (!sourceFiles.ContainsKey(interfaceModuleFilePath))
             {
-                return originalAppFiles;
+                return sourceFiles;
             }
 
-            var interfaceModuleOriginalFile = originalAppFiles[interfaceModuleFilePath];
+            var interfaceModuleOriginalFile = sourceFiles[interfaceModuleFilePath];
 
             var interfaceModuleOriginalFileText =
                 Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
@@ -574,7 +587,7 @@ namespace Kalmit
                 var filePathRepresentation = functionNameMatch.Groups[1].Value;
 
                 var matchingFiles =
-                    originalSourceFiles
+                    sourceFiles
                     .Where(sourceFilePathAndContent => functionNameFromFilePath(sourceFilePathAndContent.Key) == filePathRepresentation)
                     .ToImmutableList();
 
@@ -606,7 +619,7 @@ namespace Kalmit
 
             return
                 originalFunctions
-                .Aggregate(originalAppFiles, (intermediateAppFiles, originalFunction) =>
+                .Aggregate(sourceFiles, (intermediateAppFiles, originalFunction) =>
                     replaceFileFunction(
                         intermediateAppFiles,
                         originalFunction.functionName,
@@ -617,7 +630,7 @@ namespace Kalmit
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
             string moduleName, IEnumerable<string> moduleToImport)
         {
-            var moduleFilePath = FilePathFromModuleName(moduleName);
+            var moduleFilePath = FilePathFromModuleName(previousAppFiles, moduleName);
 
             var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
 
@@ -632,7 +645,7 @@ namespace Kalmit
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
             string moduleName, string functionName, string newFunctionText)
         {
-            var moduleFilePath = FilePathFromModuleName(moduleName);
+            var moduleFilePath = FilePathFromModuleName(previousAppFiles, moduleName);
 
             var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
 
@@ -655,7 +668,32 @@ namespace Kalmit
             return moduleText.Replace(originalFunction.functionText, newFunctionText);
         }
 
-        static public IImmutableList<string> FilePathFromModuleName(string moduleName)
+        static public IImmutableList<string> FilePathFromModuleName(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+            string moduleName)
+        {
+            var pathToElmApp = FindPathToElmAppInSourceFiles(sourceFiles);
+
+            return pathToElmApp.AddRange(FilePathFromModuleNameInElmApp(moduleName));
+        }
+
+        /*
+        2020-06-09
+        To support both older and new app sources, look up the subdirectory of the elm-app based on the source files.
+        In previous versions, the elm app was contained in the subdirectory 'elm-app'.
+        (Example: https://github.com/elm-fullstack/elm-fullstack/tree/b5273ede7cd6c876f7430a92a329d9e0b7e6714a/implement/example-apps/docker-image-default-app)
+
+        TODO: Simplify: Expect `elm.json` at the root.
+        */
+        static public IImmutableList<string> FindPathToElmAppInSourceFiles(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles) =>
+                sourceFiles.ContainsKey(ImmutableList.Create("elm-app", "elm.json"))
+                ?
+                ImmutableList.Create("elm-app")
+                :
+                ImmutableList<string>.Empty;
+
+        static public IImmutableList<string> FilePathFromModuleNameInElmApp(string moduleName)
         {
             var pathComponents = moduleName.Split(new[] { '.' });
 
@@ -681,7 +719,9 @@ namespace Kalmit
 
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
-        static public IImmutableList<string> InterfaceToHostRootModuleFilePath => FilePathFromModuleName(InterfaceToHostRootModuleName);
+        static public IImmutableList<string> InterfaceToHostRootModuleFilePathFromSourceFiles(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles) =>
+            FilePathFromModuleName(sourceFiles, InterfaceToHostRootModuleName);
 
         static public string InitialRootElmModuleText(
             string rootModuleNameBeforeLowering,

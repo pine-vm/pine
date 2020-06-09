@@ -327,8 +327,7 @@ type Dict key value
 
                     var loweredElmApp =
                         ElmApp.AsCompletelyLoweredElmApp(
-                            originalAppFiles: originalAppFiles,
-                            originalSourceFiles: originalAppFiles,
+                            sourceFiles: originalAppFiles,
                             new ElmAppInterfaceConfig { RootModuleName = "RootModule" },
                             Console.WriteLine);
                 }

@@ -27,8 +27,7 @@ namespace Kalmit.PersistentProcess.Test
 
             return
                 ElmApp.AsCompletelyLoweredElmApp(
-                    originalAppFiles: originalFiles,
-                    originalSourceFiles: originalFiles,
+                    sourceFiles: originalFiles,
                     ElmAppInterfaceConfig.Default,
                     Console.WriteLine);
         }

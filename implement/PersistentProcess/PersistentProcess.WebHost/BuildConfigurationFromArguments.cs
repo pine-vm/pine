@@ -8,8 +8,6 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     static public class BuildConfigurationFromArguments
     {
-        public const string ElmAppSubdirectoryName = "elm-app";
-
         static public (
             string sourceCompositionId,
             byte[] configZipArchive)

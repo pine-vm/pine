@@ -55,16 +55,19 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             var sourceFiles = TreeToFlatDictionaryWithPathComparer(appConfig);
 
-            var elmAppFilesBeforeLowering =
-                TreeToFlatDictionaryWithPathComparer(SubtreeElmAppFromAppConfig(appConfig));
-
             var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
-                originalAppFiles: elmAppFilesBeforeLowering,
-                originalSourceFiles: sourceFiles,
+                sourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default,
                 log.Add);
 
-            var elmAppFilesNamesAndContents = loweredElmAppFiles;
+            var pathToElmApp =
+                ElmApp.FindPathToElmAppInSourceFiles(loweredElmAppFiles);
+
+            var elmAppFilesNamesAndContents =
+                ElmApp.ToFlatDictionaryWithPathComparer(
+                    loweredElmAppFiles
+                    .Where(appFile => appFile.Key.Take(pathToElmApp.Count).SequenceEqual(pathToElmApp))
+                    .Select(appFile => (path: (IImmutableList<string>)appFile.Key.Skip(pathToElmApp.Count).ToImmutableList(), content: appFile.Value)));
 
             var processFromLoweredElmApp =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(
@@ -84,10 +87,6 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
                         fileContent: blobPathAndContent.blobContent)));
         }
-
-        static Composition.TreeComponent SubtreeElmAppFromAppConfig(Composition.TreeComponent appConfig) =>
-            appConfig.TreeContent
-            .FirstOrDefault(c => c.name.SequenceEqual(Encoding.UTF8.GetBytes(BuildConfigurationFromArguments.ElmAppSubdirectoryName))).component;
 
         PersistentProcessVolatileRepresentation(
             string lastCompositionLogRecordHashBase16,
@@ -510,20 +509,18 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
         static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValue(
             Composition.TreeComponent destinationAppConfigTree)
         {
-            var elmAppTree = SubtreeElmAppFromAppConfig(destinationAppConfigTree);
-
-            var migrateElmAppOriginalFiles =
+            var appConfigFiles =
                 ElmApp.ToFlatDictionaryWithPathComparer(
-                    elmAppTree.EnumerateBlobsTransitive()
+                    destinationAppConfigTree.EnumerateBlobsTransitive()
                     .Select(blobPathAndContent => (
                         fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
                         fileContent: blobPathAndContent.blobContent))
                     .ToImmutableList());
 
-            var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
-            var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
+            var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(appConfigFiles, MigrationElmAppInterfaceModuleName);
+            var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(appConfigFiles, MigrationElmAppCompilationRootModuleName);
 
-            migrateElmAppOriginalFiles.TryGetValue(pathToInterfaceModuleFile, out var migrateElmAppInterfaceModuleOriginalFile);
+            appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var migrateElmAppInterfaceModuleOriginalFile);
 
             if (migrateElmAppInterfaceModuleOriginalFile == null)
                 return new Result<string, Func<string, Result<string, string>>>
@@ -611,7 +608,7 @@ main =
             try
             {
                 var migrateElmAppFilesBeforeAddingCodingSupport =
-                    migrateElmAppOriginalFiles.SetItem(
+                    appConfigFiles.SetItem(
                         pathToCompilationRootModuleFile,
                         Encoding.UTF8.GetBytes(compilationRootModuleInitialText).ToImmutableList());
 

@@ -81,8 +81,7 @@ namespace Kalmit.PersistentProcess.Test
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles) =>
                 ElmApp.AsCompletelyLoweredElmApp(
-                    originalAppFiles: originalAppFiles,
-                    originalSourceFiles: originalAppFiles,
+                    sourceFiles: originalAppFiles,
                     ElmAppInterfaceConfig.Default,
                     Console.WriteLine);
 
