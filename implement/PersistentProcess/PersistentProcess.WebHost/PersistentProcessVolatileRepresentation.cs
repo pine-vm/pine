@@ -55,17 +55,17 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             var sourceFiles = TreeToFlatDictionaryWithPathComparer(appConfig);
 
-            var loweredElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+            var loweredAppFiles = ElmApp.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default,
                 log.Add);
 
             var pathToElmApp =
-                ElmApp.FindPathToElmAppInSourceFiles(loweredElmAppFiles);
+                ElmApp.FindPathToElmAppInSourceFiles(loweredAppFiles);
 
             var elmAppFilesNamesAndContents =
                 ElmApp.ToFlatDictionaryWithPathComparer(
-                    loweredElmAppFiles
+                    loweredAppFiles
                     .Where(appFile => appFile.Key.Take(pathToElmApp.Count).SequenceEqual(pathToElmApp))
                     .Select(appFile => (path: (IImmutableList<string>)appFile.Key.Skip(pathToElmApp.Count).ToImmutableList(), content: appFile.Value)));
 

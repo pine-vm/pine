@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -182,7 +183,7 @@ namespace elm_fullstack
 
             app.Command("deploy-app", deployAppCmd =>
             {
-                deployAppCmd.Description = "Deploy an app to an Elm-fullstack process. By default, migrates from the previous Elm app state using the `migrate` function in the Elm app code.";
+                deployAppCmd.Description = "Deploy an app to an Elm-fullstack process. By default, migrates from the previous app state using the `migrate` function in the Elm app code.";
                 deployAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);
@@ -210,7 +211,7 @@ namespace elm_fullstack
 
             app.Command("set-elm-app-state", setElmAppStateCmd =>
             {
-                setElmAppStateCmd.Description = "Attempt to set the state of a backend Elm app using the common serialized representation.";
+                setElmAppStateCmd.Description = "Set the state of a backend Elm app.";
                 setElmAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
@@ -236,7 +237,7 @@ namespace elm_fullstack
 
             app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
-                truncateProcessHistoryCmd.Description = "Remove parts of the process history from the persistent store, which are not needed to restore the process.";
+                truncateProcessHistoryCmd.Description = "Remove parts of the process history that are not needed to restore the process.";
                 truncateProcessHistoryCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
@@ -319,6 +320,107 @@ namespace elm_fullstack
                 });
             });
 
+            app.Command("compile-app", compileAppCmd =>
+            {
+                compileAppCmd.Description = "Compile app source code the same way as would be done when deploying.";
+                compileAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+                var fromOption = compileAppCmd.Option("--from", "Path to the app source code.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+
+                compileAppCmd.OnExecute(() =>
+                {
+                    var sourcePath = fromOption.Value();
+
+                    var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
+
+                    if (loadFromPathResult?.Ok == null)
+                    {
+                        throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
+                    }
+
+                    var sourceComposition = Composition.FromTree(loadFromPathResult.Ok.tree);
+
+                    var sourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition));
+
+                    Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'. Starting to compile...");
+
+                    var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var sourceFiles =
+                        Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TreeToFlatDictionaryWithPathComparer(
+                            loadFromPathResult.Ok.tree);
+
+                    var compilationLog = new List<string>();
+
+                    string compilationException = null;
+                    Composition.TreeComponent compiledTree = null;
+
+                    try
+                    {
+                        var loweredAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                            sourceFiles: sourceFiles,
+                            ElmAppInterfaceConfig.Default,
+                            compilationLog.Add);
+
+                        compiledTree =
+                            Composition.TreeFromSetOfBlobsWithStringPath(loweredAppFiles);
+                    }
+                    catch (Exception e)
+                    {
+                        compilationException = e.ToString();
+                    }
+
+                    compilationStopwatch.Stop();
+
+                    Console.WriteLine("Compilation completed in " + (int)compilationStopwatch.Elapsed.TotalSeconds + " seconds.");
+
+                    var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
+
+                    var compiledComposition =
+                        compiledTree == null ? null : Composition.FromTree(compiledTree);
+
+                    var compiledCompositionId =
+                        compiledComposition == null ? null :
+                        CommonConversion.StringBase16FromByteArray(Composition.GetHash(compiledComposition));
+
+                    if (compiledTree != null)
+                    {
+                        var compiledFiles =
+                            ElmApp.ToFlatDictionaryWithPathComparer(
+                                compiledTree.EnumerateBlobsTransitive()
+                                .Select(filePathAndContent =>
+                                    (path: (IImmutableList<string>)filePathAndContent.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
+                                    filePathAndContent.blobContent))
+                                    .ToImmutableList());
+
+                        var compiledCompositionArchive =
+                            ZipArchive.ZipArchiveFromEntries(compiledFiles);
+
+                        var outputCompositionFileName = compiledCompositionId + ".zip";
+
+                        var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath));
+                        File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
+                        Console.WriteLine("Saved compiled composition " + compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
+                    }
+
+                    var compileReport = new CompileAppReport
+                    {
+                        sourcePath = sourcePath,
+                        sourceCompositionId = sourceCompositionId,
+                        compilationException = compilationException,
+                        compilationLog = compilationLog.ToImmutableList(),
+                        compilationTimeSpentMilli = (int)compilationTimeSpentMilli,
+                        compiledCompositionId = compiledCompositionId,
+                    };
+
+                    writeReportToFileInReportDirectory(
+                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
+                        reportKind: "compile-app.json");
+                });
+            });
+
             app.OnExecute(() =>
             {
                 Console.WriteLine("Please specify a subcommand.");
@@ -365,6 +467,26 @@ namespace elm_fullstack
             Console.WriteLine("");
 
             DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
+        }
+
+
+        public class CompileAppReport
+        {
+            public string beginTime;
+
+            public string sourcePath;
+
+            public string sourceCompositionId;
+
+            public IReadOnlyList<string> compilationLog;
+
+            public string compilationException;
+
+            public int compilationTimeSpentMilli;
+
+            public string compiledCompositionId;
+
+            public int totalTimeSpentMilli;
         }
 
         public class DeployAppReport
@@ -916,11 +1038,13 @@ namespace elm_fullstack
             }
         }
 
+        static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-fullstack-tool", "report");
+
         static void writeReportToFileInReportDirectory(string reportContent, string reportKind)
         {
-            var fileName = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow) + "_" + reportKind;
+            var fileName = CommonConversion.TimeStringViewForReport(programStartTime) + "_" + reportKind;
 
-            var filePath = Path.Combine(Environment.CurrentDirectory, "elm-fullstack-tool", "report", fileName);
+            var filePath = Path.Combine(ReportFilePath, fileName);
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
@@ -948,5 +1072,7 @@ namespace elm_fullstack
 
             return httpRequest;
         }
+
+        static readonly DateTimeOffset programStartTime = DateTimeOffset.UtcNow;
     }
 }
