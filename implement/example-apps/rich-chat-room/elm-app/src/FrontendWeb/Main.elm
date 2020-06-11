@@ -18,6 +18,7 @@ import Http
 import Json.Decode
 import Markdown.Parser
 import Markdown.Renderer
+import Set
 import Task
 import Time
 import Url
@@ -44,7 +45,7 @@ type alias State =
     , lastRequestToBackendResult : Maybe { time : Time.Posix, result : RequestToBackendResultStructure }
     , lastMessageFromBackend : Maybe { time : Time.Posix, message : FrontendBackendInterface.MessageToClient }
     , lastSeeingLobby : Maybe { time : Time.Posix, message : FrontendBackendInterface.SeeingLobbyStructure }
-    , usersProfiles : Dict.Dict UserId { chosenName : String }
+    , usersProfilesReads : Dict.Dict UserId { time : Time.Posix, userProfile : { chosenName : String } }
     , conversationHistory : List Conversation.Event
     , showChangeNameGuide : Bool
     }
@@ -90,7 +91,7 @@ init _ url navigationKey =
     , lastMessageFromBackend = Nothing
     , lastSeeingLobby = Nothing
     , conversationHistory = []
-    , usersProfiles = Dict.empty
+    , usersProfilesReads = Dict.empty
     , showChangeNameGuide = False
     }
         |> update (UrlChange url)
@@ -141,7 +142,16 @@ updateLessScrolling : Event -> State -> ( State, Cmd Event )
 updateLessScrolling event stateBefore =
     case event of
         ArrivedAtTime time ->
-            ( { stateBefore | time = time }, requestToBackendCmd FrontendBackendInterface.ShowUpRequest )
+            let
+                state =
+                    { stateBefore | time = time }
+            in
+            ( state
+            , [ requestToBackendCmd FrontendBackendInterface.ShowUpRequest
+              , httpRequestsForUserProfiles state
+              ]
+                |> Cmd.batch
+            )
 
         RequestToBackendResult requestToBackendResult ->
             let
@@ -217,6 +227,47 @@ updateLessScrolling event stateBefore =
             ( stateBefore, Cmd.none )
 
 
+httpRequestsForUserProfiles : State -> Cmd Event
+httpRequestsForUserProfiles state =
+    let
+        visibleUsersIdsFromHistory =
+            state.conversationHistory
+                |> List.filterMap
+                    (\event ->
+                        case event.origin of
+                            Conversation.FromUser { userId } ->
+                                Just userId
+
+                            Conversation.FromSystem ->
+                                Nothing
+                    )
+
+        visibleUsersIdsFromSeeingLobby =
+            case state.lastSeeingLobby of
+                Nothing ->
+                    []
+
+                Just lastSeeingLobby ->
+                    lastSeeingLobby.message.usersOnline
+
+        visibleUsersIds =
+            (visibleUsersIdsFromSeeingLobby ++ visibleUsersIdsFromHistory)
+                |> Set.fromList
+
+        userIdsWithProfilesUpdated =
+            state.usersProfilesReads
+                |> Dict.keys
+                |> Set.fromList
+
+        profilesToRequestUserIds =
+            Set.diff visibleUsersIds userIdsWithProfilesUpdated
+    in
+    profilesToRequestUserIds
+        |> Set.toList
+        |> List.map (FrontendBackendInterface.ReadUserProfileRequest >> requestToBackendCmd)
+        |> Cmd.batch
+
+
 updateForMessageFromServer : RequestToBackendResultOkStructure -> State -> State
 updateForMessageFromServer { originatingRequest, messageFromBackend } stateBeforeGeneralUpdate =
     let
@@ -245,15 +296,16 @@ updateForMessageFromServer { originatingRequest, messageFromBackend } stateBefor
                         _ ->
                             Nothing
 
-                usersProfiles =
+                usersProfilesReads =
                     case maybeUserId of
                         Nothing ->
-                            stateBefore.usersProfiles
+                            stateBefore.usersProfilesReads
 
                         Just requestUserId ->
-                            stateBefore.usersProfiles |> Dict.insert requestUserId userProfile
+                            stateBefore.usersProfilesReads
+                                |> Dict.insert requestUserId { time = stateBefore.time, userProfile = userProfile }
             in
-            { stateBefore | usersProfiles = usersProfiles }
+            { stateBefore | usersProfilesReads = usersProfilesReads }
 
         FrontendBackendInterface.MessageToUser messageToUser ->
             stateBefore
@@ -314,7 +366,7 @@ view : State -> Browser.Document Event
 view state =
     let
         viewConfiguration =
-            { usersProfiles = state.usersProfiles }
+            { usersProfiles = state.usersProfilesReads |> Dict.map (\_ read -> read.userProfile) }
 
         messageTextboxAttributes =
             [ HA.id messageToAddTextboxId
@@ -372,7 +424,12 @@ view state =
                         |> List.map (List.singleton >> Html.div [])
 
                 Nothing ->
-                    [ "❌ Connection error" |> Html.text ]
+                    case state.lastRequestToBackendResult of
+                        Nothing ->
+                            [ "Connecting to backend..." |> Html.text ]
+
+                        Just _ ->
+                            [ "❌ Connection error" |> Html.text ]
 
         peopleOnlineView =
             peopleOnlineViewBeforeStyle |> Html.div (htmlAttributesStyles peopleOnlineViewStyle)
