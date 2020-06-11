@@ -9,7 +9,8 @@ namespace Kalmit.PersistentProcess.WebHost
     static public class BuildConfigurationFromArguments
     {
         static public (
-            string sourceCompositionId,
+            Composition.TreeComponent sourceTree,
+            string filteredSourceCompositionId,
             byte[] configZipArchive)
             BuildConfigurationZipArchiveFromPath(string sourcePath)
         {
@@ -20,27 +21,30 @@ namespace Kalmit.PersistentProcess.WebHost
                 throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
             }
 
+            var sourceTree = loadFromPathResult.Ok.tree;
+
             /*
             TODO: Provide a better way to avoid unnecessary files ending up in the config: Get the source files from git.
             */
-            var filteredTree =
+            var filteredSourceTree =
                 loadFromPathResult.Ok.comesFromLocalFilesystem
                 ?
-                RemoveNoiseFromTreeComingFromLocalFileSystem(loadFromPathResult.Ok.tree)
+                RemoveNoiseFromTreeComingFromLocalFileSystem(sourceTree)
                 :
-                loadFromPathResult.Ok.tree;
+                sourceTree;
 
-            var sourceComposition = Composition.FromTree(filteredTree);
+            var filteredSourceComposition = Composition.FromTree(filteredSourceTree);
 
-            var sourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition));
+            var filteredSourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(filteredSourceComposition));
 
-            Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'.");
+            Console.WriteLine("Loaded source composition " + filteredSourceCompositionId + " from '" + sourcePath + "'.");
 
             var configZipArchive =
-                BuildConfigurationZipArchive(sourceComposition: sourceComposition);
+                BuildConfigurationZipArchive(sourceComposition: filteredSourceComposition);
 
             return
-                (sourceCompositionId: sourceCompositionId,
+                (sourceTree: sourceTree,
+                filteredSourceCompositionId: filteredSourceCompositionId,
                 configZipArchive: configZipArchive);
         }
 

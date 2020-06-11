@@ -340,7 +340,7 @@ namespace elm_fullstack
 
                     var sourceComposition = Composition.FromTree(loadFromPathResult.Ok.tree);
 
-                    var sourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceComposition));
+                    var (sourceCompositionId, sourceSummary) = compileSourceSummary(loadFromPathResult.Ok.tree);
 
                     Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'. Starting to compile...");
 
@@ -409,6 +409,7 @@ namespace elm_fullstack
                     {
                         sourcePath = sourcePath,
                         sourceCompositionId = sourceCompositionId,
+                        sourceSummary = sourceSummary,
                         compilationException = compilationException,
                         compilationLog = compilationLog.ToImmutableList(),
                         compilationTimeSpentMilli = (int)compilationTimeSpentMilli,
@@ -469,6 +470,18 @@ namespace elm_fullstack
             DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
         }
 
+        static (string compositionId, SourceSummaryStructure summary) compileSourceSummary(Composition.TreeComponent sourceTree)
+        {
+            var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceTree));
+
+            var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
+
+            return (compositionId: compositionId, summary: new SourceSummaryStructure
+            {
+                numberOfFiles = allBlobs.Count,
+                totalSizeOfFilesContents = allBlobs.Select(blob => blob.blobContent.Count).Sum(),
+            });
+        }
 
         public class CompileAppReport
         {
@@ -477,6 +490,8 @@ namespace elm_fullstack
             public string sourcePath;
 
             public string sourceCompositionId;
+
+            public SourceSummaryStructure sourceSummary;
 
             public IReadOnlyList<string> compilationLog;
 
@@ -489,21 +504,32 @@ namespace elm_fullstack
             public int totalTimeSpentMilli;
         }
 
+        public class SourceSummaryStructure
+        {
+            public int numberOfFiles;
+
+            public int totalSizeOfFilesContents;
+        }
+
         public class DeployAppReport
         {
-            public string beginTime;
-
-            public string appConfigSourcePath;
-
-            public string appConfigSourceId;
-
-            public string appConfigBuildId;
-
             public bool initElmAppState;
 
             public string site;
 
+            public string beginTime;
+
+            public string sourcePath;
+
+            public string sourceCompositionId;
+
+            public SourceSummaryStructure sourceSummary;
+
+            public string filteredSourceCompositionId;
+
             public ResponseFromServerStruct responseFromServer;
+
+            public string deployException;
 
             public int totalTimeSpentMilli;
 
@@ -532,119 +558,132 @@ namespace elm_fullstack
                 Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                     sourcePath: sourcePath);
 
+            var (sourceCompositionId, sourceSummary) = compileSourceSummary(buildResult.sourceTree);
+
             var appConfigZipArchive = buildResult.configZipArchive;
 
             var appConfigZipArchiveFileId =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
 
-            var appConfigBuildId =
+            var filteredSourceCompositionId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
                         Kalmit.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
-                "Built app config " + appConfigBuildId + " from " + buildResult.sourceCompositionId + ".");
+                "Built app config " + filteredSourceCompositionId + " from " + sourceCompositionId + ".");
 
             DeployAppReport.ResponseFromServerStruct responseFromServer = null;
 
-            if (Regex.IsMatch(site, "^http(|s)\\:"))
+            Exception deployException = null;
+
+            try
             {
-                var deployAddress =
-                    (site.TrimEnd('/')) +
-                    (initElmAppState
-                    ?
-                    StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
-                    :
-                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
+                if (Regex.IsMatch(site, "^http(|s)\\:"))
+                {
+                    var deployAddress =
+                        (site.TrimEnd('/')) +
+                        (initElmAppState
+                        ?
+                        StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
+                        :
+                        StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
 
-                Console.WriteLine("Attempting to deploy app '" + appConfigBuildId + "' to '" + deployAddress + "'...");
+                    Console.WriteLine("Attempting to deploy app '" + filteredSourceCompositionId + "' to '" + deployAddress + "'...");
 
-                var httpResponse = AttemptHttpRequest(() =>
-                    {
-                        var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
-
-                        httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
-                        httpContent.Headers.ContentDisposition =
-                            new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = appConfigBuildId + ".zip" };
-
-                        return new System.Net.Http.HttpRequestMessage
+                    var httpResponse = AttemptHttpRequest(() =>
                         {
-                            Method = System.Net.Http.HttpMethod.Post,
-                            RequestUri = new Uri(deployAddress),
-                            Content = httpContent,
-                        };
-                    },
-                    defaultPassword: siteDefaultPassword,
-                    promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
+                            var httpContent = new System.Net.Http.ByteArrayContent(appConfigZipArchive);
 
-                var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+                            httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+                            httpContent.Headers.ContentDisposition =
+                                new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = filteredSourceCompositionId + ".zip" };
 
-                Console.WriteLine(
-                    "Server response: " + httpResponse.StatusCode + "\n" + responseContentString);
+                            return new System.Net.Http.HttpRequestMessage
+                            {
+                                Method = System.Net.Http.HttpMethod.Post,
+                                RequestUri = new Uri(deployAddress),
+                                Content = httpContent,
+                            };
+                        },
+                        defaultPassword: siteDefaultPassword,
+                        promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
 
-                object responseBodyReport = responseContentString;
+                    var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
 
-                try
-                {
-                    responseBodyReport =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>((string)responseBodyReport);
-                }
-                catch { }
+                    Console.WriteLine(
+                        "Server response: " + httpResponse.StatusCode + "\n" + responseContentString);
 
-                responseFromServer = new DeployAppReport.ResponseFromServerStruct
-                {
-                    statusCode = (int)httpResponse.StatusCode,
-                    body = responseBodyReport,
-                };
-            }
-            else
-            {
-                var processStoreFileStore = new Kalmit.FileStoreFromSystemIOFile(site);
+                    object responseBodyReport = responseContentString;
 
-                var processStoreWriter =
-                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-                        processStoreFileStore);
-
-                var appConfigTree =
-                    Composition.TreeFromSetOfBlobsWithCommonFilePath(
-                        ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
-
-                var appConfigComponent = Composition.FromTree(appConfigTree);
-
-                processStoreWriter.StoreComponent(appConfigComponent);
-
-                var appConfigValueInFile =
-                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                    try
                     {
-                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                        responseBodyReport =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>((string)responseBodyReport);
+                    }
+                    catch { }
+
+                    responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                    {
+                        statusCode = (int)httpResponse.StatusCode,
+                        body = responseBodyReport,
                     };
-
-                var compositionLogEvent =
-                    Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
-                        appConfigValueInFile: appConfigValueInFile,
-                        initElmAppState: initElmAppState);
-
-                var attemptDeployReport =
-                    Kalmit.PersistentProcess.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
-                        compositionLogEvent,
-                        processStoreFileStore);
-
-                responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                }
+                else
                 {
-                    statusCode = attemptDeployReport.statusCode,
-                    body = attemptDeployReport.responseReport,
-                };
+                    var processStoreFileStore = new Kalmit.FileStoreFromSystemIOFile(site);
+
+                    var processStoreWriter =
+                        new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                            processStoreFileStore);
+
+                    var appConfigTree =
+                        Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                            ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
+
+                    var appConfigComponent = Composition.FromTree(appConfigTree);
+
+                    processStoreWriter.StoreComponent(appConfigComponent);
+
+                    var appConfigValueInFile =
+                        new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                        {
+                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                        };
+
+                    var compositionLogEvent =
+                        Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                            appConfigValueInFile: appConfigValueInFile,
+                            initElmAppState: initElmAppState);
+
+                    var attemptDeployReport =
+                        Kalmit.PersistentProcess.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
+                            compositionLogEvent,
+                            processStoreFileStore);
+
+                    responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                    {
+                        statusCode = attemptDeployReport.statusCode,
+                        body = attemptDeployReport.responseReport,
+                    };
+                }
+            }
+            catch (Exception e)
+            {
+                deployException = e;
             }
 
             return new DeployAppReport
             {
-                beginTime = beginTime,
-                appConfigSourcePath = sourcePath,
-                appConfigSourceId = buildResult.sourceCompositionId,
-                appConfigBuildId = appConfigBuildId,
                 initElmAppState = initElmAppState,
                 site = site,
+                beginTime = beginTime,
+                sourcePath = sourcePath,
+                sourceCompositionId = sourceCompositionId,
+                sourceSummary = sourceSummary,
+                filteredSourceCompositionId = filteredSourceCompositionId,
                 responseFromServer = responseFromServer,
+                deployException = deployException?.ToString(),
                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
             };
         }
@@ -660,6 +699,8 @@ namespace elm_fullstack
 
             using (var httpClient = new System.Net.Http.HttpClient())
             {
+                httpClient.Timeout = TimeSpan.FromMinutes(4);
+
                 void setHttpClientPassword(string password)
                 {
                     httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(

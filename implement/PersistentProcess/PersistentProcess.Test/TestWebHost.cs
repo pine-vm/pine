@@ -1115,7 +1115,7 @@ namespace Kalmit.PersistentProcess.Test
                     "Restored process has app deployed.");
 
                 Assert.AreEqual(
-                    deployReport.appConfigBuildId,
+                    deployReport.filteredSourceCompositionId,
                     CommonConversion.StringBase16FromByteArray(Composition.GetHash(restoredProcessLastDeployedAppComponent)),
                     "App ID in restored process equals app ID from deployment report.");
             }
