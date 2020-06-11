@@ -5,11 +5,11 @@ You can find the source code for this example at [https://github.com/elm-fullsta
 If you have copied (and modified) the code on your local file system, you can run the app with this command:
 
 ```cmd
-elm-fullstack  run-server  --process-store-directory-path=./../live-test-artifacts/process-store  --delete-previous-process  --deploy-app-from=.
+elm-fullstack  run-server  --deploy-app-from=.
 ```
 
 To run the app with the default source code:
 
 ```cmd
-elm-fullstack  run-server  --process-store-directory-path=./../live-test-artifacts/process-store  --delete-previous-process  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/rich-chat-room
+elm-fullstack  run-server  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/rich-chat-room
 ```

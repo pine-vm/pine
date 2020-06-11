@@ -4,35 +4,29 @@ In this guide, I use the elm-fullstack command-line interface (CLI) program. You
 
 Here are direct links to the downloads, containing the `elm-fullstack` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-06/elm-fullstack-bin-f60c4977449fdbc87de493b3286608380f2b2a95-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-06/elm-fullstack-bin-f60c4977449fdbc87de493b3286608380f2b2a95-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-11/elm-fullstack-bin-9c33a38bd57be4b46c56e2acc07f9497ee4e860e-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-11/elm-fullstack-bin-9c33a38bd57be4b46c56e2acc07f9497ee4e860e-linux-x64.zip
 
-To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack install-command` command.
+To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack  install-command` command.
 
 ## Running a Server and Deploying an App
 
 To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fullstack  run-server  --process-store-directory-path=./process-store  --delete-previous-process  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app
+elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
 
 ```txt
-Deleting the previous process state from './process-store'...
-Completed deleting the previous process state from './process-store'.
+I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition c1f73d0c7b1061ce7fc6a172b4a14d35f68308896114dd933b3645d7073377c9 from 'https://github.com/elm-fullstack/elm-fullstack/tree/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app'.
-Starting to build app from 'c1f73d0c7b1061ce7fc6a172b4a14d35f68308896114dd933b3645d7073377c9'.
-I found 7 files to build the Elm app.
-This Elm app contains a frontend at 'src/FrontendWeb/Main.elm'.
-I did not find a file at 'elm-fullstack.json'. I build the configuration without the 'elm-fullstack.json'.
-I found 0 static files to include.
+Loaded source composition 0e2924ab33dc01fd792405e1c21df157987bc70779ea05a752abe38e62d92eb1 from 'https://github.com/elm-fullstack/elm-fullstack/tree/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -41,11 +35,11 @@ info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
-      Restored the process state in 2 seconds.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
-      Completed building the process volatile representation.
+      Restored the process state in 3 seconds.
 info: Kalmit.PersistentProcess.WebHost.StartupPublicApp[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
+info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+      Completed building the process volatile representation.
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
@@ -59,7 +53,7 @@ This section covers the conventions for structuring the app code so that we can 
 
 ### `Backend.Main` Elm Module
 
-The [main Elm module of the backend](/implement/example-apps/docker-image-default-app/elm-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
+The [main Elm module of the backend](/implement/example-apps/docker-image-default-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
 
 + `interfaceToHost_initState : State`
 + `interfaceToHost_processEvent : String -> State -> ( State, String )`
@@ -86,7 +80,7 @@ elm_make_frontendWeb_html =
 
 If a function with this name is present in the module, the full-stack compiler replaces the function to provide the contents of the output file from `elm make`.
 
-Backend apps often use this `Bytes.Bytes` value to send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/docker-image-default-app/elm-app/src/Backend/Main.elm#L37-L47) mentioned earlier:
+Backend apps often use this `Bytes.Bytes` value to send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L37-L47) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -136,7 +130,7 @@ This module provides access to the app source code files.
 
 By adding a function to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/example-apps/rich-chat-room/elm-app/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
 ```Elm
 file____readme_md : Bytes.Bytes
@@ -173,7 +167,7 @@ migrate backendState =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/f364480f7647109090115073297f2d71aa9af532/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-fullstack.json`
 
@@ -187,7 +181,7 @@ At the beginning of this guide, we ran a server and deployed an app in a single 
 When running a server, we want to configure two aspects: The location where to persist the process state, and the password to access the admin interface.
 On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the file system.
 
-Here is a complete command to run a server:
+Here is a complete command to run a server that maintains the persistence of the Elm-fullstack process:
 
 ```cmd
 elm-fullstack  run-server  --process-store-directory-path=./process-store  --admin-password=secret  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
@@ -221,7 +215,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2020-06-06.
+Welcome to Elm-fullstack version 2020-06-11.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -234,7 +228,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/3b7f24fa14f0baca0269081226fdcb1b5228fe0a/implement/example-apps/docker-image-default-app  --init-elm-app-state
+elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/docker-image-default-app  --init-elm-app-state
 ```
 
 The `--init-elm-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
