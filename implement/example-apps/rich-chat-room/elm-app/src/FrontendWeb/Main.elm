@@ -459,7 +459,7 @@ view state =
 
         body =
             [ Visuals.globalStylesHtmlElement
-            , [ [ appDescriptionHtml ] |> Html.div [ HA.style "margin" "1em" ]
+            , [ [ appDescriptionHtml ] |> Html.div [ HA.style "margin" "1em", HA.style "overflow" "scroll", HA.style "height" "20%" ]
               , [ chatHtml ] |> Html.div [ HA.style "flex" "1", HA.style "margin" "1em" ]
               ]
                 |> Html.div
