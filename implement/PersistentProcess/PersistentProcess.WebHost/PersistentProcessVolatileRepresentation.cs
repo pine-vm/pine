@@ -60,18 +60,9 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 ElmAppInterfaceConfig.Default,
                 log.Add);
 
-            var pathToElmApp =
-                ElmApp.FindPathToElmAppInSourceFiles(loweredAppFiles);
-
-            var elmAppFilesNamesAndContents =
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    loweredAppFiles
-                    .Where(appFile => appFile.Key.Take(pathToElmApp.Count).SequenceEqual(pathToElmApp))
-                    .Select(appFile => (path: (IImmutableList<string>)appFile.Key.Skip(pathToElmApp.Count).ToImmutableList(), content: appFile.Value)));
-
             var processFromLoweredElmApp =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(
-                elmAppFilesNamesAndContents,
+                loweredAppFiles,
                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
             return (processFromLoweredElmApp.process, processFromLoweredElmApp.buildArtifacts, log);
@@ -517,8 +508,8 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         fileContent: blobPathAndContent.blobContent))
                     .ToImmutableList());
 
-            var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(appConfigFiles, MigrationElmAppInterfaceModuleName);
-            var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(appConfigFiles, MigrationElmAppCompilationRootModuleName);
+            var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
+            var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
 
             appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var migrateElmAppInterfaceModuleOriginalFile);
 
