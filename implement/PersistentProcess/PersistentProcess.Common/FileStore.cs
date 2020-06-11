@@ -153,6 +153,34 @@ namespace Kalmit
         }
     }
 
+    public class FileStoreFromWriterAndReader : IFileStore
+    {
+        readonly IFileStoreWriter writer;
+
+        readonly IFileStoreReader reader;
+
+        public FileStoreFromWriterAndReader(IFileStoreWriter writer, IFileStoreReader reader)
+        {
+            this.writer = writer;
+            this.reader = reader;
+        }
+
+        public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
+            writer.AppendFileContent(path, fileContent);
+
+        public void DeleteFile(IImmutableList<string> path) =>
+            writer.DeleteFile(path);
+
+        public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
+            writer.SetFileContent(path, fileContent);
+
+        public byte[] GetFileContent(IImmutableList<string> path) =>
+            reader.GetFileContent(path);
+
+        public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
+            reader.ListFilesInDirectory(directoryPath);
+    }
+
     static public class FileStoreExtension
     {
         static public IFileStoreReader WithMappedPath(

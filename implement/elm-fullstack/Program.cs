@@ -50,7 +50,7 @@ namespace elm_fullstack
                 string[] publicWebHostUrlsDefault = new[] { "http://*", "https://*" };
 
 
-                var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
                 var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
                 var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
@@ -72,7 +72,7 @@ namespace elm_fullstack
                     var replicateProcessAdminPassword =
                         replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessFrom);
 
-                    if (deletePreviousProcessOption.HasValue() || replicateProcessFrom != null)
+                    if ((deletePreviousProcessOption.HasValue() || replicateProcessFrom != null) && processStoreDirectoryPath != null)
                     {
                         Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'...");
 
@@ -82,7 +82,47 @@ namespace elm_fullstack
                         Console.WriteLine("Completed deleting the previous process state from '" + processStoreDirectoryPath + "'.");
                     }
 
-                    var processStoreFileStore = new FileStoreFromSystemIOFile(processStoreDirectoryPath);
+                    IFileStore processStoreFileStore = null;
+
+                    if (processStoreDirectoryPath == null)
+                    {
+                        Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
+
+                        var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, byte[]>(EnumerableExtension.EqualityComparer<string>());
+
+                        var fileStoreWriter = new DelegatingFileStoreWriter
+                        {
+                            SetFileContentDelegate = file => files[file.path] = file.fileContent,
+                            AppendFileContentDelegate = file => files.AddOrUpdate(
+                                file.path, _ => file.fileContent,
+                                (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
+                            DeleteFileDelegate = path => files.Remove(path, out var _)
+                        };
+
+                        var fileStoreReader = new DelegatingFileStoreReader
+                        {
+                            ListFilesInDirectoryDelegate = path =>
+                                files.Select(file =>
+                                {
+                                    if (!file.Key.Take(path.Count).SequenceEqual(path))
+                                        return null;
+
+                                    return file.Key.Skip(path.Count).ToImmutableList();
+                                }).WhereNotNull(),
+                            GetFileContentDelegate = path =>
+                                {
+                                    files.TryGetValue(path, out var fileContent);
+
+                                    return fileContent;
+                                }
+                        };
+
+                        processStoreFileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
+                    }
+                    else
+                    {
+                        processStoreFileStore = new FileStoreFromSystemIOFile(processStoreDirectoryPath);
+                    }
 
                     if (replicateProcessFrom != null)
                     {
@@ -123,10 +163,14 @@ namespace elm_fullstack
                                 HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
                             };
 
+                        var initElmAppState =
+                            (deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue()) ||
+                            processStoreDirectoryPath == null;
+
                         var compositionLogEvent =
                             Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                                 appConfigValueInFile: appConfigValueInFile,
-                                initElmAppState: deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue());
+                                initElmAppState: initElmAppState);
 
                         var testDeployResult = Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
                             compositionLogEvent: compositionLogEvent,
