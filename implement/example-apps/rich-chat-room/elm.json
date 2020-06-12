@@ -18,7 +18,8 @@
             "elm/json": "1.1.3",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
-            "elm-community/result-extra": "2.3.0"
+            "elm-community/result-extra": "2.3.0",
+            "folkertdev/elm-sha2": "1.0.0"
         },
         "indirect": {
             "elm/file": "1.0.5",

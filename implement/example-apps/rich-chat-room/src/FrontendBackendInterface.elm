@@ -1,6 +1,10 @@
 module FrontendBackendInterface exposing (..)
 
+import Bytes
 import Conversation exposing (UserId)
+import SHA256
+import Url
+import Url.Parser exposing ((</>))
 
 
 type RequestFromUser
@@ -31,3 +35,33 @@ type alias SeeingLobbyStructure =
     { conversationHistory : List Conversation.Event
     , usersOnline : List UserId
     }
+
+
+type Route
+    = ApiRoute
+    | StaticContentRoute String
+
+
+routeFromUrl : Url.Url -> Maybe Route
+routeFromUrl =
+    Url.Parser.parse
+        (Url.Parser.oneOf
+            [ Url.Parser.map ApiRoute (Url.Parser.s "api")
+            , Url.Parser.map StaticContentRoute (Url.Parser.s "static-content" </> Url.Parser.string)
+            ]
+        )
+
+
+urlPathFromRoute : Route -> List String
+urlPathFromRoute route =
+    case route of
+        ApiRoute ->
+            [ "api" ]
+
+        StaticContentRoute contentName ->
+            [ "static-content", contentName ]
+
+
+staticContentFileName : Bytes.Bytes -> String
+staticContentFileName =
+    SHA256.fromBytes >> SHA256.toHex

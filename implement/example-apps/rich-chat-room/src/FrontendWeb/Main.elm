@@ -10,6 +10,7 @@ import Dict
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
+import FrontendWeb.PlayAudio as PlayAudio
 import FrontendWeb.Visuals as Visuals exposing (HtmlStyle, htmlAttributesStyles)
 import Html
 import Html.Attributes as HA
@@ -48,6 +49,7 @@ type alias State =
     , usersProfilesReads : Dict.Dict UserId { time : Time.Posix, userProfile : { chosenName : String } }
     , conversationHistory : List Conversation.Event
     , showChangeNameGuide : Bool
+    , playAudio : PlayAudio.State
     }
 
 
@@ -93,6 +95,7 @@ init _ url navigationKey =
     , conversationHistory = []
     , usersProfilesReads = Dict.empty
     , showChangeNameGuide = False
+    , playAudio = PlayAudio.init
     }
         |> update (UrlChange url)
 
@@ -105,7 +108,7 @@ requestToBackendCmd request =
                 |> Json.Decode.map (\messageFromBackend -> { originatingRequest = request, messageFromBackend = messageFromBackend })
     in
     Http.post
-        { url = Url.Builder.relative [ "api" ] []
+        { url = Url.Builder.relative (FrontendBackendInterface.ApiRoute |> FrontendBackendInterface.urlPathFromRoute) []
         , body = Http.jsonBody (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestFromUser)
         , expect = Http.expectJson RequestToBackendResult jsonDecoder
         }
@@ -124,7 +127,7 @@ update event stateBefore =
             else
                 Cmd.none
     in
-    ( state, [ cmdsLessScrolling, scrollTask ] |> Cmd.batch )
+    ( state |> updateForSoundEffects { stateBeforeEvent = stateBefore }, [ cmdsLessScrolling, scrollTask ] |> Cmd.batch )
 
 
 setViewportToBottom : String -> Task.Task Browser.Dom.Error ()
@@ -225,6 +228,42 @@ updateLessScrolling event stateBefore =
 
         DomTaskResult _ ->
             ( stateBefore, Cmd.none )
+
+
+updateForSoundEffects : { stateBeforeEvent : State } -> State -> State
+updateForSoundEffects { stateBeforeEvent } stateBefore =
+    let
+        playAudio =
+            if shouldPlaySoundMessageAddedAfterUpdate { stateBeforeEvent = stateBeforeEvent, stateAfterEvent = stateBefore } then
+                stateBefore.playAudio
+                    |> PlayAudio.startPlayback
+                        { sourceUrl =
+                            Url.Builder.relative
+                                (ElmFullstackCompilerInterface.SourceFiles.file____static_chat_message_added_0_mp3
+                                    |> FrontendBackendInterface.staticContentFileName
+                                    |> FrontendBackendInterface.StaticContentRoute
+                                    |> FrontendBackendInterface.urlPathFromRoute
+                                )
+                                []
+                        , volume = 1
+                        }
+                    |> Tuple.first
+
+            else
+                stateBefore.playAudio
+    in
+    { stateBefore | playAudio = playAudio }
+
+
+shouldPlaySoundMessageAddedAfterUpdate : { stateBeforeEvent : State, stateAfterEvent : State } -> Bool
+shouldPlaySoundMessageAddedAfterUpdate { stateBeforeEvent, stateAfterEvent } =
+    case ( stateBeforeEvent.lastSeeingLobby, stateAfterEvent.lastSeeingLobby ) of
+        ( Just lobbyBeforeEvent, Just lobbyAfterEvent ) ->
+            lobbyAfterEvent.message.conversationHistory
+                |> List.any (\eventAfterUpdate -> lobbyBeforeEvent.message.conversationHistory |> List.member eventAfterUpdate |> not)
+
+        _ ->
+            False
 
 
 httpRequestsForUserProfiles : State -> Cmd Event
@@ -514,10 +553,14 @@ view state =
                     , HA.style "height" "100%"
                     ]
 
+        playAudioHtml =
+            state.playAudio |> PlayAudio.renderHtml
+
         body =
             [ Visuals.globalStylesHtmlElement
             , [ [ appDescriptionHtml ] |> Html.div [ HA.style "margin" "1em", HA.style "overflow" "scroll", HA.style "height" "20%" ]
               , [ chatHtml ] |> Html.div [ HA.style "flex" "1", HA.style "margin" "1em" ]
+              , playAudioHtml
               ]
                 |> Html.div
                     [ HA.style "margin" "0"
