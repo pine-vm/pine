@@ -26,6 +26,7 @@ import Url
 import Url.Builder
 
 
+main : Program () State Event
 main =
     Browser.application
         { init = init
