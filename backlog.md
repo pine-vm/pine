@@ -12,4 +12,3 @@
 Ensure people can easily understand for a given change how well it would fit into the project:
 
 + Increase test coverage: The process store can reliably model values as offered on the interface. (E.g. line-breaks (or similar UTF sequences) in the serialized event do not damage the composition store)
-+ Add an automated test for using the CLI to build a web app configuration from local files.
