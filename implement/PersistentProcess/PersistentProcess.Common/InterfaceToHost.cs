@@ -7,6 +7,8 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public HttpRequestEvent httpRequest;
 
         public ResultFromTaskWithId taskComplete;
+
+        public ArrivedAtTimeEventStructure ArrivedAtTimeEvent;
     }
 
     public class ResponseOverSerialInterface
@@ -21,6 +23,8 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public HttpResponseRequest completeHttpResponse;
 
         public StartTask startTask;
+
+        public NotifyWhenArrivedAtTimeRequestStructure NotifyWhenArrivedAtTimeRequest;
     }
 
     public class HttpRequestEvent
@@ -71,6 +75,16 @@ namespace Kalmit.PersistentProcess.InterfaceToHost
         public string bodyAsBase64;
 
         public HttpHeader[] headersToAdd;
+    }
+
+    public class ArrivedAtTimeEventStructure
+    {
+        public Int64 posixTimeMilli;
+    }
+
+    public class NotifyWhenArrivedAtTimeRequestStructure
+    {
+        public Int64 posixTimeMilli;
     }
 
     public class Result<ErrT, OkT>

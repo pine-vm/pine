@@ -1123,6 +1123,48 @@ namespace Kalmit.PersistentProcess.Test
             Directory.Delete(testDirectory, recursive: true);
         }
 
+        [TestMethod]
+        public void Web_host_supports_long_polling()
+        {
+            var appSourceFiles = TestSetup.GetElmAppFromExampleName("http-long-polling");
+
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.AppConfigComponentFromFiles(appSourceFiles)))
+            {
+                using (var server = testSetup.StartWebHost())
+                {
+                    using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
+                    {
+                        for (var delay = 0; delay < 5; ++delay)
+                        {
+                            var expectedDelayMilliseconds = delay * 1000;
+
+                            var httpRequest = new HttpRequestMessage(HttpMethod.Get, "");
+
+                            httpRequest.Headers.Add("delay-milliseconds", expectedDelayMilliseconds.ToString());
+
+                            var httpStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                            var httpResponse = publicAppClient.SendAsync(httpRequest).Result;
+
+                            var responseContent =
+                                httpResponse.Content.ReadAsByteArrayAsync().Result;
+
+                            httpStopwatch.Stop();
+
+                            Assert.IsTrue(
+                                expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds,
+                                "expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
+
+                            var additionalDelayMilliseconds = httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
+
+                            Assert.IsTrue(
+                                additionalDelayMilliseconds < 1500,
+                                "additionalDelayMilliseconds < 1500");
+                        }
+                    }
+                }
+            }
+        }
 
         class FileStoreFromDelegates : IFileStore
         {

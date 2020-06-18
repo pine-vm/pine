@@ -67,7 +67,8 @@ namespace Kalmit.PersistentProcess.WebHost
             IApplicationBuilder app,
             IWebHostEnvironment env,
             WebAppAndElmAppConfig webAppAndElmAppConfig,
-            Func<DateTimeOffset> getDateTimeOffset)
+            Func<DateTimeOffset> getDateTimeOffset,
+            IHostApplicationLifetime appLifetime)
         {
             if (env.IsDevelopment())
             {
@@ -78,6 +79,14 @@ namespace Kalmit.PersistentProcess.WebHost
             {
                 throw new Exception("Missing reference to the web app config.");
             }
+
+            var tasksCancellationTokenSource = new System.Threading.CancellationTokenSource();
+
+            appLifetime.ApplicationStopping.Register(() =>
+            {
+                tasksCancellationTokenSource.Cancel();
+                _logger?.LogInformation("Public app noticed ApplicationStopping.");
+            });
 
             var nextHttpRequestIndex = 0;
 
@@ -199,6 +208,9 @@ namespace Kalmit.PersistentProcess.WebHost
 
             void processEventAndResultingRequests(InterfaceToHost.Event interfaceEvent)
             {
+                if (tasksCancellationTokenSource.IsCancellationRequested)
+                    return;
+
                 var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
 
                 var serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
@@ -231,86 +243,105 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     if (requestFromProcess.startTask != null)
                         System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(requestFromProcess.startTask));
+
+                    if (requestFromProcess.NotifyWhenArrivedAtTimeRequest != null)
+                        System.Threading.Tasks.Task.Run(() =>
+                            {
+                                var delayMilliseconds =
+                                    requestFromProcess.NotifyWhenArrivedAtTimeRequest.posixTimeMilli -
+                                    getDateTimeOffset().ToUnixTimeMilliseconds();
+
+                                if (0 < delayMilliseconds)
+                                    System.Threading.Tasks.Task.Delay((int)delayMilliseconds, tasksCancellationTokenSource.Token);
+
+                                processEventAndResultingRequests(new InterfaceToHost.Event
+                                {
+                                    ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
+                                    {
+                                        posixTimeMilli = getDateTimeOffset().ToUnixTimeMilliseconds()
+                                    }
+                                });
+                            });
                 }
             }
 
             app
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
-            .Run(async (context) =>
-            {
-                var currentDateTime = getDateTimeOffset();
-                var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
-                var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
-
-                var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
-
+                .Run(async (context) =>
                 {
-                    var httpEvent = await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
+                    var currentDateTime = getDateTimeOffset();
+                    var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
+                    var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
 
-                    var httpRequestInterfaceEvent = new InterfaceToHost.Event
+                    var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
+
                     {
-                        httpRequest = httpEvent,
-                    };
+                        var httpEvent = await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
 
-                    processEventAndResultingRequests(httpRequestInterfaceEvent);
-                }
+                        var httpRequestInterfaceEvent = new InterfaceToHost.Event
+                        {
+                            httpRequest = httpEvent,
+                        };
 
-                var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
+                        processEventAndResultingRequests(httpRequestInterfaceEvent);
+                    }
 
-                while (true)
-                {
-                    if (processRequestCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
+                    var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
+
+                    while (true)
                     {
-                        var headerContentType =
+                        if (processRequestCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
+                        {
+                            var headerContentType =
                             httpResponse.headersToAdd
                             ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
                             ?.values?.FirstOrDefault();
 
-                        context.Response.StatusCode = httpResponse.statusCode;
+                            context.Response.StatusCode = httpResponse.statusCode;
 
-                        foreach (var headerToAdd in (httpResponse.headersToAdd).EmptyIfNull())
-                            context.Response.Headers[headerToAdd.name] =
+                            foreach (var headerToAdd in (httpResponse.headersToAdd).EmptyIfNull())
+                                context.Response.Headers[headerToAdd.name] =
                                 new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
 
-                        if (headerContentType != null)
-                            context.Response.ContentType = headerContentType;
+                            if (headerContentType != null)
+                                context.Response.ContentType = headerContentType;
 
-                        byte[] contentAsByteArray = null;
+                            byte[] contentAsByteArray = null;
 
-                        if (httpResponse?.bodyAsBase64 != null)
-                        {
-                            var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
-
-                            if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
+                            if (httpResponse?.bodyAsBase64 != null)
                             {
-                                throw new FormatException(
+                                var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
+
+                                if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
+                                {
+                                    throw new FormatException(
                                     "Failed to convert from base64. bytesWritten=" + bytesWritten +
                                     ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
                                     httpResponse.bodyAsBase64);
+                                }
+
+                                contentAsByteArray = buffer.AsSpan(0, bytesWritten).ToArray();
                             }
 
-                            contentAsByteArray = buffer.AsSpan(0, bytesWritten).ToArray();
+                            context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
+
+                            if (contentAsByteArray != null)
+                                await context.Response.Body.WriteAsync(contentAsByteArray);
+
+                            break;
                         }
 
-                        context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
-
-                        if (contentAsByteArray != null)
-                            await context.Response.Body.WriteAsync(contentAsByteArray);
-
-                        break;
-                    }
-
-                    if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
-                        throw new TimeoutException(
-                            "Persistent process did not return a HTTP response within " +
+                        if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
+                            throw new TimeoutException(
+                            "The app did not return a HTTP response within " +
                             (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
                             " seconds.");
 
-                    System.Threading.Thread.Sleep(100);
-                }
+                        System.Threading.Thread.Sleep(100);
+                    }
 
 
-            });
+                });
         }
 
         static Newtonsoft.Json.JsonSerializerSettings jsonSerializerSettings = new Newtonsoft.Json.JsonSerializerSettings

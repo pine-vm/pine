@@ -1,9 +1,5 @@
 ## Backlog
 
-### Application Development
-
-+ Support hosted application choosing frequency when subscribing to time. (Could be modeled for example with Response of type `Subscriptions`, (Posix time cyclic with distance in ms, Posix time once)).
-
 ### Application Operation
 
 + Support application to configure tradeoff between the cost of persisting and cost of restoring.
