@@ -5,20 +5,21 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Base64
 import Bytes
 import Bytes.Encode
 
 
 type alias State =
     { posixTimeMilli : Int
-    , httpRequestsToRespondTo : List InterfaceToHost.HttpRequestEvent
+    , httpRequestsToRespondTo : List InterfaceToHost.HttpRequestEventStructure
     }
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             let
                 state =
                     { stateBefore
@@ -28,18 +29,14 @@ processEvent hostEvent stateBefore =
             in
             state |> updateForHttpResponses
 
-        InterfaceToHost.TaskComplete _ ->
-            ( stateBefore, [] )
+        InterfaceToHost.TaskCompleteEvent _ ->
+            stateBefore |> updateForHttpResponses
 
         InterfaceToHost.ArrivedAtTimeEvent { posixTimeMilli } ->
             { stateBefore | posixTimeMilli = posixTimeMilli } |> updateForHttpResponses
 
 
-{-| TODO: 2020-06-18 Clean up interface to host:
-Why have types supporting to specify more than one time to get notified? This seems redundant.
-Also, HTTP responses are expected to move into Tasks, as mentioned earlier.
--}
-updateForHttpResponses : State -> ( State, List InterfaceToHost.ProcessRequest )
+updateForHttpResponses : State -> ( State, InterfaceToHost.AppEventResponse )
 updateForHttpResponses state =
     let
         httpRequestsWithCompletionTimes =
@@ -64,23 +61,24 @@ updateForHttpResponses state =
                         { httpRequestId = requestEvent.httpRequestId
                         , response =
                             { statusCode = 200
-                            , body =
+                            , bodyAsBase64 =
                                 ("Completed in " ++ (ageInMilliseconds |> String.fromInt) ++ " milliseconds.")
                                     |> encodeStringToBytes
-                                    |> Just
+                                    |> Base64.fromBytes
                             , headersToAdd = []
                             }
                         }
                     )
-                |> List.map InterfaceToHost.CompleteHttpResponse
     in
     ( state
-    , completeHttpRequestsTasks
-        ++ [ InterfaceToHost.NotifyWhenArrivedAtTimeRequest { posixTimeMilli = nextCompletionPosixTimeMilli |> Maybe.withDefault (state.posixTimeMilli + 1000) } ]
+    , { completeHttpResponses = completeHttpRequestsTasks
+      , notifyWhenArrivedAtTime = Just { posixTimeMilli = nextCompletionPosixTimeMilli |> Maybe.withDefault (state.posixTimeMilli + 1000) }
+      , startTasks = []
+      }
     )
 
 
-completionTimeForHttpRequest : InterfaceToHost.HttpRequestEvent -> { completionPosixTimeMilli : Int }
+completionTimeForHttpRequest : InterfaceToHost.HttpRequestEventStructure -> { completionPosixTimeMilli : Int }
 completionTimeForHttpRequest httpRequest =
     let
         delayMilliseconds =

@@ -13,26 +13,39 @@ import Json.Decode
 
 type alias State =
     { volatileHostId : Maybe String
-    , httpRequestToForward : Maybe InterfaceToHost.HttpRequestEvent
+    , httpRequestToForward : Maybe InterfaceToHost.HttpRequestEventStructure
     }
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.ArrivedAtTimeEvent _ ->
+            ( stateBefore
+            , { completeHttpResponses = []
+              , startTasks = []
+              , notifyWhenArrivedAtTime = Nothing
+              }
+            )
+
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             let
                 state =
                     { stateBefore | httpRequestToForward = Just httpRequestEvent }
             in
             ( state, state |> httpRequestForwardRequestsFromState )
 
-        InterfaceToHost.TaskComplete taskComplete ->
+        InterfaceToHost.TaskCompleteEvent taskComplete ->
             case taskComplete.taskResult of
                 InterfaceToHost.CreateVolatileHostResponse createVolatileHostResponse ->
                     case createVolatileHostResponse of
                         Err _ ->
-                            ( stateBefore, [] )
+                            ( stateBefore
+                            , { completeHttpResponses = []
+                              , startTasks = []
+                              , notifyWhenArrivedAtTime = Nothing
+                              }
+                            )
 
                         Ok { hostId } ->
                             let
@@ -44,18 +57,23 @@ processEvent hostEvent stateBefore =
                 InterfaceToHost.RequestToVolatileHostResponse requestToVolatileHostResponse ->
                     case stateBefore.httpRequestToForward of
                         Nothing ->
-                            ( stateBefore, [] )
+                            ( stateBefore
+                            , { completeHttpResponses = []
+                              , startTasks = []
+                              , notifyWhenArrivedAtTime = Nothing
+                              }
+                            )
 
                         Just httpRequestToForward ->
                             let
                                 bodyFromString =
-                                    Bytes.Encode.string >> Bytes.Encode.encode >> Just
+                                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
                                 httpResponse =
                                     case requestToVolatileHostResponse of
                                         Err _ ->
                                             { statusCode = 500
-                                            , body = bodyFromString "Error running in volatile host."
+                                            , bodyAsBase64 = bodyFromString "Error running in volatile host."
                                             , headersToAdd = []
                                             }
 
@@ -63,7 +81,7 @@ processEvent hostEvent stateBefore =
                                             case requestToVolatileHostComplete.exceptionToString of
                                                 Just exceptionToString ->
                                                     { statusCode = 500
-                                                    , body = bodyFromString ("Exception in volatile host: " ++ exceptionToString)
+                                                    , bodyAsBase64 = bodyFromString ("Exception in volatile host: " ++ exceptionToString)
                                                     , headersToAdd = []
                                                     }
 
@@ -77,7 +95,7 @@ processEvent hostEvent stateBefore =
                                                     case returnValueAsHttpResponseResult of
                                                         Err decodeError ->
                                                             { statusCode = 500
-                                                            , body =
+                                                            , bodyAsBase64 =
                                                                 bodyFromString ("Error decoding response from volatile host: " ++ (decodeError |> Json.Decode.errorToString))
                                                             , headersToAdd = []
                                                             }
@@ -88,56 +106,54 @@ processEvent hostEvent stateBefore =
                                                                     volatileHostHttpResponse.headers
                                                                         |> List.filter (.name >> String.toLower >> (/=) "transfer-encoding")
                                                             in
-                                                            case volatileHostHttpResponse.bodyAsBase64 of
-                                                                Nothing ->
-                                                                    { statusCode = 200
-                                                                    , body = Nothing
-                                                                    , headersToAdd = headersToAdd
-                                                                    }
-
-                                                                Just bodyAsBase64 ->
-                                                                    case bodyAsBase64 |> Base64.toBytes of
-                                                                        Nothing ->
-                                                                            { statusCode = 500
-                                                                            , body = bodyFromString "Failed to decode body from base64"
-                                                                            , headersToAdd = []
-                                                                            }
-
-                                                                        Just body ->
-                                                                            { statusCode = 200
-                                                                            , body = Just body
-                                                                            , headersToAdd = headersToAdd
-                                                                            }
+                                                            { statusCode = 200
+                                                            , bodyAsBase64 = volatileHostHttpResponse.bodyAsBase64
+                                                            , headersToAdd = headersToAdd
+                                                            }
 
                                 state =
                                     { stateBefore | httpRequestToForward = Nothing }
                             in
                             ( state
-                            , [ InterfaceToHost.CompleteHttpResponse
-                                    { httpRequestId = httpRequestToForward.httpRequestId
-                                    , response = httpResponse
-                                    }
-                              ]
+                            , { completeHttpResponses =
+                                    [ { httpRequestId = httpRequestToForward.httpRequestId
+                                      , response = httpResponse
+                                      }
+                                    ]
+                              , startTasks = []
+                              , notifyWhenArrivedAtTime = Nothing
+                              }
                             )
 
                 InterfaceToHost.CompleteWithoutResult ->
-                    ( stateBefore, [] )
+                    ( stateBefore
+                    , { completeHttpResponses = []
+                      , startTasks = []
+                      , notifyWhenArrivedAtTime = Nothing
+                      }
+                    )
 
 
-httpRequestForwardRequestsFromState : State -> List InterfaceToHost.ProcessRequest
+httpRequestForwardRequestsFromState : State -> InterfaceToHost.AppEventResponse
 httpRequestForwardRequestsFromState state =
     case state.httpRequestToForward of
         Nothing ->
-            []
+            { startTasks = []
+            , completeHttpResponses = []
+            , notifyWhenArrivedAtTime = Nothing
+            }
 
         Just httpRequestToForward ->
             case state.volatileHostId of
                 Nothing ->
-                    [ InterfaceToHost.StartTask
-                        { taskId = "create-vhost"
-                        , task = InterfaceToHost.CreateVolatileHost { script = HttpViaVolatileHost.volatileHostScript }
-                        }
-                    ]
+                    { startTasks =
+                        [ { taskId = "create-vhost"
+                          , task = InterfaceToHost.CreateVolatileHost { script = HttpViaVolatileHost.volatileHostScript }
+                          }
+                        ]
+                    , completeHttpResponses = []
+                    , notifyWhenArrivedAtTime = Nothing
+                    }
 
                 Just volatileHostId ->
                     let
@@ -151,30 +167,30 @@ httpRequestForwardRequestsFromState state =
                     in
                     case maybeForwardTo of
                         Nothing ->
-                            [ InterfaceToHost.CompleteHttpResponse
-                                { httpRequestId = httpRequestToForward.httpRequestId
-                                , response =
-                                    { statusCode = 400
-                                    , body =
-                                        "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
-                                            |> Bytes.Encode.string
-                                            |> Bytes.Encode.encode
-                                            |> Just
-                                    , headersToAdd = []
-                                    }
-                                }
-                            ]
+                            { completeHttpResponses =
+                                [ { httpRequestId = httpRequestToForward.httpRequestId
+                                  , response =
+                                        { statusCode = 400
+                                        , bodyAsBase64 =
+                                            "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
+                                                |> Bytes.Encode.string
+                                                |> Bytes.Encode.encode
+                                                |> Base64.fromBytes
+                                        , headersToAdd = []
+                                        }
+                                  }
+                                ]
+                            , startTasks = []
+                            , notifyWhenArrivedAtTime = Nothing
+                            }
 
                         Just forwardTo ->
                             let
-                                bodyAsBase64 =
-                                    httpRequestToForward.request.body |> Maybe.andThen Base64.fromBytes
-
                                 httpRequest =
                                     { uri = forwardTo
                                     , method = httpRequestToForward.request.method
                                     , headers = httpRequestToForward.request.headers
-                                    , bodyAsBase64 = bodyAsBase64
+                                    , bodyAsBase64 = httpRequestToForward.request.bodyAsBase64
                                     }
 
                                 task =
@@ -184,11 +200,14 @@ httpRequestForwardRequestsFromState state =
                                     }
                                         |> InterfaceToHost.RequestToVolatileHost
                             in
-                            [ InterfaceToHost.StartTask
-                                { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId
-                                , task = task
-                                }
-                            ]
+                            { startTasks =
+                                [ { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId
+                                  , task = task
+                                  }
+                                ]
+                            , completeHttpResponses = []
+                            , notifyWhenArrivedAtTime = Nothing
+                            }
 
 
 interfaceToHost_initState : State

@@ -192,9 +192,9 @@ namespace Kalmit.PersistentProcess.WebHost
             {
                 var taskResult = performProcessTask(taskWithId.task);
 
-                var interfaceEvent = new InterfaceToHost.Event
+                var interfaceEvent = new InterfaceToHost.AppEventStructure
                 {
-                    taskComplete = new InterfaceToHost.ResultFromTaskWithId
+                    TaskCompleteEvent = new InterfaceToHost.ResultFromTaskWithId
                     {
                         taskId = taskWithId.taskId,
                         taskResult = taskResult,
@@ -206,12 +206,23 @@ namespace Kalmit.PersistentProcess.WebHost
 
             var processRequestCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
 
-            void processEventAndResultingRequests(InterfaceToHost.Event interfaceEvent)
+            InterfaceToHost.NotifyWhenArrivedAtTimeRequestStructure nextTimeToNotify = null;
+
+            void processEventAndResultingRequests(InterfaceToHost.AppEventStructure interfaceEvent)
             {
                 if (tasksCancellationTokenSource.IsCancellationRequested)
                     return;
 
                 var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
+
+                {
+                    if (webAppAndElmAppConfig.appCodeUsesInterface_Before_2020_06_20)
+                    {
+                        serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(
+                            InterfaceToHost_Before_2020_06_20.Event.FromAppEvent(interfaceEvent),
+                            jsonSerializerSettings);
+                    }
+                }
 
                 var serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
 
@@ -219,9 +230,18 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 try
                 {
-                    structuredResponse =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                            serializedResponse);
+                    if (webAppAndElmAppConfig.appCodeUsesInterface_Before_2020_06_20)
+                    {
+                        structuredResponse =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost_Before_2020_06_20.ResponseOverSerialInterface>(
+                                serializedResponse).TranslateToNewStructure();
+                    }
+                    else
+                    {
+                        structuredResponse =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
+                                serializedResponse);
+                    }
                 }
                 catch (Exception parseException)
                 {
@@ -230,38 +250,55 @@ namespace Kalmit.PersistentProcess.WebHost
                         parseException);
                 }
 
-                if (structuredResponse?.decodeEventSuccess == null)
+                if (structuredResponse?.DecodeEventSuccess == null)
                 {
-                    throw new Exception("Hosted app failed to decode the event: " + structuredResponse.decodeEventError);
+                    throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
                 }
 
-                foreach (var requestFromProcess in structuredResponse.decodeEventSuccess)
+                if (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime != null)
                 {
-                    if (requestFromProcess.completeHttpResponse != null)
-                        processRequestCompleteHttpResponse[requestFromProcess.completeHttpResponse.httpRequestId] =
-                            requestFromProcess.completeHttpResponse.response;
+                    System.Threading.Tasks.Task.Run(() =>
+                        {
+                            if (tasksCancellationTokenSource.IsCancellationRequested)
+                                return;
 
-                    if (requestFromProcess.startTask != null)
-                        System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(requestFromProcess.startTask));
+                            nextTimeToNotify = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime;
 
-                    if (requestFromProcess.NotifyWhenArrivedAtTimeRequest != null)
-                        System.Threading.Tasks.Task.Run(() =>
+                            while (!tasksCancellationTokenSource.IsCancellationRequested)
                             {
-                                var delayMilliseconds =
-                                    requestFromProcess.NotifyWhenArrivedAtTimeRequest.posixTimeMilli -
+                                if (nextTimeToNotify != structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime)
+                                    return;
+
+                                var remainingDelayMilliseconds =
+                                    structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime.posixTimeMilli -
                                     getDateTimeOffset().ToUnixTimeMilliseconds();
 
-                                if (0 < delayMilliseconds)
-                                    System.Threading.Tasks.Task.Delay((int)delayMilliseconds, tasksCancellationTokenSource.Token);
-
-                                processEventAndResultingRequests(new InterfaceToHost.Event
+                                if (remainingDelayMilliseconds <= 0)
                                 {
-                                    ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
+                                    processEventAndResultingRequests(new InterfaceToHost.AppEventStructure
                                     {
-                                        posixTimeMilli = getDateTimeOffset().ToUnixTimeMilliseconds()
-                                    }
-                                });
-                            });
+                                        ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
+                                        {
+                                            posixTimeMilli = getDateTimeOffset().ToUnixTimeMilliseconds()
+                                        }
+                                    });
+                                    return;
+                                }
+
+                                System.Threading.Thread.Sleep(10);
+                            }
+                        });
+                }
+
+                foreach (var startTask in structuredResponse.DecodeEventSuccess.startTasks)
+                {
+                    System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(startTask));
+                }
+
+                foreach (var completeHttpResponse in structuredResponse.DecodeEventSuccess.completeHttpResponses)
+                {
+                    processRequestCompleteHttpResponse[completeHttpResponse.httpRequestId] =
+                        completeHttpResponse.response;
                 }
             }
 
@@ -276,11 +313,12 @@ namespace Kalmit.PersistentProcess.WebHost
                     var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
 
                     {
-                        var httpEvent = await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
+                        var httpRequestEvent =
+                            await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
 
-                        var httpRequestInterfaceEvent = new InterfaceToHost.Event
+                        var httpRequestInterfaceEvent = new InterfaceToHost.AppEventStructure
                         {
-                            httpRequest = httpEvent,
+                            HttpRequestEvent = httpRequestEvent,
                         };
 
                         processEventAndResultingRequests(httpRequestInterfaceEvent);
@@ -375,5 +413,25 @@ namespace Kalmit.PersistentProcess.WebHost
         public WebAppConfigurationJsonStructure WebAppConfiguration;
 
         public Func<string, string> ProcessEventInElmApp;
+
+        /*
+        2020-06-20 TODO: Remove temporary branches to maintain compatibility with older app codes.
+        */
+        public bool appCodeUsesInterface_Before_2020_06_20;
+
+        static public bool appCodeUsesInterface_Before_2020_06_20_from_appConfigTree(Composition.TreeComponent appConfigTree)
+        {
+            return
+                appConfigTree.EnumerateBlobsTransitive()
+                .Any(blobPathAndContent =>
+                {
+                    if (!blobPathAndContent.path.Last().SequenceEqual(System.Text.Encoding.UTF8.GetBytes("InterfaceToHost.elm")))
+                        return false;
+
+                    return
+                        System.Text.Encoding.UTF8.GetString(blobPathAndContent.blobContent.ToArray())
+                        .Contains("DecodeEventSuccess (List ProcessRequest)");
+                });
+        }
     }
 }

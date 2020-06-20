@@ -168,7 +168,7 @@ namespace Kalmit.PersistentProcess.Test
             {
                 IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
                     testSetup.EnumerateStoredUpdateElmAppStateForEvents()
-                    .Select(processEvent => processEvent?.httpRequest?.request?.bodyAsBase64)
+                    .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
                     .WhereNotNull()
                     .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 

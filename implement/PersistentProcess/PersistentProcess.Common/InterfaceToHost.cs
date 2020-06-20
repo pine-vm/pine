@@ -2,29 +2,29 @@
 
 namespace Kalmit.PersistentProcess.InterfaceToHost
 {
-    public class Event
+    public class AppEventStructure
     {
-        public HttpRequestEvent httpRequest;
-
-        public ResultFromTaskWithId taskComplete;
-
         public ArrivedAtTimeEventStructure ArrivedAtTimeEvent;
+
+        public HttpRequestEvent HttpRequestEvent;
+
+        public ResultFromTaskWithId TaskCompleteEvent;
     }
 
     public class ResponseOverSerialInterface
     {
-        public string decodeEventError;
+        public string DecodeEventError;
 
-        public ProcessRequest[] decodeEventSuccess;
+        public AppEventResponseStructure DecodeEventSuccess;
     }
 
-    public class ProcessRequest
+    public class AppEventResponseStructure
     {
-        public HttpResponseRequest completeHttpResponse;
+        public NotifyWhenArrivedAtTimeRequestStructure notifyWhenArrivedAtTime;
 
-        public StartTask startTask;
+        public StartTask[] startTasks;
 
-        public NotifyWhenArrivedAtTimeRequestStructure NotifyWhenArrivedAtTimeRequest;
+        public HttpResponseRequest[] completeHttpResponses;
     }
 
     public class HttpRequestEvent
