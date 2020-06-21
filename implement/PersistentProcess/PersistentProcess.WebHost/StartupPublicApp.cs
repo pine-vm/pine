@@ -16,6 +16,8 @@ namespace Kalmit.PersistentProcess.WebHost
     {
         private readonly ILogger<StartupPublicApp> _logger;
 
+        static TimeSpan notifyTimeHasArrivedMaximumDistance => TimeSpan.FromSeconds(10);
+
         public StartupPublicApp(ILogger<StartupPublicApp> logger)
         {
             _logger = logger;
@@ -80,11 +82,11 @@ namespace Kalmit.PersistentProcess.WebHost
                 throw new Exception("Missing reference to the web app config.");
             }
 
-            var tasksCancellationTokenSource = new System.Threading.CancellationTokenSource();
+            var applicationStoppingCancellationTokenSource = new System.Threading.CancellationTokenSource();
 
             appLifetime.ApplicationStopping.Register(() =>
             {
-                tasksCancellationTokenSource.Cancel();
+                applicationStoppingCancellationTokenSource.Cancel();
                 _logger?.LogInformation("Public app noticed ApplicationStopping.");
             });
 
@@ -96,6 +98,18 @@ namespace Kalmit.PersistentProcess.WebHost
             var createVolatileHostAttempts = 0;
 
             var volatileHosts = new ConcurrentDictionary<string, VolatileHost>();
+
+            var appTaskCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
+
+            System.Threading.Timer notifyTimeHasArrivedTimer = null;
+            DateTimeOffset? lastAppEventTimeHasArrived = null;
+            InterfaceToHost.NotifyWhenArrivedAtTimeRequestStructure nextTimeToNotify = null;
+            var nextTimeToNotifyLock = new object();
+
+            /*
+            2020-06-21 TODO: Remove temporary flag 'appAskedToBeNotifiedWhenTimeArrived' when apps have been migrated.
+            */
+            bool appEverAskedToBeNotifiedWhenTimeArrived = false;
 
             InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
                 performProcessTaskRequestToVolatileHost(
@@ -204,13 +218,9 @@ namespace Kalmit.PersistentProcess.WebHost
                 processEventAndResultingRequests(interfaceEvent);
             }
 
-            var processRequestCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
-
-            InterfaceToHost.NotifyWhenArrivedAtTimeRequestStructure nextTimeToNotify = null;
-
             void processEventAndResultingRequests(InterfaceToHost.AppEventStructure interfaceEvent)
             {
-                if (tasksCancellationTokenSource.IsCancellationRequested)
+                if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
                     return;
 
                 var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
@@ -257,35 +267,13 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 if (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime != null)
                 {
+                    appEverAskedToBeNotifiedWhenTimeArrived = true;
+
                     System.Threading.Tasks.Task.Run(() =>
                         {
-                            if (tasksCancellationTokenSource.IsCancellationRequested)
-                                return;
-
-                            nextTimeToNotify = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime;
-
-                            while (!tasksCancellationTokenSource.IsCancellationRequested)
+                            lock (nextTimeToNotifyLock)
                             {
-                                if (nextTimeToNotify != structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime)
-                                    return;
-
-                                var remainingDelayMilliseconds =
-                                    structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime.posixTimeMilli -
-                                    getDateTimeOffset().ToUnixTimeMilliseconds();
-
-                                if (remainingDelayMilliseconds <= 0)
-                                {
-                                    processEventAndResultingRequests(new InterfaceToHost.AppEventStructure
-                                    {
-                                        ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
-                                        {
-                                            posixTimeMilli = getDateTimeOffset().ToUnixTimeMilliseconds()
-                                        }
-                                    });
-                                    return;
-                                }
-
-                                System.Threading.Thread.Sleep(10);
+                                nextTimeToNotify = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime;
                             }
                         });
                 }
@@ -297,10 +285,68 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 foreach (var completeHttpResponse in structuredResponse.DecodeEventSuccess.completeHttpResponses)
                 {
-                    processRequestCompleteHttpResponse[completeHttpResponse.httpRequestId] =
+                    appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] =
                         completeHttpResponse.response;
                 }
             }
+
+            void processEventTimeHasArrived()
+            {
+                var currentTime = getDateTimeOffset();
+
+                lastAppEventTimeHasArrived = currentTime;
+
+                processEventAndResultingRequests(new InterfaceToHost.AppEventStructure
+                {
+                    ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
+                    {
+                        posixTimeMilli = currentTime.ToUnixTimeMilliseconds()
+                    }
+                });
+            }
+
+            notifyTimeHasArrivedTimer = new System.Threading.Timer(
+                callback: _ =>
+                {
+                    if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                    {
+                        notifyTimeHasArrivedTimer?.Dispose();
+                        return;
+                    }
+
+                    lock (nextTimeToNotifyLock)
+                    {
+                        if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                        {
+                            notifyTimeHasArrivedTimer?.Dispose();
+                            return;
+                        }
+
+                        var localNextTimeToNotify = nextTimeToNotify;
+
+                        if (localNextTimeToNotify != null && localNextTimeToNotify.posixTimeMilli <= getDateTimeOffset().ToUnixTimeMilliseconds())
+                        {
+                            nextTimeToNotify = null;
+                            processEventTimeHasArrived();
+                            return;
+                        }
+                    }
+
+                    if (!appEverAskedToBeNotifiedWhenTimeArrived)
+                        return;
+
+                    if (lastAppEventTimeHasArrived.HasValue
+                        ?
+                        notifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value)
+                        :
+                        true)
+                    {
+                        processEventTimeHasArrived();
+                    }
+                },
+                state: null,
+                dueTime: TimeSpan.Zero,
+                period: TimeSpan.FromMilliseconds(10));
 
             app
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
@@ -328,7 +374,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     while (true)
                     {
-                        if (processRequestCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
+                        if (appTaskCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
                         {
                             var headerContentType =
                             httpResponse.headersToAdd
