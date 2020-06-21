@@ -22,10 +22,7 @@ processEvent hostEvent stateBefore =
     case hostEvent of
         InterfaceToHost.ArrivedAtTimeEvent _ ->
             ( stateBefore
-            , { completeHttpResponses = []
-              , startTasks = []
-              , notifyWhenArrivedAtTime = Nothing
-              }
+            , InterfaceToHost.passiveAppEventResponse
             )
 
         InterfaceToHost.HttpRequestEvent httpRequestEvent ->
@@ -41,10 +38,7 @@ processEvent hostEvent stateBefore =
                     case createVolatileHostResponse of
                         Err _ ->
                             ( stateBefore
-                            , { completeHttpResponses = []
-                              , startTasks = []
-                              , notifyWhenArrivedAtTime = Nothing
-                              }
+                            , InterfaceToHost.passiveAppEventResponse
                             )
 
                         Ok { hostId } ->
@@ -58,10 +52,7 @@ processEvent hostEvent stateBefore =
                     case stateBefore.httpRequestToForward of
                         Nothing ->
                             ( stateBefore
-                            , { completeHttpResponses = []
-                              , startTasks = []
-                              , notifyWhenArrivedAtTime = Nothing
-                              }
+                            , InterfaceToHost.passiveAppEventResponse
                             )
 
                         Just httpRequestToForward ->
@@ -115,22 +106,17 @@ processEvent hostEvent stateBefore =
                                     { stateBefore | httpRequestToForward = Nothing }
                             in
                             ( state
-                            , { completeHttpResponses =
+                            , InterfaceToHost.passiveAppEventResponse
+                                |> InterfaceToHost.withCompleteHttpResponsesAdded
                                     [ { httpRequestId = httpRequestToForward.httpRequestId
                                       , response = httpResponse
                                       }
                                     ]
-                              , startTasks = []
-                              , notifyWhenArrivedAtTime = Nothing
-                              }
                             )
 
                 InterfaceToHost.CompleteWithoutResult ->
                     ( stateBefore
-                    , { completeHttpResponses = []
-                      , startTasks = []
-                      , notifyWhenArrivedAtTime = Nothing
-                      }
+                    , InterfaceToHost.passiveAppEventResponse
                     )
 
 
@@ -138,22 +124,17 @@ httpRequestForwardRequestsFromState : State -> InterfaceToHost.AppEventResponse
 httpRequestForwardRequestsFromState state =
     case state.httpRequestToForward of
         Nothing ->
-            { startTasks = []
-            , completeHttpResponses = []
-            , notifyWhenArrivedAtTime = Nothing
-            }
+            InterfaceToHost.passiveAppEventResponse
 
         Just httpRequestToForward ->
             case state.volatileHostId of
                 Nothing ->
-                    { startTasks =
-                        [ { taskId = "create-vhost"
-                          , task = InterfaceToHost.CreateVolatileHost { script = HttpViaVolatileHost.volatileHostScript }
-                          }
-                        ]
-                    , completeHttpResponses = []
-                    , notifyWhenArrivedAtTime = Nothing
-                    }
+                    InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withStartTasksAdded
+                            [ { taskId = "create-vhost"
+                              , task = InterfaceToHost.CreateVolatileHost { script = HttpViaVolatileHost.volatileHostScript }
+                              }
+                            ]
 
                 Just volatileHostId ->
                     let
@@ -167,22 +148,20 @@ httpRequestForwardRequestsFromState state =
                     in
                     case maybeForwardTo of
                         Nothing ->
-                            { completeHttpResponses =
-                                [ { httpRequestId = httpRequestToForward.httpRequestId
-                                  , response =
-                                        { statusCode = 400
-                                        , bodyAsBase64 =
-                                            "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
-                                                |> Bytes.Encode.string
-                                                |> Bytes.Encode.encode
-                                                |> Base64.fromBytes
-                                        , headersToAdd = []
-                                        }
-                                  }
-                                ]
-                            , startTasks = []
-                            , notifyWhenArrivedAtTime = Nothing
-                            }
+                            InterfaceToHost.passiveAppEventResponse
+                                |> InterfaceToHost.withCompleteHttpResponsesAdded
+                                    [ { httpRequestId = httpRequestToForward.httpRequestId
+                                      , response =
+                                            { statusCode = 400
+                                            , bodyAsBase64 =
+                                                "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
+                                                    |> Bytes.Encode.string
+                                                    |> Bytes.Encode.encode
+                                                    |> Base64.fromBytes
+                                            , headersToAdd = []
+                                            }
+                                      }
+                                    ]
 
                         Just forwardTo ->
                             let
@@ -200,14 +179,12 @@ httpRequestForwardRequestsFromState state =
                                     }
                                         |> InterfaceToHost.RequestToVolatileHost
                             in
-                            { startTasks =
-                                [ { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId
-                                  , task = task
-                                  }
-                                ]
-                            , completeHttpResponses = []
-                            , notifyWhenArrivedAtTime = Nothing
-                            }
+                            InterfaceToHost.passiveAppEventResponse
+                                |> InterfaceToHost.withStartTasksAdded
+                                    [ { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId
+                                      , task = task
+                                      }
+                                    ]
 
 
 interfaceToHost_initState : State

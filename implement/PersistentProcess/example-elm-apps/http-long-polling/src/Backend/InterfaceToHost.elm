@@ -1,20 +1,4 @@
-module Backend.InterfaceToHost exposing
-    ( AppEvent(..)
-    , AppEventResponse
-    , HttpHeader
-    , HttpRequestContext
-    , HttpRequestEventStructure
-    , HttpRequestProperties
-    , HttpResponse
-    , HttpResponseRequest
-    , RequestToVolatileHostError(..)
-    , StartTaskStructure
-    , Task(..)
-    , TaskCompleteEventStructure
-    , TaskResultStructure(..)
-    , decodeOptionalField
-    , wrapForSerialInterface_processEvent
-    )
+module Backend.InterfaceToHost exposing (..)
 
 import Json.Decode
 import Json.Encode
@@ -138,6 +122,53 @@ type alias HttpHeader =
 
 type alias TaskId =
     String
+
+
+passiveAppEventResponse : AppEventResponse
+passiveAppEventResponse =
+    { startTasks = []
+    , completeHttpResponses = []
+    , notifyWhenArrivedAtTime = Nothing
+    }
+
+
+withStartTasksAdded : List StartTaskStructure -> AppEventResponse -> AppEventResponse
+withStartTasksAdded startTasksToAdd responseBefore =
+    { responseBefore | startTasks = responseBefore.startTasks ++ startTasksToAdd }
+
+
+withCompleteHttpResponsesAdded : List HttpResponseRequest -> AppEventResponse -> AppEventResponse
+withCompleteHttpResponsesAdded httpResponsesToAdd responseBefore =
+    { responseBefore | completeHttpResponses = responseBefore.completeHttpResponses ++ httpResponsesToAdd }
+
+
+concatAppEventResponse : List AppEventResponse -> AppEventResponse
+concatAppEventResponse responses =
+    let
+        notifyWhenArrivedAtTimePosixMilli =
+            responses
+                |> List.filterMap .notifyWhenArrivedAtTime
+                |> List.map .posixTimeMilli
+                |> List.minimum
+
+        notifyWhenArrivedAtTime =
+            case notifyWhenArrivedAtTimePosixMilli of
+                Nothing ->
+                    Nothing
+
+                Just posixTimeMilli ->
+                    Just { posixTimeMilli = posixTimeMilli }
+
+        startTasks =
+            responses |> List.concatMap .startTasks
+
+        completeHttpResponses =
+            responses |> List.concatMap .completeHttpResponses
+    in
+    { notifyWhenArrivedAtTime = notifyWhenArrivedAtTime
+    , startTasks = startTasks
+    , completeHttpResponses = completeHttpResponses
+    }
 
 
 wrapForSerialInterface_processEvent : (AppEvent -> state -> ( state, AppEventResponse )) -> String -> state -> ( state, String )
