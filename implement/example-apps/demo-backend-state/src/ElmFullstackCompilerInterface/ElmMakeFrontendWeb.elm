@@ -1,11 +1,6 @@
 module ElmFullstackCompilerInterface.ElmMakeFrontendWeb exposing (..)
 
-import Bytes
-import Bytes.Encode
 
-
-elm_make_frontendWeb_html_debug : Bytes.Bytes
-elm_make_frontendWeb_html_debug =
+elm_make_frontendWeb_html_debug_base64 : String
+elm_make_frontendWeb_html_debug_base64 =
     "The Elm-fullstack compiler replaces this function."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode

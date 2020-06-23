@@ -6,6 +6,7 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -48,17 +49,20 @@ interfaceToHost_processEvent =
     InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             processEventHttpRequest httpRequestEvent { stateBefore | posixTimeMilli = httpRequestEvent.posixTimeMilli }
 
-        InterfaceToHost.TaskComplete _ ->
-            ( stateBefore, [] )
+        InterfaceToHost.TaskCompleteEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+
+        InterfaceToHost.ArrivedAtTimeEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
 
 
-processEventHttpRequest : InterfaceToHost.HttpRequestEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEventHttpRequest : InterfaceToHost.HttpRequestEventStructure -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEventHttpRequest httpRequestEvent stateBefore =
     case
         httpRequestEvent.request.uri
@@ -67,21 +71,22 @@ processEventHttpRequest httpRequestEvent stateBefore =
     of
         Nothing ->
             ( stateBefore
-            , [ { httpRequestId = httpRequestEvent.httpRequestId
-                , response =
-                    { statusCode = 200
-                    , body = Just ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug
-                    , headersToAdd = []
-                    }
-                }
-                    |> InterfaceToHost.CompleteHttpResponse
-              ]
+            , InterfaceToHost.passiveAppEventResponse
+                |> InterfaceToHost.withCompleteHttpResponsesAdded
+                    [ { httpRequestId = httpRequestEvent.httpRequestId
+                      , response =
+                            { statusCode = 200
+                            , bodyAsBase64 = Just ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug_base64
+                            , headersToAdd = []
+                            }
+                      }
+                    ]
             )
 
         Just FrontendBackendInterface.ApiRoute ->
             case
-                httpRequestEvent.request.body
-                    |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
+                httpRequestEvent.request.bodyAsBase64
+                    |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                     |> Maybe.withDefault "Missing HTTP body"
                     |> Json.Decode.decodeString GenerateJsonCoders.jsonDecodeRequestFromUser
             of
@@ -91,15 +96,18 @@ processEventHttpRequest httpRequestEvent stateBefore =
                             { httpRequestId = httpRequestEvent.httpRequestId
                             , response =
                                 { statusCode = 400
-                                , body =
+                                , bodyAsBase64 =
                                     ("Failed to decode request: " ++ (decodeError |> Json.Decode.errorToString))
                                         |> encodeStringToBytes
-                                        |> Just
+                                        |> Base64.fromBytes
                                 , headersToAdd = []
                                 }
                             }
                     in
-                    ( stateBefore, [ httpResponse |> InterfaceToHost.CompleteHttpResponse ] )
+                    ( stateBefore
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+                    )
 
                 Ok requestFromUser ->
                     let
@@ -141,19 +149,21 @@ processEventHttpRequest httpRequestEvent stateBefore =
                             { httpRequestId = httpRequestEvent.httpRequestId
                             , response =
                                 { statusCode = 200
-                                , body =
+                                , bodyAsBase64 =
                                     responseToClient
                                         |> GenerateJsonCoders.jsonEncodeMessageToClient
                                         |> Json.Encode.encode 0
                                         |> encodeStringToBytes
-                                        |> Just
+                                        |> Base64.fromBytes
                                 , headersToAdd = []
                                 }
                                     |> addCookieUserSessionId userSessionId
                             }
-                                |> InterfaceToHost.CompleteHttpResponse
                     in
-                    ( state, [ httpResponse ] )
+                    ( state
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+                    )
 
         Just (FrontendBackendInterface.StaticContentRoute contentName) ->
             let
@@ -161,25 +171,26 @@ processEventHttpRequest httpRequestEvent stateBefore =
                     case availableStaticContent |> Dict.get contentName of
                         Nothing ->
                             { statusCode = 404
-                            , body =
+                            , bodyAsBase64 =
                                 ("Found no content with the name " ++ contentName)
                                     |> encodeStringToBytes
-                                    |> Just
+                                    |> Base64.fromBytes
                             , headersToAdd = []
                             }
 
                         Just content ->
                             { statusCode = 200
-                            , body = Just content
+                            , bodyAsBase64 = content |> Base64.fromBytes
                             , headersToAdd = [ { name = "Cache-Control", values = [ "public, max-age=31536000" ] } ]
                             }
             in
             ( stateBefore
-            , [ { httpRequestId = httpRequestEvent.httpRequestId
-                , response = httpResponse
-                }
-                    |> InterfaceToHost.CompleteHttpResponse
-              ]
+            , InterfaceToHost.passiveAppEventResponse
+                |> InterfaceToHost.withCompleteHttpResponsesAdded
+                    [ { httpRequestId = httpRequestEvent.httpRequestId
+                      , response = httpResponse
+                      }
+                    ]
             )
 
 

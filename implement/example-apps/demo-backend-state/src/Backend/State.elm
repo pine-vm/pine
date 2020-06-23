@@ -16,7 +16,7 @@ import Set
 
 type alias State =
     { httpRequestsCount : Int
-    , lastHttpRequests : List InterfaceToHost.HttpRequestEvent
+    , lastHttpRequests : List InterfaceToHost.HttpRequestEventStructure
     , tuple2 : Tuple2
     , tuple3 : Tuple3
     , list_custom_type : List CustomType

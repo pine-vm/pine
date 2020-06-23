@@ -7,6 +7,7 @@ module Backend.Main exposing
 
 import Backend.InterfaceToHost as InterfaceToHost
 import Backend.State exposing (CustomType(..), CustomTypeWithTypeParameter(..), RecursiveType(..), valueForOpaqueCustomType)
+import Base64
 import Bytes.Encode
 import Common
 import Dict
@@ -27,10 +28,10 @@ interfaceToHost_processEvent =
     InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             let
                 state =
                     { stateBefore
@@ -46,13 +47,13 @@ processEvent hostEvent stateBefore =
                             |> Maybe.withDefault False
                     then
                         { statusCode = 200
-                        , body = Just ElmFullstackCompilerInterface.ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug
+                        , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug_base64
                         , headersToAdd = []
                         }
 
                     else
                         { statusCode = 200
-                        , body =
+                        , bodyAsBase64 =
                             [ Common.describeApp
                             , "I received "
                                 ++ (state.httpRequestsCount |> String.fromInt)
@@ -63,18 +64,22 @@ processEvent hostEvent stateBefore =
                                 |> String.join "\n"
                                 |> Bytes.Encode.string
                                 |> Bytes.Encode.encode
-                                |> Just
+                                |> Base64.fromBytes
                         , headersToAdd = []
                         }
             in
             ( state
-            , [ { httpRequestId = httpRequestEvent.httpRequestId, response = httpResponse }
-                    |> InterfaceToHost.CompleteHttpResponse
-              ]
+            , InterfaceToHost.passiveAppEventResponse
+                |> InterfaceToHost.withCompleteHttpResponsesAdded
+                    [ { httpRequestId = httpRequestEvent.httpRequestId, response = httpResponse }
+                    ]
             )
 
-        InterfaceToHost.TaskComplete _ ->
-            ( stateBefore, [] )
+        InterfaceToHost.TaskCompleteEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+
+        InterfaceToHost.ArrivedAtTimeEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
 
 
 urlLeadsToFrontendHtmlDocument : Url.Url -> Bool
