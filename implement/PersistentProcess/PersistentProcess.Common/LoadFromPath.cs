@@ -18,7 +18,7 @@ namespace Kalmit
                 }
 
                 return Result<string, (TreeComponent tree, bool comesFromLocalFilesystem)>.ok(
-                    (tree: loadFromGithubResult.Success, comesFromLocalFilesystem: false));
+                    (tree: loadFromGithubResult.Success.tree, comesFromLocalFilesystem: false));
             }
             else
             {

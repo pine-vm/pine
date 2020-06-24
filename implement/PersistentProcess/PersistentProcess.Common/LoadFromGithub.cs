@@ -95,6 +95,8 @@ namespace Kalmit
             Repository.Clone(parsedUrl.repository, gitRepositoryLocalDirectory, new CloneOptions { Checkout = false });
 
             Composition.TreeComponent literalNodeObject = null;
+            CommitInfo rootCommit = null;
+            CommitInfo firstParentCommitWithSameTree = null;
 
             using (var gitRepository = new Repository(gitRepositoryLocalDirectory))
             {
@@ -105,6 +107,8 @@ namespace Kalmit
                     {
                         Error = "I did not find the commit for ref '" + parsedUrl.@ref + "'.",
                     };
+
+                rootCommit = GetCommitInfo(commit);
 
                 var pathNodesNames = parsedUrl.path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
@@ -118,6 +122,29 @@ namespace Kalmit
                     {
                         Error = "I did not find an object at path '" + parsedUrl.path + "'.",
                     };
+
+                IEnumerable<Commit> traceBackTreeParents()
+                {
+                    var queue = new Queue<Commit>();
+
+                    queue.Enqueue(commit);
+
+                    while (queue.TryDequeue(out var currentCommit))
+                    {
+                        yield return currentCommit;
+
+                        foreach (var parent in currentCommit.Parents)
+                        {
+                            if (FindGitObjectAtPath(parent.Tree, pathNodesNames)?.Success?.Sha != linkedObject?.Sha)
+                                continue;
+
+                            queue.Enqueue(parent);
+                        }
+                    }
+                }
+
+                firstParentCommitWithSameTree =
+                    GetCommitInfo(traceBackTreeParents().OrderBy(commit => commit.Author.When).First());
 
                 static Composition.TreeComponent convertToLiteralNodeObjectRecursive(GitObject gitObject)
                 {
@@ -189,7 +216,37 @@ namespace Kalmit
                 */
             }
 
-            return new LoadFromUrlResult { Success = literalNodeObject };
+            return new LoadFromUrlResult
+            {
+                Success = new LoadFromUrlSuccess
+                {
+                    tree = literalNodeObject,
+                    rootCommit = rootCommit,
+                    firstParentCommitWithSameTree = firstParentCommitWithSameTree,
+                }
+            };
+        }
+
+        static public CommitInfo GetCommitInfo(Commit commit)
+        {
+            if (commit == null)
+                return null;
+
+            return new CommitInfo
+            {
+                message = commit.Message,
+                author = GetParticipantSignature(commit.Author),
+                comitter = GetParticipantSignature(commit.Committer),
+            };
+        }
+
+        static public GitParticipantSignature GetParticipantSignature(Signature signature)
+        {
+            return new GitParticipantSignature
+            {
+                name = signature.Name,
+                email = signature.Email,
+            };
         }
 
         class FollowGitPathResult
@@ -246,9 +303,34 @@ namespace Kalmit
         {
             public object Error;
 
-            public Composition.TreeComponent Success;
+            public LoadFromUrlSuccess Success;
+        }
 
-            public IImmutableList<byte> AsBlob => Success?.BlobContent;
+        public class LoadFromUrlSuccess
+        {
+            public Composition.TreeComponent tree;
+
+            public CommitInfo rootCommit;
+
+            public CommitInfo firstParentCommitWithSameTree;
+
+            public IImmutableList<byte> AsBlob => tree?.BlobContent;
+        }
+
+        public class CommitInfo
+        {
+            public string message;
+
+            public GitParticipantSignature author;
+
+            public GitParticipantSignature comitter;
+        }
+
+        public class GitParticipantSignature
+        {
+            public string name;
+
+            public string email;
         }
 
         /// <summary>

@@ -30,7 +30,7 @@ namespace Kalmit.PersistentProcess.Test
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
 
             var loadedFilesNamesAndContents =
-                loadFromGithubResult.Success.EnumerateBlobsTransitive()
+                loadFromGithubResult.Success.tree.EnumerateBlobsTransitive()
                 .Select(blobPathAndContent => (
                     fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray()))),
                     fileContent: blobPathAndContent.blobContent))
@@ -65,7 +65,7 @@ namespace Kalmit.PersistentProcess.Test
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
 
             var loadedFilesNamesAndContents =
-                loadFromGithubResult.Success.EnumerateBlobsTransitive()
+                loadFromGithubResult.Success.tree.EnumerateBlobsTransitive()
                 .Select(blobPathAndContent => (
                     fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray()))),
                     fileContent: blobPathAndContent.blobContent))
@@ -99,7 +99,7 @@ namespace Kalmit.PersistentProcess.Test
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
 
-            var blobContent = loadFromGithubResult.Success.BlobContent;
+            var blobContent = loadFromGithubResult.Success.tree.BlobContent;
 
             Assert.IsNotNull(blobContent, "Found blobContent.");
 
@@ -108,6 +108,24 @@ namespace Kalmit.PersistentProcess.Test
                     Kalmit.CommonConversion.HashSHA256(blobContent.ToArray()))
                 .ToLowerInvariant(),
                 "Loaded blob content hash equals expected hash.");
+        }
+
+        [TestMethod]
+        public void LoadFromGithub_Commits_Authors()
+        {
+            var loadFromGithubResult =
+                Kalmit.LoadFromGithub.LoadFromUrl(
+                    "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications");
+
+            Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
+
+            Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.Success.rootCommit.message);
+            Assert.AreEqual("Michael Rätzel", loadFromGithubResult.Success.rootCommit.author.name);
+            Assert.AreEqual("viir@viir.de", loadFromGithubResult.Success.rootCommit.author.email);
+
+            Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.Success.firstParentCommitWithSameTree.message);
+            Assert.AreEqual("John", loadFromGithubResult.Success.firstParentCommitWithSameTree.author.name);
+            Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.Success.firstParentCommitWithSameTree.author.email);
         }
     }
 }
