@@ -111,7 +111,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void LoadFromGithub_Commits_Authors()
+        public void LoadFromGithub_Commits_Contents()
         {
             var loadFromGithubResult =
                 Kalmit.LoadFromGithub.LoadFromUrl(
@@ -119,13 +119,17 @@ namespace Kalmit.PersistentProcess.Test
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
 
-            Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.Success.rootCommit.message);
-            Assert.AreEqual("Michael Rätzel", loadFromGithubResult.Success.rootCommit.author.name);
-            Assert.AreEqual("viir@viir.de", loadFromGithubResult.Success.rootCommit.author.email);
+            Assert.AreEqual("https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications", loadFromGithubResult.Success.stableUrl);
 
-            Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.Success.firstParentCommitWithSameTree.message);
-            Assert.AreEqual("John", loadFromGithubResult.Success.firstParentCommitWithSameTree.author.name);
-            Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.Success.firstParentCommitWithSameTree.author.email);
+            Assert.AreEqual("6c5442434768625a4df9d0dfd2f54d61d9d1f61e", loadFromGithubResult.Success.rootCommit.hash);
+            Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.Success.rootCommit.content.message);
+            Assert.AreEqual("Michael Rätzel", loadFromGithubResult.Success.rootCommit.content.author.name);
+            Assert.AreEqual("viir@viir.de", loadFromGithubResult.Success.rootCommit.content.author.email);
+
+            Assert.AreEqual("1f915f4583cde98e0491e66bc73d7df0e92d1aac", loadFromGithubResult.Success.firstParentCommitWithSameTree.hash);
+            Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.Success.firstParentCommitWithSameTree.content.message);
+            Assert.AreEqual("John", loadFromGithubResult.Success.firstParentCommitWithSameTree.content.author.name);
+            Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.Success.firstParentCommitWithSameTree.content.author.email);
         }
     }
 }

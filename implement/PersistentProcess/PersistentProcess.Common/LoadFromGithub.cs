@@ -46,6 +46,14 @@ namespace Kalmit
                 blob = 1,
                 tree = 2,
             }
+
+            public ParseObjectUrlResult WithRef(string @ref) => new ParseObjectUrlResult
+            {
+                repository = repository,
+                objectType = objectType,
+                @ref = @ref,
+                path = path
+            };
         }
 
         static public ParseObjectUrlResult ParseGitHubObjectUrl(string objectUrl)
@@ -75,6 +83,12 @@ namespace Kalmit
             };
         }
 
+        static public string BackToUrl(ParseObjectUrlResult parseObjectUrlResult) =>
+            parseObjectUrlResult.repository + "/" +
+            parseObjectUrlResult.objectType + "/" +
+            parseObjectUrlResult.@ref + "/" +
+            parseObjectUrlResult.path;
+
         static public LoadFromUrlResult LoadFromUrl(string sourceUrl)
         {
             var parsedUrl = ParseGitHubObjectUrl(sourceUrl);
@@ -95,8 +109,9 @@ namespace Kalmit
             Repository.Clone(parsedUrl.repository, gitRepositoryLocalDirectory, new CloneOptions { Checkout = false });
 
             Composition.TreeComponent literalNodeObject = null;
-            CommitInfo rootCommit = null;
-            CommitInfo firstParentCommitWithSameTree = null;
+            string stableUrl = null;
+            (string hash, CommitContent content)? rootCommit = null;
+            (string hash, CommitContent content)? firstParentCommitWithSameTree = null;
 
             using (var gitRepository = new Repository(gitRepositoryLocalDirectory))
             {
@@ -108,7 +123,9 @@ namespace Kalmit
                         Error = "I did not find the commit for ref '" + parsedUrl.@ref + "'.",
                     };
 
-                rootCommit = GetCommitInfo(commit);
+                stableUrl = BackToUrl(parsedUrl.WithRef(commit.Sha));
+
+                rootCommit = GetCommitHashAndContent(commit);
 
                 var pathNodesNames = parsedUrl.path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
@@ -144,7 +161,7 @@ namespace Kalmit
                 }
 
                 firstParentCommitWithSameTree =
-                    GetCommitInfo(traceBackTreeParents().OrderBy(commit => commit.Author.When).First());
+                    GetCommitHashAndContent(traceBackTreeParents().OrderBy(commit => commit.Author.When).First());
 
                 static Composition.TreeComponent convertToLiteralNodeObjectRecursive(GitObject gitObject)
                 {
@@ -221,23 +238,21 @@ namespace Kalmit
                 Success = new LoadFromUrlSuccess
                 {
                     tree = literalNodeObject,
-                    rootCommit = rootCommit,
-                    firstParentCommitWithSameTree = firstParentCommitWithSameTree,
+                    stableUrl = stableUrl,
+                    rootCommit = rootCommit.Value,
+                    firstParentCommitWithSameTree = firstParentCommitWithSameTree.Value,
                 }
             };
         }
 
-        static public CommitInfo GetCommitInfo(Commit commit)
+        static public (string hash, CommitContent content) GetCommitHashAndContent(Commit commit)
         {
-            if (commit == null)
-                return null;
-
-            return new CommitInfo
+            return (commit.Sha, new CommitContent
             {
                 message = commit.Message,
                 author = GetParticipantSignature(commit.Author),
                 comitter = GetParticipantSignature(commit.Committer),
-            };
+            });
         }
 
         static public GitParticipantSignature GetParticipantSignature(Signature signature)
@@ -310,14 +325,16 @@ namespace Kalmit
         {
             public Composition.TreeComponent tree;
 
-            public CommitInfo rootCommit;
+            public string stableUrl;
 
-            public CommitInfo firstParentCommitWithSameTree;
+            public (string hash, CommitContent content) rootCommit;
+
+            public (string hash, CommitContent content) firstParentCommitWithSameTree;
 
             public IImmutableList<byte> AsBlob => tree?.BlobContent;
         }
 
-        public class CommitInfo
+        public class CommitContent
         {
             public string message;
 
