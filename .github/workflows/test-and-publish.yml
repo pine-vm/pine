@@ -21,7 +21,7 @@ jobs:
     - uses: actions/setup-dotnet@v1
       with:
         dotnet-version: '3.1.301'
-  - name: Try use dotnet core 3
+    - name: Try use dotnet core 3
       run: dotnet --info
     - uses: actions/checkout@v1
     - name: Run tests
