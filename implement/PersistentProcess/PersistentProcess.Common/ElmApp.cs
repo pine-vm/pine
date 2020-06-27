@@ -28,6 +28,12 @@ namespace Kalmit
 
         public const string DeserializeStateFunctionName = "interfaceToHost_deserializeState";
 
+        static public string ElmMakeInterfaceModuleName => "ElmFullstackCompilerInterface.ElmMake";
+
+        /*
+        2020-06-27 TODO:
+        Remove ElmMakeFrontendWebInterfaceModuleName when apps are migrated to ElmMakeInterfaceModuleName.
+        */
         static public string ElmMakeFrontendWebInterfaceModuleName => "ElmFullstackCompilerInterface.ElmMakeFrontendWeb";
 
         static public string GenerateJsonCodersInterfaceModuleName => "ElmFullstackCompilerInterface.GenerateJsonCoders";
@@ -61,10 +67,13 @@ namespace Kalmit
             ElmAppInterfaceConfig interfaceConfig,
             Action<string> logWriteLine) =>
             LoweredElmAppForBackendStateSerializer(
-                LoweredElmAppForElmMakeFrontendWeb(
-                    originalAppFiles: LoweredElmAppToGenerateJsonCoders(LoweredElmAppForSourceFiles(sourceFiles), logWriteLine),
+                LoweredElmAppForElmMake(
+                    originalAppFiles: LoweredElmAppForElmMakeFrontendWeb(
+                        originalAppFiles: LoweredElmAppToGenerateJsonCoders(LoweredElmAppForSourceFiles(sourceFiles), logWriteLine),
+                        logWriteLine: logWriteLine),
                     logWriteLine: logWriteLine),
-                    interfaceConfig, logWriteLine);
+                interfaceConfig,
+                logWriteLine: logWriteLine);
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForBackendStateSerializer(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
@@ -122,6 +131,135 @@ namespace Kalmit
                 Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
         }
 
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForElmMake(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
+            Action<string> logWriteLine)
+        {
+            var interfaceModuleFilePath =
+                FilePathFromModuleName(ElmAppInterfaceConvention.ElmMakeInterfaceModuleName);
+
+            if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
+            {
+                return originalAppFiles;
+            }
+
+            var interfaceModuleOriginalFile = originalAppFiles[interfaceModuleFilePath];
+
+            var interfaceModuleOriginalFileText =
+                Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
+
+            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
+
+            byte[] BuildFrontendWebHtml(IImmutableList<string> pathToFileWithElmEntryPoint, string elmMakeCommandAppendix)
+            {
+                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
+                    originalAppFiles,
+                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                return Encoding.UTF8.GetBytes(frontendWebHtml);
+            }
+
+            string compileFileExpression(
+                IImmutableList<string> pathToFileWithElmEntryPoint,
+                string elmMakeCommandAppendix,
+                bool encodingBase64)
+            {
+                var htmlFile = BuildFrontendWebHtml(
+                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                var fileAsBase64 = Convert.ToBase64String(htmlFile);
+
+                var base64Expression = "\"" + fileAsBase64 + "\"";
+
+                if (encodingBase64)
+                    return base64Expression;
+
+                return
+                    base64Expression +
+                    @"|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
+            }
+
+            /*
+            2020-06-07
+            I saw apps spending a lot of time on encoding the `Bytes.Bytes` value to base64 when building HTTP responses.
+            As a quick way to optimize runtimes expenses, offer a base64 string directly so that apps can avoid the roundtrip to and from `Bytes.Bytes`.
+            This should become obsolete with a better engine running the Elm code: These values could be cached, but the current engine does not do that.
+            */
+
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunction(
+                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
+                string functionName,
+                string originalFunctionText)
+            {
+                var functionNameMatch = Regex.Match(functionName, "elm_make(?<flags>(__[^_]+)*)____(?<filepath>.*)");
+
+                if (!functionNameMatch.Success)
+                    throw new NotSupportedException("Function name does not match supported pattern: '" + functionName + "'");
+
+                var filePathRepresentation = functionNameMatch.Groups["filepath"].Value;
+
+                var flags =
+                    functionNameMatch.Groups["flags"].Value.Trim('_').Split('_')
+                    .ToImmutableHashSet();
+
+                var matchingFiles =
+                    originalAppFiles
+                    .Where(sourceFilePathAndContent => functionNameInCompilationInterfaceFromFilePath(sourceFilePathAndContent.Key) == filePathRepresentation)
+                    .ToImmutableList();
+
+                if (matchingFiles.Count < 1)
+                    throw new Exception("Did not find any source file with a path matching the representation '" + filePathRepresentation + "'");
+
+                if (matchingFiles.Count > 1)
+                {
+                    throw new Exception(
+                        "The file path representation '" + filePathRepresentation +
+                        "' is not unique because it matches " + matchingFiles.Count + " of the source files:" +
+                        string.Join(", ", matchingFiles.Select(matchingFile => "\"" + string.Join("/", matchingFile.Key) + "\"")));
+                }
+
+                var elmMakeCommandAppendix =
+                    flags.Contains("debug") ? "--debug" : null;
+
+                var fileExpression = compileFileExpression(
+                    pathToFileWithElmEntryPoint: matchingFiles.Single().Key,
+                    elmMakeCommandAppendix: elmMakeCommandAppendix,
+                    encodingBase64: flags.Contains("base64"));
+
+                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, fileExpression);
+
+                var originalFunctionTextLines =
+                    originalFunctionText.Replace("\r", "").Split("\n");
+
+                var newFunctionText =
+                    String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { newFunctionBody }));
+
+                return
+                    ReplaceFunctionInModule(
+                        previousAppFiles: ImportModuleInModule(
+                            previousAppFiles: previousAppFiles,
+                            moduleName: ElmAppInterfaceConvention.ElmMakeInterfaceModuleName,
+                            moduleToImport: ImmutableList.Create("Base64")),
+                        moduleName: ElmAppInterfaceConvention.ElmMakeInterfaceModuleName,
+                        functionName: functionName,
+                        newFunctionText: newFunctionText);
+            }
+
+            return
+                originalFunctions
+                .Aggregate(originalAppFiles, (intermediateAppFiles, originalFunction) =>
+                    replaceFunction(
+                        intermediateAppFiles,
+                        originalFunction.functionName,
+                        originalFunction.functionText));
+        }
+
+        /*
+        2020-06-27 TODO:
+        Remove LoweredElmAppForElmMakeFrontendWeb when apps are migrated to LoweredElmAppForElmMake.
+        */
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForElmMakeFrontendWeb(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
             Action<string> logWriteLine)
@@ -564,10 +702,7 @@ namespace Kalmit
 
             var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
 
-            string functionNameFromFilePath(IImmutableList<string> filePath) =>
-                Regex.Replace(string.Join("/", filePath), "[^a-zA-Z0-9]", "_");
-
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFileFunction(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunction(
                 IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
                 string fileFunctionName,
                 string originalFunctionText)
@@ -581,7 +716,7 @@ namespace Kalmit
 
                 var matchingFiles =
                     sourceFiles
-                    .Where(sourceFilePathAndContent => functionNameFromFilePath(sourceFilePathAndContent.Key) == filePathRepresentation)
+                    .Where(sourceFilePathAndContent => functionNameInCompilationInterfaceFromFilePath(sourceFilePathAndContent.Key) == filePathRepresentation)
                     .ToImmutableList();
 
                 if (matchingFiles.Count < 1)
@@ -613,11 +748,14 @@ namespace Kalmit
             return
                 originalFunctions
                 .Aggregate(sourceFiles, (intermediateAppFiles, originalFunction) =>
-                    replaceFileFunction(
+                    replaceFunction(
                         intermediateAppFiles,
                         originalFunction.functionName,
                         originalFunction.functionText));
         }
+
+        static string functionNameInCompilationInterfaceFromFilePath(IImmutableList<string> filePath) =>
+            Regex.Replace(string.Join("/", filePath), "[^a-zA-Z0-9]", "_");
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ImportModuleInModule(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,

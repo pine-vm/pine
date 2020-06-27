@@ -12,7 +12,7 @@ import Bytes.Decode
 import Bytes.Encode
 import Conversation exposing (UserId)
 import Dict
-import ElmFullstackCompilerInterface.ElmMakeFrontendWeb as ElmMakeFrontendWeb
+import ElmFullstackCompilerInterface.ElmMake
 import ElmFullstackCompilerInterface.GenerateJsonCoders as GenerateJsonCoders
 import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
@@ -76,7 +76,7 @@ processEventHttpRequest httpRequestEvent stateBefore =
                     [ { httpRequestId = httpRequestEvent.httpRequestId
                       , response =
                             { statusCode = 200
-                            , bodyAsBase64 = Just ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug_base64
+                            , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
                             , headersToAdd = []
                             }
                       }
