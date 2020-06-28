@@ -5,6 +5,7 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Base64
 import ElmFullstackCompilerInterface.SourceFiles
 
 
@@ -12,21 +13,21 @@ type alias State =
     {}
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             let
                 response =
                     if (httpRequestEvent.request.method |> String.toLower) /= "get" then
                         { statusCode = 405
-                        , body = Nothing
+                        , bodyAsBase64 = Nothing
                         , headersToAdd = []
                         }
 
                     else
                         { statusCode = 200
-                        , body = Just ElmFullstackCompilerInterface.SourceFiles.file____static_content_demo_file_mp3
+                        , bodyAsBase64 = ElmFullstackCompilerInterface.SourceFiles.file____static_content_demo_file_mp3 |> Base64.fromBytes
                         , headersToAdd =
                             [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                             ]
@@ -36,12 +37,17 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = response
                     }
-                        |> InterfaceToHost.CompleteHttpResponse
             in
-            ( stateBefore, [ httpResponse ] )
+            ( stateBefore
+            , InterfaceToHost.passiveAppEventResponse
+                |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+            )
 
-        InterfaceToHost.TaskComplete _ ->
-            ( stateBefore, [] )
+        InterfaceToHost.TaskCompleteEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+
+        InterfaceToHost.ArrivedAtTimeEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
 
 
 interfaceToHost_initState : State

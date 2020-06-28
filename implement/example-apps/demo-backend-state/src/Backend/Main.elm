@@ -11,7 +11,7 @@ import Base64
 import Bytes.Encode
 import Common
 import Dict
-import ElmFullstackCompilerInterface.ElmMakeFrontendWeb
+import ElmFullstackCompilerInterface.ElmMake
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import Json.Encode
 import ListDict
@@ -47,7 +47,7 @@ processEvent hostEvent stateBefore =
                             |> Maybe.withDefault False
                     then
                         { statusCode = 200
-                        , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMakeFrontendWeb.elm_make_frontendWeb_html_debug_base64
+                        , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
                         , headersToAdd = []
                         }
 

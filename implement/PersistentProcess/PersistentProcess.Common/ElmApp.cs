@@ -30,12 +30,6 @@ namespace Kalmit
 
         static public string ElmMakeInterfaceModuleName => "ElmFullstackCompilerInterface.ElmMake";
 
-        /*
-        2020-06-27 TODO:
-        Remove ElmMakeFrontendWebInterfaceModuleName when apps are migrated to ElmMakeInterfaceModuleName.
-        */
-        static public string ElmMakeFrontendWebInterfaceModuleName => "ElmFullstackCompilerInterface.ElmMakeFrontendWeb";
-
         static public string GenerateJsonCodersInterfaceModuleName => "ElmFullstackCompilerInterface.GenerateJsonCoders";
 
         static public string SourceFilesInterfaceModuleName => "ElmFullstackCompilerInterface.SourceFiles";
@@ -68,10 +62,9 @@ namespace Kalmit
             Action<string> logWriteLine) =>
             LoweredElmAppForBackendStateSerializer(
                 LoweredElmAppForElmMake(
-                    originalAppFiles: LoweredElmAppForElmMakeFrontendWeb(
-                        originalAppFiles: LoweredElmAppToGenerateJsonCoders(LoweredElmAppForSourceFiles(sourceFiles), logWriteLine),
+                    originalAppFiles: LoweredElmAppToGenerateJsonCoders(
+                        LoweredElmAppForSourceFiles(sourceFiles), logWriteLine),
                         logWriteLine: logWriteLine),
-                    logWriteLine: logWriteLine),
                 interfaceConfig,
                 logWriteLine: logWriteLine);
 
@@ -243,120 +236,6 @@ namespace Kalmit
                             moduleName: ElmAppInterfaceConvention.ElmMakeInterfaceModuleName,
                             moduleToImport: ImmutableList.Create("Base64")),
                         moduleName: ElmAppInterfaceConvention.ElmMakeInterfaceModuleName,
-                        functionName: functionName,
-                        newFunctionText: newFunctionText);
-            }
-
-            return
-                originalFunctions
-                .Aggregate(originalAppFiles, (intermediateAppFiles, originalFunction) =>
-                    replaceFunction(
-                        intermediateAppFiles,
-                        originalFunction.functionName,
-                        originalFunction.functionText));
-        }
-
-        /*
-        2020-06-27 TODO:
-        Remove LoweredElmAppForElmMakeFrontendWeb when apps are migrated to LoweredElmAppForElmMake.
-        */
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForElmMakeFrontendWeb(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
-            Action<string> logWriteLine)
-        {
-            var interfaceModuleFilePath =
-                FilePathFromModuleName(ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName);
-
-            if (!originalAppFiles.ContainsKey(interfaceModuleFilePath))
-            {
-                return originalAppFiles;
-            }
-
-            var interfaceModuleOriginalFile = originalAppFiles[interfaceModuleFilePath];
-
-            var interfaceModuleOriginalFileText =
-                Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
-
-            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
-
-            var frontendWebModuleFilePath = FilePathFromModuleName(ElmAppInterfaceConvention.FrontendWebElmModuleName);
-            var frontendWebModuleFilePathString = string.Join("/", frontendWebModuleFilePath);
-
-            var elmAppContainsFrontend = originalAppFiles.ContainsKey(frontendWebModuleFilePath);
-
-            logWriteLine?.Invoke("This Elm app contains " + (elmAppContainsFrontend ? "a" : "no") + " frontend at '" + frontendWebModuleFilePathString + "'.");
-
-            byte[] BuildFrontendWebHtml(string elmMakeCommandAppendix)
-            {
-                if (!elmAppContainsFrontend)
-                {
-                    throw new Exception(
-                        "Error in app code: The sources do not contain a frontend at '" +
-                        frontendWebModuleFilePathString + "' but module " + ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName +
-                        " is trying to use the frontend.");
-                }
-
-                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
-                    originalAppFiles,
-                    pathToFileWithElmEntryPoint: frontendWebModuleFilePath,
-                    elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                return Encoding.UTF8.GetBytes(frontendWebHtml);
-            }
-
-            string fileExpression(string elmMakeCommandAppendix, bool encodingBase64)
-            {
-                var htmlFile = BuildFrontendWebHtml(elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                var fileAsBase64 = Convert.ToBase64String(htmlFile);
-
-                var base64Expression = "\"" + fileAsBase64 + "\"";
-
-                if (encodingBase64)
-                    return base64Expression;
-
-                return
-                    base64Expression +
-                    @"|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
-            }
-
-            /*
-            2020-06-07
-            I saw apps spending a lot of time on encoding the `Bytes.Bytes` value to base64 when building HTTP responses.
-            As a quick way to optimize runtimes expenses, offer a base64 string directly so that apps can avoid the roundtrip to and from `Bytes.Bytes`.
-            This should become obsolete with a better engine running the Elm code: These values could be cached, but the current engine does not do that.
-            */
-
-            var fileExpressionFromFunctionName =
-                ImmutableDictionary.Create<string, Func<string>>()
-                .SetItem("elm_make_frontendWeb_html", () => fileExpression(elmMakeCommandAppendix: null, encodingBase64: false))
-                .SetItem("elm_make_frontendWeb_html_debug", () => fileExpression(elmMakeCommandAppendix: "--debug", encodingBase64: false))
-                .SetItem("elm_make_frontendWeb_html_base64", () => fileExpression(elmMakeCommandAppendix: null, encodingBase64: true))
-                .SetItem("elm_make_frontendWeb_html_debug_base64", () => fileExpression(elmMakeCommandAppendix: "--debug", encodingBase64: true));
-
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunction(
-                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
-                string functionName,
-                string originalFunctionText)
-            {
-                if (!fileExpressionFromFunctionName.TryGetValue(functionName, out var getFileExpression))
-                    return previousAppFiles;
-
-                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, getFileExpression());
-
-                var originalFunctionTextLines =
-                    originalFunctionText.Replace("\r", "").Split("\n");
-
-                var newFunctionText =
-                    String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { newFunctionBody }));
-
-                return
-                    ReplaceFunctionInModule(
-                        previousAppFiles: ImportModuleInModule(
-                            previousAppFiles: previousAppFiles,
-                            moduleName: ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName,
-                            moduleToImport: ImmutableList.Create("Base64")),
-                        moduleName: ElmAppInterfaceConvention.ElmMakeFrontendWebInterfaceModuleName,
                         functionName: functionName,
                         newFunctionText: newFunctionText);
             }

@@ -6,6 +6,7 @@ module Backend.Main exposing
 
 import Backend.InterfaceToHost as InterfaceToHost
 import Backend.StateType
+import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -21,10 +22,10 @@ type alias State =
     }
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             let
                 ( state, httpResponseCode, httpResponseBodyString ) =
                     case httpRequestEvent.request.method |> String.toLower of
@@ -38,9 +39,9 @@ processEvent hostEvent stateBefore =
 
                         "post" ->
                             case
-                                httpRequestEvent.request.body
-                                    |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
-                                    |> Maybe.withDefault ""
+                                httpRequestEvent.request.bodyAsBase64
+                                    |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
+                                    |> Maybe.withDefault "Missing HTTP body"
                                     |> Json.Decode.decodeString ElmFullstackCompilerInterface.GenerateJsonCoders.decodeBackendState
                             of
                                 Err decodeErr ->
@@ -62,16 +63,21 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = httpResponseCode
-                        , body = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Just
+                        , bodyAsBase64 = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
                         , headersToAdd = []
                         }
                     }
-                        |> InterfaceToHost.CompleteHttpResponse
             in
-            ( state, [ httpResponse ] )
+            ( state
+            , InterfaceToHost.passiveAppEventResponse
+                |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+            )
 
-        InterfaceToHost.TaskComplete _ ->
-            ( stateBefore, [] )
+        InterfaceToHost.TaskCompleteEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+
+        InterfaceToHost.ArrivedAtTimeEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
 
 
 decodeBytesToString : Bytes.Bytes -> Maybe String

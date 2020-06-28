@@ -183,18 +183,6 @@ namespace Kalmit.PersistentProcess.Test
 
                 var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
-                {
-                    /*
-                    2020-06-20 TODO: Remove temporary branch for older app interface to host.
-                    */
-
-                    var asOldStructure =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<PersistentProcess.InterfaceToHost_Before_2020_06_20.Event>(eventString);
-
-                    if (asOldStructure?.httpRequest != null || asOldStructure?.taskComplete != null)
-                        return asOldStructure.AsAppEvent();
-                }
-
                 return Newtonsoft.Json.JsonConvert.DeserializeObject<PersistentProcess.InterfaceToHost.AppEventStructure>(eventString);
             }
 

@@ -231,7 +231,6 @@ namespace Kalmit.PersistentProcess.WebHost
                                                 return elmEventResponse;
                                             }
                                         },
-                                        appCodeUsesInterface_Before_2020_06_20 = WebAppAndElmAppConfig.appCodeUsesInterface_Before_2020_06_20_from_appConfigTree(appConfigTree),
                                     });
                             })
                             .Build();

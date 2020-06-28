@@ -106,11 +106,6 @@ namespace Kalmit.PersistentProcess.WebHost
             InterfaceToHost.NotifyWhenArrivedAtTimeRequestStructure nextTimeToNotify = null;
             var nextTimeToNotifyLock = new object();
 
-            /*
-            2020-06-21 TODO: Remove temporary flag 'appAskedToBeNotifiedWhenTimeArrived' when apps have been migrated.
-            */
-            bool appEverAskedToBeNotifiedWhenTimeArrived = false;
-
             InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
                 performProcessTaskRequestToVolatileHost(
                 InterfaceToHost.Task.RequestToVolatileHostStructure requestToVolatileHost)
@@ -225,33 +220,24 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
 
-                {
-                    if (webAppAndElmAppConfig.appCodeUsesInterface_Before_2020_06_20)
-                    {
-                        serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(
-                            InterfaceToHost_Before_2020_06_20.Event.FromAppEvent(interfaceEvent),
-                            jsonSerializerSettings);
-                    }
-                }
+                string serializedResponse = null;
 
-                var serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+                try
+                {
+                    serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+                }
+                catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                {
+                    return;
+                }
 
                 InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
 
                 try
                 {
-                    if (webAppAndElmAppConfig.appCodeUsesInterface_Before_2020_06_20)
-                    {
-                        structuredResponse =
-                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost_Before_2020_06_20.ResponseOverSerialInterface>(
-                                serializedResponse).TranslateToNewStructure();
-                    }
-                    else
-                    {
-                        structuredResponse =
-                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                                serializedResponse);
-                    }
+                    structuredResponse =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
+                            serializedResponse);
                 }
                 catch (Exception parseException)
                 {
@@ -267,8 +253,6 @@ namespace Kalmit.PersistentProcess.WebHost
 
                 if (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime != null)
                 {
-                    appEverAskedToBeNotifiedWhenTimeArrived = true;
-
                     System.Threading.Tasks.Task.Run(() =>
                         {
                             lock (nextTimeToNotifyLock)
@@ -332,9 +316,6 @@ namespace Kalmit.PersistentProcess.WebHost
                         }
                     }
 
-                    if (!appEverAskedToBeNotifiedWhenTimeArrived)
-                        return;
-
                     if (lastAppEventTimeHasArrived.HasValue
                         ?
                         notifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value)
@@ -347,6 +328,8 @@ namespace Kalmit.PersistentProcess.WebHost
                 state: null,
                 dueTime: TimeSpan.Zero,
                 period: TimeSpan.FromMilliseconds(10));
+
+            processEventTimeHasArrived();
 
             app
             .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
@@ -459,25 +442,5 @@ namespace Kalmit.PersistentProcess.WebHost
         public WebAppConfigurationJsonStructure WebAppConfiguration;
 
         public Func<string, string> ProcessEventInElmApp;
-
-        /*
-        2020-06-20 TODO: Remove temporary branches to maintain compatibility with older app codes.
-        */
-        public bool appCodeUsesInterface_Before_2020_06_20;
-
-        static public bool appCodeUsesInterface_Before_2020_06_20_from_appConfigTree(Composition.TreeComponent appConfigTree)
-        {
-            return
-                appConfigTree.EnumerateBlobsTransitive()
-                .Any(blobPathAndContent =>
-                {
-                    if (!blobPathAndContent.path.Last().SequenceEqual(System.Text.Encoding.UTF8.GetBytes("InterfaceToHost.elm")))
-                        return false;
-
-                    return
-                        System.Text.Encoding.UTF8.GetString(blobPathAndContent.blobContent.ToArray())
-                        .Contains("DecodeEventSuccess (List ProcessRequest)");
-                });
-        }
     }
 }

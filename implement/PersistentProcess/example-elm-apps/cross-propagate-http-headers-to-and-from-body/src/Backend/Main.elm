@@ -5,6 +5,7 @@ module Backend.Main exposing
     )
 
 import Backend.InterfaceToHost as InterfaceToHost
+import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -15,16 +16,16 @@ type alias State =
     ()
 
 
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequest httpRequestEvent ->
+        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             let
                 headerToPropagateBody =
                     { name = "response-header-name"
                     , values =
-                        [ httpRequestEvent.request.body
-                            |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
+                        [ httpRequestEvent.request.bodyAsBase64
+                            |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                             |> Maybe.withDefault ""
                         ]
                     }
@@ -44,16 +45,21 @@ processEvent hostEvent stateBefore =
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , body = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Just
+                        , bodyAsBase64 = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
                         , headersToAdd = [ headerToPropagateBody, { name = "content-type", values = [ "application/json" ] } ]
                         }
                     }
-                        |> InterfaceToHost.CompleteHttpResponse
             in
-            ( stateBefore, [ httpResponse ] )
+            ( stateBefore
+            , InterfaceToHost.passiveAppEventResponse
+                |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+            )
 
-        InterfaceToHost.TaskComplete _ ->
-            ( stateBefore, [] )
+        InterfaceToHost.TaskCompleteEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+
+        InterfaceToHost.ArrivedAtTimeEvent _ ->
+            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
 
 
 decodeBytesToString : Bytes.Bytes -> Maybe String
