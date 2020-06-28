@@ -23,4 +23,9 @@
     <ProjectReference Include="..\PersistentProcess\PersistentProcess.Common\PersistentProcess.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="ElmEngine\parse-elm-syntax\elm.json" />
+    <EmbeddedResource Include="ElmEngine\parse-elm-syntax\src\Main.elm" />
+  </ItemGroup>
+
 </Project>
