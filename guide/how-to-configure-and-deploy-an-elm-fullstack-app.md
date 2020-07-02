@@ -142,9 +142,11 @@ file____readme_md =
 
 To map the source file path to a function name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
 
-+ `readme.md` -> `file____readme_md`
-+ `static/readme.md` -> `file____static_readme_md`
-+ `static/command-from-player.mp3` -> `file____static_command_from_player_mp3`
+| file path                        | Elm function name |
+| -------------------------------- | -------------------------- |
+| `readme.md`                      | `file____readme_md` |
+| `static/readme.md`               | `file____static_readme_md` |
+| `static/command-from-player.mp3` | `file____static_command_from_player_mp3` |
 
 The compilation will fail if this module contains a function name that matches more than one or none of the source files.
 
