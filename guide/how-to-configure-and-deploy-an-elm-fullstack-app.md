@@ -104,7 +104,7 @@ If your app does not contain a frontend, you don't need this Elm module at all.
 
 ### `ElmFullstackCompilerInterface.GenerateJsonCoders` Elm Module
 
-This module provides automatically generated JSON encoders end decoders for Elm types, except types containing functions.
+This module provides automatically generated JSON encoders and decoders for Elm types, except types containing functions.
 
 By adding a function to this module, we can select a type to generate a JSON encoder or decoder. A common use case for this automation are types used at the interface between the front-end and the back-end.
 
