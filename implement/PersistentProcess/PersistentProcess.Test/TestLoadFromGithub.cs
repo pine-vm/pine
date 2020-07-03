@@ -111,7 +111,7 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         [TestMethod]
-        public void LoadFromGithub_Commits_Contents()
+        public void LoadFromGithub_Commits_Contents_And_Lineage()
         {
             var loadFromGithubResult =
                 Kalmit.LoadFromGithub.LoadFromUrl(
@@ -119,7 +119,13 @@ namespace Kalmit.PersistentProcess.Test
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
 
-            Assert.AreEqual("https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications", loadFromGithubResult.Success.stableUrl);
+            Assert.AreEqual(
+                "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications",
+                loadFromGithubResult.Success.urlInCommit);
+
+            Assert.AreEqual(
+                "https://github.com/Viir/bots/tree/1f915f4583cde98e0491e66bc73d7df0e92d1aac/implement/applications",
+                loadFromGithubResult.Success.urlInFirstParentCommitWithSameValueAtThisPath);
 
             Assert.AreEqual("6c5442434768625a4df9d0dfd2f54d61d9d1f61e", loadFromGithubResult.Success.rootCommit.hash);
             Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.Success.rootCommit.content.message);

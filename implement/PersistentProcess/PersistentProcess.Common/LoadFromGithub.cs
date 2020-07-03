@@ -109,7 +109,8 @@ namespace Kalmit
             Repository.Clone(parsedUrl.repository, gitRepositoryLocalDirectory, new CloneOptions { Checkout = false });
 
             Composition.TreeComponent literalNodeObject = null;
-            string stableUrl = null;
+            string urlInCommit = null;
+            string urlInFirstParentCommitWithSameValueAtThisPath = null;
             (string hash, CommitContent content)? rootCommit = null;
             (string hash, CommitContent content)? firstParentCommitWithSameTree = null;
 
@@ -123,7 +124,7 @@ namespace Kalmit
                         Error = "I did not find the commit for ref '" + parsedUrl.@ref + "'.",
                     };
 
-                stableUrl = BackToUrl(parsedUrl.WithRef(commit.Sha));
+                urlInCommit = BackToUrl(parsedUrl.WithRef(commit.Sha));
 
                 rootCommit = GetCommitHashAndContent(commit);
 
@@ -162,6 +163,9 @@ namespace Kalmit
 
                 firstParentCommitWithSameTree =
                     GetCommitHashAndContent(traceBackTreeParents().OrderBy(commit => commit.Author.When).First());
+
+                urlInFirstParentCommitWithSameValueAtThisPath =
+                    BackToUrl(parsedUrl.WithRef(firstParentCommitWithSameTree.Value.hash));
 
                 static Composition.TreeComponent convertToLiteralNodeObjectRecursive(GitObject gitObject)
                 {
@@ -238,7 +242,8 @@ namespace Kalmit
                 Success = new LoadFromUrlSuccess
                 {
                     tree = literalNodeObject,
-                    stableUrl = stableUrl,
+                    urlInCommit = urlInCommit,
+                    urlInFirstParentCommitWithSameValueAtThisPath = urlInFirstParentCommitWithSameValueAtThisPath,
                     rootCommit = rootCommit.Value,
                     firstParentCommitWithSameTree = firstParentCommitWithSameTree.Value,
                 }
@@ -325,7 +330,9 @@ namespace Kalmit
         {
             public Composition.TreeComponent tree;
 
-            public string stableUrl;
+            public string urlInCommit;
+
+            public string urlInFirstParentCommitWithSameValueAtThisPath;
 
             public (string hash, CommitContent content) rootCommit;
 
