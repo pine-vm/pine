@@ -253,20 +253,26 @@ processMessageFromClient context requestFromUser stateBefore =
                             )
 
                         Just userId ->
-                            let
-                                conversationHistory =
-                                    { posixTimeMilli = stateBefore.posixTimeMilli
-                                    , origin = Conversation.FromUser { userId = userId }
-                                    , message = Conversation.LeafPlainText message
-                                    }
-                                        :: stateBefore.conversationHistory
+                            if hasUserExhaustedRateLimitToAddMessage stateBefore { userId = userId } then
+                                ( stateBefore
+                                , FrontendBackendInterface.MessageToUser (Conversation.LeafPlainText "❌ Too many messages – Maximum sending rate exceeded.")
+                                )
 
-                                stateAfterAddingMessage =
-                                    { stateBefore | conversationHistory = conversationHistory }
-                            in
-                            ( stateAfterAddingMessage
-                            , stateAfterAddingMessage |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby
-                            )
+                            else
+                                let
+                                    conversationHistory =
+                                        { posixTimeMilli = stateBefore.posixTimeMilli
+                                        , origin = Conversation.FromUser { userId = userId }
+                                        , message = Conversation.LeafPlainText message
+                                        }
+                                            :: stateBefore.conversationHistory
+
+                                    stateAfterAddingMessage =
+                                        { stateBefore | conversationHistory = conversationHistory }
+                                in
+                                ( stateAfterAddingMessage
+                                , stateAfterAddingMessage |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby
+                                )
 
                 FrontendBackendInterface.ChooseNameRequest chosenName ->
                     case context.userId of
@@ -394,6 +400,44 @@ getNextUserSessionId state =
             (otherSessionsIds |> String.concat) ++ (state.posixTimeMilli |> String.fromInt)
     in
     source |> SHA1.fromString |> SHA1.toHex |> String.left 30
+
+
+hasUserExhaustedRateLimitToAddMessage : State -> { userId : Int } -> Bool
+hasUserExhaustedRateLimitToAddMessage state { userId } =
+    let
+        addedMessagesAges =
+            state.conversationHistory
+                |> List.filterMap
+                    (\event ->
+                        case event.origin of
+                            Conversation.FromSystem ->
+                                Nothing
+
+                            Conversation.FromUser fromUser ->
+                                if fromUser.userId /= userId then
+                                    Nothing
+
+                                else
+                                    Just event.posixTimeMilli
+                    )
+                |> List.map (\addedMessagePosixTimeMilli -> (state.posixTimeMilli - addedMessagePosixTimeMilli) // 1000)
+
+        numberOfMessagesWithinAge ageInSeconds =
+            addedMessagesAges
+                |> List.filter (\messageAge -> messageAge <= ageInSeconds)
+                |> List.length
+    in
+    userAddMessageRateLimits
+        |> List.any (\limit -> limit.numberOfMessages <= numberOfMessagesWithinAge limit.timespanInSeconds)
+
+
+userAddMessageRateLimits : List { timespanInSeconds : Int, numberOfMessages : Int }
+userAddMessageRateLimits =
+    [ { timespanInSeconds = 3, numberOfMessages = 2 }
+    , { timespanInSeconds = 10, numberOfMessages = 3 }
+    , { timespanInSeconds = 60, numberOfMessages = 8 }
+    , { timespanInSeconds = 60 * 10, numberOfMessages = 50 }
+    ]
 
 
 decodeBytesToString : Bytes.Bytes -> Maybe String
