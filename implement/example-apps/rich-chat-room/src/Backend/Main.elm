@@ -64,24 +64,38 @@ processEvent hostEvent stateBefore =
 
 processEventHttpRequest : InterfaceToHost.HttpRequestEventStructure -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEventHttpRequest httpRequestEvent stateBefore =
-    case
-        httpRequestEvent.request.uri
-            |> Url.fromString
-            |> Maybe.andThen FrontendBackendInterface.routeFromUrl
-    of
-        Nothing ->
+    let
+        respondWithFrontendHtmlDocument { enableInspector } =
             ( stateBefore
             , InterfaceToHost.passiveAppEventResponse
                 |> InterfaceToHost.withCompleteHttpResponsesAdded
                     [ { httpRequestId = httpRequestEvent.httpRequestId
                       , response =
                             { statusCode = 200
-                            , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
+                            , bodyAsBase64 =
+                                Just
+                                    (if enableInspector then
+                                        ElmFullstackCompilerInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
+
+                                     else
+                                        ElmFullstackCompilerInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
+                                    )
                             , headersToAdd = []
                             }
                       }
                     ]
             )
+    in
+    case
+        httpRequestEvent.request.uri
+            |> Url.fromString
+            |> Maybe.andThen FrontendBackendInterface.routeFromUrl
+    of
+        Nothing ->
+            respondWithFrontendHtmlDocument { enableInspector = False }
+
+        Just FrontendBackendInterface.FrontendWithInspectorRoute ->
+            respondWithFrontendHtmlDocument { enableInspector = True }
 
         Just FrontendBackendInterface.ApiRoute ->
             case

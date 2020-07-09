@@ -40,6 +40,7 @@ type alias SeeingLobbyStructure =
 type Route
     = ApiRoute
     | StaticContentRoute String
+    | FrontendWithInspectorRoute
 
 
 routeFromUrl : Url.Url -> Maybe Route
@@ -48,6 +49,7 @@ routeFromUrl =
         (Url.Parser.oneOf
             [ Url.Parser.map ApiRoute (Url.Parser.s "api")
             , Url.Parser.map StaticContentRoute (Url.Parser.s "static-content" </> Url.Parser.string)
+            , Url.Parser.map FrontendWithInspectorRoute (Url.Parser.s "with-inspector")
             ]
         )
 
@@ -60,6 +62,9 @@ urlPathFromRoute route =
 
         StaticContentRoute contentName ->
             [ "static-content", contentName ]
+
+        FrontendWithInspectorRoute ->
+            [ "with-inspector" ]
 
 
 staticContentFileName : Bytes.Bytes -> String
