@@ -17,3 +17,8 @@ This repository also contains the implementation of the Elm-fullstack web host, 
 
 See the guide [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
 
+## Example Projects
+
+### Rich Chat Room
+
+The [rich chat room example app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
