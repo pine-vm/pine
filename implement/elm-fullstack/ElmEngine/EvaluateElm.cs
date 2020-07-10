@@ -18,27 +18,47 @@ namespace elm_fullstack.ElmEngine
             var parsedModule = GetParsedModule(appCodeTree, evaluationRootFilePath);
 
             var entryPointDeclaration =
-                parsedModule.declarations
+                parsedModule.parsedModule.declarations
                 .FirstOrDefault(d => d?.value?.function?.declaration?.value?.name?.value == evaluationRootDeclarationName);
 
             if (entryPointDeclaration == null)
                 throw new Exception("Did not find the declaration for the entry point '" + evaluationRootDeclarationName + "'.");
 
-            var onlyLiteral = entryPointDeclaration?.value?.function?.declaration?.value?.expression?.value?.literal;
-
-            if (onlyLiteral == null)
-                throw new NotImplementedException("This case is not implemented yet.");
-
-            if (!long.TryParse(onlyLiteral, out var _))
-            {
-                // It is not an integer, assume it is a string literal.
-                return Newtonsoft.Json.JsonConvert.SerializeObject(onlyLiteral);
-            }
-
-            return onlyLiteral;
+            return EvaluateExpression(entryPointDeclaration?.value?.function?.declaration?.value?.expression?.value).AsJsonString();
         }
 
-        static ElmSyntaxJson.File GetParsedModule(
+        static public ElmValue EvaluateExpression(ElmSyntaxJson.Expression expression)
+        {
+            if (expression.literal != null)
+            {
+                if (long.TryParse(expression.literal, out var integer))
+                {
+                    return new ElmValue { IntegerValue = integer };
+                }
+
+                return new ElmValue { StringValue = expression.literal };
+            }
+
+            if (expression.operatorapplication != null)
+                return EvaluateOperatorApplication(expression.operatorapplication);
+
+            throw new Exception("Unsupported expression type: " + expression.type);
+        }
+
+        static public ElmValue EvaluateOperatorApplication(ElmSyntaxJson.OperatorApplicationExpression operatorApplication)
+        {
+            if (operatorApplication.@operator == "++")
+            {
+                return
+                    ElmValue.OperationConcat(
+                        left: EvaluateExpression(operatorApplication.left.value),
+                        right: EvaluateExpression(operatorApplication.right.value));
+            }
+
+            throw new Exception("Unsupported operator: '" + operatorApplication.@operator + "'");
+        }
+
+        static (string elmSyntaxJson, ElmSyntaxJson.File parsedModule) GetParsedModule(
             Composition.TreeComponent appCodeTree,
             IImmutableList<string> filePath)
         {
@@ -80,16 +100,42 @@ namespace elm_fullstack.ElmEngine
             {
                 var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
 
-                var parseResultAsString =
+                var elmSyntaxJson =
                     javascriptEngine.CallFunction("parseElmModuleTextToJson", mainElmModuleText)
                     ?.ToString();
 
-                var parseResult = Newtonsoft.Json.JsonConvert.DeserializeObject<ParseResultJson>(parseResultAsString);
+                var parseResult = Newtonsoft.Json.JsonConvert.DeserializeObject<ParseResultJson>(elmSyntaxJson);
 
                 if (parseResult?.Ok == null)
                     throw new Exception("Failed to parse Main.elm module text: " + parseResult.Err);
 
-                return parseResult.Ok;
+                return (elmSyntaxJson: elmSyntaxJson, parsedModule: parseResult.Ok);
+            }
+        }
+
+        public class ElmValue
+        {
+            public string StringValue;
+
+            public Int64? IntegerValue;
+
+            static public ElmValue OperationConcat(ElmValue left, ElmValue right)
+            {
+                if (left.StringValue != null && right.StringValue != null)
+                    return new ElmValue { StringValue = left.StringValue + right.StringValue };
+
+                throw new Exception("Unsupported combination of types for concatenation");
+            }
+
+            public string AsJsonString()
+            {
+                if (StringValue != null)
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(StringValue);
+
+                if (IntegerValue != null)
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(IntegerValue);
+
+                throw new NotImplementedException();
             }
         }
 
@@ -157,6 +203,26 @@ namespace elm_fullstack.ElmEngine
             public string type;
 
             public string literal;
+
+            public OperatorApplicationExpression operatorapplication;
+        }
+
+        // https://github.com/stil4m/elm-syntax/blob/551248d79d4b0b2ecbf5bb9b7bbad2f52cf01634/src/Elm/Syntax/Expression.elm#L313-L320
+        public class OperatorApplicationExpression
+        {
+            public string @operator;
+
+            public InfixDirection direction;
+
+            public Node<Expression> left;
+
+            public Node<Expression> right;
+        }
+
+        // https://github.com/stil4m/elm-syntax/blob/551248d79d4b0b2ecbf5bb9b7bbad2f52cf01634/src/Elm/Syntax/Infix.elm#L54-L66
+        public enum InfixDirection
+        {
+            left = 1, right = 2, non = 3
         }
 
         // https://github.com/stil4m/elm-syntax/blob/783e85f051ac0259078dadf1cb948c8cc9a27413/src/Elm/Syntax/Node.elm#L69-L74
