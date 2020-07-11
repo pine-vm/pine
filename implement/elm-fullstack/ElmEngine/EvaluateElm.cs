@@ -18,16 +18,23 @@ namespace elm_fullstack.ElmEngine
             var parsedModule = GetParsedModule(appCodeTree, evaluationRootFilePath);
 
             var entryPointDeclaration =
-                parsedModule.parsedModule.declarations
-                .FirstOrDefault(d => d?.value?.function?.declaration?.value?.name?.value == evaluationRootDeclarationName);
+                FindDeclarationByName(parsedModule.parsedModule, evaluationRootDeclarationName);
 
             if (entryPointDeclaration == null)
                 throw new Exception("Did not find the declaration for the entry point '" + evaluationRootDeclarationName + "'.");
 
-            return EvaluateExpression(entryPointDeclaration?.value?.function?.declaration?.value?.expression?.value).AsJsonString();
+            return EvaluateExpression(
+                evaluationContext: parsedModule.parsedModule,
+                expression: entryPointDeclaration?.value?.function?.declaration?.value?.expression?.value).AsJsonString();
         }
 
-        static public ElmValue EvaluateExpression(ElmSyntaxJson.Expression expression)
+        static public ElmSyntaxJson.Node<ElmSyntaxJson.Declaration> FindDeclarationByName(
+            ElmSyntaxJson.File evaluationContext, string name) =>
+            evaluationContext.declarations
+            .FirstOrDefault(d => d?.value?.function?.declaration?.value?.name?.value == name);
+
+        static public ElmValue EvaluateExpression(
+            ElmSyntaxJson.File evaluationContext, ElmSyntaxJson.Expression expression)
         {
             if (expression.literal != null)
             {
@@ -40,22 +47,43 @@ namespace elm_fullstack.ElmEngine
             }
 
             if (expression.operatorapplication != null)
-                return EvaluateOperatorApplication(expression.operatorapplication);
+                return EvaluateOperatorApplication(evaluationContext, expression.operatorapplication);
+
+            if (expression.functionOrValue != null)
+                return EvaluateFunctionOrValue(evaluationContext, expression.functionOrValue);
 
             throw new Exception("Unsupported expression type: " + expression.type);
         }
 
-        static public ElmValue EvaluateOperatorApplication(ElmSyntaxJson.OperatorApplicationExpression operatorApplication)
+        static public ElmValue EvaluateOperatorApplication(
+            ElmSyntaxJson.File evaluationContext, ElmSyntaxJson.OperatorApplicationExpression operatorApplication)
         {
             if (operatorApplication.@operator == "++")
             {
                 return
                     ElmValue.OperationConcat(
-                        left: EvaluateExpression(operatorApplication.left.value),
-                        right: EvaluateExpression(operatorApplication.right.value));
+                        left: EvaluateExpression(evaluationContext, operatorApplication.left.value),
+                        right: EvaluateExpression(evaluationContext, operatorApplication.right.value));
             }
 
             throw new Exception("Unsupported operator: '" + operatorApplication.@operator + "'");
+        }
+
+        static public ElmValue EvaluateFunctionOrValue(
+            ElmSyntaxJson.File evaluationContext, ElmSyntaxJson.FunctionOrValueExpression functionOrValue)
+        {
+            if (0 < functionOrValue.moduleName.Count)
+                throw new NotImplementedException("Reaching in other modules is not implemented yet.");
+
+            var declaration =
+                FindDeclarationByName(evaluationContext, functionOrValue.name);
+
+            if (declaration == null)
+                throw new Exception("Did not find declaration for '" + functionOrValue.name + "'. This should not compile.");
+
+            return EvaluateExpression(
+                evaluationContext,
+                declaration?.value?.function?.declaration?.value?.expression?.value);
         }
 
         static (string elmSyntaxJson, ElmSyntaxJson.File parsedModule) GetParsedModule(
@@ -205,6 +233,8 @@ namespace elm_fullstack.ElmEngine
             public string literal;
 
             public OperatorApplicationExpression operatorapplication;
+
+            public FunctionOrValueExpression functionOrValue;
         }
 
         // https://github.com/stil4m/elm-syntax/blob/551248d79d4b0b2ecbf5bb9b7bbad2f52cf01634/src/Elm/Syntax/Expression.elm#L313-L320
@@ -217,6 +247,14 @@ namespace elm_fullstack.ElmEngine
             public Node<Expression> left;
 
             public Node<Expression> right;
+        }
+
+        // https://github.com/stil4m/elm-syntax/blob/783e85f051ac0259078dadf1cb948c8cc9a27413/src/Elm/Syntax/Expression.elm#L240-L246
+        public class FunctionOrValueExpression
+        {
+            public IReadOnlyList<string> moduleName;
+
+            public string name;
         }
 
         // https://github.com/stil4m/elm-syntax/blob/551248d79d4b0b2ecbf5bb9b7bbad2f52cf01634/src/Elm/Syntax/Infix.elm#L54-L66
