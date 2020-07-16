@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace Kalmit
@@ -15,7 +16,9 @@ namespace Kalmit
         static public IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T> orig) =>
             orig ?? Array.Empty<T>();
 
-        static public IEqualityComparer<IEnumerable<T>> EqualityComparer<T>() => new IEnumerableComparer<T>();
+        static public IEqualityComparer<IEnumerable<T>> EqualityComparer<T>() => new IEnumerableEqualityComparer<T>();
+
+        static public IComparer<T> Comparer<T>() where T : IEnumerable<IComparable> => new IEnumerableComparer<T>();
 
         // From https://github.com/morelinq/MoreLINQ/blob/07bd0861658b381ce97c8b44d3b9f2cd3c9bf769/MoreLinq/TakeUntil.cs
         static public IEnumerable<TSource> TakeUntil<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
@@ -34,7 +37,7 @@ namespace Kalmit
             }
         }
 
-        class IEnumerableComparer<T> : IEqualityComparer<IEnumerable<T>>
+        class IEnumerableEqualityComparer<T> : IEqualityComparer<IEnumerable<T>>
         {
             public bool Equals(IEnumerable<T> x, IEnumerable<T> y)
             {
@@ -42,6 +45,49 @@ namespace Kalmit
             }
 
             public int GetHashCode(IEnumerable<T> obj) => 0;
+        }
+
+        class IEnumerableComparer<T> : IComparer<T> where T : IEnumerable<IComparable>
+        {
+            public int Compare([AllowNull] IEnumerable<IComparable> x, [AllowNull] IEnumerable<IComparable> y)
+            {
+                if (x == y)
+                    return 0;
+
+                if (x == null)
+                    return -1;
+
+                if (y == null)
+                    return 1;
+
+                var xEnumerator = x.GetEnumerator();
+                var yEnumerator = y.GetEnumerator();
+
+                while (true)
+                {
+                    var xHasCurrent = xEnumerator.MoveNext();
+                    var yHasCurrent = yEnumerator.MoveNext();
+
+                    if (!xHasCurrent && !yHasCurrent)
+                        return 0;
+
+                    if (!xHasCurrent)
+                        return -1;
+
+                    if (!yHasCurrent)
+                        return 1;
+
+                    var currentComparison = xEnumerator.Current.CompareTo(yEnumerator.Current);
+
+                    if (currentComparison != 0)
+                        return currentComparison;
+                }
+            }
+
+            public int Compare([AllowNull] T x, [AllowNull] T y)
+            {
+                return Compare((IEnumerable<IComparable>)x, (IEnumerable<IComparable>)y);
+            }
         }
     }
 }

@@ -76,6 +76,7 @@ namespace Kalmit.PersistentProcess.Test
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     ElmApp.FilesFilteredForElmApp(
                         Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
+                    .OrderBy(file => file.filePath)
                     .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent)));
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsLoweredElmApp(

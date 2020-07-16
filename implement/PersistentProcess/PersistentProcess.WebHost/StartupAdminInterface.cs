@@ -375,7 +375,7 @@ namespace Kalmit.PersistentProcess.WebHost
                         }
 
                         var appConfigTree =
-                            Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                            Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                                 ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive));
 
                         var appConfigComponent = Composition.FromTree(appConfigTree);

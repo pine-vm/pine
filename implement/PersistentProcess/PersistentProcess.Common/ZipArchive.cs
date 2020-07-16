@@ -6,6 +6,9 @@ using System.Linq;
 
 namespace Kalmit
 {
+    /*
+    2020-07-16 Discovered: The roundtrip over `ZipArchiveFromEntries` and `EntriesFromZipArchive` changed the order of entries!
+    */
     static public class ZipArchive
     {
         /// <summary>

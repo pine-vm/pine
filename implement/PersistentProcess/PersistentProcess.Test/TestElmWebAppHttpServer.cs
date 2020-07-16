@@ -10,7 +10,7 @@ namespace Kalmit.PersistentProcess.Test
     {
         static public Composition.Component AppConfigComponentFromFiles(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> appFiles) =>
-            Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(appFiles));
+            Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles));
 
         static public Composition.Component CounterWebApp =>
             AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);

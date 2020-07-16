@@ -21,7 +21,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 try
                 {
-                    var appCodeTree = LoadFromLocalFilesystem.LoadTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
+                    var appCodeTree = LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
 
                     var expectedValueFile = File.ReadAllBytes(Path.Combine(scenarioDirectory, "expected-value.json"));
 

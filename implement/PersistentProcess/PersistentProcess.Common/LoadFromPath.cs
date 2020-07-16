@@ -23,7 +23,7 @@ namespace Kalmit
             else
             {
                 return Result<string, (TreeComponent tree, bool comesFromLocalFilesystem)>.ok(
-                    (tree: LoadFromLocalFilesystem.LoadTreeFromPath(path), comesFromLocalFilesystem: true));
+                    (tree: LoadFromLocalFilesystem.LoadSortedTreeFromPath(path), comesFromLocalFilesystem: true));
             }
         }
     }

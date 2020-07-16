@@ -200,9 +200,9 @@ namespace Kalmit
             };
         }
 
-        static public TreeComponent TreeFromSetOfBlobsWithCommonFilePath(
+        static public TreeComponent SortedTreeFromSetOfBlobsWithCommonFilePath(
             IEnumerable<(string path, IImmutableList<byte> blobContent)> blobsWithPath) =>
-            TreeFromSetOfBlobs(
+            SortedTreeFromSetOfBlobs(
                 blobsWithPath.Select(blobWithPath =>
                 {
                     var pathComponents =
@@ -214,75 +214,74 @@ namespace Kalmit
                 })
             );
 
-        static public TreeComponent TreeFromSetOfBlobsWithCommonFilePath(
+        static public TreeComponent SortedTreeFromSetOfBlobsWithCommonFilePath(
             IEnumerable<(string path, byte[] blobContent)> blobsWithPath) =>
-            TreeFromSetOfBlobsWithCommonFilePath(
+            SortedTreeFromSetOfBlobsWithCommonFilePath(
                 blobsWithPath.Select(blobWithPath => (blobWithPath.path, (IImmutableList<byte>)blobWithPath.blobContent.ToImmutableList())));
 
-        static public TreeComponent TreeFromSetOfBlobs<PathT>(
+        static public TreeComponent SortedTreeFromSetOfBlobs<PathT>(
             IEnumerable<(IImmutableList<PathT> path, IImmutableList<byte> blobContent)> blobsWithPath,
             Func<PathT, IImmutableList<byte>> mapPathComponent) =>
-            TreeFromSetOfBlobs(
+            SortedTreeFromSetOfBlobs(
                 blobsWithPath.Select(blobWithPath =>
                     (path: (IImmutableList<IImmutableList<byte>>)blobWithPath.path.Select(mapPathComponent).ToImmutableList(),
                     blobContent: blobWithPath.blobContent)));
 
-        static public TreeComponent TreeFromSetOfBlobsWithStringPath(
+        static public TreeComponent SortedTreeFromSetOfBlobsWithStringPath(
             IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
-            TreeFromSetOfBlobs(
+            SortedTreeFromSetOfBlobs(
                 blobsWithPath, pathComponent => System.Text.Encoding.UTF8.GetBytes(pathComponent).ToImmutableList());
 
-        static public TreeComponent TreeFromSetOfBlobsWithStringPath(
+        static public TreeComponent SortedTreeFromSetOfBlobsWithStringPath(
             IReadOnlyDictionary<IImmutableList<string>, IImmutableList<byte>> blobsWithPath) =>
-            TreeFromSetOfBlobsWithStringPath(
+            SortedTreeFromSetOfBlobsWithStringPath(
                 blobsWithPath.Select(pathAndBlobContent => (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
-        static public TreeComponent TreeFromSetOfBlobs(
+        static public TreeComponent SortedTreeFromSetOfBlobs(
             IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             new TreeComponent
             {
-                TreeContent = TreeContentFromSetOfBlobs(blobsWithPath)
+                TreeContent = SortedTreeContentFromSetOfBlobs(blobsWithPath)
             };
 
-        static public IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> TreeContentFromSetOfBlobs(
-            IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath)
+        static public IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> SortedTreeContentFromSetOfBlobs(
+            IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
+            blobsWithPath
+            .Aggregate(
+                (IImmutableList<(IImmutableList<byte> name, TreeComponent obj)>)
+                ImmutableList<(IImmutableList<byte> name, TreeComponent obj)>.Empty,
+                (intermediateResult, nextBlob) => SetBlobAtPathSorted(intermediateResult, nextBlob.path, nextBlob.blobContent));
+
+        static public IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> SetBlobAtPathSorted(
+            IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> treeContentBefore,
+            IImmutableList<IImmutableList<byte>> path,
+            IImmutableList<byte> blobContent)
         {
-            var groupedByDirectory =
-                blobsWithPath
-                .GroupBy(
-                    pathAndContent => 1 < pathAndContent.path.Count ? pathAndContent.path.First() : null,
-                    new ByteListComparer())
-                .ToImmutableList();
+            var pathFirstElement = path.First();
 
-            var currentLevelBlobs =
-                groupedByDirectory
-                .FirstOrDefault(group => group.Key == null)
-                .EmptyIfNull()
-                .Select(pathAndContent =>
-                    (name: pathAndContent.path.First(),
-                    blobContent: new TreeComponent { BlobContent = pathAndContent.blobContent.ToImmutableList() }))
-                .OrderBy(nameAndContent => nameAndContent.name, new ByteListComparer())
-                .ToImmutableList();
+            var componentBefore =
+                treeContentBefore.FirstOrDefault(c => c.name.SequenceEqual(pathFirstElement)).obj;
 
-            var subTrees =
-                groupedByDirectory
-                .Where(group => group.Key != null)
-                .Select(directoryGroup =>
+            var component =
+                path.Count < 2
+                ?
+                new TreeComponent { BlobContent = blobContent }
+                :
+                new TreeComponent
                 {
-                    var blobsWithRelativePaths =
-                        directoryGroup.Select(pathAndContent =>
-                            (path: (IImmutableList<IImmutableList<byte>>)pathAndContent.path.Skip(1).ToImmutableList(),
-                            blobContent: pathAndContent.blobContent));
+                    TreeContent =
+                        SetBlobAtPathSorted(
+                            componentBefore?.TreeContent ?? ImmutableList<(IImmutableList<byte> name, TreeComponent obj)>.Empty,
+                            path.RemoveAt(0),
+                            blobContent)
+                };
 
-                    return (name: (IImmutableList<byte>)directoryGroup.Key.ToImmutableList(), content: new TreeComponent
-                    {
-                        TreeContent = TreeContentFromSetOfBlobs(blobsWithRelativePaths)
-                    });
-                })
-                .OrderBy(nameAndContent => nameAndContent.name, new ByteListComparer())
+            return
+                treeContentBefore
+                .RemoveAll(c => ByteListComparer.CompareStatic(c.name, pathFirstElement) == 0)
+                .Add((pathFirstElement, component))
+                .OrderBy(c => c.name, new ByteListComparer())
                 .ToImmutableList();
-
-            return currentLevelBlobs.AddRange(subTrees).ToImmutableList();
         }
 
         static public Result<String, Component> Deserialize(
@@ -456,7 +455,10 @@ namespace Kalmit
 
         public class ByteListComparer : IComparer<IReadOnlyList<byte>>, IEqualityComparer<IReadOnlyList<byte>>
         {
-            public int Compare(IReadOnlyList<byte> x, IReadOnlyList<byte> y)
+            public int Compare(IReadOnlyList<byte> x, IReadOnlyList<byte> y) =>
+                CompareStatic(x, y);
+
+            static public int CompareStatic(IReadOnlyList<byte> x, IReadOnlyList<byte> y)
             {
                 if (x == null && y == null)
                     return 0;

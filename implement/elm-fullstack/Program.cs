@@ -146,7 +146,7 @@ namespace elm_fullstack
                                 sourcePath: deployAppFromOption.Value()).configZipArchive;
 
                         var appConfigTree =
-                            Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                            Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                                 ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
                         var appConfigComponent = Composition.FromTree(appConfigTree);
@@ -407,7 +407,7 @@ namespace elm_fullstack
                             compilationLog.Add);
 
                         compiledTree =
-                            Composition.TreeFromSetOfBlobsWithStringPath(loweredAppFiles);
+                            Composition.SortedTreeFromSetOfBlobsWithStringPath(loweredAppFiles);
                     }
                     catch (Exception e)
                     {
@@ -611,7 +611,7 @@ namespace elm_fullstack
 
             var filteredSourceCompositionId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
-                    Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                    Composition.GetHash(Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         Kalmit.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
@@ -682,7 +682,7 @@ namespace elm_fullstack
                             processStoreFileStore);
 
                     var appConfigTree =
-                        Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                        Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
                     var appConfigComponent = Composition.FromTree(appConfigTree);
@@ -995,7 +995,7 @@ namespace elm_fullstack
 
             return
                 ElmApp.ToFlatDictionaryWithPathComparer(
-                    Composition.TreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
+                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
                     .EnumerateBlobsTransitive()
                     .Select(blobPathAndContent => (
                         fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
@@ -1012,7 +1012,7 @@ namespace elm_fullstack
                 LoadFilesForRestoreFromPathAndLogToConsole(sourcePath: sourcePath, sourcePassword: sourcePassword);
 
             var processHistoryTree =
-                Composition.TreeFromSetOfBlobsWithStringPath(restoreFiles);
+                Composition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
 
             var processHistoryComponentHash = Composition.GetHash(Composition.FromTree(processHistoryTree));
             var processHistoryComponentHashBase16 = CommonConversion.StringBase16FromByteArray(processHistoryComponentHash);
@@ -1100,7 +1100,7 @@ namespace elm_fullstack
 
             var webAppConfigFileId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
-                    Composition.GetHash(Composition.FromTree(Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                    Composition.GetHash(Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         Kalmit.ZipArchive.EntriesFromZipArchive(configZipArchive)))));
 
             Console.WriteLine(

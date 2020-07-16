@@ -112,7 +112,7 @@ namespace Kalmit.PersistentProcess.Test
                 defaultAppSourceFiles.SetItem(demoSourceFilePath, staticContent);
 
             var webAppSource =
-                Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
+                Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource))
             {
@@ -163,7 +163,7 @@ namespace Kalmit.PersistentProcess.Test
                     });
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                deployAppConfigAndInitElmState: Composition.FromTree(Composition.TreeFromSetOfBlobsWithStringPath(webAppConfig)),
+                deployAppConfigAndInitElmState: Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
                 persistentProcessHostDateTime: () => persistentProcessHostDateTime))
             {
                 IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
@@ -569,7 +569,7 @@ namespace Kalmit.PersistentProcess.Test
             var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
 
             var webAppConfigTree =
-                Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive).ToImmutableList());
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup())
@@ -592,7 +592,7 @@ namespace Kalmit.PersistentProcess.Test
                         var getAppResponseContent = getAppConfigResponse.Content.ReadAsByteArrayAsync().Result;
 
                         var responseAppConfigTree =
-                            Composition.TreeFromSetOfBlobsWithCommonFilePath(
+                            Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                                 ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                         CollectionAssert.AreEqual(

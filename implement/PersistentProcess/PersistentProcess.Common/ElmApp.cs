@@ -52,9 +52,11 @@ namespace Kalmit
             .Where(file => 0 < file.filePath?.Length && FilePathMatchesPatternOfFilesInElmApp(file.filePath));
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ToFlatDictionaryWithPathComparer(
-            IEnumerable<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> fileList) =>
-            fileList.ToImmutableDictionary(entry => entry.filePath, entry => entry.fileContent)
-            .WithComparers(EnumerableExtension.EqualityComparer<string>());
+            IEnumerable<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> filesBeforeSorting) =>
+            filesBeforeSorting.ToImmutableSortedDictionary(
+                entry => entry.filePath,
+                entry => entry.fileContent,
+                EnumerableExtension.Comparer<IImmutableList<string>>());
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,

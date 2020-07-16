@@ -172,7 +172,7 @@ namespace Kalmit.PersistentProcess.Test
             foreach (var testCase in testCases)
             {
                 var asComposition = Composition.FromTree(
-                    Composition.TreeFromSetOfBlobsWithCommonFilePath(testCase.input));
+                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
 
                 Assert.AreEqual(testCase.expectedOutput, asComposition);
             }
