@@ -1,0 +1,242 @@
+{
+    "Ok": {
+        "moduleDefinition": {
+            "range": [
+                1,
+                1,
+                1,
+                39
+            ],
+            "value": {
+                "type": "normal",
+                "normal": {
+                    "moduleName": {
+                        "range": [
+                            1,
+                            8,
+                            1,
+                            12
+                        ],
+                        "value": [
+                            "Main"
+                        ]
+                    },
+                    "exposingList": {
+                        "range": [
+                            1,
+                            13,
+                            1,
+                            39
+                        ],
+                        "value": {
+                            "type": "explicit",
+                            "explicit": [
+                                {
+                                    "range": [
+                                        1,
+                                        23,
+                                        1,
+                                        38
+                                    ],
+                                    "value": {
+                                        "type": "function",
+                                        "function": {
+                                            "name": "evaluation_root"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "imports": [],
+        "declarations": [
+            {
+                "range": [
+                    4,
+                    1,
+                    12,
+                    1
+                ],
+                "value": {
+                    "type": "function",
+                    "function": {
+                        "documentation": null,
+                        "signature": {
+                            "range": [
+                                4,
+                                1,
+                                4,
+                                25
+                            ],
+                            "value": {
+                                "name": {
+                                    "range": [
+                                        4,
+                                        1,
+                                        4,
+                                        16
+                                    ],
+                                    "value": "evaluation_root"
+                                },
+                                "typeAnnotation": {
+                                    "range": [
+                                        4,
+                                        19,
+                                        4,
+                                        25
+                                    ],
+                                    "value": {
+                                        "type": "typed",
+                                        "typed": {
+                                            "moduleNameAndName": {
+                                                "range": [
+                                                    4,
+                                                    19,
+                                                    4,
+                                                    25
+                                                ],
+                                                "value": {
+                                                    "moduleName": [],
+                                                    "name": "String"
+                                                }
+                                            },
+                                            "args": []
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "declaration": {
+                            "range": [
+                                5,
+                                1,
+                                12,
+                                1
+                            ],
+                            "value": {
+                                "name": {
+                                    "range": [
+                                        5,
+                                        1,
+                                        5,
+                                        16
+                                    ],
+                                    "value": "evaluation_root"
+                                },
+                                "arguments": [],
+                                "expression": {
+                                    "range": [
+                                        6,
+                                        5,
+                                        12,
+                                        1
+                                    ],
+                                    "value": {
+                                        "type": "let",
+                                        "let": {
+                                            "declarations": [
+                                                {
+                                                    "range": [
+                                                        7,
+                                                        9,
+                                                        9,
+                                                        5
+                                                    ],
+                                                    "value": {
+                                                        "type": "function",
+                                                        "function": {
+                                                            "documentation": null,
+                                                            "signature": null,
+                                                            "declaration": {
+                                                                "range": [
+                                                                    7,
+                                                                    9,
+                                                                    8,
+                                                                    32
+                                                                ],
+                                                                "value": {
+                                                                    "name": {
+                                                                        "range": [
+                                                                            7,
+                                                                            9,
+                                                                            7,
+                                                                            25
+                                                                        ],
+                                                                        "value": "binding_from_let"
+                                                                    },
+                                                                    "arguments": [],
+                                                                    "expression": {
+                                                                        "range": [
+                                                                            8,
+                                                                            13,
+                                                                            8,
+                                                                            32
+                                                                        ],
+                                                                        "value": {
+                                                                            "type": "literal",
+                                                                            "literal": "literal from let "
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ],
+                                            "expression": {
+                                                "range": [
+                                                    10,
+                                                    5,
+                                                    10,
+                                                    45
+                                                ],
+                                                "value": {
+                                                    "type": "operatorapplication",
+                                                    "operatorapplication": {
+                                                        "operator": "++",
+                                                        "direction": "left",
+                                                        "left": {
+                                                            "range": [
+                                                                10,
+                                                                5,
+                                                                10,
+                                                                21
+                                                            ],
+                                                            "value": {
+                                                                "type": "functionOrValue",
+                                                                "functionOrValue": {
+                                                                    "moduleName": [],
+                                                                    "name": "binding_from_let"
+                                                                }
+                                                            }
+                                                        },
+                                                        "right": {
+                                                            "range": [
+                                                                10,
+                                                                25,
+                                                                10,
+                                                                45
+                                                            ],
+                                                            "value": {
+                                                                "type": "literal",
+                                                                "literal": " second literal ✔️"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ],
+        "comments": []
+    }
+}
