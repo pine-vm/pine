@@ -2,6 +2,6 @@ namespace Kalmit.PersistentProcess.WebHost
 {
     public class Program
     {
-        static public string AppVersionId => "2020-07-16";
+        static public string AppVersionId => "2020-07-27";
     }
 }

@@ -20,24 +20,19 @@ namespace elm_fullstack.ElmEngine
             var evaluationContext =
                 EvaluationContextFromDeclarations(parsedModule.parsedModule.declarations);
 
-            var entryPointDeclaration =
-                FindFunctionDeclarationByName(evaluationContext, evaluationRootDeclarationName);
+            var entryFunctionDeclaration =
+                evaluationContext.FindBoundSyntaxByName(evaluationRootDeclarationName)?.FunctionDeclaration;
 
-            if (entryPointDeclaration == null)
-                throw new Exception("Did not find the declaration for the entry point '" + evaluationRootDeclarationName + "'.");
+            if (entryFunctionDeclaration == null)
+                throw new Exception("Did not find the function declaration for the entry point '" + evaluationRootDeclarationName + "'.");
 
             return EvaluateExpression(
                 evaluationContext,
-                expression: entryPointDeclaration?.value?.expression?.value).AsJsonString();
+                expression: entryFunctionDeclaration?.value?.expression?.value).AsJsonString();
         }
 
-        static public ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration> FindFunctionDeclarationByName(
-            IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> evaluationContext,
-            string name) =>
-            evaluationContext.GetValueOrDefault(name);
-
         static public ElmValue EvaluateExpression(
-            IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> evaluationContext,
+            EvaluationContext evaluationContext,
             ElmSyntaxJson.Expression expression)
         {
             if (expression.literal != null)
@@ -59,11 +54,14 @@ namespace elm_fullstack.ElmEngine
             if (expression.let != null)
                 return EvaluateLet(evaluationContext, expression.let);
 
+            if (expression.application != null)
+                return EvaluateApplication(evaluationContext, expression.application);
+
             throw new Exception("Unsupported expression type: " + expression.type);
         }
 
         static public ElmValue EvaluateOperatorApplication(
-            IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> evaluationContext,
+            EvaluationContext evaluationContext,
             ElmSyntaxJson.OperatorApplicationExpression operatorApplication)
         {
             if (operatorApplication.@operator == "++")
@@ -78,25 +76,38 @@ namespace elm_fullstack.ElmEngine
         }
 
         static public ElmValue EvaluateFunctionOrValue(
-            IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> evaluationContext,
+            EvaluationContext evaluationContext,
             ElmSyntaxJson.FunctionOrValueExpression functionOrValue)
         {
             if (0 < functionOrValue.moduleName.Count)
                 throw new NotImplementedException("Reaching in other modules is not implemented yet.");
 
-            var declaration =
-                FindFunctionDeclarationByName(evaluationContext, functionOrValue.name);
+            var boundSyntax =
+                evaluationContext.FindBoundSyntaxByName(functionOrValue.name);
 
-            if (declaration == null)
-                throw new Exception("Did not find declaration for '" + functionOrValue.name + "'. This should not compile.");
+            if (boundSyntax == null)
+                throw new NotImplementedException("Did not find bound syntax for '" + functionOrValue.name + "'. Import resolution is not implemented yet.");
 
-            return EvaluateExpression(
-                evaluationContext,
-                declaration?.value?.expression?.value);
+            if (boundSyntax.Expression != null)
+                return EvaluateExpression(
+                    evaluationContext,
+                    boundSyntax.Expression?.value);
+
+            if (boundSyntax.FunctionDeclaration != null)
+            {
+                if (0 < boundSyntax.FunctionDeclaration?.value.arguments?.Count)
+                    throw new NotImplementedException("Function arguments are not implemented yet.");
+
+                return EvaluateExpression(
+                    evaluationContext,
+                    boundSyntax.FunctionDeclaration?.value?.expression?.value);
+            }
+
+            throw new Exception("Unexpected type of bound syntax.");
         }
 
         static public ElmValue EvaluateLet(
-            IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> evaluationContext,
+            EvaluationContext evaluationContext,
             ElmSyntaxJson.LetExpression let)
         {
             return EvaluateExpression(
@@ -104,19 +115,73 @@ namespace elm_fullstack.ElmEngine
                 let.expression.value);
         }
 
-        static IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> EvaluationContextFromDeclarations(
-            IReadOnlyList<ElmSyntaxJson.Node<ElmSyntaxJson.Declaration>> declarations) =>
-            declarations
-            .Select(declaration => declaration.value.function)
-            .WhereNotNull()
-            .ToImmutableDictionary(
-                functionDeclaration => functionDeclaration.declaration.value.name.value,
-                functionDeclaration => functionDeclaration.declaration);
+        static public ElmValue EvaluateApplication(
+            EvaluationContext evaluationContext,
+            IReadOnlyList<ElmSyntaxJson.Node<ElmSyntaxJson.Expression>> application)
+        {
+            var functionReference = application.First().value.functionOrValue;
 
-        static IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> WithDeclarationsAdded(
-            IImmutableDictionary<string, ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> evaluationContext,
+            if (functionReference == null)
+                throw new NotImplementedException(
+                    "Unexpected type of first element in application: " + application.First().value.type);
+
+            var functionDeclaration =
+                evaluationContext.FindBoundSyntaxByName(functionReference.name)?.FunctionDeclaration;
+
+            if (functionDeclaration == null)
+                throw new NotImplementedException("Did not find function declaration for '" + functionReference.name + "'. Import resolution is not implemented yet.");
+
+            var bindings =
+                functionDeclaration.value.arguments
+                .Select((argument, argumentIndex) =>
+                {
+                    if (argument.value.var != null)
+                    {
+                        var argumentExpression = application.ElementAtOrDefault(argumentIndex + 1);
+
+                        if (argumentExpression == null)
+                            throw new NotImplementedException("Partial application is not implemented yet.");
+
+                        return (name: argument.value.var.value, boundSyntax: new BoundSyntax { Expression = argumentExpression });
+                    }
+
+                    throw new NotImplementedException();
+                })
+                .ToImmutableDictionary(
+                    argumentNameAndBoundSyntax => argumentNameAndBoundSyntax.name,
+                    argumentNameAndBoundSyntax => argumentNameAndBoundSyntax.boundSyntax);
+
+            return EvaluateExpression(
+                evaluationContext.withBindings(bindings),
+                functionDeclaration.value.expression.value);
+        }
+
+        static EvaluationContext EvaluationContextFromDeclarations(
             IReadOnlyList<ElmSyntaxJson.Node<ElmSyntaxJson.Declaration>> declarations) =>
-            evaluationContext.SetItems(EvaluationContextFromDeclarations(declarations));
+            WithDeclarationsAdded(
+                new EvaluationContext(),
+                declarations
+                .Select(declaration => declaration.value.function?.declaration)
+                .WhereNotNull()
+                .ToImmutableList());
+
+        static EvaluationContext WithDeclarationsAdded(
+            EvaluationContext parent,
+            IReadOnlyList<ElmSyntaxJson.Node<ElmSyntaxJson.Declaration>> declarations) =>
+            WithDeclarationsAdded(parent, declarations.Select(declaration =>
+            {
+                if (declaration.value.function != null)
+                    return declaration.value.function.declaration;
+
+                throw new NotImplementedException("Type of declaration not implemented: " + declaration.value.type);
+            }).ToImmutableList());
+
+        static EvaluationContext WithDeclarationsAdded(
+            EvaluationContext parent,
+            IReadOnlyList<ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration>> declarations) =>
+            parent.withBindings(declarations.ToImmutableDictionary(
+                functionDeclaration => functionDeclaration.value.name.value,
+                functionDeclaration => new BoundSyntax { FunctionDeclaration = functionDeclaration }));
 
         static (string elmSyntaxJson, ElmSyntaxJson.File parsedModule) GetParsedModule(
             Composition.TreeComponent appCodeTree,
@@ -171,6 +236,40 @@ namespace elm_fullstack.ElmEngine
 
                 return (elmSyntaxJson: elmSyntaxJson, parsedModule: parseResult.Ok);
             }
+        }
+
+        public class EvaluationContext
+        {
+            public EvaluationContext parent;
+
+            IImmutableDictionary<string, BoundSyntax> bindings;
+
+            public EvaluationContext withBinding(string name, BoundSyntax expression) =>
+                withBindings(ImmutableDictionary<string, BoundSyntax>.Empty.SetItem(name, expression));
+
+            public EvaluationContext withBindings(IImmutableDictionary<string, BoundSyntax> bindings)
+            {
+                return new EvaluationContext
+                {
+                    parent = this,
+                    bindings = bindings,
+                };
+            }
+
+            public BoundSyntax FindBoundSyntaxByName(string name)
+            {
+                if (bindings.TryGetValue(name, out var expression))
+                    return expression;
+
+                return parent?.FindBoundSyntaxByName(name);
+            }
+        }
+
+        public class BoundSyntax
+        {
+            public ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration> FunctionDeclaration;
+
+            public ElmSyntaxJson.Node<ElmSyntaxJson.Expression> Expression;
         }
 
         public class ElmValue
@@ -242,29 +341,36 @@ namespace elm_fullstack.ElmEngine
         {
             public string type;
 
-            public DeclarationFunction function;
+            public FunctionExpression function;
         }
 
         // https://github.com/stil4m/elm-syntax/blob/783e85f051ac0259078dadf1cb948c8cc9a27413/src/Elm/Syntax/Expression.elm#L364-L370
-        public class DeclarationFunction
+        public class FunctionExpression
         {
             public Node<FunctionDeclaration> declaration;
         }
 
+        // https://github.com/stil4m/elm-syntax/blob/783e85f051ac0259078dadf1cb948c8cc9a27413/src/Elm/Syntax/Expression.elm#L373-L379
         public class FunctionDeclaration
         {
             public Node<string> name;
 
-            public IReadOnlyList<Node<FunctionArgument>> arguments;
+            public IReadOnlyList<Node<Pattern>> arguments;
 
             public Node<Expression> expression;
         }
 
-        public class FunctionArgument
+        // https://github.com/stil4m/elm-syntax/blob/783e85f051ac0259078dadf1cb948c8cc9a27413/src/Elm/Syntax/Pattern.elm#L126-L230
+        public class Pattern
         {
             public string type;
 
-            public Node<Expression> expression;
+            public VarPattern var;
+        }
+
+        public class VarPattern
+        {
+            public string value;
         }
 
         // https://github.com/stil4m/elm-syntax/blob/783e85f051ac0259078dadf1cb948c8cc9a27413/src/Elm/Syntax/Expression.elm#L226-L315
@@ -279,6 +385,8 @@ namespace elm_fullstack.ElmEngine
             public FunctionOrValueExpression functionOrValue;
 
             public LetExpression let;
+
+            public IReadOnlyList<Node<Expression>> application;
         }
 
         // https://github.com/stil4m/elm-syntax/blob/551248d79d4b0b2ecbf5bb9b7bbad2f52cf01634/src/Elm/Syntax/Expression.elm#L313-L320
