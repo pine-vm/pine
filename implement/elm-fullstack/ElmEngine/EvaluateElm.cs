@@ -88,10 +88,10 @@ namespace elm_fullstack.ElmEngine
             if (boundSyntax == null)
                 throw new NotImplementedException("Did not find bound syntax for '" + functionOrValue.name + "'. Import resolution is not implemented yet.");
 
-            if (boundSyntax.Expression != null)
+            if (boundSyntax.Closure != null)
                 return EvaluateExpression(
-                    evaluationContext,
-                    boundSyntax.Expression?.value);
+                    boundSyntax.Closure.evaluationContext,
+                    boundSyntax.Closure.expression?.value);
 
             if (boundSyntax.FunctionDeclaration != null)
             {
@@ -142,7 +142,13 @@ namespace elm_fullstack.ElmEngine
                         if (argumentExpression == null)
                             throw new NotImplementedException("Partial application is not implemented yet.");
 
-                        return (name: argument.value.var.value, boundSyntax: new BoundSyntax { Expression = argumentExpression });
+                        var closure = new Closure
+                        {
+                            evaluationContext = evaluationContext,
+                            expression = argumentExpression,
+                        };
+
+                        return (name: argument.value.var.value, boundSyntax: new BoundSyntax { Closure = closure });
                     }
 
                     throw new NotImplementedException();
@@ -269,7 +275,14 @@ namespace elm_fullstack.ElmEngine
         {
             public ElmSyntaxJson.Node<ElmSyntaxJson.FunctionDeclaration> FunctionDeclaration;
 
-            public ElmSyntaxJson.Node<ElmSyntaxJson.Expression> Expression;
+            public Closure Closure;
+        }
+
+        public class Closure
+        {
+            public EvaluationContext evaluationContext;
+
+            public ElmSyntaxJson.Node<ElmSyntaxJson.Expression> expression;
         }
 
         public class ElmValue
