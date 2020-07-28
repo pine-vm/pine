@@ -415,11 +415,17 @@ namespace Kalmit
         static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
             "$author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
 
+        static public string overrideElmMakeHomeDirectory = null;
+
         static string elmHomeDirectory;
 
         static string GetElmHomeDirectory()
         {
-            elmHomeDirectory = elmHomeDirectory ?? Path.Combine(Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
+            elmHomeDirectory =
+                overrideElmMakeHomeDirectory ??
+                elmHomeDirectory ??
+                Path.Combine(Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
+
             Directory.CreateDirectory(elmHomeDirectory);
             return elmHomeDirectory;
         }
