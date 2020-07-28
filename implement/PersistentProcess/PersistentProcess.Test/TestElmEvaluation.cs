@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Immutable;
 using System.IO;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Kalmit.PersistentProcess.Test
@@ -18,6 +19,12 @@ namespace Kalmit.PersistentProcess.Test
             foreach (var scenarioDirectory in Directory.EnumerateDirectories(pathToScenariosDirectory))
             {
                 var scenarioName = Path.GetFileName(scenarioDirectory);
+
+                if (Directory.EnumerateFiles(scenarioDirectory, "*").Take(1).Count() < 1)
+                {
+                    // Do not stumble over empty directory here. It could be a leftover after git checkout.
+                    continue;
+                }
 
                 try
                 {
