@@ -67,4 +67,20 @@ module_level_binding =
 """ ]
                         "ModuleName.module_level_binding"
                     )
+        , Test.test "Concat string via module level function" <|
+            \_ ->
+                Expect.equal (Ok "\"literal from module  second literal ✔️\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString
+                        [ """
+module ModuleName exposing (module_level_binding)
+
+
+module_level_binding : String -> String
+module_level_binding param0 =
+    "literal from module " ++ param0
+
+
+""" ]
+                        "ModuleName.module_level_binding \" second literal ✔️\""
+                    )
         ]

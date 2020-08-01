@@ -7,24 +7,27 @@ import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Module
 import Elm.Syntax.Node
+import Elm.Syntax.Pattern
 import Json.Encode
 import Parser
 import Platform
 import Result.Extra
 
 
-type JsonValue
+type FunctionOrValue
     = StringValue String
+    | FunctionValue String FunctionOrValue
+    | ExpressionValue Elm.Syntax.Expression.Expression
 
 
 type EvaluationContext
     = EmptyContext
-    | ContextWithExpressionBindings (List { name : List String, expression : Elm.Syntax.Expression.Expression }) EvaluationContext
+    | WithBindingsAdded (List { name : List String, bound : FunctionOrValue }) EvaluationContext
 
 
-contextWithExpressionBindings : List { name : List String, expression : Elm.Syntax.Expression.Expression } -> EvaluationContext -> EvaluationContext
-contextWithExpressionBindings =
-    ContextWithExpressionBindings
+withBindingsAdded : List { name : List String, bound : FunctionOrValue } -> EvaluationContext -> EvaluationContext
+withBindingsAdded =
+    WithBindingsAdded
 
 
 contextFromModules : List Elm.Syntax.File.File -> EvaluationContext
@@ -59,29 +62,52 @@ contextFromModules modules =
                                                 functionImplementation =
                                                     Elm.Syntax.Node.value functionDeclaration.declaration
                                             in
-                                            Just
-                                                { name = moduleName ++ [ Elm.Syntax.Node.value functionImplementation.name ]
-                                                , expression = Elm.Syntax.Node.value functionImplementation.expression
-                                                }
+                                            case functionValueFromFunctionImplementation functionImplementation of
+                                                Err error ->
+                                                    Nothing
+
+                                                Ok bound ->
+                                                    Just
+                                                        { name = moduleName ++ [ Elm.Syntax.Node.value functionImplementation.name ]
+                                                        , bound = bound
+                                                        }
 
                                         _ ->
                                             Maybe.Nothing
                                 )
                     )
     in
-    contextWithExpressionBindings bindings EmptyContext
+    withBindingsAdded bindings EmptyContext
 
 
-lookUpValueInContext : EvaluationContext -> List String -> Maybe Elm.Syntax.Expression.Expression
+functionValueFromFunctionImplementation : Elm.Syntax.Expression.FunctionImplementation -> Result String FunctionOrValue
+functionValueFromFunctionImplementation functionImplementation =
+    let
+        withArgumentAdded argument functionBefore =
+            case argument of
+                Elm.Syntax.Pattern.VarPattern varName ->
+                    Ok (FunctionValue varName functionBefore)
+
+                _ ->
+                    Err "Type of pattern is not implemented yet."
+    in
+    functionImplementation.arguments
+        |> List.map Elm.Syntax.Node.value
+        |> List.foldr
+            (\argument -> Result.andThen (withArgumentAdded argument))
+            (Ok (ExpressionValue (Elm.Syntax.Node.value functionImplementation.expression)))
+
+
+lookUpValueInContext : EvaluationContext -> List String -> Maybe FunctionOrValue
 lookUpValueInContext context name =
     case context of
         EmptyContext ->
             Nothing
 
-        ContextWithExpressionBindings bindings parentContext ->
+        WithBindingsAdded bindings parentContext ->
             case bindings |> List.filter (.name >> (==) name) |> List.head of
                 Just binding ->
-                    Just binding.expression
+                    Just binding.bound
 
                 Nothing ->
                     lookUpValueInContext parentContext name
@@ -98,14 +124,20 @@ getValueFromJustExpressionSyntaxAsJsonString =
     getValueFromExpressionSyntaxAsJsonString []
 
 
-jsonStringFromJsonValue : JsonValue -> String
+jsonStringFromJsonValue : FunctionOrValue -> String
 jsonStringFromJsonValue value =
     case value of
         StringValue string ->
             "\"" ++ string ++ "\""
 
+        FunctionValue _ _ ->
+            "Error: Got FunctionValue"
 
-evaluateExpressionSyntax : List String -> String -> Result String JsonValue
+        ExpressionValue _ ->
+            "Error: Got ExpressionValue"
+
+
+evaluateExpressionSyntax : List String -> String -> Result String FunctionOrValue
 evaluateExpressionSyntax modulesTexts expressionCode =
     case parseExpressionFromString expressionCode of
         Err parseError ->
@@ -121,7 +153,7 @@ evaluateExpressionSyntax modulesTexts expressionCode =
                         |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
 
 
-evaluateExpression : EvaluationContext -> Elm.Syntax.Expression.Expression -> Result String JsonValue
+evaluateExpression : EvaluationContext -> Elm.Syntax.Expression.Expression -> Result String FunctionOrValue
 evaluateExpression context expression =
     case expression of
         Elm.Syntax.Expression.Literal literal ->
@@ -144,6 +176,9 @@ evaluateExpression context expression =
                                         ( StringValue leftString, StringValue rightString ) ->
                                             Ok (StringValue (leftString ++ rightString))
 
+                                        _ ->
+                                            Err "Found unsupported type of value in operands"
+
                 _ ->
                     Err ("Unsupported type of operator: " ++ operator)
 
@@ -160,11 +195,11 @@ evaluateExpression context expression =
                     let
                         letContext =
                             context
-                                |> contextWithExpressionBindings
+                                |> withBindingsAdded
                                     (bindings
                                         |> List.map
                                             (\binding ->
-                                                { name = [ binding.name ], expression = binding.expression }
+                                                { name = [ binding.name ], bound = ExpressionValue binding.expression }
                                             )
                                     )
                     in
@@ -174,8 +209,52 @@ evaluateExpression context expression =
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             lookUpValueInContext context (moduleName ++ [ localName ])
-                |> Maybe.map (evaluateExpression context)
+                |> Maybe.map
+                    (\boundValue ->
+                        case boundValue of
+                            ExpressionValue expressionValue ->
+                                evaluateExpression context expressionValue
+
+                            _ ->
+                                Ok boundValue
+                    )
                 |> Maybe.withDefault (Err ("Failed to look up expression for '" ++ localName ++ "'"))
+
+        Elm.Syntax.Expression.Application application ->
+            case application of
+                [ appliedFunctionSyntax, argument ] ->
+                    case evaluateExpression context (Elm.Syntax.Node.value appliedFunctionSyntax) of
+                        Err error ->
+                            Err ("Failed to look up function: " ++ error)
+
+                        Ok (FunctionValue paramName nextFunction) ->
+                            case evaluateExpression context (Elm.Syntax.Node.value argument) of
+                                Err error ->
+                                    Err ("Failed to evaluate application argument: " ++ error)
+
+                                Ok argumentValue ->
+                                    let
+                                        contextInFunction =
+                                            context |> withBindingsAdded [ { name = [ paramName ], bound = argumentValue } ]
+                                    in
+                                    case nextFunction of
+                                        ExpressionValue expressionValue ->
+                                            evaluateExpression contextInFunction expressionValue
+
+                                        FunctionValue _ _ ->
+                                            Err "Unsupported shape of application: nextFunction is a FunctionValue."
+
+                                        StringValue _ ->
+                                            Err "Unsupported shape of application: nextFunction is a StringValue."
+
+                        Ok (StringValue _) ->
+                            Err "Found unexpected value for first element in application: StringValue"
+
+                        Ok (ExpressionValue _) ->
+                            Err "Found unexpected value for first element in application: ExpressionValue"
+
+                _ ->
+                    Err "Unsupported shape of application: Number of arguments is not 1"
 
         _ ->
             Err "Unsupported type of expression"
