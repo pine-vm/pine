@@ -16,4 +16,14 @@ suite =
             \_ ->
                 Expect.equal (Ok "\"first literal  second literal ✔️\"")
                     (Main.getValueFromExpressionSyntaxAsJsonString """  "first literal "  ++  " second literal ✔️"  """)
+        , Test.test "Concat string using let" <|
+            \_ ->
+                Expect.equal (Ok "\"literal from let  second literal ✔️\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString """
+let
+    binding_from_let =
+        "literal from let "
+in
+binding_from_let ++ " second literal ✔️"
+""")
         ]
