@@ -83,4 +83,22 @@ module_level_binding param0 =
 """ ]
                         "ModuleName.module_level_binding \" second literal ✔️\""
                     )
+        , Test.test "Depend on binding in current module" <|
+            \_ ->
+                Expect.equal (Ok "\"literal from module\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString
+                        [ """
+module ModuleName exposing (module_level_binding)
+
+
+module_level_binding =
+    other_module_level_binding
+
+
+other_module_level_binding =
+    "literal from module"
+
+""" ]
+                        "ModuleName.module_level_binding"
+                    )
         ]

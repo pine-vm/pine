@@ -20,64 +20,16 @@ type FunctionOrValue
     | ExpressionValue Elm.Syntax.Expression.Expression
 
 
-type EvaluationContext
-    = EmptyContext
-    | WithBindingsAdded (List { name : List String, bound : FunctionOrValue }) EvaluationContext
+type alias EvaluationContext =
+    { modules : List Elm.Syntax.File.File
+    , currentModule : Maybe Elm.Syntax.File.File
+    , locals : List { name : String, bound : FunctionOrValue }
+    }
 
 
-withBindingsAdded : List { name : List String, bound : FunctionOrValue } -> EvaluationContext -> EvaluationContext
-withBindingsAdded =
-    WithBindingsAdded
-
-
-contextFromModules : List Elm.Syntax.File.File -> EvaluationContext
-contextFromModules modules =
-    let
-        bindings =
-            modules
-                |> List.concatMap
-                    (\file ->
-                        let
-                            moduleNameSyntax =
-                                case Elm.Syntax.Node.value file.moduleDefinition of
-                                    Elm.Syntax.Module.NormalModule normalModule ->
-                                        normalModule.moduleName
-
-                                    Elm.Syntax.Module.PortModule portModule ->
-                                        portModule.moduleName
-
-                                    Elm.Syntax.Module.EffectModule effectModule ->
-                                        effectModule.moduleName
-
-                            moduleName =
-                                Elm.Syntax.Node.value moduleNameSyntax
-                        in
-                        file.declarations
-                            |> List.map Elm.Syntax.Node.value
-                            |> List.filterMap
-                                (\declaration ->
-                                    case declaration of
-                                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                            let
-                                                functionImplementation =
-                                                    Elm.Syntax.Node.value functionDeclaration.declaration
-                                            in
-                                            case functionValueFromFunctionImplementation functionImplementation of
-                                                Err error ->
-                                                    Nothing
-
-                                                Ok bound ->
-                                                    Just
-                                                        { name = moduleName ++ [ Elm.Syntax.Node.value functionImplementation.name ]
-                                                        , bound = bound
-                                                        }
-
-                                        _ ->
-                                            Maybe.Nothing
-                                )
-                    )
-    in
-    withBindingsAdded bindings EmptyContext
+withLocalsAdded : List { name : String, bound : FunctionOrValue } -> EvaluationContext -> EvaluationContext
+withLocalsAdded bindings context =
+    { context | locals = bindings ++ context.locals }
 
 
 functionValueFromFunctionImplementation : Elm.Syntax.Expression.FunctionImplementation -> Result String FunctionOrValue
@@ -98,19 +50,59 @@ functionValueFromFunctionImplementation functionImplementation =
             (Ok (ExpressionValue (Elm.Syntax.Node.value functionImplementation.expression)))
 
 
-lookUpValueInContext : EvaluationContext -> List String -> Maybe FunctionOrValue
+moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)
+moduleNameFromSyntaxFile file =
+    case Elm.Syntax.Node.value file.moduleDefinition of
+        Elm.Syntax.Module.NormalModule normalModule ->
+            normalModule.moduleName
+
+        Elm.Syntax.Module.PortModule portModule ->
+            portModule.moduleName
+
+        Elm.Syntax.Module.EffectModule effectModule ->
+            effectModule.moduleName
+
+
+lookUpModule : EvaluationContext -> List String -> Maybe Elm.Syntax.File.File
+lookUpModule context moduleName =
+    context.modules
+        |> List.filter (moduleNameFromSyntaxFile >> Elm.Syntax.Node.value >> (==) moduleName)
+        |> List.head
+
+
+lookUpValueInModule : String -> Elm.Syntax.File.File -> Maybe FunctionOrValue
+lookUpValueInModule name file =
+    file.declarations
+        |> List.map Elm.Syntax.Node.value
+        |> List.filterMap
+            (\declaration ->
+                case declaration of
+                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                        let
+                            functionImplementation =
+                                Elm.Syntax.Node.value functionDeclaration.declaration
+                        in
+                        if Elm.Syntax.Node.value functionImplementation.name /= name then
+                            Nothing
+
+                        else
+                            Result.toMaybe
+                                (functionValueFromFunctionImplementation functionImplementation)
+
+                    _ ->
+                        Nothing
+            )
+        |> List.head
+
+
+lookUpValueInContext : EvaluationContext -> String -> Maybe FunctionOrValue
 lookUpValueInContext context name =
-    case context of
-        EmptyContext ->
-            Nothing
+    case context.locals |> List.filter (.name >> (==) name) |> List.head of
+        Just binding ->
+            Just binding.bound
 
-        WithBindingsAdded bindings parentContext ->
-            case bindings |> List.filter (.name >> (==) name) |> List.head of
-                Just binding ->
-                    Just binding.bound
-
-                Nothing ->
-                    lookUpValueInContext parentContext name
+        Nothing ->
+            context.currentModule |> Maybe.andThen (lookUpValueInModule name)
 
 
 getValueFromExpressionSyntaxAsJsonString : List String -> String -> Result String String
@@ -149,7 +141,7 @@ evaluateExpressionSyntax modulesTexts expressionCode =
                     Err "Failed to parse module text"
 
                 Ok modules ->
-                    evaluateExpression (contextFromModules modules) expression
+                    evaluateExpression { modules = modules, currentModule = Nothing, locals = [] } expression
                         |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
 
 
@@ -195,11 +187,11 @@ evaluateExpression context expression =
                     let
                         letContext =
                             context
-                                |> withBindingsAdded
+                                |> withLocalsAdded
                                     (bindings
                                         |> List.map
                                             (\binding ->
-                                                { name = [ binding.name ], bound = ExpressionValue binding.expression }
+                                                { name = binding.name, bound = ExpressionValue binding.expression }
                                             )
                                     )
                     in
@@ -208,12 +200,20 @@ evaluateExpression context expression =
                         |> evaluateExpression letContext
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            lookUpValueInContext context (moduleName ++ [ localName ])
+            let
+                nextContext =
+                    if moduleName == [] then
+                        context
+
+                    else
+                        { context | currentModule = lookUpModule context moduleName }
+            in
+            lookUpValueInContext nextContext localName
                 |> Maybe.map
                     (\boundValue ->
                         case boundValue of
                             ExpressionValue expressionValue ->
-                                evaluateExpression context expressionValue
+                                evaluateExpression nextContext expressionValue
 
                             _ ->
                                 Ok boundValue
@@ -235,7 +235,7 @@ evaluateExpression context expression =
                                 Ok argumentValue ->
                                     let
                                         contextInFunction =
-                                            context |> withBindingsAdded [ { name = [ paramName ], bound = argumentValue } ]
+                                            context |> withLocalsAdded [ { name = paramName, bound = argumentValue } ]
                                     in
                                     case nextFunction of
                                         ExpressionValue expressionValue ->
