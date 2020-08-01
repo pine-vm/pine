@@ -321,8 +321,8 @@ namespace elm_fullstack.ElmEngine
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ParseElmSyntaxAppCodeFiles() =>
             ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
-            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.parse_elm_syntax.elm.json").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.parse_elm_syntax.src.Main.elm").ToImmutableList());
+            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.elm.json").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.Main.elm").ToImmutableList());
 
         static byte[] GetManifestResourceStreamContent(string name)
         {
