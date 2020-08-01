@@ -5,6 +5,7 @@ import Elm.Processing
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
+import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Json.Encode
 import Parser
@@ -18,15 +19,60 @@ type JsonValue
 
 type EvaluationContext
     = EmptyContext
-    | ContextWithExpressionBindings (List { name : String, expression : Elm.Syntax.Expression.Expression }) EvaluationContext
+    | ContextWithExpressionBindings (List { name : List String, expression : Elm.Syntax.Expression.Expression }) EvaluationContext
 
 
-contextWithExpressionBindings : List { name : String, expression : Elm.Syntax.Expression.Expression } -> EvaluationContext -> EvaluationContext
+contextWithExpressionBindings : List { name : List String, expression : Elm.Syntax.Expression.Expression } -> EvaluationContext -> EvaluationContext
 contextWithExpressionBindings =
     ContextWithExpressionBindings
 
 
-lookUpValueInContext : EvaluationContext -> String -> Maybe Elm.Syntax.Expression.Expression
+contextFromModules : List Elm.Syntax.File.File -> EvaluationContext
+contextFromModules modules =
+    let
+        bindings =
+            modules
+                |> List.concatMap
+                    (\file ->
+                        let
+                            moduleNameSyntax =
+                                case Elm.Syntax.Node.value file.moduleDefinition of
+                                    Elm.Syntax.Module.NormalModule normalModule ->
+                                        normalModule.moduleName
+
+                                    Elm.Syntax.Module.PortModule portModule ->
+                                        portModule.moduleName
+
+                                    Elm.Syntax.Module.EffectModule effectModule ->
+                                        effectModule.moduleName
+
+                            moduleName =
+                                Elm.Syntax.Node.value moduleNameSyntax
+                        in
+                        file.declarations
+                            |> List.map Elm.Syntax.Node.value
+                            |> List.filterMap
+                                (\declaration ->
+                                    case declaration of
+                                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                            let
+                                                functionImplementation =
+                                                    Elm.Syntax.Node.value functionDeclaration.declaration
+                                            in
+                                            Just
+                                                { name = moduleName ++ [ Elm.Syntax.Node.value functionImplementation.name ]
+                                                , expression = Elm.Syntax.Node.value functionImplementation.expression
+                                                }
+
+                                        _ ->
+                                            Maybe.Nothing
+                                )
+                    )
+    in
+    contextWithExpressionBindings bindings EmptyContext
+
+
+lookUpValueInContext : EvaluationContext -> List String -> Maybe Elm.Syntax.Expression.Expression
 lookUpValueInContext context name =
     case context of
         EmptyContext ->
@@ -41,10 +87,15 @@ lookUpValueInContext context name =
                     lookUpValueInContext parentContext name
 
 
-getValueFromExpressionSyntaxAsJsonString : String -> Result String String
-getValueFromExpressionSyntaxAsJsonString =
-    evaluateExpressionSyntax
+getValueFromExpressionSyntaxAsJsonString : List String -> String -> Result String String
+getValueFromExpressionSyntaxAsJsonString modulesTexts =
+    evaluateExpressionSyntax modulesTexts
         >> Result.map jsonStringFromJsonValue
+
+
+getValueFromJustExpressionSyntaxAsJsonString : String -> Result String String
+getValueFromJustExpressionSyntaxAsJsonString =
+    getValueFromExpressionSyntaxAsJsonString []
 
 
 jsonStringFromJsonValue : JsonValue -> String
@@ -54,15 +105,20 @@ jsonStringFromJsonValue value =
             "\"" ++ string ++ "\""
 
 
-evaluateExpressionSyntax : String -> Result String JsonValue
-evaluateExpressionSyntax expressionCode =
+evaluateExpressionSyntax : List String -> String -> Result String JsonValue
+evaluateExpressionSyntax modulesTexts expressionCode =
     case parseExpressionFromString expressionCode of
         Err parseError ->
             Err ("Failed to parse expression: " ++ parseError)
 
         Ok expression ->
-            evaluateExpression EmptyContext expression
-                |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
+            case modulesTexts |> List.map parseElmModuleText |> Result.Extra.combine of
+                Err _ ->
+                    Err "Failed to parse module text"
+
+                Ok modules ->
+                    evaluateExpression (contextFromModules modules) expression
+                        |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
 
 
 evaluateExpression : EvaluationContext -> Elm.Syntax.Expression.Expression -> Result String JsonValue
@@ -101,18 +157,25 @@ evaluateExpression context expression =
                     Err ("Failed to get value bindings from declaration in let block: " ++ error)
 
                 Ok bindings ->
+                    let
+                        letContext =
+                            context
+                                |> contextWithExpressionBindings
+                                    (bindings
+                                        |> List.map
+                                            (\binding ->
+                                                { name = [ binding.name ], expression = binding.expression }
+                                            )
+                                    )
+                    in
                     letBlock.expression
                         |> Elm.Syntax.Node.value
-                        |> evaluateExpression (context |> contextWithExpressionBindings bindings)
+                        |> evaluateExpression letContext
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            if moduleName == [] then
-                lookUpValueInContext context localName
-                    |> Maybe.map (evaluateExpression context)
-                    |> Maybe.withDefault (Err ("Failed to look up expression for '" ++ localName ++ "'"))
-
-            else
-                Err "Module name is not implemented yet."
+            lookUpValueInContext context (moduleName ++ [ localName ])
+                |> Maybe.map (evaluateExpression context)
+                |> Maybe.withDefault (Err ("Failed to look up expression for '" ++ localName ++ "'"))
 
         _ ->
             Err "Unsupported type of expression"

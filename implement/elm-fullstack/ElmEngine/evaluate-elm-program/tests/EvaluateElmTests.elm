@@ -11,15 +11,15 @@ suite =
         [ Test.test "Just a literal" <|
             \_ ->
                 Expect.equal (Ok "\"just a literal ✔️\"")
-                    (Main.getValueFromExpressionSyntaxAsJsonString """  "just a literal ✔️"  """)
+                    (Main.getValueFromJustExpressionSyntaxAsJsonString """  "just a literal ✔️"  """)
         , Test.test "Concat string literal" <|
             \_ ->
                 Expect.equal (Ok "\"first literal  second literal ✔️\"")
-                    (Main.getValueFromExpressionSyntaxAsJsonString """  "first literal "  ++  " second literal ✔️"  """)
-        , Test.test "Concat string using let" <|
+                    (Main.getValueFromJustExpressionSyntaxAsJsonString """  "first literal "  ++  " second literal ✔️"  """)
+        , Test.test "Concat string via let" <|
             \_ ->
                 Expect.equal (Ok "\"literal from let  second literal ✔️\"")
-                    (Main.getValueFromExpressionSyntaxAsJsonString """
+                    (Main.getValueFromJustExpressionSyntaxAsJsonString """
 let
     binding_from_let =
         "literal from let "
@@ -29,7 +29,7 @@ binding_from_let ++ " second literal ✔️"
         , Test.test "Dependency within let" <|
             \_ ->
                 Expect.equal (Ok "\"literal\"")
-                    (Main.getValueFromExpressionSyntaxAsJsonString """
+                    (Main.getValueFromJustExpressionSyntaxAsJsonString """
 let
     a = "literal"
 
@@ -40,7 +40,7 @@ b
         , Test.test "Support any order in let" <|
             \_ ->
                 Expect.equal (Ok "\"literal\"")
-                    (Main.getValueFromExpressionSyntaxAsJsonString """
+                    (Main.getValueFromJustExpressionSyntaxAsJsonString """
 let
     d = c
 
@@ -52,4 +52,19 @@ let
 in
 d
 """)
+        , Test.test "Value from module-level binding" <|
+            \_ ->
+                Expect.equal (Ok "\"literal\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString
+                        [ """
+module ModuleName exposing (module_level_binding)
+
+
+module_level_binding : String
+module_level_binding =
+    "literal"
+
+""" ]
+                        "ModuleName.module_level_binding"
+                    )
         ]
