@@ -37,4 +37,19 @@ let
 in
 b
 """)
+        , Test.test "Support any order in let" <|
+            \_ ->
+                Expect.equal (Ok "\"literal\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString """
+let
+    d = c
+
+    a = "literal"
+
+    c = b
+
+    b = a
+in
+d
+""")
         ]
