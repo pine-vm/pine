@@ -18,24 +18,24 @@ type JsonValue
 
 type EvaluationContext
     = EmptyContext
-    | ContextWithValueBindings (List { name : String, value : JsonValue }) EvaluationContext
+    | ContextWithExpressionBindings (List { name : String, expression : Elm.Syntax.Expression.Expression }) EvaluationContext
 
 
-contextWithValueBindings : List { name : String, value : JsonValue } -> EvaluationContext -> EvaluationContext
-contextWithValueBindings =
-    ContextWithValueBindings
+contextWithExpressionBindings : List { name : String, expression : Elm.Syntax.Expression.Expression } -> EvaluationContext -> EvaluationContext
+contextWithExpressionBindings =
+    ContextWithExpressionBindings
 
 
-lookUpValueInContext : EvaluationContext -> String -> Maybe JsonValue
+lookUpValueInContext : EvaluationContext -> String -> Maybe Elm.Syntax.Expression.Expression
 lookUpValueInContext context name =
     case context of
         EmptyContext ->
             Nothing
 
-        ContextWithValueBindings bindings parentContext ->
+        ContextWithExpressionBindings bindings parentContext ->
             case bindings |> List.filter (.name >> (==) name) |> List.head of
                 Just binding ->
-                    Just binding.value
+                    Just binding.expression
 
                 Nothing ->
                     lookUpValueInContext parentContext name
@@ -94,20 +94,22 @@ evaluateExpression context expression =
         Elm.Syntax.Expression.LetExpression letBlock ->
             case
                 letBlock.declarations
-                    |> List.map (Elm.Syntax.Node.value >> getValueBindingFromLetDeclaration context)
+                    |> List.map (Elm.Syntax.Node.value >> getExpressionBindingFromLetDeclaration)
                     |> Result.Extra.combine
             of
                 Err error ->
                     Err ("Failed to get value bindings from declaration in let block: " ++ error)
 
                 Ok bindings ->
-                    letBlock.expression |> Elm.Syntax.Node.value |> evaluateExpression (context |> contextWithValueBindings bindings)
+                    letBlock.expression
+                        |> Elm.Syntax.Node.value
+                        |> evaluateExpression (context |> contextWithExpressionBindings bindings)
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             if moduleName == [] then
                 lookUpValueInContext context localName
-                    |> Maybe.map Ok
-                    |> Maybe.withDefault (Err ("Failed to look up value for '" ++ localName ++ "'"))
+                    |> Maybe.map (evaluateExpression context)
+                    |> Maybe.withDefault (Err ("Failed to look up expression for '" ++ localName ++ "'"))
 
             else
                 Err "Module name is not implemented yet."
@@ -116,8 +118,10 @@ evaluateExpression context expression =
             Err "Unsupported type of expression"
 
 
-getValueBindingFromLetDeclaration : EvaluationContext -> Elm.Syntax.Expression.LetDeclaration -> Result String { name : String, value : JsonValue }
-getValueBindingFromLetDeclaration context letDeclaration =
+getExpressionBindingFromLetDeclaration :
+    Elm.Syntax.Expression.LetDeclaration
+    -> Result String { name : String, expression : Elm.Syntax.Expression.Expression }
+getExpressionBindingFromLetDeclaration letDeclaration =
     case letDeclaration of
         Elm.Syntax.Expression.LetDestructuring _ _ ->
             Err "LetDestructuring is not implemented yet."
@@ -128,12 +132,10 @@ getValueBindingFromLetDeclaration context letDeclaration =
                     Elm.Syntax.Node.value letFunction.declaration
             in
             if functionDeclaration.arguments == [] then
-                case functionDeclaration.expression |> Elm.Syntax.Node.value |> evaluateExpression context of
-                    Err error ->
-                        Err ("Failed to evaluate expression of function in let: " ++ error)
-
-                    Ok value ->
-                        Ok { name = Elm.Syntax.Node.value functionDeclaration.name, value = value }
+                Ok
+                    { name = Elm.Syntax.Node.value functionDeclaration.name
+                    , expression = functionDeclaration.expression |> Elm.Syntax.Node.value
+                    }
 
             else
                 Err "Function with argument is not implemented yet."

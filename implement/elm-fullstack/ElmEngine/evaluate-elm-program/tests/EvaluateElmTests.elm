@@ -26,4 +26,15 @@ let
 in
 binding_from_let ++ " second literal ✔️"
 """)
+        , Test.test "Dependency within let" <|
+            \_ ->
+                Expect.equal (Ok "\"literal\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString """
+let
+    a = "literal"
+
+    b = a
+in
+b
+""")
         ]
