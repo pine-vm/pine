@@ -11,19 +11,62 @@ import Parser
 import Platform
 
 
-getValueFromExpressionAsJsonString : String -> Result String String
-getValueFromExpressionAsJsonString expressionCode =
+type JsonValue
+    = StringValue String
+
+
+getValueFromExpressionSyntaxAsJsonString : String -> Result String String
+getValueFromExpressionSyntaxAsJsonString =
+    evaluateExpressionSyntax
+        >> Result.map jsonStringFromJsonValue
+
+
+jsonStringFromJsonValue : JsonValue -> String
+jsonStringFromJsonValue value =
+    case value of
+        StringValue string ->
+            "\"" ++ string ++ "\""
+
+
+evaluateExpressionSyntax : String -> Result String JsonValue
+evaluateExpressionSyntax expressionCode =
     case parseExpressionFromString expressionCode of
         Err parseError ->
             Err ("Failed to parse expression: " ++ parseError)
 
         Ok expression ->
-            case expression of
-                Elm.Syntax.Expression.Literal literal ->
-                    Ok ("\"" ++ literal ++ "\"")
+            evaluateExpression expression
+                |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
+
+
+evaluateExpression : Elm.Syntax.Expression.Expression -> Result String JsonValue
+evaluateExpression expression =
+    case expression of
+        Elm.Syntax.Expression.Literal literal ->
+            Ok (StringValue literal)
+
+        Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightExpr ->
+            case operator of
+                "++" ->
+                    case leftExpr |> Elm.Syntax.Node.value |> evaluateExpression of
+                        Err error ->
+                            Err ("Failed to evaluate left expression: " ++ error)
+
+                        Ok leftValue ->
+                            case rightExpr |> Elm.Syntax.Node.value |> evaluateExpression of
+                                Err error ->
+                                    Err ("Failed to evaluate right expression: " ++ error)
+
+                                Ok rightValue ->
+                                    case ( leftValue, rightValue ) of
+                                        ( StringValue leftString, StringValue rightString ) ->
+                                            Ok (StringValue (leftString ++ rightString))
 
                 _ ->
-                    Err "Unsupported type of expression."
+                    Err ("Unsupported type of expression: " ++ operator)
+
+        _ ->
+            Err "Unsupported type of expression"
 
 
 parseExpressionFromString : String -> Result String Elm.Syntax.Expression.Expression
