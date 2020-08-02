@@ -101,4 +101,18 @@ other_module_level_binding =
 """ ]
                         "ModuleName.module_level_binding"
                     )
+        , Test.test "Function with two named parameters" <|
+            \_ ->
+                Expect.equal (Ok "\"literal from module ab\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString
+                        [ """
+module ModuleName exposing (module_level_binding)
+
+
+module_level_binding param0 param1 =
+    "literal from module " ++ param0 ++ param1
+
+""" ]
+                        "ModuleName.module_level_binding  \"a\"  \"b\""
+                    )
         ]

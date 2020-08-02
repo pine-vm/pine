@@ -222,42 +222,53 @@ evaluateExpression context expression =
 
         Elm.Syntax.Expression.Application application ->
             case application of
-                [ appliedFunctionSyntax, argument ] ->
+                appliedFunctionSyntax :: arguments ->
                     case evaluateExpression context (Elm.Syntax.Node.value appliedFunctionSyntax) of
                         Err error ->
                             Err ("Failed to look up function: " ++ error)
 
-                        Ok (FunctionValue paramName nextFunction) ->
-                            case evaluateExpression context (Elm.Syntax.Node.value argument) of
+                        Ok function ->
+                            case arguments |> List.map (Elm.Syntax.Node.value >> evaluateExpression context) |> Result.Extra.combine of
                                 Err error ->
-                                    Err ("Failed to evaluate application argument: " ++ error)
+                                    Err ("Failed to evaluate argument: " ++ error)
 
-                                Ok argumentValue ->
-                                    let
-                                        contextInFunction =
-                                            context |> withLocalsAdded [ { name = paramName, bound = argumentValue } ]
-                                    in
-                                    case nextFunction of
-                                        ExpressionValue expressionValue ->
-                                            evaluateExpression contextInFunction expressionValue
+                                Ok argumentsValues ->
+                                    evaluateApplication context function argumentsValues
 
-                                        FunctionValue _ _ ->
-                                            Err "Unsupported shape of application: nextFunction is a FunctionValue."
-
-                                        StringValue _ ->
-                                            Err "Unsupported shape of application: nextFunction is a StringValue."
-
-                        Ok (StringValue _) ->
-                            Err "Found unexpected value for first element in application: StringValue"
-
-                        Ok (ExpressionValue _) ->
-                            Err "Found unexpected value for first element in application: ExpressionValue"
-
-                _ ->
-                    Err "Unsupported shape of application: Number of arguments is not 1"
+                [] ->
+                    Err "Invalid shape of application: Zero elements in the application list"
 
         _ ->
             Err "Unsupported type of expression"
+
+
+evaluateApplication : EvaluationContext -> FunctionOrValue -> List FunctionOrValue -> Result String FunctionOrValue
+evaluateApplication context function arguments =
+    case arguments of
+        [] ->
+            case function of
+                ExpressionValue expressionValue ->
+                    evaluateExpression context expressionValue
+
+                FunctionValue _ _ ->
+                    Ok function
+
+                StringValue _ ->
+                    Ok function
+
+        currentArgument :: remainingArguments ->
+            case function of
+                FunctionValue paramName nextFunction ->
+                    evaluateApplication
+                        (context |> withLocalsAdded [ { name = paramName, bound = currentArgument } ])
+                        nextFunction
+                        remainingArguments
+
+                StringValue _ ->
+                    Err "Found unexpected value for first element in application: StringValue"
+
+                ExpressionValue _ ->
+                    Err "Found unexpected value for first element in application: ExpressionValue"
 
 
 getExpressionBindingFromLetDeclaration :
