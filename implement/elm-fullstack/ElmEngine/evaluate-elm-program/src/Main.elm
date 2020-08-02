@@ -239,7 +239,7 @@ evaluateExpression context expression =
                     Err "Invalid shape of application: Zero elements in the application list"
 
         _ ->
-            Err "Unsupported type of expression"
+            Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
 
 
 evaluateApplication : EvaluationContext -> FunctionOrValue -> List FunctionOrValue -> Result String FunctionOrValue
