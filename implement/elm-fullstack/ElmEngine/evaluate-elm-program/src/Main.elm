@@ -16,15 +16,19 @@ import Result.Extra
 
 type FunctionOrValue
     = StringValue String
-    | FunctionValue String FunctionOrValue
+    | FunctionValue EvaluationContextLocals String FunctionOrValue
     | ExpressionValue Elm.Syntax.Expression.Expression
 
 
 type alias EvaluationContext =
     { modules : List Elm.Syntax.File.File
     , currentModule : Maybe Elm.Syntax.File.File
-    , locals : List { name : String, bound : FunctionOrValue }
+    , locals : EvaluationContextLocals
     }
+
+
+type alias EvaluationContextLocals =
+    List { name : String, bound : FunctionOrValue }
 
 
 withLocalsAdded : List { name : String, bound : FunctionOrValue } -> EvaluationContext -> EvaluationContext
@@ -38,7 +42,7 @@ functionValueFromFunctionImplementation functionImplementation =
         withArgumentAdded argument functionBefore =
             case argument of
                 Elm.Syntax.Pattern.VarPattern varName ->
-                    Ok (FunctionValue varName functionBefore)
+                    Ok (FunctionValue [] varName functionBefore)
 
                 _ ->
                     Err "Type of pattern is not implemented yet."
@@ -95,14 +99,16 @@ lookUpValueInModule name file =
         |> List.head
 
 
-lookUpValueInContext : EvaluationContext -> String -> Maybe FunctionOrValue
+lookUpValueInContext : EvaluationContext -> String -> Result { availableLocals : List String } FunctionOrValue
 lookUpValueInContext context name =
     case context.locals |> List.filter (.name >> (==) name) |> List.head of
         Just binding ->
-            Just binding.bound
+            Ok binding.bound
 
         Nothing ->
-            context.currentModule |> Maybe.andThen (lookUpValueInModule name)
+            context.currentModule
+                |> Maybe.andThen (lookUpValueInModule name)
+                |> Result.fromMaybe { availableLocals = context.locals |> List.map .name }
 
 
 getValueFromExpressionSyntaxAsJsonString : List String -> String -> Result String String
@@ -122,7 +128,7 @@ jsonStringFromJsonValue value =
         StringValue string ->
             "\"" ++ string ++ "\""
 
-        FunctionValue _ _ ->
+        FunctionValue _ _ _ ->
             "Error: Got FunctionValue"
 
         ExpressionValue _ ->
@@ -209,7 +215,8 @@ evaluateExpression context expression =
                         { context | currentModule = lookUpModule context moduleName }
             in
             lookUpValueInContext nextContext localName
-                |> Maybe.map
+                |> Result.mapError (\lookupError -> "Failed to look up value for '" ++ localName ++ "'. Available locals: " ++ (lookupError.availableLocals |> String.join ", "))
+                |> Result.andThen
                     (\boundValue ->
                         case boundValue of
                             ExpressionValue expressionValue ->
@@ -218,7 +225,6 @@ evaluateExpression context expression =
                             _ ->
                                 Ok boundValue
                     )
-                |> Maybe.withDefault (Err ("Failed to look up expression for '" ++ localName ++ "'"))
 
         Elm.Syntax.Expression.Application application ->
             case application of
@@ -250,17 +256,21 @@ evaluateApplication context function arguments =
                 ExpressionValue expressionValue ->
                     evaluateExpression context expressionValue
 
-                FunctionValue _ _ ->
-                    Ok function
+                FunctionValue functionContext paramName nextFunction ->
+                    Ok (FunctionValue (functionContext ++ context.locals) paramName nextFunction)
 
                 StringValue _ ->
                     Ok function
 
         currentArgument :: remainingArguments ->
             case function of
-                FunctionValue paramName nextFunction ->
+                FunctionValue functionContext paramName nextFunction ->
+                    let
+                        contextWithParamBound =
+                            context |> withLocalsAdded ({ name = paramName, bound = currentArgument } :: functionContext)
+                    in
                     evaluateApplication
-                        (context |> withLocalsAdded [ { name = paramName, bound = currentArgument } ])
+                        contextWithParamBound
                         nextFunction
                         remainingArguments
 

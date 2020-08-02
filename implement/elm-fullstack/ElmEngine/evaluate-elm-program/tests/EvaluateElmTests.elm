@@ -115,4 +115,51 @@ module_level_binding param0 param1 =
 """ ]
                         "ModuleName.module_level_binding  \"a\"  \"b\""
                     )
+        , Test.test "Partial application" <|
+            \_ ->
+                Expect.equal (Ok "\"literal from module ab\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString
+                        [ """
+module ModuleName exposing (partially_applied_a)
+
+
+partially_applied_a =
+    function_with_two_parameters "a"
+
+
+function_with_two_parameters param0 param1 =
+    "literal from module " ++ param0 ++ param1
+
+""" ]
+                        "ModuleName.partially_applied_a \"b\""
+                    )
+        , Test.test "Partial application via multiple modules" <|
+            \_ ->
+                Expect.equal (Ok "\"a b c\"")
+                    (Main.getValueFromExpressionSyntaxAsJsonString
+                        [ """
+module ModuleA exposing (partially_applied_a)
+
+
+partially_applied_a =
+    function_with_three_parameters "a"
+
+
+function_with_three_parameters param0 param1 param2 =
+    param0 ++ " " ++ param1 ++ " " ++ param2
+
+""", """
+module ModuleB exposing (partially_applied_b)
+
+
+partially_applied_b =
+    ModuleA.partially_applied_a "b"
+
+
+function_with_three_parameters param0 param1 param2 =
+    param0 ++ " " ++ param1 ++ " " ++ param2
+
+""" ]
+                        "ModuleB.partially_applied_b \"c\""
+                    )
         ]
