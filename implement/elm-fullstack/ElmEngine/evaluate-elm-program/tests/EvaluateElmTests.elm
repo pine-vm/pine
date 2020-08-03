@@ -170,4 +170,11 @@ function_with_three_parameters param0 param1 param2 =
                         []
                         """ [ "a", "b" ] """
                     )
+        , Test.test "Concat List String" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = """["a","b","c"]""", typeText = "List String" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ [ "a", "b" ] ++ [ "c" ] """
+                    )
         ]

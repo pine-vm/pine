@@ -187,6 +187,9 @@ evaluateExpression context expression =
                                         ( StringValue leftString, StringValue rightString ) ->
                                             Ok (StringValue (leftString ++ rightString))
 
+                                        ( ListValue leftString, ListValue rightString ) ->
+                                            Ok (ListValue (leftString ++ rightString))
+
                                         _ ->
                                             Err "Found unsupported type of value in operands"
 
