@@ -18,6 +18,7 @@ type FunctionOrValue
     = StringValue String
     | FunctionValue EvaluationContextLocals String FunctionOrValue
     | ExpressionValue Elm.Syntax.Expression.Expression
+    | ListValue (List FunctionOrValue)
 
 
 type alias EvaluationContext =
@@ -114,7 +115,7 @@ lookUpValueInContext context name =
 evaluateExpressionString : List String -> String -> Result String { valueAsJsonString : String, typeText : String }
 evaluateExpressionString modulesTexts =
     evaluateExpressionSyntax modulesTexts
-        >> Result.map jsonStringFromJsonValue
+        >> Result.map serializeFunctionOrValue
 
 
 evaluateExpressionStringWithoutModules : String -> Result String { valueAsJsonString : String, typeText : String }
@@ -122,8 +123,8 @@ evaluateExpressionStringWithoutModules =
     evaluateExpressionString []
 
 
-jsonStringFromJsonValue : FunctionOrValue -> { valueAsJsonString : String, typeText : String }
-jsonStringFromJsonValue value =
+serializeFunctionOrValue : FunctionOrValue -> { valueAsJsonString : String, typeText : String }
+serializeFunctionOrValue value =
     case value of
         StringValue string ->
             { valueAsJsonString = "\"" ++ string ++ "\"", typeText = "String" }
@@ -133,6 +134,18 @@ jsonStringFromJsonValue value =
 
         ExpressionValue _ ->
             { valueAsJsonString = "Error: Got ExpressionValue", typeText = "Not implemented" }
+
+        ListValue list ->
+            let
+                elements =
+                    list |> List.map serializeFunctionOrValue
+
+                elementTypeText =
+                    elements |> List.head |> Maybe.map .typeText |> Maybe.withDefault "a"
+            in
+            { valueAsJsonString = "[" ++ String.join "," (elements |> List.map .valueAsJsonString) ++ "]"
+            , typeText = "List " ++ elementTypeText
+            }
 
 
 evaluateExpressionSyntax : List String -> String -> Result String FunctionOrValue
@@ -244,6 +257,14 @@ evaluateExpression context expression =
                 [] ->
                     Err "Invalid shape of application: Zero elements in the application list"
 
+        Elm.Syntax.Expression.ListExpr listExpression ->
+            case listExpression |> List.map (Elm.Syntax.Node.value >> evaluateExpression context) |> Result.Extra.combine of
+                Err error ->
+                    Err ("Failed to evaluate list expression: " ++ error)
+
+                Ok values ->
+                    Ok (ListValue values)
+
         _ ->
             Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
 
@@ -260,6 +281,9 @@ evaluateApplication context function arguments =
                     Ok (FunctionValue (functionContext ++ context.locals) paramName nextFunction)
 
                 StringValue _ ->
+                    Ok function
+
+                ListValue _ ->
                     Ok function
 
         currentArgument :: remainingArguments ->
@@ -279,6 +303,9 @@ evaluateApplication context function arguments =
 
                 ExpressionValue _ ->
                     Err "Found unexpected value for first element in application: ExpressionValue"
+
+                ListValue _ ->
+                    Err "Found unexpected value for first element in application: ListValue"
 
 
 getExpressionBindingFromLetDeclaration :

@@ -163,4 +163,11 @@ function_with_three_parameters param0 param1 param2 =
 """ ]
                         "ModuleB.partially_applied_b \"c\""
                     )
+        , Test.test "Literal List String" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = """["a","b"]""", typeText = "List String" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ [ "a", "b" ] """
+                    )
         ]
