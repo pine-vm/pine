@@ -212,4 +212,11 @@ function_with_three_parameters param0 param1 param2 =
                         []
                         """ 17 // 4 """
                     )
+        , Test.test "Parentheses override operator associativity" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = "12", typeText = "Int" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ (1 + 2) * (3 + 1) """
+                    )
         ]

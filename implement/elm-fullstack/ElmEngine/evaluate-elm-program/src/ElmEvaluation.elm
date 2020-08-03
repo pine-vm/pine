@@ -306,6 +306,9 @@ evaluateExpression context expression =
         Elm.Syntax.Expression.Integer integer ->
             Ok (IntegerValue integer)
 
+        Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
+            evaluateExpression context (Elm.Syntax.Node.value parenthesizedExpression)
+
         _ ->
             Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
 
