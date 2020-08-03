@@ -10,7 +10,6 @@ import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Json.Encode
 import Parser
-import Platform
 import Result.Extra
 
 
@@ -396,17 +395,3 @@ parseElmModuleTextToJson elmModule =
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
     Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
-
-
-{-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>)
-Elm code needed to inform the Elm compiler about our entry points.
--}
-main : Program Int () String
-main =
-    Platform.worker
-        { init = \_ -> ( (), Cmd.none )
-        , update =
-            \event stateBefore ->
-                ( parseElmModuleTextToJson "" |> always stateBefore, Cmd.none )
-        , subscriptions = \_ -> Sub.none
-        }
