@@ -177,4 +177,39 @@ function_with_three_parameters param0 param1 param2 =
                         []
                         """ [ "a", "b" ] ++ [ "c" ] """
                     )
+        , Test.test "Literal Int" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = "123", typeText = "Int" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ 123 """
+                    )
+        , Test.test "Add Int" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = "18", typeText = "Int" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ 13 + 5 """
+                    )
+        , Test.test "Subtract Int" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = "13", typeText = "Int" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ 16 - 3 """
+                    )
+        , Test.test "Multiply Int" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = "15", typeText = "Int" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ 3 * 5 """
+                    )
+        , Test.test "Divide Int" <|
+            \_ ->
+                Expect.equal (Ok { valueAsJsonString = "4", typeText = "Int" })
+                    (ElmEvaluation.evaluateExpressionString
+                        []
+                        """ 17 // 4 """
+                    )
         ]
