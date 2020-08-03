@@ -111,28 +111,28 @@ lookUpValueInContext context name =
                 |> Result.fromMaybe { availableLocals = context.locals |> List.map .name }
 
 
-getValueFromExpressionSyntaxAsJsonString : List String -> String -> Result String String
-getValueFromExpressionSyntaxAsJsonString modulesTexts =
+evaluateExpressionString : List String -> String -> Result String { valueAsJsonString : String, typeText : String }
+evaluateExpressionString modulesTexts =
     evaluateExpressionSyntax modulesTexts
         >> Result.map jsonStringFromJsonValue
 
 
-getValueFromJustExpressionSyntaxAsJsonString : String -> Result String String
-getValueFromJustExpressionSyntaxAsJsonString =
-    getValueFromExpressionSyntaxAsJsonString []
+evaluateExpressionStringWithoutModules : String -> Result String { valueAsJsonString : String, typeText : String }
+evaluateExpressionStringWithoutModules =
+    evaluateExpressionString []
 
 
-jsonStringFromJsonValue : FunctionOrValue -> String
+jsonStringFromJsonValue : FunctionOrValue -> { valueAsJsonString : String, typeText : String }
 jsonStringFromJsonValue value =
     case value of
         StringValue string ->
-            "\"" ++ string ++ "\""
+            { valueAsJsonString = "\"" ++ string ++ "\"", typeText = "String" }
 
         FunctionValue _ _ _ ->
-            "Error: Got FunctionValue"
+            { valueAsJsonString = "Error: Got FunctionValue", typeText = "Not implemented" }
 
         ExpressionValue _ ->
-            "Error: Got ExpressionValue"
+            { valueAsJsonString = "Error: Got ExpressionValue", typeText = "Not implemented" }
 
 
 evaluateExpressionSyntax : List String -> String -> Result String FunctionOrValue
