@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="ElmEngine\evaluate-elm-program\elm.json" />
+    <EmbeddedResource Include="ElmEngine\evaluate-elm-program\src\ElmEvaluation.elm" />
     <EmbeddedResource Include="ElmEngine\evaluate-elm-program\src\Main.elm" />
   </ItemGroup>
 
