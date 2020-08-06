@@ -227,5 +227,33 @@ function_with_three_parameters param0 param1 param2 =
                             []
                             """ String.length "Hello World!" """
                         )
+            , Test.test "String.toLower" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "\"hello world!\"", typeText = "String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ String.toLower "Hello World!" """
+                        )
+            , Test.test "String.trim" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "\"Hello World!\"", typeText = "String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ String.trim "  Hello World!  " """
+                        )
+            , Test.test "String.split" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = """["Hello","World!"]""", typeText = "List String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ String.split " " "Hello World!" """
+                        )
+            , Test.test "String.join" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "\"Hello World!\"", typeText = "String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ String.join " " [ "Hello", "World!" ] """
+                        )
             ]
         ]

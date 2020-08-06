@@ -497,10 +497,18 @@ parseElmModuleText =
 coreModules : Dict.Dict (List String) (Dict.Dict String FunctionOrValue)
 coreModules =
     let
-        getArgumentString generalArgument =
+        unwrapString generalArgument =
             case generalArgument of
                 StringValue string ->
                     Ok string
+
+                _ ->
+                    Err "Unexpected type"
+
+        unwrapListString generalArgument =
+            case generalArgument of
+                ListValue listValue ->
+                    listValue |> List.map unwrapString |> Result.Extra.combine
 
                 _ ->
                     Err "Unexpected type"
@@ -516,11 +524,61 @@ coreModules =
                         >> Result.andThen functionWith1Argument
                     )
                 )
+
+        coreFunctionWith2Arguments : (FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue) -> FunctionOrValue
+        coreFunctionWith2Arguments functionWith2Arguments =
+            FunctionValue
+                Dict.empty
+                "coreFuncArg0"
+                (FunctionValue
+                    Dict.empty
+                    "coreFuncArg1"
+                    (CoreFunction
+                        (\locals ->
+                            case ( locals |> Dict.get "coreFuncArg0", locals |> Dict.get "coreFuncArg1" ) of
+                                ( Just arg0, Just arg1 ) ->
+                                    functionWith2Arguments arg0 arg1
+
+                                _ ->
+                                    Err "Error in core function argument name"
+                        )
+                    )
+                )
     in
     [ ( [ "String" ]
       , [ ( "length"
           , coreFunctionWith1Argument
-                (getArgumentString >> Result.map (String.length >> IntegerValue))
+                (unwrapString >> Result.map (String.length >> IntegerValue))
+          )
+        , ( "toLower"
+          , coreFunctionWith1Argument
+                (unwrapString >> Result.map (String.toLower >> StringValue))
+          )
+        , ( "trim"
+          , coreFunctionWith1Argument
+                (unwrapString >> Result.map (String.trim >> StringValue))
+          )
+        , ( "split"
+          , coreFunctionWith2Arguments
+                (\separatorArg stringArg ->
+                    case ( separatorArg |> unwrapString, stringArg |> unwrapString ) of
+                        ( Ok separator, Ok string ) ->
+                            Ok (String.split separator string |> List.map StringValue |> ListValue)
+
+                        _ ->
+                            Err "Error unwrapping argument"
+                )
+          )
+        , ( "join"
+          , coreFunctionWith2Arguments
+                (\separatorArg chunksArg ->
+                    case ( separatorArg |> unwrapString, chunksArg |> unwrapListString ) of
+                        ( Ok separator, Ok chunks ) ->
+                            Ok (String.join separator chunks |> StringValue)
+
+                        _ ->
+                            Err "Error unwrapping argument"
+                )
           )
         ]
             |> Dict.fromList
