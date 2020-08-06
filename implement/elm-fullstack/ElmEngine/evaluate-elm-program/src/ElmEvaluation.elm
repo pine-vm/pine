@@ -1,5 +1,6 @@
 module ElmEvaluation exposing (..)
 
+import Dict
 import Elm.Parser
 import Elm.Processing
 import Elm.Syntax.Declaration
@@ -19,22 +20,28 @@ type FunctionOrValue
     | ExpressionValue Elm.Syntax.Expression.Expression
     | ListValue (List FunctionOrValue)
     | IntegerValue Int
+    | CoreFunction (EvaluationContextLocals -> Result String FunctionOrValue)
 
 
 type alias EvaluationContext =
-    { modules : List Elm.Syntax.File.File
-    , currentModule : Maybe Elm.Syntax.File.File
+    { modules : Dict.Dict (List String) ModuleStructure
+    , currentModule : Maybe ModuleStructure
     , locals : EvaluationContextLocals
     }
 
 
+type ModuleStructure
+    = ModuleFromSyntax Elm.Syntax.File.File
+    | ModuleFromCore (Dict.Dict String FunctionOrValue)
+
+
 type alias EvaluationContextLocals =
-    List { name : String, bound : FunctionOrValue }
+    Dict.Dict String FunctionOrValue
 
 
-withLocalsAdded : List { name : String, bound : FunctionOrValue } -> EvaluationContext -> EvaluationContext
-withLocalsAdded bindings context =
-    { context | locals = bindings ++ context.locals }
+withLocalsAdded : EvaluationContextLocals -> EvaluationContext -> EvaluationContext
+withLocalsAdded localsToAdd context =
+    { context | locals = localsToAdd |> Dict.union context.locals }
 
 
 functionValueFromFunctionImplementation : Elm.Syntax.Expression.FunctionImplementation -> Result String FunctionOrValue
@@ -43,7 +50,7 @@ functionValueFromFunctionImplementation functionImplementation =
         withArgumentAdded argument functionBefore =
             case argument of
                 Elm.Syntax.Pattern.VarPattern varName ->
-                    Ok (FunctionValue [] varName functionBefore)
+                    Ok (FunctionValue Dict.empty varName functionBefore)
 
                 _ ->
                     Err "Type of pattern is not implemented yet."
@@ -68,48 +75,51 @@ moduleNameFromSyntaxFile file =
             effectModule.moduleName
 
 
-lookUpModule : EvaluationContext -> List String -> Maybe Elm.Syntax.File.File
+lookUpModule : EvaluationContext -> List String -> Maybe ModuleStructure
 lookUpModule context moduleName =
-    context.modules
-        |> List.filter (moduleNameFromSyntaxFile >> Elm.Syntax.Node.value >> (==) moduleName)
-        |> List.head
+    context.modules |> Dict.get moduleName
 
 
-lookUpValueInModule : String -> Elm.Syntax.File.File -> Maybe FunctionOrValue
-lookUpValueInModule name file =
-    file.declarations
-        |> List.map Elm.Syntax.Node.value
-        |> List.filterMap
-            (\declaration ->
-                case declaration of
-                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                        let
-                            functionImplementation =
-                                Elm.Syntax.Node.value functionDeclaration.declaration
-                        in
-                        if Elm.Syntax.Node.value functionImplementation.name /= name then
-                            Nothing
+lookUpValueInModule : String -> ModuleStructure -> Maybe FunctionOrValue
+lookUpValueInModule name module_ =
+    case module_ of
+        ModuleFromSyntax file ->
+            file.declarations
+                |> List.map Elm.Syntax.Node.value
+                |> List.filterMap
+                    (\declaration ->
+                        case declaration of
+                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                let
+                                    functionImplementation =
+                                        Elm.Syntax.Node.value functionDeclaration.declaration
+                                in
+                                if Elm.Syntax.Node.value functionImplementation.name /= name then
+                                    Nothing
 
-                        else
-                            Result.toMaybe
-                                (functionValueFromFunctionImplementation functionImplementation)
+                                else
+                                    Result.toMaybe
+                                        (functionValueFromFunctionImplementation functionImplementation)
 
-                    _ ->
-                        Nothing
-            )
-        |> List.head
+                            _ ->
+                                Nothing
+                    )
+                |> List.head
+
+        ModuleFromCore moduleFromCore ->
+            moduleFromCore |> Dict.get name
 
 
 lookUpValueInContext : EvaluationContext -> String -> Result { availableLocals : List String } FunctionOrValue
 lookUpValueInContext context name =
-    case context.locals |> List.filter (.name >> (==) name) |> List.head of
-        Just binding ->
-            Ok binding.bound
+    case context.locals |> Dict.get name of
+        Just local ->
+            Ok local
 
         Nothing ->
             context.currentModule
                 |> Maybe.andThen (lookUpValueInModule name)
-                |> Result.fromMaybe { availableLocals = context.locals |> List.map .name }
+                |> Result.fromMaybe { availableLocals = context.locals |> Dict.keys }
 
 
 evaluateExpressionString : List String -> String -> Result String { valueAsJsonString : String, typeText : String }
@@ -133,10 +143,10 @@ serializeFunctionOrValue value =
             { valueAsJsonString = integer |> String.fromInt, typeText = "Int" }
 
         FunctionValue _ _ _ ->
-            { valueAsJsonString = "Error: Got FunctionValue", typeText = "Not implemented" }
+            { valueAsJsonString = "Error: Got FunctionValue", typeText = "Error: Got FunctionValue" }
 
         ExpressionValue _ ->
-            { valueAsJsonString = "Error: Got ExpressionValue", typeText = "Not implemented" }
+            { valueAsJsonString = "Error: Got ExpressionValue", typeText = "Error: Got ExpressionValue" }
 
         ListValue list ->
             let
@@ -149,6 +159,9 @@ serializeFunctionOrValue value =
             { valueAsJsonString = "[" ++ String.join "," (elements |> List.map .valueAsJsonString) ++ "]"
             , typeText = "List " ++ elementTypeText
             }
+
+        CoreFunction _ ->
+            { valueAsJsonString = "Error: Got CoreFunction", typeText = "Error: Got CoreFunction" }
 
 
 evaluateExpressionSyntax : List String -> String -> Result String FunctionOrValue
@@ -163,7 +176,23 @@ evaluateExpressionSyntax modulesTexts expressionCode =
                     Err "Failed to parse module text"
 
                 Ok modules ->
-                    evaluateExpression { modules = modules, currentModule = Nothing, locals = [] } expression
+                    let
+                        context =
+                            { modules =
+                                modules
+                                    |> List.map
+                                        (\file ->
+                                            ( file |> moduleNameFromSyntaxFile |> Elm.Syntax.Node.value
+                                            , ModuleFromSyntax file
+                                            )
+                                        )
+                                    |> Dict.fromList
+                                    |> Dict.union (coreModules |> Dict.map (always ModuleFromCore))
+                            , currentModule = Nothing
+                            , locals = Dict.empty
+                            }
+                    in
+                    evaluateExpression context expression
                         |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
 
 
@@ -247,9 +276,8 @@ evaluateExpression context expression =
                                 |> withLocalsAdded
                                     (bindings
                                         |> List.map
-                                            (\binding ->
-                                                { name = binding.name, bound = ExpressionValue binding.expression }
-                                            )
+                                            (\binding -> ( binding.name, ExpressionValue binding.expression ))
+                                        |> Dict.fromList
                                     )
                     in
                     letBlock.expression
@@ -266,7 +294,20 @@ evaluateExpression context expression =
                         { context | currentModule = lookUpModule context moduleName }
             in
             lookUpValueInContext nextContext localName
-                |> Result.mapError (\lookupError -> "Failed to look up value for '" ++ localName ++ "'. Available locals: " ++ (lookupError.availableLocals |> String.join ", "))
+                |> Result.mapError
+                    (\lookupError ->
+                        "Failed to look up value for '"
+                            ++ localName
+                            ++ "'"
+                            ++ (if moduleName == [] then
+                                    ""
+
+                                else
+                                    " in module " ++ (moduleName |> String.join ".")
+                               )
+                            ++ ". Available locals: "
+                            ++ (lookupError.availableLocals |> String.join ", ")
+                    )
                 |> Result.andThen
                     (\boundValue ->
                         case boundValue of
@@ -322,7 +363,10 @@ evaluateApplication context function arguments =
                     evaluateExpression context expressionValue
 
                 FunctionValue functionContext paramName nextFunction ->
-                    Ok (FunctionValue (functionContext ++ context.locals) paramName nextFunction)
+                    Ok (FunctionValue (functionContext |> Dict.union context.locals) paramName nextFunction)
+
+                CoreFunction coreFunction ->
+                    coreFunction context.locals
 
                 StringValue _ ->
                     Ok function
@@ -338,7 +382,9 @@ evaluateApplication context function arguments =
                 FunctionValue functionContext paramName nextFunction ->
                     let
                         contextWithParamBound =
-                            context |> withLocalsAdded ({ name = paramName, bound = currentArgument } :: functionContext)
+                            context
+                                |> withLocalsAdded functionContext
+                                |> withLocalsAdded (Dict.singleton paramName currentArgument)
                     in
                     evaluateApplication
                         contextWithParamBound
@@ -356,6 +402,9 @@ evaluateApplication context function arguments =
 
                 ListValue _ ->
                     Err "Found unexpected value for first element in application: ListValue"
+
+                CoreFunction _ ->
+                    Err "Found unexpected value for first element in application: CoreFunction"
 
 
 getExpressionBindingFromLetDeclaration :
@@ -443,3 +492,38 @@ parseElmModuleTextToJson elmModule =
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
     Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
+
+
+coreModules : Dict.Dict (List String) (Dict.Dict String FunctionOrValue)
+coreModules =
+    let
+        getArgumentString generalArgument =
+            case generalArgument of
+                StringValue string ->
+                    Ok string
+
+                _ ->
+                    Err "Unexpected type"
+
+        coreFunctionWith1Argument : (FunctionOrValue -> Result String FunctionOrValue) -> FunctionOrValue
+        coreFunctionWith1Argument functionWith1Argument =
+            FunctionValue
+                Dict.empty
+                "coreFuncArg0"
+                (CoreFunction
+                    (Dict.get "coreFuncArg0"
+                        >> Result.fromMaybe "Error in core function argument name"
+                        >> Result.andThen functionWith1Argument
+                    )
+                )
+    in
+    [ ( [ "String" ]
+      , [ ( "length"
+          , coreFunctionWith1Argument
+                (getArgumentString >> Result.map (String.length >> IntegerValue))
+          )
+        ]
+            |> Dict.fromList
+      )
+    ]
+        |> Dict.fromList
