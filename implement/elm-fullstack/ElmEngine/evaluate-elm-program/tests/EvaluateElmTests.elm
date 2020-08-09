@@ -256,4 +256,20 @@ function_with_three_parameters param0 param1 param2 =
                             """ String.join " " [ "Hello", "World!" ] """
                         )
             ]
+        , Test.describe "anonymous function"
+            [ Test.test "With one argument" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "\"hello world!\"", typeText = "String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (\\arg -> String.toLower (String.trim arg))  "  Hello World!  " """
+                        )
+            , Test.test "With two arguments" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "\"hello world\"", typeText = "String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (\\greeting subject -> String.toLower (greeting ++ " " ++ subject))  "Hello"  "World" """
+                        )
+            ]
         ]

@@ -46,6 +46,16 @@ withLocalsAdded localsToAdd context =
 
 functionValueFromFunctionImplementation : Elm.Syntax.Expression.FunctionImplementation -> Result String FunctionOrValue
 functionValueFromFunctionImplementation functionImplementation =
+    functionValueFromArgumentsAndExpression
+        { arguments = functionImplementation.arguments, expression = functionImplementation.expression }
+
+
+functionValueFromArgumentsAndExpression :
+    { arguments : List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+    , expression : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+    }
+    -> Result String FunctionOrValue
+functionValueFromArgumentsAndExpression functionImplementation =
     let
         withArgumentAdded argument functionBefore =
             case argument of
@@ -349,6 +359,9 @@ evaluateExpression context expression =
 
         Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
             evaluateExpression context (Elm.Syntax.Node.value parenthesizedExpression)
+
+        Elm.Syntax.Expression.LambdaExpression lambda ->
+            functionValueFromArgumentsAndExpression { arguments = lambda.args, expression = lambda.expression }
 
         _ ->
             Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
