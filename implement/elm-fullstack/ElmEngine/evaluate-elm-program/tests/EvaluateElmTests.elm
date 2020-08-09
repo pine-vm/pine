@@ -272,6 +272,43 @@ function_with_three_parameters param0 param1 param2 =
                             """ (\\greeting subject -> String.toLower (greeting ++ " " ++ subject))  "Hello"  "World" """
                         )
             ]
+        , Test.describe "Operator as function"
+            [ Test.test "Concat operator (++)" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "\"Hello World!\"", typeText = "String" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (++) "Hello" " World!" """
+                        )
+            , Test.test "Plus operator (+)" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "4", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (+) 3 1 """
+                        )
+            , Test.test "Minus operator (-)" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "9", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (-) 13 4 """
+                        )
+            , Test.test "Asterisk operator (*)" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "33", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (*) 11 3 """
+                        )
+            , Test.test "Slash Slash operator (//)" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "24", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (//) 123 5 """
+                        )
+            ]
         , Test.describe "Operators"
             [ Test.describe "Function composition pointing right >>"
                 [ Test.test "With two composed functions" <|

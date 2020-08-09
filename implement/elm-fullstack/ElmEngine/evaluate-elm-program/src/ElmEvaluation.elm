@@ -315,6 +315,14 @@ evaluateExpression context expression =
         Elm.Syntax.Expression.LambdaExpression lambda ->
             functionValueFromArgumentsAndExpression { arguments = lambda.args, expression = lambda.expression }
 
+        Elm.Syntax.Expression.PrefixOperator prefixOperator ->
+            case coreFunctionFromOperatorString |> Dict.get prefixOperator of
+                Just coreFunction ->
+                    Ok (coreFunctionWith2Arguments coreFunction)
+
+                _ ->
+                    Err ("PrefixOperator not implemented: (" ++ prefixOperator ++ ")")
+
         _ ->
             Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
 
@@ -340,49 +348,6 @@ evaluateOperatorApplication context { operator, leftExpr, rightExpr } =
 
                 Ok rightValue ->
                     case operator of
-                        "++" ->
-                            case ( leftValue, rightValue ) of
-                                ( StringValue leftString, StringValue rightString ) ->
-                                    Ok (StringValue (leftString ++ rightString))
-
-                                ( ListValue leftString, ListValue rightString ) ->
-                                    Ok (ListValue (leftString ++ rightString))
-
-                                _ ->
-                                    Err "Found unsupported type of value in operands"
-
-                        "+" ->
-                            case ( leftValue, rightValue ) of
-                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                    Ok (IntegerValue (leftInt + rightInt))
-
-                                _ ->
-                                    Err "Found unsupported type of value in operands"
-
-                        "-" ->
-                            case ( leftValue, rightValue ) of
-                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                    Ok (IntegerValue (leftInt - rightInt))
-
-                                _ ->
-                                    Err "Found unsupported type of value in operands"
-
-                        "*" ->
-                            case ( leftValue, rightValue ) of
-                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                    Ok (IntegerValue (leftInt * rightInt))
-
-                                _ ->
-                                    Err "Found unsupported type of value in operands"
-
-                        "//" ->
-                            case ( leftValue, rightValue ) of
-                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                    Ok (IntegerValue (leftInt // rightInt))
-
-                                _ ->
-                                    Err "Found unsupported type of value in operands"
-
                         ">>" ->
                             Ok
                                 (FunctionValue context.locals
@@ -403,7 +368,76 @@ evaluateOperatorApplication context { operator, leftExpr, rightExpr } =
                                 )
 
                         _ ->
-                            Err ("Unsupported type of operator: " ++ operator)
+                            case coreFunctionFromOperatorString |> Dict.get operator of
+                                Just coreFunction ->
+                                    coreFunction leftValue rightValue
+
+                                Nothing ->
+                                    Err ("Unsupported type of operator: " ++ operator)
+
+
+coreFunctionFromOperatorString : Dict.Dict String (FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue)
+coreFunctionFromOperatorString =
+    [ ( "++", evaluateOperationPlusPlus )
+    , ( "+", evaluateOperationPlus )
+    , ( "-", evaluateOperationMinus )
+    , ( "*", evaluateOperationAsterisk )
+    , ( "//", evaluateOperationSlashSlash )
+    ]
+        |> Dict.fromList
+
+
+evaluateOperationPlusPlus : FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue
+evaluateOperationPlusPlus leftValue rightValue =
+    case ( leftValue, rightValue ) of
+        ( StringValue leftString, StringValue rightString ) ->
+            Ok (StringValue (leftString ++ rightString))
+
+        ( ListValue leftString, ListValue rightString ) ->
+            Ok (ListValue (leftString ++ rightString))
+
+        _ ->
+            Err "Found unsupported type of value in operands"
+
+
+evaluateOperationPlus : FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue
+evaluateOperationPlus leftValue rightValue =
+    case ( leftValue, rightValue ) of
+        ( IntegerValue leftInt, IntegerValue rightInt ) ->
+            Ok (IntegerValue (leftInt + rightInt))
+
+        _ ->
+            Err "Found unsupported type of value in operands"
+
+
+evaluateOperationMinus : FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue
+evaluateOperationMinus leftValue rightValue =
+    case ( leftValue, rightValue ) of
+        ( IntegerValue leftInt, IntegerValue rightInt ) ->
+            Ok (IntegerValue (leftInt - rightInt))
+
+        _ ->
+            Err "Found unsupported type of value in operands"
+
+
+evaluateOperationAsterisk : FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue
+evaluateOperationAsterisk leftValue rightValue =
+    case ( leftValue, rightValue ) of
+        ( IntegerValue leftInt, IntegerValue rightInt ) ->
+            Ok (IntegerValue (leftInt * rightInt))
+
+        _ ->
+            Err "Found unsupported type of value in operands"
+
+
+evaluateOperationSlashSlash : FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue
+evaluateOperationSlashSlash leftValue rightValue =
+    case ( leftValue, rightValue ) of
+        ( IntegerValue leftInt, IntegerValue rightInt ) ->
+            Ok (IntegerValue (leftInt // rightInt))
+
+        _ ->
+            Err "Found unsupported type of value in operands"
 
 
 evaluateApplication : EvaluationContext -> FunctionOrValue -> List FunctionOrValue -> Result String FunctionOrValue
@@ -564,38 +598,6 @@ coreModules =
 
                 _ ->
                     Err "Unexpected type"
-
-        coreFunctionWith1Argument : (FunctionOrValue -> Result String FunctionOrValue) -> FunctionOrValue
-        coreFunctionWith1Argument functionWith1Argument =
-            FunctionValue
-                Dict.empty
-                "coreFuncArg0"
-                (CoreFunction
-                    (Dict.get "coreFuncArg0"
-                        >> Result.fromMaybe "Error in core function argument name"
-                        >> Result.andThen functionWith1Argument
-                    )
-                )
-
-        coreFunctionWith2Arguments : (FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue) -> FunctionOrValue
-        coreFunctionWith2Arguments functionWith2Arguments =
-            FunctionValue
-                Dict.empty
-                "coreFuncArg0"
-                (FunctionValue
-                    Dict.empty
-                    "coreFuncArg1"
-                    (CoreFunction
-                        (\locals ->
-                            case ( locals |> Dict.get "coreFuncArg0", locals |> Dict.get "coreFuncArg1" ) of
-                                ( Just arg0, Just arg1 ) ->
-                                    functionWith2Arguments arg0 arg1
-
-                                _ ->
-                                    Err "Error in core function argument name"
-                        )
-                    )
-                )
     in
     [ ( [ "String" ]
       , [ ( "length"
@@ -637,3 +639,37 @@ coreModules =
       )
     ]
         |> Dict.fromList
+
+
+coreFunctionWith1Argument : (FunctionOrValue -> Result String FunctionOrValue) -> FunctionOrValue
+coreFunctionWith1Argument functionWith1Argument =
+    FunctionValue
+        Dict.empty
+        "coreFuncArg0"
+        (CoreFunction
+            (Dict.get "coreFuncArg0"
+                >> Result.fromMaybe "Error in core function argument name"
+                >> Result.andThen functionWith1Argument
+            )
+        )
+
+
+coreFunctionWith2Arguments : (FunctionOrValue -> FunctionOrValue -> Result String FunctionOrValue) -> FunctionOrValue
+coreFunctionWith2Arguments functionWith2Arguments =
+    FunctionValue
+        Dict.empty
+        "coreFuncArg0"
+        (FunctionValue
+            Dict.empty
+            "coreFuncArg1"
+            (CoreFunction
+                (\locals ->
+                    case ( locals |> Dict.get "coreFuncArg0", locals |> Dict.get "coreFuncArg1" ) of
+                        ( Just arg0, Just arg1 ) ->
+                            functionWith2Arguments arg0 arg1
+
+                        _ ->
+                            Err "Error in core function argument name"
+                )
+            )
+        )
