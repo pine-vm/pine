@@ -217,10 +217,18 @@ evaluateExpression context expression =
             Ok (StringValue literal)
 
         Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightExpr ->
-            evaluateOperatorApplication
-                context
-                { operator = operator, direction = direction, leftExpr = leftExpr, rightExpr = rightExpr }
-                |> Result.mapError (\error -> "Failed to apply operator (" ++ operator ++ "): " ++ error)
+            let
+                orderedExpression =
+                    mapExpressionForOperatorPrecedence expression
+            in
+            if orderedExpression == expression then
+                evaluateOperatorApplication
+                    context
+                    { operator = operator, direction = direction, leftExpr = leftExpr, rightExpr = rightExpr }
+                    |> Result.mapError (\error -> "Failed to apply operator (" ++ operator ++ "): " ++ error)
+
+            else
+                evaluateExpression context orderedExpression
 
         Elm.Syntax.Expression.LetExpression letBlock ->
             case
@@ -325,6 +333,50 @@ evaluateExpression context expression =
 
         _ ->
             Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
+
+
+mapExpressionForOperatorPrecedence : Elm.Syntax.Expression.Expression -> Elm.Syntax.Expression.Expression
+mapExpressionForOperatorPrecedence originalExpression =
+    case originalExpression of
+        Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightExpr ->
+            let
+                mappedRightExpr =
+                    Elm.Syntax.Node.Node (Elm.Syntax.Node.range rightExpr)
+                        (mapExpressionForOperatorPrecedence (Elm.Syntax.Node.value rightExpr))
+            in
+            case Elm.Syntax.Node.value mappedRightExpr of
+                Elm.Syntax.Expression.OperatorApplication rightOperator _ rightLeftExpr rightRightExpr ->
+                    if
+                        (operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0)
+                            < (operatorPrecendencePriority |> Dict.get operator |> Maybe.withDefault 0)
+                    then
+                        Elm.Syntax.Expression.OperatorApplication rightOperator
+                            direction
+                            rightRightExpr
+                            (Elm.Syntax.Node.Node
+                                (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftExpr, Elm.Syntax.Node.range rightLeftExpr ])
+                                (Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightLeftExpr)
+                            )
+
+                    else
+                        Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
+
+                _ ->
+                    Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
+
+        _ ->
+            originalExpression
+
+
+operatorPrecendencePriority : Dict.Dict String Int
+operatorPrecendencePriority =
+    [ ( "+", 0 )
+    , ( "-", 0 )
+    , ( "*", 1 )
+    , ( "//", 1 )
+    , ( "/", 1 )
+    ]
+        |> Dict.fromList
 
 
 evaluateOperatorApplication :
