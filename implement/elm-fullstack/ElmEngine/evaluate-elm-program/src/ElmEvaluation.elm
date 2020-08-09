@@ -6,9 +6,11 @@ import Elm.Processing
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
+import Elm.Syntax.Infix
 import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
+import Elm.Syntax.Range
 import Json.Encode
 import Parser
 import Result.Extra
@@ -152,8 +154,10 @@ serializeFunctionOrValue value =
         IntegerValue integer ->
             { valueAsJsonString = integer |> String.fromInt, typeText = "Int" }
 
-        FunctionValue _ _ _ ->
-            { valueAsJsonString = "Error: Got FunctionValue", typeText = "Error: Got FunctionValue" }
+        FunctionValue _ argName _ ->
+            { valueAsJsonString = "Error: Got FunctionValue (argName: " ++ argName ++ ")"
+            , typeText = "Error: Got FunctionValue"
+            }
 
         ExpressionValue _ ->
             { valueAsJsonString = "Error: Got ExpressionValue", typeText = "Error: Got ExpressionValue" }
@@ -213,62 +217,10 @@ evaluateExpression context expression =
             Ok (StringValue literal)
 
         Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightExpr ->
-            case leftExpr |> Elm.Syntax.Node.value |> evaluateExpression context of
-                Err error ->
-                    Err ("Failed to evaluate left expression: " ++ error)
-
-                Ok leftValue ->
-                    case rightExpr |> Elm.Syntax.Node.value |> evaluateExpression context of
-                        Err error ->
-                            Err ("Failed to evaluate right expression: " ++ error)
-
-                        Ok rightValue ->
-                            case operator of
-                                "++" ->
-                                    case ( leftValue, rightValue ) of
-                                        ( StringValue leftString, StringValue rightString ) ->
-                                            Ok (StringValue (leftString ++ rightString))
-
-                                        ( ListValue leftString, ListValue rightString ) ->
-                                            Ok (ListValue (leftString ++ rightString))
-
-                                        _ ->
-                                            Err "Found unsupported type of value in operands"
-
-                                "+" ->
-                                    case ( leftValue, rightValue ) of
-                                        ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                            Ok (IntegerValue (leftInt + rightInt))
-
-                                        _ ->
-                                            Err "Found unsupported type of value in operands"
-
-                                "-" ->
-                                    case ( leftValue, rightValue ) of
-                                        ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                            Ok (IntegerValue (leftInt - rightInt))
-
-                                        _ ->
-                                            Err "Found unsupported type of value in operands"
-
-                                "*" ->
-                                    case ( leftValue, rightValue ) of
-                                        ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                            Ok (IntegerValue (leftInt * rightInt))
-
-                                        _ ->
-                                            Err "Found unsupported type of value in operands"
-
-                                "//" ->
-                                    case ( leftValue, rightValue ) of
-                                        ( IntegerValue leftInt, IntegerValue rightInt ) ->
-                                            Ok (IntegerValue (leftInt // rightInt))
-
-                                        _ ->
-                                            Err "Found unsupported type of value in operands"
-
-                                _ ->
-                                    Err ("Unsupported type of operator: " ++ operator)
+            evaluateOperatorApplication
+                context
+                { operator = operator, direction = direction, leftExpr = leftExpr, rightExpr = rightExpr }
+                |> Result.mapError (\error -> "Failed to apply operator (" ++ operator ++ "): " ++ error)
 
         Elm.Syntax.Expression.LetExpression letBlock ->
             case
@@ -365,6 +317,93 @@ evaluateExpression context expression =
 
         _ ->
             Err ("Unsupported type of expression: " ++ (expression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0))
+
+
+evaluateOperatorApplication :
+    EvaluationContext
+    ->
+        { operator : String
+        , direction : Elm.Syntax.Infix.InfixDirection
+        , leftExpr : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+        , rightExpr : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
+        }
+    -> Result String FunctionOrValue
+evaluateOperatorApplication context { operator, leftExpr, rightExpr } =
+    case leftExpr |> Elm.Syntax.Node.value |> evaluateExpression context of
+        Err error ->
+            Err ("Failed to evaluate left expression: " ++ error)
+
+        Ok leftValue ->
+            case rightExpr |> Elm.Syntax.Node.value |> evaluateExpression context of
+                Err error ->
+                    Err ("Failed to evaluate right expression: " ++ error)
+
+                Ok rightValue ->
+                    case operator of
+                        "++" ->
+                            case ( leftValue, rightValue ) of
+                                ( StringValue leftString, StringValue rightString ) ->
+                                    Ok (StringValue (leftString ++ rightString))
+
+                                ( ListValue leftString, ListValue rightString ) ->
+                                    Ok (ListValue (leftString ++ rightString))
+
+                                _ ->
+                                    Err "Found unsupported type of value in operands"
+
+                        "+" ->
+                            case ( leftValue, rightValue ) of
+                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
+                                    Ok (IntegerValue (leftInt + rightInt))
+
+                                _ ->
+                                    Err "Found unsupported type of value in operands"
+
+                        "-" ->
+                            case ( leftValue, rightValue ) of
+                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
+                                    Ok (IntegerValue (leftInt - rightInt))
+
+                                _ ->
+                                    Err "Found unsupported type of value in operands"
+
+                        "*" ->
+                            case ( leftValue, rightValue ) of
+                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
+                                    Ok (IntegerValue (leftInt * rightInt))
+
+                                _ ->
+                                    Err "Found unsupported type of value in operands"
+
+                        "//" ->
+                            case ( leftValue, rightValue ) of
+                                ( IntegerValue leftInt, IntegerValue rightInt ) ->
+                                    Ok (IntegerValue (leftInt // rightInt))
+
+                                _ ->
+                                    Err "Found unsupported type of value in operands"
+
+                        ">>" ->
+                            Ok
+                                (FunctionValue context.locals
+                                    "function_composition_argument_name"
+                                    (ExpressionValue
+                                        (Elm.Syntax.Expression.Application
+                                            [ rightExpr
+                                            , Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange
+                                                (Elm.Syntax.Expression.Application
+                                                    [ leftExpr
+                                                    , Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange
+                                                        (Elm.Syntax.Expression.FunctionOrValue [] "function_composition_argument_name")
+                                                    ]
+                                                )
+                                            ]
+                                        )
+                                    )
+                                )
+
+                        _ ->
+                            Err ("Unsupported type of operator: " ++ operator)
 
 
 evaluateApplication : EvaluationContext -> FunctionOrValue -> List FunctionOrValue -> Result String FunctionOrValue

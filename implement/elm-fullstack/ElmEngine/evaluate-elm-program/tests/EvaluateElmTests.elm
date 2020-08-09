@@ -272,4 +272,15 @@ function_with_three_parameters param0 param1 param2 =
                             """ (\\greeting subject -> String.toLower (greeting ++ " " ++ subject))  "Hello"  "World" """
                         )
             ]
+        , Test.describe "Operators"
+            [ Test.describe "Function composition pointing right >>"
+                [ Test.test "With two composed functions" <|
+                    \_ ->
+                        Expect.equal (Ok { valueAsJsonString = "\"hello world!\"", typeText = "String" })
+                            (ElmEvaluation.evaluateExpressionString
+                                []
+                                """ (String.trim >> String.toLower)  "  Hello World!  " """
+                            )
+                ]
+            ]
         ]
