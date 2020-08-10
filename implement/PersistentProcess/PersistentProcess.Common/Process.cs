@@ -181,7 +181,7 @@ namespace Kalmit
         I cannot find that directory though! Is it missing? Is there a typo?
         [...]
         */
-        static string CompileElm(
+        static public string CompileElm(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
             IImmutableList<string> pathToFileWithElmEntryPoint,
             string outputFileName,
@@ -194,14 +194,19 @@ namespace Kalmit
             */
             var maxRetryCount = 2;
 
-            var command = "make " + makePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
+            var command = "make " + MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
             var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles)>();
+
+            var platformSpecificFiles =
+                elmCodeFiles
+                .Select(elmCodeFile => (MakePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value))
+                .ToImmutableList();
 
             do
             {
                 var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                    elmCodeFiles.Select(elmCodeFile => (makePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value)).ToImmutableList(),
+                    platformSpecificFiles,
                     GetElmExecutableFile,
                     command,
                     new Dictionary<string, string>()
@@ -235,8 +240,13 @@ namespace Kalmit
 
                 attemptsResults.Add(commandResults);
 
+                var platformSpecificNewFiles =
+                    commandResults.resultingFiles
+                    .Where(file => !platformSpecificFiles.Any(inputFile => inputFile.Item1 == file.name))
+                    .ToImmutableList();
+
                 var outputFileContent =
-                    commandResults.resultingFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
+                    platformSpecificNewFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
 
                 if (outputFileContent != null)
                     return Encoding.UTF8.GetString(outputFileContent.ToArray());
@@ -258,27 +268,27 @@ namespace Kalmit
                 "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
         }
 
-        static string makePlatformSpecificPath(IImmutableList<string> path) =>
+        static public string MakePlatformSpecificPath(IImmutableList<string> path) =>
             string.Join(Path.DirectorySeparatorChar.ToString(), path);
 
-        static byte[] GetElmExecutableFile =>
-        CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
+        static public byte[] GetElmExecutableFile =>
+            CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
 
-        static byte[] GetElmExecutableFileCompressedGzip =>
-        BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
-            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            ?
-            /*
-            Loaded 2019-10-29 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
-            */
-            "e44af52bb27f725a973478e589d990a6428e115fe1bb14f03833134d6c0f155c"
-            :
-            /*
-            Loaded 2019-10-29 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
-            */
-            "d1bf666298cbe3c5447b9ca0ea608552d750e5d232f9845c2af11907b654903b"));
+        static public byte[] GetElmExecutableFileCompressedGzip =>
+            BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
+                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ?
+                /*
+                Loaded 2019-10-29 from
+                https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
+                */
+                "e44af52bb27f725a973478e589d990a6428e115fe1bb14f03833134d6c0f155c"
+                :
+                /*
+                Loaded 2019-10-29 from
+                https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
+                */
+                "d1bf666298cbe3c5447b9ca0ea608552d750e5d232f9845c2af11907b654903b"));
 
         public const string appStateJsVarName = "app_state";
 
@@ -419,7 +429,7 @@ namespace Kalmit
 
         static string elmHomeDirectory;
 
-        static string GetElmHomeDirectory()
+        static public string GetElmHomeDirectory()
         {
             elmHomeDirectory =
                 overrideElmMakeHomeDirectory ??
