@@ -346,17 +346,30 @@ mapExpressionForOperatorPrecedence originalExpression =
             in
             case Elm.Syntax.Node.value mappedRightExpr of
                 Elm.Syntax.Expression.OperatorApplication rightOperator _ rightLeftExpr rightRightExpr ->
+                    let
+                        operatorPriority =
+                            operatorPrecendencePriority |> Dict.get operator |> Maybe.withDefault 0
+
+                        operatorRightPriority =
+                            operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0
+
+                        areStillOrderedBySyntaxRange =
+                            compareLocations
+                                (Elm.Syntax.Node.range leftExpr).start
+                                (Elm.Syntax.Node.range rightLeftExpr).start
+                                == LT
+                    in
                     if
-                        (operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0)
-                            < (operatorPrecendencePriority |> Dict.get operator |> Maybe.withDefault 0)
+                        (operatorRightPriority < operatorPriority)
+                            || ((operatorRightPriority == operatorPriority) && areStillOrderedBySyntaxRange)
                     then
                         Elm.Syntax.Expression.OperatorApplication rightOperator
                             direction
-                            rightRightExpr
                             (Elm.Syntax.Node.Node
                                 (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftExpr, Elm.Syntax.Node.range rightLeftExpr ])
                                 (Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightLeftExpr)
                             )
+                            rightRightExpr
 
                     else
                         Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
@@ -366,6 +379,18 @@ mapExpressionForOperatorPrecedence originalExpression =
 
         _ ->
             originalExpression
+
+
+compareLocations : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location -> Order
+compareLocations left right =
+    if left.row < right.row then
+        LT
+
+    else if right.row < left.row then
+        GT
+
+    else
+        compare left.column right.column
 
 
 operatorPrecendencePriority : Dict.Dict String Int

@@ -212,20 +212,29 @@ function_with_three_parameters param0 param1 param2 =
                         []
                         """ 17 // 4 """
                     )
-        , Test.test "Operator asterisk precedes operator plus" <|
-            \_ ->
-                Expect.equal (Ok { valueAsJsonString = "17", typeText = "Int" })
-                    (ElmEvaluation.evaluateExpressionString
-                        []
-                        """ 4 + 4 * 3 + 1 """
-                    )
-        , Test.test "Parentheses override operator precedence" <|
-            \_ ->
-                Expect.equal (Ok { valueAsJsonString = "12", typeText = "Int" })
-                    (ElmEvaluation.evaluateExpressionString
-                        []
-                        """ (1 + 2) * (3 + 1) """
-                    )
+        , Test.describe "Operator precedence"
+            [ Test.test "Operator asterisk precedes operator plus" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "17", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ 4 + 4 * 3 + 1 """
+                        )
+            , Test.test "Parentheses override operator precedence" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "12", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ (1 + 2) * (3 + 1) """
+                        )
+            , Test.test "Multiplication and division operators have same priority and are applied left to right" <|
+                \_ ->
+                    Expect.equal (Ok { valueAsJsonString = "13", typeText = "Int" })
+                        (ElmEvaluation.evaluateExpressionString
+                            []
+                            """ 20 * 20 // 30 """
+                        )
+            ]
         , Test.describe "Core functions"
             [ Test.test "String.length" <|
                 \_ ->
