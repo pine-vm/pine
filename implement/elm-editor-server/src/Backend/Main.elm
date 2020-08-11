@@ -15,7 +15,7 @@ import Url
 
 type alias State =
     { volatileHostId : Maybe String
-    , httpRequestToAnswer : Maybe InterfaceToHost.HttpRequestEventStructure
+    , pendingHttpRequests : List InterfaceToHost.HttpRequestEventStructure
     }
 
 
@@ -62,7 +62,7 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                 )
 
             else
-                ( { stateBefore | httpRequestToAnswer = Just httpRequestEvent }
+                ( { stateBefore | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10 }
                 , InterfaceToHost.passiveAppEventResponse
                 )
 
@@ -71,46 +71,45 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                 InterfaceToHost.CreateVolatileHostResponse createVolatileHostResponse ->
                     case createVolatileHostResponse of
                         Err createVolatileHostError ->
-                            case stateBefore.httpRequestToAnswer of
-                                Nothing ->
-                                    ( stateBefore
-                                    , InterfaceToHost.passiveAppEventResponse
-                                    )
+                            let
+                                bodyFromString =
+                                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
-                                Just httpRequestToAnswer ->
-                                    let
-                                        bodyFromString =
-                                            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+                                httpResponse =
+                                    { statusCode = 500
+                                    , bodyAsBase64 = bodyFromString ("Failed to create volatile host: " ++ createVolatileHostError.exceptionToString)
+                                    , headersToAdd = []
+                                    }
 
-                                        httpResponse =
-                                            { statusCode = 500
-                                            , bodyAsBase64 = bodyFromString ("Failed to create volatile host: " ++ createVolatileHostError.exceptionToString)
-                                            , headersToAdd = []
-                                            }
-
-                                        state =
-                                            { stateBefore | httpRequestToAnswer = Nothing }
-                                    in
-                                    ( state
-                                    , InterfaceToHost.passiveAppEventResponse
-                                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                                            [ { httpRequestId = httpRequestToAnswer.httpRequestId
-                                              , response = httpResponse
-                                              }
-                                            ]
-                                    )
+                                httpResponses =
+                                    stateBefore.pendingHttpRequests
+                                        |> List.map
+                                            (\httpRequest ->
+                                                { httpRequestId = httpRequest.httpRequestId
+                                                , response = httpResponse
+                                                }
+                                            )
+                            in
+                            ( { stateBefore | pendingHttpRequests = [] }
+                            , InterfaceToHost.passiveAppEventResponse
+                                |> InterfaceToHost.withCompleteHttpResponsesAdded httpResponses
+                            )
 
                         Ok { hostId } ->
                             ( { stateBefore | volatileHostId = Just hostId }, InterfaceToHost.passiveAppEventResponse )
 
                 InterfaceToHost.RequestToVolatileHostResponse requestToVolatileHostResponse ->
-                    case stateBefore.httpRequestToAnswer of
+                    case
+                        stateBefore.pendingHttpRequests
+                            |> List.filter (taskIdForHttpRequest >> (==) taskComplete.taskId)
+                            |> List.head
+                    of
                         Nothing ->
                             ( stateBefore
                             , InterfaceToHost.passiveAppEventResponse
                             )
 
-                        Just httpRequestToAnswer ->
+                        Just httpRequestEvent ->
                             let
                                 bodyFromString =
                                     Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
@@ -144,14 +143,15 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                                                             )
                                                     , headersToAdd = headersToAdd
                                                     }
-
-                                state =
-                                    { stateBefore | httpRequestToAnswer = Nothing }
                             in
-                            ( state
+                            ( { stateBefore
+                                | pendingHttpRequests =
+                                    stateBefore.pendingHttpRequests
+                                        |> List.filter ((==) httpRequestEvent >> not)
+                              }
                             , InterfaceToHost.passiveAppEventResponse
                                 |> InterfaceToHost.withCompleteHttpResponsesAdded
-                                    [ { httpRequestId = httpRequestToAnswer.httpRequestId
+                                    [ { httpRequestId = httpRequestEvent.httpRequestId
                                       , response = httpResponse
                                       }
                                     ]
@@ -165,11 +165,11 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
 
 tasksFromState : State -> List InterfaceToHost.StartTaskStructure
 tasksFromState state =
-    case state.httpRequestToAnswer of
+    case state.pendingHttpRequests |> List.head of
         Nothing ->
             []
 
-        Just httpRequestToAnswer ->
+        Just httpRequestEvent ->
             case state.volatileHostId of
                 Nothing ->
                     [ { taskId = "create-vhost"
@@ -182,16 +182,21 @@ tasksFromState state =
                         task =
                             { hostId = volatileHostId
                             , request =
-                                httpRequestToAnswer.request.bodyAsBase64
+                                httpRequestEvent.request.bodyAsBase64
                                     |> Maybe.andThen Common.decodeBase64ToString
                                     |> Maybe.withDefault "Error decoding base64"
                             }
                                 |> InterfaceToHost.RequestToVolatileHost
                     in
-                    [ { taskId = "http-request-api-" ++ httpRequestToAnswer.httpRequestId
+                    [ { taskId = taskIdForHttpRequest httpRequestEvent
                       , task = task
                       }
                     ]
+
+
+taskIdForHttpRequest : InterfaceToHost.HttpRequestEventStructure -> String
+taskIdForHttpRequest httpRequestEvent =
+    "http-request-api-" ++ httpRequestEvent.httpRequestId
 
 
 urlLeadsToFrontendHtmlDocument : Url.Url -> Bool
@@ -201,7 +206,7 @@ urlLeadsToFrontendHtmlDocument url =
 
 interfaceToHost_initState : State
 interfaceToHost_initState =
-    { volatileHostId = Nothing, httpRequestToAnswer = Nothing }
+    { volatileHostId = Nothing, pendingHttpRequests = [] }
 
 
 interfaceToHost_processEvent : String -> State -> ( State, String )
