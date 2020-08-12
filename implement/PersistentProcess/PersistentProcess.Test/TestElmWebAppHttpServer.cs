@@ -8,21 +8,17 @@ namespace Kalmit.PersistentProcess.Test
     [TestClass]
     public class TestElmWebAppHttpServer
     {
-        static public Composition.Component AppConfigComponentFromFiles(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> appFiles) =>
-            Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles));
-
         static public Composition.Component CounterWebApp =>
-            AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
+            TestSetup.AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
 
         static public Composition.Component StringBuilderWebApp =>
-            AppConfigComponentFromFiles(TestSetup.StringBuilderElmWebApp);
+            TestSetup.AppConfigComponentFromFiles(TestSetup.StringBuilderElmWebApp);
 
         static public Composition.Component CrossPropagateHttpHeadersToAndFromBody =>
-            AppConfigComponentFromFiles(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
+            TestSetup.AppConfigComponentFromFiles(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
 
         static public Composition.Component HttpProxyWebApp =>
-            AppConfigComponentFromFiles(TestSetup.HttpProxyWebApp);
+            TestSetup.AppConfigComponentFromFiles(TestSetup.HttpProxyWebApp);
 
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()

@@ -19,16 +19,9 @@ namespace Kalmit.PersistentProcess.Test
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetLoweredElmAppFromDirectoryPath(
             IImmutableList<string> directoryPath)
         {
-            var originalFiles =
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    ElmApp.FilesFilteredForElmApp(
-                        Filesystem.GetAllFilesFromDirectory(FilePathStringFromPath(directoryPath)))
-                        .OrderBy(file => file.filePath)
-                        .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent)));
-
             return
                 ElmApp.AsCompletelyLoweredElmApp(
-                    sourceFiles: originalFiles,
+                    sourceFiles: TestSetup.GetElmAppFromDirectoryPath(directoryPath),
                     ElmAppInterfaceConfig.Default,
                     Console.WriteLine);
         }

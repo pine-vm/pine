@@ -11,6 +11,10 @@ namespace Kalmit.PersistentProcess.Test
     {
         static public string PathToExampleElmApps => "./../../../../example-elm-apps";
 
+        static public Composition.Component AppConfigComponentFromFiles(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> appFiles) =>
+            Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles));
+
         static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
             IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
             additionsAndExpectedResponses
@@ -72,12 +76,22 @@ namespace Kalmit.PersistentProcess.Test
         }
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromExampleName(
-            string exampleName) =>
+            string exampleName) => GetElmAppFromDirectoryPath(Path.Combine(PathToExampleElmApps, exampleName));
+
+        static string FilePathStringFromPath(IImmutableList<string> path) =>
+            Path.Combine(path.ToArray());
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromDirectoryPath(
+            IImmutableList<string> directoryPath) =>
+            GetElmAppFromDirectoryPath(FilePathStringFromPath(directoryPath));
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetElmAppFromDirectoryPath(
+            string directoryPath) =>
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     ElmApp.FilesFilteredForElmApp(
-                        Filesystem.GetAllFilesFromDirectory(Path.Combine(PathToExampleElmApps, exampleName)))
-                    .OrderBy(file => file.filePath)
-                    .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent)));
+                        Filesystem.GetAllFilesFromDirectory(directoryPath))
+                        .OrderBy(file => file.filePath)
+                        .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.filePath.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.fileContent)));
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles) =>

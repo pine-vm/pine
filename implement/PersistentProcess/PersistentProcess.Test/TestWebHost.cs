@@ -662,7 +662,7 @@ namespace Kalmit.PersistentProcess.Test
             var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.AppConfigComponentFromFiles(webAppConfigFiles)))
+                deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(webAppConfigFiles)))
             {
                 using (var server = testSetup.StartWebHost())
                 {
@@ -1128,7 +1128,7 @@ namespace Kalmit.PersistentProcess.Test
         {
             var appSourceFiles = TestSetup.GetElmAppFromExampleName("http-long-polling");
 
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.AppConfigComponentFromFiles(appSourceFiles)))
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles)))
             {
                 using (var server = testSetup.StartWebHost())
                 {
