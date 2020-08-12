@@ -20,6 +20,20 @@ namespace Kalmit
                 return hasher.ComputeHash(input);
         }
 
+        static public byte[] CompressGzip(byte[] original)
+        {
+            using (var compressedStream = new System.IO.MemoryStream())
+            {
+                using (var compressStream = new System.IO.Compression.GZipStream(
+                    compressedStream, System.IO.Compression.CompressionMode.Compress))
+                {
+                    compressStream.Write(original);
+                    compressStream.Flush();
+                    return compressedStream.ToArray();
+                }
+            }
+        }
+
         static public byte[] DecompressGzip(byte[] compressed)
         {
             using (var decompressStream = new System.IO.Compression.GZipStream(

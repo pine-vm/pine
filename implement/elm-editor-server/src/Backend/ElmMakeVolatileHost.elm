@@ -1,5 +1,5 @@
 module Backend.ElmMakeVolatileHost exposing
-    ( jsonDecodeElmMakeResponseStructure
+    ( jsonDecodeResponseStructure
     , requestToVolatileHost
     , volatileHostScript
     )
@@ -10,27 +10,27 @@ import Json.Decode
 import Json.Encode
 
 
-type alias ElmMakeRequestStructure =
-    FrontendBackendInterface.ElmMakeRequestStructure
+type alias RequestStructure =
+    FrontendBackendInterface.RequestStructure
 
 
-type alias ElmMakeResponseStructure =
-    FrontendBackendInterface.ElmMakeResponseStructure
+type alias ResponseStructure =
+    FrontendBackendInterface.ResponseStructure
 
 
-jsonDecodeElmMakeResponseStructure : Json.Decode.Decoder ElmMakeResponseStructure
-jsonDecodeElmMakeResponseStructure =
-    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeElmMakeResponseStructure
+jsonDecodeResponseStructure : Json.Decode.Decoder ResponseStructure
+jsonDecodeResponseStructure =
+    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeResponseStructure
 
 
-jsonEncodeElmMakeRequestStructure : ElmMakeRequestStructure -> Json.Encode.Value
-jsonEncodeElmMakeRequestStructure =
-    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeElmMakeRequestStructure
+jsonEncodeRequestStructure : RequestStructure -> Json.Encode.Value
+jsonEncodeRequestStructure =
+    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestStructure
 
 
-requestToVolatileHost : ElmMakeRequestStructure -> String
+requestToVolatileHost : RequestStructure -> String
 requestToVolatileHost =
-    jsonEncodeElmMakeRequestStructure >> Json.Encode.encode 0
+    jsonEncodeRequestStructure >> Json.Encode.encode 0
 
 
 volatileHostScript : String
@@ -57,12 +57,34 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
+public class RequestStructure
+{
+    public IReadOnlyList<ElmMakeRequestStructure> ElmMakeRequest;
+
+    public IReadOnlyList<string> FormatElmModuleTextRequest;
+}
+
+public class ResponseStructure
+{
+    public IReadOnlyList<ElmMakeResponseStructure> ElmMakeResponse;
+
+    public IReadOnlyList<FormatElmModuleTextResponseStructure> FormatElmModuleTextResponse;
+
+    public IReadOnlyList<string> ErrorResponse;
+}
 
 public class ElmMakeRequestStructure
 {
     public IReadOnlyList<FileWithPath> files;
 
     public string commandLineArguments;
+}
+
+public class FormatElmModuleTextResponseStructure
+{
+    public Maybe<string> formattedText;
+
+    public ProcessOutput processOutput;
 }
 
 public class FileWithPath
@@ -72,7 +94,7 @@ public class FileWithPath
     public string contentBase64;
 }
 
-public class ElmMakeResultStructure
+public class ElmMakeResponseStructure
 {
     public ProcessOutput processOutput;
 
@@ -89,10 +111,47 @@ public struct ProcessOutput
 }
 
 
-string GetResponseFromRequestSerial(string serializedRequest)
+string GetSerialResponseFromSerialRequest(string serializedRequest)
 {
-    var elmMakeRequest = Newtonsoft.Json.JsonConvert.DeserializeObject<ElmMakeRequestStructure>(serializedRequest);
+    var request = Newtonsoft.Json.JsonConvert.DeserializeObject<RequestStructure>(serializedRequest);
 
+    var response = GetResponseFromRequest(request);
+
+    return Newtonsoft.Json.JsonConvert.SerializeObject(response);
+}
+
+ResponseStructure GetResponseFromRequest(RequestStructure request)
+{
+    var elmMakeRequest =
+        request.ElmMakeRequest?.FirstOrDefault();
+
+    if(elmMakeRequest != null)
+    {
+        return new ResponseStructure
+        {
+            ElmMakeResponse = ImmutableList.Create(ElmMake(elmMakeRequest))
+        };
+    }
+
+    var formatElmModuleTextRequest =
+        request.FormatElmModuleTextRequest?.FirstOrDefault();
+
+    if(formatElmModuleTextRequest != null)
+    {
+        return new ResponseStructure
+        {
+            FormatElmModuleTextResponse = ImmutableList.Create(ElmFormat.FormatElmModuleText(formatElmModuleTextRequest))
+        };
+    }
+
+    return new ResponseStructure
+    {
+        ErrorResponse = ImmutableList.Create("This request does not encode any supported case.")
+    };
+}
+
+ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
+{
     var elmCodeFiles =
         elmMakeRequest.files
         .ToImmutableDictionary(
@@ -158,13 +217,13 @@ string GetResponseFromRequestSerial(string serializedRequest)
         exitCode = commandResults.processOutput.ExitCode,
     };
 
-    var responseStructure = new ElmMakeResultStructure
+    var responseStructure = new ElmMakeResponseStructure
     {
         processOutput = processOutput,
         files = newFiles,
     };
 
-    return Newtonsoft.Json.JsonConvert.SerializeObject(responseStructure);
+    return responseStructure;
 }
 
 string MakePlatformSpecificPath(IImmutableList<string> path) =>
@@ -204,10 +263,89 @@ static public string GetElmHomeDirectory()
     return elmHomeDirectory;
 }
 
+static public class ElmFormat
+{
+    static public FormatElmModuleTextResponseStructure FormatElmModuleText(string originalModuleText)
+    {
+        var elmModuleFileName = "ElmModuleToFormat.elm";
+
+        var elmFormatResult =
+            Kalmit.ExecutableFile.ExecuteFileWithArguments(
+                ImmutableList.Create(
+                    (elmModuleFileName, (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText).ToImmutableList())),
+                GetElmFormatExecutableFile,
+                " " + elmModuleFileName + " --yes",
+                environmentStrings: null);
+
+        var resultingFile =
+            elmFormatResult.resultingFiles
+            .FirstOrDefault(file => file.name.EndsWith(elmModuleFileName))
+            .content;
+
+        var formattedText =
+            resultingFile == null ? null : System.Text.Encoding.UTF8.GetString(resultingFile.ToArray());
+
+        var processOutput = new ProcessOutput
+        {
+            standardOutput = elmFormatResult.processOutput.StandardOutput,
+            standardError = elmFormatResult.processOutput.StandardError,
+            exitCode = elmFormatResult.processOutput.ExitCode,
+        };
+
+        return new FormatElmModuleTextResponseStructure
+        {
+            processOutput = processOutput,
+            formattedText = Maybe<string>.NothingFromNull(formattedText),
+        };
+    }
+
+    static public byte[] GetElmFormatExecutableFile =>
+        Kalmit.CommonConversion.DecompressGzip(GetElmFormatExecutableFileCompressedGzip);
+
+    static public byte[] GetElmFormatExecutableFileCompressedGzip =>
+        Kalmit.BlobLibrary.GetBlobWithSHA256(Kalmit.CommonConversion.ByteArrayFromStringBase16(
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)
+            ?
+            /*
+            Loaded 2020-08-12 from
+            https://github.com/avh4/elm-format/releases/download/0.8.3/elm-format-0.8.3-linux-x64.tgz
+            */
+            "488a7eab12837d66aaed8eb23b80647a02c87c38daf6f1a3c4e60fff59fe01be"
+            :
+            /*
+            Loaded 2020-08-12 from
+            https://github.com/avh4/elm-format/releases/download/0.8.3/elm-format-0.8.3-win-i386.zip
+            */
+            "5fc848a7215f400aae60bd02101809c63bd084e0972b9a8962633afc81a53cbd"));
+
+}
+
+public class Maybe<JustT>
+{
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public IReadOnlyList<object> Nothing;
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public IReadOnlyList<JustT> Just;
+
+    static public Maybe<JustT> just(JustT j) =>
+        new Maybe<JustT> { Just = ImmutableList.Create(j) };
+
+    static public Maybe<JustT> nothing() =>
+        new Maybe<JustT> { Nothing = ImmutableList<object>.Empty };
+
+    static public Maybe<JustT> NothingFromNull(JustT maybeNull) =>
+        maybeNull == null
+        ?
+        nothing()
+        :
+        new Maybe<JustT> { Just = ImmutableList.Create(maybeNull) };
+}
+
 
 string InterfaceToHost_Request(string request)
 {
-    return GetResponseFromRequestSerial(request);
+    return GetSerialResponseFromSerialRequest(request);
 }
 
 """

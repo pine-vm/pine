@@ -5,16 +5,16 @@ import Json.Decode
 import Json.Encode
 
 
-jsonEncodeElmMakeRequestStructure : FrontendBackendInterface.ElmMakeRequestStructure -> Json.Encode.Value
-jsonEncodeElmMakeRequestStructure =
+jsonEncodeRequestStructure : FrontendBackendInterface.RequestStructure -> Json.Encode.Value
+jsonEncodeRequestStructure =
     always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
 
 
-jsonDecodeElmMakeRequestStructure : Json.Decode.Decoder FrontendBackendInterface.ElmMakeRequestStructure
-jsonDecodeElmMakeRequestStructure =
+jsonDecodeRequestStructure : Json.Decode.Decoder FrontendBackendInterface.RequestStructure
+jsonDecodeRequestStructure =
     Json.Decode.fail "The Elm-fullstack compiler replaces this function."
 
 
-jsonDecodeElmMakeResponseStructure : Json.Decode.Decoder FrontendBackendInterface.ElmMakeResponseStructure
-jsonDecodeElmMakeResponseStructure =
+jsonDecodeResponseStructure : Json.Decode.Decoder FrontendBackendInterface.ResponseStructure
+jsonDecodeResponseStructure =
     Json.Decode.fail "The Elm-fullstack compiler replaces this function."

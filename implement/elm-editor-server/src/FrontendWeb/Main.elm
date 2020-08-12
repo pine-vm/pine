@@ -7,6 +7,7 @@ import Bytes.Encode
 import Common
 import Element
 import Element.Background
+import Element.Border
 import Element.Font
 import Element.Input
 import ElmFullstackCompilerInterface.GenerateJsonCoders
@@ -15,6 +16,7 @@ import Html
 import Html.Attributes as HA
 import Html.Events
 import Http
+import Json.Decode
 import Url
 import Url.Builder
 
@@ -27,6 +29,7 @@ type alias State =
     { navigationKey : Navigation.Key
     , inputElmCode : String
     , elmMakeResult : Maybe (Result Http.Error ElmMakeResultStructure)
+    , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     }
 
 
@@ -38,8 +41,10 @@ type alias ElmMakeResultStructure =
 
 type Event
     = UserInputElmCode String
+    | UserInputFormat
     | UserInputCompile
-    | ElmMakeResponse { response : Result Http.Error ElmMakeResponseStructure }
+    | BackendElmFormatResponseEvent (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
+    | BackendElmMakeResponseEvent (Result Http.Error FrontendBackendInterface.ElmMakeResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
 
@@ -61,6 +66,7 @@ init _ url navigationKey =
     { navigationKey = navigationKey
     , inputElmCode = initElmCode
     , elmMakeResult = Nothing
+    , elmFormatResult = Nothing
     }
         |> update (UrlChange url)
 
@@ -73,15 +79,24 @@ update event stateBefore =
             , Cmd.none
             )
 
+        UserInputFormat ->
+            ( stateBefore, elmFormatCmd stateBefore )
+
         UserInputCompile ->
-            ( stateBefore
-            , elmMakeCmd stateBefore
+            ( stateBefore, elmMakeCmd stateBefore )
+
+        BackendElmFormatResponseEvent httpResponse ->
+            ( { stateBefore
+                | elmFormatResult = Just httpResponse
+                , inputElmCode = httpResponse |> Result.toMaybe |> Maybe.andThen .formattedText |> Maybe.withDefault stateBefore.inputElmCode
+              }
+            , Cmd.none
             )
 
-        ElmMakeResponse { response } ->
+        BackendElmMakeResponseEvent httpResponse ->
             let
                 elmMakeResult =
-                    response
+                    httpResponse
                         |> Result.map
                             (\responseOk ->
                                 let
@@ -119,6 +134,23 @@ update event stateBefore =
                     ( stateBefore, Navigation.load url )
 
 
+elmFormatCmd : State -> Cmd Event
+elmFormatCmd state =
+    let
+        request =
+            state.inputElmCode |> FrontendBackendInterface.FormatElmModuleTextRequest
+
+        jsonDecoder backendResponse =
+            case backendResponse of
+                FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
+                    Json.Decode.succeed formatResponse
+
+                _ ->
+                    Json.Decode.fail "Unexpected response"
+    in
+    requestToApiCmd request jsonDecoder BackendElmFormatResponseEvent
+
+
 elmMakeCmd : State -> Cmd Event
 elmMakeCmd state =
     let
@@ -132,7 +164,7 @@ elmMakeCmd state =
         entryPointFilePath =
             [ "src", "Main.elm" ]
 
-        request =
+        elmMakeRequest =
             { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
             , files =
                 [ ( [ "elm.json" ]
@@ -150,13 +182,37 @@ elmMakeCmd state =
                         )
             }
 
+        request =
+            elmMakeRequest |> FrontendBackendInterface.ElmMakeRequest
+
+        jsonDecoder backendResponse =
+            case backendResponse of
+                FrontendBackendInterface.ElmMakeResponse elmMakeResponse ->
+                    Json.Decode.succeed elmMakeResponse
+
+                _ ->
+                    Json.Decode.fail "Unexpected response"
+    in
+    requestToApiCmd request jsonDecoder BackendElmMakeResponseEvent
+
+
+requestToApiCmd :
+    FrontendBackendInterface.RequestStructure
+    -> (FrontendBackendInterface.ResponseStructure -> Json.Decode.Decoder event)
+    -> (Result Http.Error event -> Event)
+    -> Cmd Event
+requestToApiCmd request jsonDecoderSpecialization eventConstructor =
+    let
         jsonDecoder =
-            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeElmMakeResponseStructure
+            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeResponseStructure
+                |> Json.Decode.andThen jsonDecoderSpecialization
     in
     Http.post
         { url = Url.Builder.absolute [ "api" ] []
-        , body = Http.jsonBody (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeElmMakeRequestStructure)
-        , expect = Http.expectJson (\response -> ElmMakeResponse { response = response }) jsonDecoder
+        , body =
+            Http.jsonBody
+                (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
+        , expect = Http.expectJson (\response -> eventConstructor response) jsonDecoder
         }
 
 
@@ -212,18 +268,33 @@ view state =
                                 []
                                 |> Element.html
 
-        compileButton =
+        buttonElement buttonConfig =
             Element.Input.button
                 [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
                 , Element.mouseOver
-                    [ Element.Background.color (Element.rgb 0.2 0.2 0.5) ]
+                    [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
                 , Element.paddingXY defaultFontSize (defaultFontSize // 2)
-                , Element.alignRight
+                , Element.Border.widthEach { left = 0, right = 0, top = 0, bottom = 2 }
+                , Element.Border.color (Element.rgb 0 0.5 0.8)
                 ]
-                { label = Element.column [] [ Element.text "▶️ Compile" ], onPress = Just UserInputCompile }
+                { label = Element.text buttonConfig.label
+                , onPress = buttonConfig.onPress
+                }
+
+        formatButton =
+            buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
+
+        compileButton =
+            buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
 
         body =
-            [ [ editorElement state ]
+            [ [ [ formatButton ]
+                    |> Element.row
+                        [ Element.spacing defaultFontSize
+                        , Element.padding (defaultFontSize // 2)
+                        ]
+              , editorElement state
+              ]
                 |> Element.column
                     [ Element.spacing (defaultFontSize // 2)
                     , Element.width (Element.fillPortion 4)
