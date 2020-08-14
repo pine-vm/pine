@@ -145,26 +145,32 @@ namespace Kalmit
 
             var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
 
-            byte[] BuildFrontendWebHtml(IImmutableList<string> pathToFileWithElmEntryPoint, string elmMakeCommandAppendix)
+            byte[] ElmMake(
+                IImmutableList<string> pathToFileWithElmEntryPoint,
+                string elmMakeCommandAppendix,
+                bool makeJavascript)
             {
-                var frontendWebHtml = ProcessFromElm019Code.CompileElmToHtml(
+                var fileAsString = ProcessFromElm019Code.CompileElm(
                     originalAppFiles,
                     pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                    outputFileName: "output." + (makeJavascript ? "js" : "html"),
                     elmMakeCommandAppendix: elmMakeCommandAppendix);
 
-                return Encoding.UTF8.GetBytes(frontendWebHtml);
+                return Encoding.UTF8.GetBytes(fileAsString);
             }
 
             string compileFileExpression(
                 IImmutableList<string> pathToFileWithElmEntryPoint,
                 string elmMakeCommandAppendix,
-                bool encodingBase64)
+                bool encodingBase64,
+                bool makeJavascript)
             {
-                var htmlFile = BuildFrontendWebHtml(
+                var elmMadeFile = ElmMake(
                     pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+                    elmMakeCommandAppendix: elmMakeCommandAppendix,
+                    makeJavascript);
 
-                var fileAsBase64 = Convert.ToBase64String(htmlFile);
+                var fileAsBase64 = Convert.ToBase64String(elmMadeFile);
 
                 var base64Expression = "\"" + fileAsBase64 + "\"";
 
@@ -221,7 +227,8 @@ namespace Kalmit
                 var fileExpression = compileFileExpression(
                     pathToFileWithElmEntryPoint: matchingFiles.Single().Key,
                     elmMakeCommandAppendix: elmMakeCommandAppendix,
-                    encodingBase64: flags.Contains("base64"));
+                    encodingBase64: flags.Contains("base64"),
+                    makeJavascript: flags.Contains("javascript"));
 
                 var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, fileExpression);
 

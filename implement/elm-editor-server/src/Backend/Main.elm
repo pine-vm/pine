@@ -6,6 +6,7 @@ module Backend.Main exposing
 
 import Backend.ElmMakeVolatileHost as ElmMakeVolatileHost
 import Backend.InterfaceToHost as InterfaceToHost
+import Backend.Route
 import Base64
 import Bytes.Encode
 import Common
@@ -42,29 +43,49 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
             )
 
         InterfaceToHost.HttpRequestEvent httpRequestEvent ->
-            if
-                httpRequestEvent.request.uri
-                    |> Url.fromString
-                    |> Maybe.map urlLeadsToFrontendHtmlDocument
-                    |> Maybe.withDefault False
-            then
-                ( stateBefore
-                , InterfaceToHost.passiveAppEventResponse
-                    |> InterfaceToHost.withCompleteHttpResponsesAdded
-                        [ { httpRequestId = httpRequestEvent.httpRequestId
-                          , response =
-                                { statusCode = 200
-                                , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
-                                , headersToAdd = []
-                                }
-                          }
-                        ]
-                )
+            let
+                bodyFromString =
+                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
-            else
-                ( { stateBefore | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10 }
-                , InterfaceToHost.passiveAppEventResponse
-                )
+                httpResponseOkWithStringContent stringContent =
+                    httpResponseOkWithBodyAsBase64 (bodyFromString stringContent)
+
+                httpResponseOkWithBodyAsBase64 bodyAsBase64 =
+                    { httpRequestId = httpRequestEvent.httpRequestId
+                    , response =
+                        { statusCode = 200
+                        , bodyAsBase64 = bodyAsBase64
+                        , headersToAdd = []
+                        }
+                    }
+            in
+            case httpRequestEvent.request.uri |> Url.fromString |> Maybe.andThen Backend.Route.routeFromUrl of
+                Nothing ->
+                    ( stateBefore
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            [ httpResponseOkWithStringContent frontendHtmlDocument
+                            ]
+                    )
+
+                Just (Backend.Route.StaticFileRoute Backend.Route.FrontendElmJavascriptRoute) ->
+                    ( stateBefore
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            [ httpResponseOkWithBodyAsBase64 (Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm) ]
+                    )
+
+                Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
+                    ( stateBefore
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            [ httpResponseOkWithStringContent monacoHtmlDocument ]
+                    )
+
+                Just Backend.Route.ApiRoute ->
+                    ( { stateBefore | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10 }
+                    , InterfaceToHost.passiveAppEventResponse
+                    )
 
         InterfaceToHost.TaskCompleteEvent taskComplete ->
             case taskComplete.taskResult of
@@ -199,11 +220,6 @@ taskIdForHttpRequest httpRequestEvent =
     "http-request-api-" ++ httpRequestEvent.httpRequestId
 
 
-urlLeadsToFrontendHtmlDocument : Url.Url -> Bool
-urlLeadsToFrontendHtmlDocument url =
-    not (url.path == "/api" || (url.path |> String.startsWith "/api/"))
-
-
 interfaceToHost_initState : State
 interfaceToHost_initState =
     { volatileHostId = Nothing, pendingHttpRequests = [] }
@@ -212,3 +228,149 @@ interfaceToHost_initState =
 interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
     InterfaceToHost.wrapForSerialInterface_processEvent processEvent
+
+
+frontendHtmlDocument : String
+frontendHtmlDocument =
+    """
+<!DOCTYPE HTML>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Elm Editor</title>
+  <script type="text/javascript" src="elm-made.js"></script>
+</head>
+
+<body>
+    <div id="elm-app-container"></div>
+</body>
+
+<script type="text/javascript">
+
+var app = Elm.FrontendWeb.Main.init({
+    node: document.getElementById('elm-app-container')
+});
+
+app.ports.sendMessageToMonacoFrame.subscribe(function(message) {
+    document.getElementById('monaco-iframe').contentWindow?.dispatchMessage?.(message);
+});
+
+function messageFromMonacoFrame(message) {
+    app.ports.receiveMessageFromMonacoFrame?.send(message);
+}
+
+</script>
+
+</html>
+"""
+
+
+monacoHtmlDocument : String
+monacoHtmlDocument =
+    monacoHtmlDocumentFromCdnUrl (monacoCdnURLs |> List.head |> Maybe.withDefault "Missing URL to CDN")
+
+
+{-| Combine from samples:
+
+  - <https://github.com/microsoft/monaco-editor/blob/1396f98763b08e4b8dc3d9e16e23ceb67d8456e9/docs/integrate-amd.md>
+  - <https://github.com/microsoft/monaco-editor/blob/1396f98763b08e4b8dc3d9e16e23ceb67d8456e9/docs/integrate-amd-cross.md>
+
+-}
+monacoHtmlDocumentFromCdnUrl : String -> String
+monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
+    """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
+<body style="margin:0;height:93vh;">
+
+<div id="container" style="height:100%;width:100%;"></div>
+
+<script type="text/javascript" src="url-to-the-monaco-cdn-directory-min/vs/loader.js"></script>
+
+<script>
+
+    function getEditorModel() {
+        if(typeof monaco != "object")
+            return null;
+
+        return monaco?.editor?.getModels()[0];
+    }
+
+    function monacoEditorSetValue(newValue) {
+        getEditorModel()?.setValue(newValue);
+    }
+
+    function dispatchMessage(message) {
+        if(message.SetValue)
+            monacoEditorSetValue(message.SetValue[0]);
+    }
+
+    function tryCompleteSetup() {
+        var editorModel = getEditorModel();
+
+        if(editorModel == null) {
+            setTimeout(tryCompleteSetup, 500);
+        }
+        else {
+            editorModel.onDidChangeContent(function() {
+                var content = getEditorModel().getValue();
+
+                // console.log("onDidChangeContent:\\n" + content);
+
+                parent?.messageFromMonacoFrame?.({"DidChangeContentEvent":[content]});
+            });
+
+            parent?.messageFromMonacoFrame?.({"CompletedSetupEvent":[]});
+        }
+    }
+
+</script>
+
+<script>
+  require.config({ paths: { 'vs': 'url-to-the-monaco-cdn-directory-min/vs' }});
+
+  // Before loading vs/editor/editor.main, define a global MonacoEnvironment that overwrites
+  // the default worker url location (used when creating WebWorkers). The problem here is that
+  // HTML5 does not allow cross-domain web workers, so we need to proxy the instantiation of
+  // a web worker through a same-domain script
+  window.MonacoEnvironment = {
+    getWorkerUrl: function(workerId, label) {
+      return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+        self.MonacoEnvironment = {
+          baseUrl: 'url-to-the-monaco-cdn-directory-min/'
+        };
+        importScripts('url-to-the-monaco-cdn-directory-min/vs/base/worker/workerMain.js');`
+      )}`;
+    }
+  };
+    require(['vs/editor/editor.main'], function() {
+        var editor = monaco.editor.create(document.getElementById('container'), {
+            value: "Initialization of editor is not complete yet",
+            language: 'Elm',
+            automaticLayout: true,
+            scrollBeyondLastLine: false,
+            theme: "vs-dark"
+        });
+
+        tryCompleteSetup();
+    });
+</script>
+
+</body>
+</html>
+"""
+        |> String.replace "url-to-the-monaco-cdn-directory-min" cdnUrlToMin
+
+
+{-| <https://github.com/microsoft/monaco-editor/issues/583>
+-}
+monacoCdnURLs : List String
+monacoCdnURLs =
+    [ "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.20.0/min"
+    , "https://unpkg.com/monaco-editor@0.20.0/min"
+    , "https://cdn.jsdelivr.net/npm/monaco-editor@0.20/min/"
+    ]

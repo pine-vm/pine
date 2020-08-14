@@ -1,4 +1,4 @@
-module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
+port module FrontendWeb.Main exposing (Event(..), State, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
 
 import Base64
 import Browser
@@ -12,13 +12,20 @@ import Element.Font
 import Element.Input
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import FrontendBackendInterface
+import FrontendWeb.MonacoEditor
 import Html
 import Html.Attributes as HA
-import Html.Events
 import Http
 import Json.Decode
+import Json.Encode
 import Url
 import Url.Builder
+
+
+port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
+
+
+port receiveMessageFromMonacoFrame : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias ElmMakeResponseStructure =
@@ -27,7 +34,8 @@ type alias ElmMakeResponseStructure =
 
 type alias State =
     { navigationKey : Navigation.Key
-    , inputElmCode : String
+    , editorElmCode : String
+    , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , elmMakeResult : Maybe (Result Http.Error ElmMakeResultStructure)
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     }
@@ -41,6 +49,7 @@ type alias ElmMakeResultStructure =
 
 type Event
     = UserInputElmCode String
+    | MonacoEditorEvent Json.Decode.Value
     | UserInputFormat
     | UserInputCompile
     | BackendElmFormatResponseEvent (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
@@ -54,7 +63,7 @@ main =
     Browser.application
         { init = init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = always (receiveMessageFromMonacoFrame MonacoEditorEvent)
         , view = view
         , onUrlRequest = UrlRequest
         , onUrlChange = UrlChange
@@ -63,21 +72,42 @@ main =
 
 init : () -> Url.Url -> Navigation.Key -> ( State, Cmd Event )
 init _ url navigationKey =
-    { navigationKey = navigationKey
-    , inputElmCode = initElmCode
-    , elmMakeResult = Nothing
-    , elmFormatResult = Nothing
-    }
-        |> update (UrlChange url)
+    let
+        ( model, urlChangeCmd ) =
+            { navigationKey = navigationKey
+            , editorElmCode = initElmCode
+            , decodeMessageFromMonacoEditorError = Nothing
+            , elmMakeResult = Nothing
+            , elmFormatResult = Nothing
+            }
+                |> update (UrlChange url)
+    in
+    ( model, urlChangeCmd )
 
 
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
     case event of
         UserInputElmCode inputElmCode ->
-            ( { stateBefore | inputElmCode = inputElmCode }
+            ( { stateBefore | editorElmCode = inputElmCode }
             , Cmd.none
             )
+
+        MonacoEditorEvent monacoEditorEvent ->
+            case
+                monacoEditorEvent
+                    |> Json.Decode.decodeValue ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
+            of
+                Err decodeError ->
+                    ( { stateBefore | decodeMessageFromMonacoEditorError = Just decodeError }, Cmd.none )
+
+                Ok decodedMonacoEditorEvent ->
+                    case decodedMonacoEditorEvent of
+                        FrontendWeb.MonacoEditor.DidChangeContentEvent content ->
+                            stateBefore |> update (UserInputElmCode content)
+
+                        FrontendWeb.MonacoEditor.CompletedSetupEvent ->
+                            ( stateBefore, stateBefore.editorElmCode |> setTextInMonacoEditorCmd )
 
         UserInputFormat ->
             ( stateBefore, elmFormatCmd stateBefore )
@@ -86,11 +116,12 @@ update event stateBefore =
             ( stateBefore, elmMakeCmd stateBefore )
 
         BackendElmFormatResponseEvent httpResponse ->
-            ( { stateBefore
-                | elmFormatResult = Just httpResponse
-                , inputElmCode = httpResponse |> Result.toMaybe |> Maybe.andThen .formattedText |> Maybe.withDefault stateBefore.inputElmCode
-              }
-            , Cmd.none
+            let
+                editorElmCode =
+                    httpResponse |> Result.toMaybe |> Maybe.andThen .formattedText |> Maybe.withDefault stateBefore.editorElmCode
+            in
+            ( { stateBefore | elmFormatResult = Just httpResponse, editorElmCode = editorElmCode }
+            , setTextInMonacoEditorCmd editorElmCode
             )
 
         BackendElmMakeResponseEvent httpResponse ->
@@ -138,7 +169,7 @@ elmFormatCmd : State -> Cmd Event
 elmFormatCmd state =
     let
         request =
-            state.inputElmCode |> FrontendBackendInterface.FormatElmModuleTextRequest
+            state.editorElmCode |> FrontendBackendInterface.FormatElmModuleTextRequest
 
         jsonDecoder backendResponse =
             case backendResponse of
@@ -171,7 +202,7 @@ elmMakeCmd state =
                   , initElmJson
                   )
                 , ( entryPointFilePath
-                  , state.inputElmCode
+                  , state.editorElmCode
                   )
                 ]
                     |> List.map
@@ -293,7 +324,7 @@ view state =
                         [ Element.spacing defaultFontSize
                         , Element.padding (defaultFontSize // 2)
                         ]
-              , editorElement state
+              , monacoEditorElement state
               ]
                 |> Element.column
                     [ Element.spacing (defaultFontSize // 2)
@@ -321,26 +352,24 @@ view state =
     { title = "Elm Editor", body = [ body ] }
 
 
-editorElement : State -> Element.Element Event
-editorElement state =
-    let
-        inputElement =
-            Html.textarea
-                [ HA.value state.inputElmCode
-                , Html.Events.onInput UserInputElmCode
-                , HA.style "white-space" "pre"
-                , attributeMonospaceFont
-                , HA.style "font-size" "100%"
-                , HA.style "padding" "0.4em"
-                , HA.style "width" "90%"
-                , HA.style "height" "100%"
-                , HA.style "background" "#111"
-                , HA.style "color" "#eee"
-                ]
-                []
-                |> Element.html
-    in
-    inputElement
+setTextInMonacoEditorCmd : String -> Cmd Event
+setTextInMonacoEditorCmd =
+    FrontendWeb.MonacoEditor.SetValue
+        >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> sendMessageToMonacoFrame
+
+
+monacoEditorElement : State -> Element.Element Event
+monacoEditorElement _ =
+    Html.iframe
+        [ HA.src "/monaco"
+        , HA.id "monaco-iframe"
+        , HA.style "width" "100%"
+        , HA.style "height" "100%"
+        , HA.style "border" "0"
+        ]
+        []
+        |> Element.html
 
 
 initElmCode : String
