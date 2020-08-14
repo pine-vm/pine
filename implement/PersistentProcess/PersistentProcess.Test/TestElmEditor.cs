@@ -11,6 +11,9 @@ namespace Kalmit.PersistentProcess.Test
     [TestClass]
     public class TestElmEditor
     {
+        static string NormalizeStringTestingElmFormat(string originalString) =>
+            originalString?.Trim()?.Replace("\n\r", "\n")?.Replace("\r\n", "\n");
+
         [TestMethod]
         public void Elm_editor_backend_support_format_elm_module_text()
         {
@@ -78,10 +81,10 @@ a =
                             "responseStructure.ErrorResponse should be null.\n" + responseStructure.ErrorResponse);
 
                         Assert.AreEqual(
-                            expectedElmModuleTextAfterFormatting?.Trim(),
-                            responseStructure
-                            ?.FormatElmModuleTextResponse?.FirstOrDefault()
-                            ?.formattedText.Just?.FirstOrDefault()?.Trim(),
+                            NormalizeStringTestingElmFormat(expectedElmModuleTextAfterFormatting),
+                            NormalizeStringTestingElmFormat(responseStructure
+                                ?.FormatElmModuleTextResponse?.FirstOrDefault()
+                                ?.formattedText.Just?.FirstOrDefault()),
                             "Response content");
                     }
                 }
