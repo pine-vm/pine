@@ -7,7 +7,7 @@ namespace Kalmit.PersistentProcess.Test
     {
         static public IReadOnlyCollection<(string filePath, byte[] fileContent)> GetElmAppFromFilePath(
             string filePath) =>
-            ElmApp.FilesFilteredForElmApp(Filesystem.GetAllFilesFromDirectory(filePath))
+            Filesystem.GetAllFilesFromDirectory(filePath)
             .OrderBy(file => file.filePath)
             .ToImmutableList();
     }

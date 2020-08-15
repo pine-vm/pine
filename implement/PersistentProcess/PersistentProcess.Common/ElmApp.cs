@@ -39,18 +39,6 @@ namespace Kalmit
 
     public class ElmApp
     {
-        static public bool FilePathMatchesPatternOfFilesInElmApp(string filePath) =>
-            Regex.IsMatch(
-                Path.GetFileName(filePath),
-                "(^" + Regex.Escape("elm.json") + "|" + Regex.Escape(".elm") + ")$",
-                RegexOptions.IgnoreCase) &&
-            !filePath.Replace("\\", "/").Contains("elm-stuff/generated-code/");
-
-        static public IEnumerable<(string filePath, IImmutableList<byte> fileContent)> FilesFilteredForElmApp(
-            IEnumerable<(string filePath, IImmutableList<byte> fileContent)> files) =>
-            files
-            .Where(file => 0 < file.filePath?.Length && FilePathMatchesPatternOfFilesInElmApp(file.filePath));
-
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ToFlatDictionaryWithPathComparer(
             IEnumerable<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> filesBeforeSorting) =>
             filesBeforeSorting.ToImmutableSortedDictionary(
