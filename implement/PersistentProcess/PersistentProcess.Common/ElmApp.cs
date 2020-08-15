@@ -205,27 +205,17 @@ namespace Kalmit
                     functionNameMatch.Groups["flags"].Value.Trim('_').Split('_')
                     .ToImmutableHashSet();
 
-                var matchingFiles =
-                    originalAppFiles
-                    .Where(sourceFilePathAndContent => functionNameInCompilationInterfaceFromFilePath(sourceFilePathAndContent.Key) == filePathRepresentation)
-                    .ToImmutableList();
+                var matchingFileResult =
+                    FindFileWithPathMatchingRepresentationInFunctionName(originalAppFiles, filePathRepresentation);
 
-                if (matchingFiles.Count < 1)
-                    throw new Exception("Did not find any source file with a path matching the representation '" + filePathRepresentation + "'");
-
-                if (matchingFiles.Count > 1)
-                {
-                    throw new Exception(
-                        "The file path representation '" + filePathRepresentation +
-                        "' is not unique because it matches " + matchingFiles.Count + " of the source files:" +
-                        string.Join(", ", matchingFiles.Select(matchingFile => "\"" + string.Join("/", matchingFile.Key) + "\"")));
-                }
+                if (matchingFileResult.Ok.Key == null)
+                    throw new Exception("Failed to identify file for '" + filePathRepresentation + "': " + matchingFileResult.Err);
 
                 var elmMakeCommandAppendix =
                     flags.Contains("debug") ? "--debug" : null;
 
                 var fileExpression = compileFileExpression(
-                    pathToFileWithElmEntryPoint: matchingFiles.Single().Key,
+                    pathToFileWithElmEntryPoint: matchingFileResult.Ok.Key,
                     elmMakeCommandAppendix: elmMakeCommandAppendix,
                     encodingBase64: flags.Contains("base64"),
                     makeJavascript: flags.Contains("javascript"));
@@ -602,15 +592,13 @@ namespace Kalmit
 
                 var filePathRepresentation = functionNameMatch.Groups[1].Value;
 
-                var matchingFiles =
-                    sourceFiles
-                    .Where(sourceFilePathAndContent => functionNameInCompilationInterfaceFromFilePath(sourceFilePathAndContent.Key) == filePathRepresentation)
-                    .ToImmutableList();
+                var matchingFileResult =
+                    FindFileWithPathMatchingRepresentationInFunctionName(sourceFiles, filePathRepresentation);
 
-                if (matchingFiles.Count < 1)
-                    throw new Exception("Did not find any source file with a path matching the representation '" + filePathRepresentation + "'");
+                if (matchingFileResult.Ok.Key == null)
+                    throw new Exception("Failed to identify file for '" + filePathRepresentation + "': " + matchingFileResult.Err);
 
-                var fileAsBase64 = Convert.ToBase64String(matchingFiles.Single().Value.ToArray());
+                var fileAsBase64 = Convert.ToBase64String(matchingFileResult.Ok.Value.ToArray());
 
                 var fileExpression = "\"" + fileAsBase64 + @"""|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
 
@@ -640,6 +628,41 @@ namespace Kalmit
                         intermediateAppFiles,
                         originalFunction.functionName,
                         originalFunction.functionText));
+        }
+
+        static Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>> FindFileWithPathMatchingRepresentationInFunctionName(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+            string filePathRepresentation)
+        {
+            var sourceFilesWithRepresentations =
+                sourceFiles
+                .Select(sourceFilePathAndContent => (sourceFilePathAndContent, filePathRepresentation: functionNameInCompilationInterfaceFromFilePath(sourceFilePathAndContent.Key)))
+                .ToImmutableList();
+
+            var matchingFiles =
+                sourceFilesWithRepresentations
+                .Where(sourceFileAndPathRepresentation => sourceFileAndPathRepresentation.filePathRepresentation == filePathRepresentation)
+                .Select(sourceFileAndPathRepresentation => sourceFileAndPathRepresentation.sourceFilePathAndContent)
+                .ToImmutableList();
+
+            if (matchingFiles.Count < 1)
+            {
+                return Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>>.err(
+                    "Did not find any source file with a path matching the representation '" + filePathRepresentation + "'. Here is a list of the available files:\n" +
+                    string.Join("\n", sourceFilesWithRepresentations.Select(
+                        sourceFileAndRepr => "'" + string.Join("/", sourceFileAndRepr.sourceFilePathAndContent.Key) + "' ('" + sourceFileAndRepr.filePathRepresentation + "')")));
+            }
+
+            if (matchingFiles.Count > 1)
+            {
+                return Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>>.err(
+                    "The file path representation '" + filePathRepresentation +
+                    "' is not unique because it matches " + matchingFiles.Count + " of the source files:" +
+                    string.Join(", ", matchingFiles.Select(matchingFile => "\"" + string.Join("/", matchingFile.Key) + "\"")));
+            }
+
+            return Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>>.ok(
+                matchingFiles.Single());
         }
 
         static string functionNameInCompilationInterfaceFromFilePath(IImmutableList<string> filePath) =>
