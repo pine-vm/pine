@@ -11,6 +11,7 @@ import Base64
 import Bytes.Encode
 import Common
 import ElmFullstackCompilerInterface.ElmMake
+import ElmFullstackCompilerInterface.SourceFiles
 import Url
 
 
@@ -80,6 +81,13 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
                             [ httpResponseOkWithStringContent monacoHtmlDocument ]
+                    )
+
+                Just (Backend.Route.StaticFileRoute Backend.Route.MonarchJavascriptRoute) ->
+                    ( stateBefore
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            [ httpResponseOkWithBodyAsBase64 (ElmFullstackCompilerInterface.SourceFiles.file____src_monarch_js |> Base64.fromBytes) ]
                     )
 
                 Just Backend.Route.ApiRoute ->
@@ -284,6 +292,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+    <script type="text/javascript" src="monarch.js"></script>
 </head>
 <body style="margin:0;height:93vh;">
 
@@ -348,6 +357,11 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     }
   };
     require(['vs/editor/editor.main'], function() {
+
+        monaco.languages.register({ id: 'Elm' });
+
+        monaco.languages.setMonarchTokensProvider('Elm', window.elm_monarch);
+
         var editor = monaco.editor.create(document.getElementById('container'), {
             value: "Initialization of editor is not complete yet",
             language: 'Elm',

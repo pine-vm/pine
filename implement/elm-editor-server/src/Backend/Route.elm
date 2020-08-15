@@ -17,6 +17,7 @@ type Route
 type StaticFile
     = FrontendElmJavascriptRoute
     | MonacoFrameDocumentRoute
+    | MonarchJavascriptRoute
 
 
 fromAuth0LoginRedirectPath : String
@@ -30,6 +31,7 @@ routeFromUrl =
         (Url.Parser.oneOf
             [ Url.Parser.map (StaticFileRoute FrontendElmJavascriptRoute) (Url.Parser.s "elm-made.js")
             , Url.Parser.map (StaticFileRoute MonacoFrameDocumentRoute) (Url.Parser.s "monaco")
+            , Url.Parser.map (StaticFileRoute MonarchJavascriptRoute) (Url.Parser.s "monarch.js")
             , Url.Parser.map ApiRoute (Url.Parser.s "api")
             ]
         )
