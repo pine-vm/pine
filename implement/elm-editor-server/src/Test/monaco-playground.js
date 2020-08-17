@@ -1,3 +1,4 @@
+
 var elm_monarch = {
     // Set defaultToken to invalid to see what you do not tokenize yet
     // defaultToken: 'invalid',
@@ -133,5 +134,79 @@ var elm_monarch = {
     },
 };
 
-window.elm_monarch = elm_monarch;
+monaco.languages.register({ id: 'Elm' });
 
+monaco.languages.setMonarchTokensProvider('Elm', elm_monarch);
+
+monaco.editor.defineTheme('dark-plus', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+        { token: 'keyword', foreground: '#C586C0' },
+        { token: 'type', foreground: '#569CD6' },
+        { token: 'function.name', foreground: '#DCDCAA' },
+    ]
+});
+
+monaco.editor.create(document.getElementById("container"), {
+    theme: 'dark-plus',
+    value: getCode(),
+    language: 'Elm'
+});
+
+function getCode() {
+    return `
+module Test.TestSyntaxHighlighting exposing
+    ( RecordAlias
+    , Route(..)
+    , functionWithLetBlockAndLocalFunction
+    , reference
+    )
+
+import Bytes
+import Json.Decode exposing (keyValuePairs)
+
+
+type Route
+    = ApiRoute
+    | StaticFileRoute String
+
+
+type alias RecordAlias typeVar =
+    { primitiveField : Basics.Int
+    , var : typeVar
+
+    -- Single line comment
+    }
+
+
+functionWithLetBlockAndLocalFunction : Bytes.Bytes -> Int
+functionWithLetBlockAndLocalFunction param =
+    let
+        {- Multi-line
+           comment
+            {- nested -}
+        -}
+        localFunction : Bytes.Bytes -> Int
+        localFunction =
+            Bytes.width
+    in
+    if (param |> localFunction) < 123 then
+        "testing string literal" ++ """string literal
+
+containing newline""" |> String.length
+
+    else
+        case "hello" of
+            "specific case" ->
+                1
+
+            _ ->
+                3
+
+
+reference : Json.Decode.Decoder a -> Json.Decode.Decoder (List ( String, a ))
+reference =
+    keyValuePairs
+`;
+}

@@ -362,12 +362,22 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         monaco.languages.setMonarchTokensProvider('Elm', window.elm_monarch);
 
+        monaco.editor.defineTheme('dark-plus', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [
+                { token: 'keyword', foreground: '#C586C0' },
+                { token: 'type', foreground: '#569CD6' },
+                { token: 'function.name', foreground: '#DCDCAA' },
+            ]
+        });
+
         var editor = monaco.editor.create(document.getElementById('container'), {
             value: "Initialization of editor is not complete yet",
             language: 'Elm',
             automaticLayout: true,
             scrollBeyondLastLine: false,
-            theme: "vs-dark"
+            theme: "dark-plus"
         });
 
         tryCompleteSetup();
