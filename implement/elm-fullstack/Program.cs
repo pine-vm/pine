@@ -16,6 +16,8 @@ namespace elm_fullstack
     {
         static int Main(string[] args)
         {
+            Kalmit.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
+
             var app = new CommandLineApplication
             {
                 Name = "elm-fullstack",
@@ -495,6 +497,10 @@ namespace elm_fullstack
 
             return executeAndGuideInCaseOfException();
         }
+
+        static public string ElmMakeHomeDirectoryPath =>
+            System.IO.Path.Combine(
+                Kalmit.Filesystem.CacheDirectory, "elm-make-home");
 
         static public void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
         {
