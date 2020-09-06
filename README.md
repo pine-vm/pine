@@ -22,3 +22,4 @@ See the guide [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-co
 ### Rich Chat Room
 
 The [rich chat room example app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
+For a detailed description of this app, see the readme file at https://github.com/elm-fullstack/elm-fullstack/blob/master/implement/example-apps/rich-chat-room/readme.md
