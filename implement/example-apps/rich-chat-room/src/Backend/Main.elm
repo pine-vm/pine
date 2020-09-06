@@ -28,6 +28,15 @@ type alias State =
     , usersSessions : Dict.Dict String UserSessionState
     , usersProfiles : Dict.Dict UserId UserProfile
     , usersLastSeen : Dict.Dict UserId { posixTime : Int }
+    , pendingHttpRequests : Dict.Dict String PendingHttpRequest
+    }
+
+
+type alias PendingHttpRequest =
+    { posixTimeMilli : Int
+    , userSessionId : String
+    , userId : Maybe UserId
+    , requestFromUser : FrontendBackendInterface.RequestFromUser
     }
 
 
@@ -51,6 +60,95 @@ interfaceToHost_processEvent =
 
 processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
+    let
+        ( stateBeforeHttpResponses, responseBeforeHttpResponses ) =
+            processEventWithoutHttpResponses hostEvent stateBefore
+
+        ( state, httpResponses ) =
+            processPendingHttpRequests stateBeforeHttpResponses
+
+        notifyWhenArrivedAtTime =
+            if Dict.isEmpty state.pendingHttpRequests then
+                Nothing
+
+            else
+                Just { posixTimeMilli = state.posixTimeMilli + 1000 }
+
+        response =
+            { responseBeforeHttpResponses | notifyWhenArrivedAtTime = notifyWhenArrivedAtTime }
+                |> InterfaceToHost.withCompleteHttpResponsesAdded httpResponses
+    in
+    ( state
+    , response
+    )
+
+
+processPendingHttpRequests : State -> ( State, List InterfaceToHost.HttpResponseRequest )
+processPendingHttpRequests stateBefore =
+    let
+        ( state, httpResponses ) =
+            stateBefore.pendingHttpRequests
+                |> Dict.toList
+                |> List.foldl
+                    (\( pendingHttpRequestId, pendingHttpRequest ) ( intermediateState, intermediateHttpResponses ) ->
+                        case
+                            processRequestFromUser
+                                { posixTimeMilli = stateBefore.posixTimeMilli
+                                , loginUrl = ""
+                                }
+                                { posixTimeMilli = pendingHttpRequest.posixTimeMilli
+                                , userId = pendingHttpRequest.userId
+                                , requestFromUser = pendingHttpRequest.requestFromUser
+                                }
+                                intermediateState
+                        of
+                            Nothing ->
+                                ( intermediateState
+                                , intermediateHttpResponses
+                                )
+
+                            Just ( completeHttpResponseState, completeHttpResponseResponseToUser ) ->
+                                let
+                                    responseToClient =
+                                        { currentPosixTimeMilli = intermediateState.posixTimeMilli
+                                        , currentUserId = pendingHttpRequest.userId
+                                        , responseToUser =
+                                            completeHttpResponseResponseToUser
+                                        }
+
+                                    httpResponse =
+                                        { httpRequestId = pendingHttpRequestId
+                                        , response =
+                                            { statusCode = 200
+                                            , bodyAsBase64 =
+                                                responseToClient
+                                                    |> GenerateJsonCoders.jsonEncodeMessageToClient
+                                                    |> Json.Encode.encode 0
+                                                    |> encodeStringToBytes
+                                                    |> Base64.fromBytes
+                                            , headersToAdd = []
+                                            }
+                                                |> addCookieUserSessionId pendingHttpRequest.userSessionId
+                                        }
+                                in
+                                ( completeHttpResponseState
+                                , httpResponse :: intermediateHttpResponses
+                                )
+                    )
+                    ( stateBefore, [] )
+
+        pendingHttpRequests =
+            httpResponses
+                |> List.map .httpRequestId
+                |> List.foldl Dict.remove stateBefore.pendingHttpRequests
+    in
+    ( { state | pendingHttpRequests = pendingHttpRequests }
+    , httpResponses
+    )
+
+
+processEventWithoutHttpResponses : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+processEventWithoutHttpResponses hostEvent stateBefore =
     case hostEvent of
         InterfaceToHost.HttpRequestEvent httpRequestEvent ->
             processEventHttpRequest httpRequestEvent { stateBefore | posixTimeMilli = httpRequestEvent.posixTimeMilli }
@@ -143,40 +241,20 @@ processEventHttpRequest httpRequestEvent stateBefore =
                         usersSessions =
                             stateBefore.usersSessions
                                 |> Dict.insert userSessionId userSessionState
-
-                        ( state, responseToUser ) =
-                            processMessageFromClient
-                                { posixTimeMilli = stateBefore.posixTimeMilli, userId = userSessionStateBefore.userId, loginUrl = "" }
-                                requestFromUser
-                                { stateBefore
-                                    | usersSessions = usersSessions
-                                    , usersLastSeen = usersLastSeen
-                                }
-
-                        responseToClient =
-                            { currentPosixTimeMilli = state.posixTimeMilli
-                            , currentUserId = userSessionState.userId
-                            , responseToUser = responseToUser
-                            }
-
-                        httpResponse =
-                            { httpRequestId = httpRequestEvent.httpRequestId
-                            , response =
-                                { statusCode = 200
-                                , bodyAsBase64 =
-                                    responseToClient
-                                        |> GenerateJsonCoders.jsonEncodeMessageToClient
-                                        |> Json.Encode.encode 0
-                                        |> encodeStringToBytes
-                                        |> Base64.fromBytes
-                                , headersToAdd = []
-                                }
-                                    |> addCookieUserSessionId userSessionId
-                            }
                     in
-                    ( state
+                    ( { stateBefore
+                        | usersLastSeen = usersLastSeen
+                        , usersSessions = usersSessions
+                        , pendingHttpRequests =
+                            stateBefore.pendingHttpRequests
+                                |> Dict.insert httpRequestEvent.httpRequestId
+                                    { posixTimeMilli = httpRequestEvent.posixTimeMilli
+                                    , userSessionId = userSessionId
+                                    , userId = userSessionStateBefore.userId
+                                    , requestFromUser = requestFromUser
+                                    }
+                      }
                     , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
                     )
 
         Just (FrontendBackendInterface.StaticContentRoute contentName) ->
@@ -228,88 +306,110 @@ seeingLobbyFromState state =
     }
 
 
-processMessageFromClient :
-    { userId : Maybe Int, posixTimeMilli : Int, loginUrl : String }
-    -> FrontendBackendInterface.RequestFromUser
+processRequestFromUser :
+    { posixTimeMilli : Int, loginUrl : String }
+    -> { posixTimeMilli : Int, userId : Maybe Int, requestFromUser : FrontendBackendInterface.RequestFromUser }
     -> State
-    -> ( State, FrontendBackendInterface.ResponseToUser )
-processMessageFromClient context requestFromUser stateBefore =
-    let
-        ( state, responseToUser ) =
-            case requestFromUser of
-                FrontendBackendInterface.ShowUpRequest ->
-                    ( stateBefore, stateBefore |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby )
+    -> Maybe ( State, FrontendBackendInterface.ResponseToUser )
+processRequestFromUser context requestFromUser stateBefore =
+    case requestFromUser.requestFromUser of
+        FrontendBackendInterface.ShowUpRequest showUpRequest ->
+            let
+                seeingLobby =
+                    seeingLobbyFromState stateBefore
 
-                FrontendBackendInterface.AddTextMessageRequest message ->
-                    case context.userId of
-                        Nothing ->
-                            ( stateBefore
-                            , FrontendBackendInterface.MessageToUser
-                                ([ Conversation.LeafPlainText "⚠️ To add a message, please sign in first at "
-                                 , Conversation.LeafLinkToUrl { url = context.loginUrl }
-                                 ]
-                                    |> Conversation.SequenceOfNodes
-                                )
-                            )
-
-                        Just userId ->
-                            if hasUserExhaustedRateLimitToAddMessage stateBefore { userId = userId } then
-                                ( stateBefore
-                                , FrontendBackendInterface.MessageToUser (Conversation.LeafPlainText "❌ Too many messages – Maximum sending rate exceeded.")
-                                )
-
-                            else
-                                let
-                                    conversationHistory =
-                                        { posixTimeMilli = stateBefore.posixTimeMilli
-                                        , origin = Conversation.FromUser { userId = userId }
-                                        , message = Conversation.LeafPlainText message
-                                        }
-                                            :: stateBefore.conversationHistory
-
-                                    stateAfterAddingMessage =
-                                        { stateBefore | conversationHistory = conversationHistory }
-                                in
-                                ( stateAfterAddingMessage
-                                , stateAfterAddingMessage |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby
-                                )
-
-                FrontendBackendInterface.ChooseNameRequest chosenName ->
-                    case context.userId of
-                        Nothing ->
-                            ( stateBefore
-                            , FrontendBackendInterface.MessageToUser
-                                ([ Conversation.LeafPlainText "⚠️ To choose a name, please sign in first at "
-                                 , Conversation.LeafLinkToUrl { url = context.loginUrl }
-                                 ]
-                                    |> Conversation.SequenceOfNodes
-                                )
-                            )
-
-                        Just userId ->
-                            let
-                                userProfileBefore =
-                                    stateBefore.usersProfiles |> Dict.get userId |> Maybe.withDefault initUserProfile
-
-                                userProfile =
-                                    { userProfileBefore | chosenName = chosenName }
-
-                                usersProfiles =
-                                    stateBefore.usersProfiles |> Dict.insert userId userProfile
-                            in
-                            ( { stateBefore | usersProfiles = usersProfiles }
-                            , FrontendBackendInterface.ReadUserProfile userProfile
-                            )
-
-                FrontendBackendInterface.ReadUserProfileRequest userId ->
+                requestAgeMilli =
+                    context.posixTimeMilli - requestFromUser.posixTimeMilli
+            in
+            if
+                ((seeingLobby.conversationHistory |> List.map .posixTimeMilli |> List.maximum)
+                    /= showUpRequest.lastSeenEventPosixTimeMilli
+                )
+                    || (5000 <= requestAgeMilli)
+            then
+                Just
                     ( stateBefore
-                    , stateBefore.usersProfiles
-                        |> Dict.get userId
-                        |> Maybe.withDefault initUserProfile
-                        |> FrontendBackendInterface.ReadUserProfile
+                    , FrontendBackendInterface.SeeingLobby seeingLobby
                     )
-    in
-    ( state, responseToUser )
+
+            else
+                Nothing
+
+        FrontendBackendInterface.AddTextMessageRequest message ->
+            case requestFromUser.userId of
+                Nothing ->
+                    Just
+                        ( stateBefore
+                        , ([ Conversation.LeafPlainText "⚠️ To add a message, please sign in first at "
+                           , Conversation.LeafLinkToUrl { url = context.loginUrl }
+                           ]
+                            |> Conversation.SequenceOfNodes
+                          )
+                            |> FrontendBackendInterface.MessageToUser
+                        )
+
+                Just userId ->
+                    if hasUserExhaustedRateLimitToAddMessage stateBefore { userId = userId } then
+                        Just
+                            ( stateBefore
+                            , Conversation.LeafPlainText "❌ Too many messages – Maximum sending rate exceeded."
+                                |> FrontendBackendInterface.MessageToUser
+                            )
+
+                    else
+                        let
+                            conversationHistory =
+                                { posixTimeMilli = stateBefore.posixTimeMilli
+                                , origin = Conversation.FromUser { userId = userId }
+                                , message = Conversation.LeafPlainText message
+                                }
+                                    :: stateBefore.conversationHistory
+
+                            stateAfterAddingMessage =
+                                { stateBefore | conversationHistory = conversationHistory }
+                        in
+                        Just
+                            ( stateAfterAddingMessage
+                            , stateAfterAddingMessage |> seeingLobbyFromState |> FrontendBackendInterface.SeeingLobby
+                            )
+
+        FrontendBackendInterface.ChooseNameRequest chosenName ->
+            case requestFromUser.userId of
+                Nothing ->
+                    Just
+                        ( stateBefore
+                        , ([ Conversation.LeafPlainText "⚠️ To choose a name, please sign in first at "
+                           , Conversation.LeafLinkToUrl { url = context.loginUrl }
+                           ]
+                            |> Conversation.SequenceOfNodes
+                          )
+                            |> FrontendBackendInterface.MessageToUser
+                        )
+
+                Just userId ->
+                    let
+                        userProfileBefore =
+                            stateBefore.usersProfiles |> Dict.get userId |> Maybe.withDefault initUserProfile
+
+                        userProfile =
+                            { userProfileBefore | chosenName = chosenName }
+
+                        usersProfiles =
+                            stateBefore.usersProfiles |> Dict.insert userId userProfile
+                    in
+                    Just
+                        ( { stateBefore | usersProfiles = usersProfiles }
+                        , userProfile |> FrontendBackendInterface.ReadUserProfile
+                        )
+
+        FrontendBackendInterface.ReadUserProfileRequest userId ->
+            Just
+                ( stateBefore
+                , stateBefore.usersProfiles
+                    |> Dict.get userId
+                    |> Maybe.withDefault initUserProfile
+                    |> FrontendBackendInterface.ReadUserProfile
+                )
 
 
 initUserProfile : UserProfile
@@ -471,4 +571,5 @@ interfaceToHost_initState =
     , usersProfiles = Dict.empty
     , usersSessions = Dict.empty
     , usersLastSeen = Dict.empty
+    , pendingHttpRequests = Dict.empty
     }

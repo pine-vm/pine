@@ -31,7 +31,7 @@ main =
     Browser.application
         { init = init
         , update = update
-        , subscriptions = always (Time.every 3000 ArrivedAtTime)
+        , subscriptions = always (Time.every 5000 ArrivedAtTime)
         , view = view
         , onUrlRequest = UrlRequest
         , onUrlChange = UrlChange
@@ -41,7 +41,7 @@ main =
 type alias State =
     { navigationKey : Navigation.Key
     , time : Time.Posix
-    , lastRequestToBackendTime : Maybe Time.Posix
+    , lastRequestsToBackendTimes : List Time.Posix
     , messageToAddText : String
     , editingChosenName : Maybe String
     , lastRequestToBackendResult : Maybe { time : Time.Posix, result : RequestToBackendResultStructure }
@@ -89,7 +89,7 @@ init _ url navigationKey =
     , time = Time.millisToPosix 0
     , messageToAddText = ""
     , editingChosenName = Nothing
-    , lastRequestToBackendTime = Nothing
+    , lastRequestsToBackendTimes = []
     , lastRequestToBackendResult = Nothing
     , lastMessageFromBackend = Nothing
     , lastSeeingLobby = Nothing
@@ -128,7 +128,9 @@ update event stateBefore =
             else
                 Cmd.none
     in
-    ( state |> updateForSoundEffects { stateBeforeEvent = stateBefore }, [ cmdsLessScrolling, scrollTask ] |> Cmd.batch )
+    ( state |> updateForSoundEffects { stateBeforeEvent = stateBefore }
+    , [ cmdsLessScrolling, scrollTask ] |> Cmd.batch
+    )
 
 
 setViewportToBottom : String -> Task.Task Browser.Dom.Error ()
@@ -144,18 +146,21 @@ shouldScrollHistoryToBottomAfterUpdate stateBeforeUpdate stateAfterUpdate =
 
 updateLessScrolling : Event -> State -> ( State, Cmd Event )
 updateLessScrolling event stateBefore =
+    let
+        ( stateWithIntegratedEvent, eventSpecificCmd ) =
+            updateSpecificToEvent event stateBefore
+
+        ( state, generalCmd ) =
+            updateToRequestSeeLobby stateWithIntegratedEvent
+    in
+    ( state, Cmd.batch [ eventSpecificCmd, generalCmd, httpRequestsForUserProfiles state ] )
+
+
+updateSpecificToEvent : Event -> State -> ( State, Cmd Event )
+updateSpecificToEvent event stateBefore =
     case event of
         ArrivedAtTime time ->
-            let
-                state =
-                    { stateBefore | time = time }
-            in
-            ( state
-            , [ requestToBackendCmd FrontendBackendInterface.ShowUpRequest
-              , httpRequestsForUserProfiles state
-              ]
-                |> Cmd.batch
-            )
+            ( { stateBefore | time = time }, Cmd.none )
 
         RequestToBackendResult requestToBackendResult ->
             let
@@ -200,7 +205,10 @@ updateLessScrolling event stateBefore =
                     focusCmd =
                         Browser.Dom.focus messageToAddTextboxId |> Task.attempt DomTaskResult
                 in
-                ( { stateBefore | lastRequestToBackendTime = Just stateBefore.time, editingChosenName = Nothing }
+                ( { stateBefore
+                    | lastRequestsToBackendTimes = stateBefore.time :: stateBefore.lastRequestsToBackendTimes
+                    , editingChosenName = Nothing
+                  }
                 , [ requestToServerCmd, focusCmd ] |> Cmd.batch
                 )
 
@@ -217,7 +225,7 @@ updateLessScrolling event stateBefore =
 
         EnterKeyDownOnChooseNameTextbox ->
             stateBefore
-                |> updateLessScrolling UserInputCompleteEnterChosenName
+                |> updateSpecificToEvent UserInputCompleteEnterChosenName
                 |> Tuple.mapSecond (List.singleton >> (::) (Browser.Dom.focus messageToAddTextboxId |> Task.attempt DomTaskResult) >> Cmd.batch)
 
         UserInputCompleteEnterChosenName ->
@@ -229,6 +237,32 @@ updateLessScrolling event stateBefore =
 
         DomTaskResult _ ->
             ( stateBefore, Cmd.none )
+
+
+updateToRequestSeeLobby : State -> ( State, Cmd Event )
+updateToRequestSeeLobby stateBefore =
+    let
+        timeForRequestToSeeLobby =
+            case stateBefore.lastRequestsToBackendTimes of
+                [] ->
+                    True
+
+                lastRequestToBackendTime :: _ ->
+                    let
+                        requestAgeMilli =
+                            Time.posixToMillis stateBefore.time - Time.posixToMillis lastRequestToBackendTime
+                    in
+                    5000 < requestAgeMilli
+    in
+    if not timeForRequestToSeeLobby then
+        ( stateBefore, Cmd.none )
+
+    else
+        ( { stateBefore
+            | lastRequestsToBackendTimes = stateBefore.time :: stateBefore.lastRequestsToBackendTimes |> List.take 4
+          }
+        , requestToBackendCmd (FrontendBackendInterface.ShowUpRequest (showUpRequestToBackendFromState stateBefore))
+        )
 
 
 updateForSoundEffects : { stateBeforeEvent : State } -> State -> State
@@ -265,6 +299,13 @@ shouldPlaySoundMessageAddedAfterUpdate { stateBeforeEvent, stateAfterEvent } =
 
         _ ->
             False
+
+
+showUpRequestToBackendFromState : State -> { lastSeenEventPosixTimeMilli : Maybe Int }
+showUpRequestToBackendFromState state =
+    { lastSeenEventPosixTimeMilli =
+        state.conversationHistory |> List.map .posixTimeMilli |> List.maximum
+    }
 
 
 httpRequestsForUserProfiles : State -> Cmd Event

@@ -8,7 +8,7 @@ import Url.Parser exposing ((</>))
 
 
 type RequestFromUser
-    = ShowUpRequest
+    = ShowUpRequest { lastSeenEventPosixTimeMilli : Maybe Int }
     | AddTextMessageRequest String
     | ChooseNameRequest String
     | ReadUserProfileRequest UserId
