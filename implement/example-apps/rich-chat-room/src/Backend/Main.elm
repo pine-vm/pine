@@ -61,11 +61,11 @@ interfaceToHost_processEvent =
 processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 processEvent hostEvent stateBefore =
     let
-        ( stateBeforeHttpResponses, responseBeforeHttpResponses ) =
-            processEventWithoutHttpResponses hostEvent stateBefore
+        ( stateBeforeProcessPendingHttpRequests, responseBeforeHttpResponses ) =
+            processEventWithoutPendingHttpRequests hostEvent stateBefore
 
         ( state, httpResponses ) =
-            processPendingHttpRequests stateBeforeHttpResponses
+            processPendingHttpRequests stateBeforeProcessPendingHttpRequests
 
         notifyWhenArrivedAtTime =
             if Dict.isEmpty state.pendingHttpRequests then
@@ -147,17 +147,20 @@ processPendingHttpRequests stateBefore =
     )
 
 
-processEventWithoutHttpResponses : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEventWithoutHttpResponses hostEvent stateBefore =
+processEventWithoutPendingHttpRequests : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+processEventWithoutPendingHttpRequests hostEvent stateBefore =
     case hostEvent of
         InterfaceToHost.HttpRequestEvent httpRequestEvent ->
-            processEventHttpRequest httpRequestEvent { stateBefore | posixTimeMilli = httpRequestEvent.posixTimeMilli }
+            processEventHttpRequest httpRequestEvent
+                { stateBefore | posixTimeMilli = httpRequestEvent.posixTimeMilli }
 
         InterfaceToHost.TaskCompleteEvent _ ->
             ( stateBefore, InterfaceToHost.passiveAppEventResponse )
 
-        InterfaceToHost.ArrivedAtTimeEvent _ ->
-            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+        InterfaceToHost.ArrivedAtTimeEvent { posixTimeMilli } ->
+            ( { stateBefore | posixTimeMilli = posixTimeMilli }
+            , InterfaceToHost.passiveAppEventResponse
+            )
 
 
 processEventHttpRequest : InterfaceToHost.HttpRequestEventStructure -> State -> ( State, InterfaceToHost.AppEventResponse )
