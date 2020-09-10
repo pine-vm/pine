@@ -37,9 +37,9 @@ To learn more about these artifacts' interfaces, see [How to Configure and Deplo
 
 ## Building from Source
 
-The easiest way to test a change in the source code is to trigger the Github action workflow in `.github/workflows/test-and-publish.yml`. This workflow gets you the results of automated tests and your version of the executable files. Push to your fork on Github to trigger this action.
+The easiest way to test a change in the source code is to trigger the Github action workflow in [`.github/workflows/test-and-publish.yml`](./.github/workflows/test-and-publish.yml). This workflow gets you the results of automated tests and your version of the executable files. Push to your fork on Github to trigger this action.
 
-As we can see in the workflow file, the project uses .NET core to run tests and build the executable file. You can download `dotnet` from https://dotnet.microsoft.com/download/dotnet-core to build and test locally.
+As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), the project uses .NET core to run tests and build the executable file. You can download `dotnet` from https://dotnet.microsoft.com/download/dotnet-core to build and test locally.
 
 ## Example Projects
 
