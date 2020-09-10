@@ -1,21 +1,45 @@
 # Elm Full-Stack
 
-In this repository, I share what I learn about building full-stack apps using the [Elm programming language](https://elm-lang.org). This approach emerged out of the development of online multiplayer video games like [DRTS](https://drtsgame.com).
+Elm-fullstack simplifies building full-stack web apps using the [Elm programming language](https://elm-lang.org).
 
-In these applications, backend and frontend share an understanding of game mechanics and the game world. (Changes in these shared functionalities need to be synchronized between backend and frontend implementation.) Frontend and backend implementations use the same Elm modules for the common parts which need to be kept consistent. The tests run by elm-test also integrate backend and frontend for automated integration tests.
+The framework supports:
 
-This repository also contains the implementation of the Elm-fullstack web host, tooling, and the command-line interface. These software components implement common non-app specific functionality, such as:
-
-+ Persistence: The framework automatically persists the state of your app, including events in the backend Elm app, deployments of new app configurations, and migrations. To learn more about this functionality, see the [guide on persistence in Elm-fullstack](./guide/persistence-in-elm-fullstack.md).
-+ Mapping HTTP requests to Elm types in the backend so that we can work with a strongly typed interface.
-+ Generating the functions to serialize and deserialize the messages exchanged between frontend and backend.
-+ Atomic backend state migrations: Model your backend state migrations with an Elm function that maps from the previous backend state type to the new one. The framework uses this function to migrate the backend state during deployment.
-+ [HTTPS support](./guide/how-to-configure-and-deploy-an-elm-fullstack-app.md#support-https): Choose a list of domains, and the server automatically acquires and renews an SSL certificate from [Let's Encrypt](https://letsencrypt.org/).
-+ Rate-limit HTTP requests to the backend app.
++ Building a web-server around a backend app modeled using the Elm-programming language.
++ Sharing Elm modules with common functions and types between frontend and backend implementations.
++ Using the Elm-architecture on the backend by providing automatic persistence, replication, and migrations.
++ Automating the generation of functions to serialize and deserialize Elm values.
 
 ## Getting Started
 
-See the guide [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+Use this command to run a server and deploy an example app:
+
+```cmd
+elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/557b615e028682f1b45121fe73bf7b4455a6f13b/implement/example-apps/docker-image-default-app
+```
+
+For a guide on configuration options, structuring your Elm app code, deploying, migrating, etc., see [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+
+## Releases / Artifacts
+
+### Elm-fullstack Executable File
+
+The `elm-fullstack` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-fullstack/elm-fullstack/releases) on Github.
+
+### Docker Image
+
+If you prefer deploying using docker, use the `elmfullstack/elm-fullstack` image from [docker hub](https://hub.docker.com/r/elmfullstack/elm-fullstack/tags). The tags are aligned with the version IDs in the CLI executable file.
+
+```cmd
+docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=secret" elmfullstack/elm-fullstack
+```
+
+To learn more about these artifacts' interfaces, see [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+
+## Building from Source
+
+The easiest way to test a change in the source code is to trigger the Github action workflow in `.github/workflows/test-and-publish.yml`. This workflow gets you the results of automated tests and your version of the executable files. Push to your fork on Github to trigger this action.
+
+As we can see in the workflow file, the project uses .NET core to run tests and build the executable file. You can download `dotnet` from https://dotnet.microsoft.com/download/dotnet-core to build and test locally.
 
 ## Example Projects
 

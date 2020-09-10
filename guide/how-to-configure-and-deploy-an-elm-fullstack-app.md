@@ -4,8 +4,8 @@ In this guide, I use the elm-fullstack command-line interface (CLI) program. You
 
 Here are direct links to the downloads, containing the `elm-fullstack` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-27/elm-fullstack-bin-1ab87314ca59b2630493514be443d6007c86941e-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-06-27/elm-fullstack-bin-1ab87314ca59b2630493514be443d6007c86941e-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-08-22/elm-fullstack-bin-33dde927b7eba99db55eff1c3cd0ca49cdfd55fa-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-08-22/elm-fullstack-bin-33dde927b7eba99db55eff1c3cd0ca49cdfd55fa-linux-x64.zip
 
 To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack  install-command` command.
 
@@ -233,7 +233,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2020-06-11.
+Welcome to Elm-fullstack version 2020-08-22.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
