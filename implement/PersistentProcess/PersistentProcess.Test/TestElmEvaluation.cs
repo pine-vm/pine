@@ -50,8 +50,7 @@ namespace Kalmit.PersistentProcess.Test
                     var evaluatedJson =
                         elm_fullstack.ElmEngine.EvaluateElm.GetValueFromEntryPointAsJsonString(
                             appCodeTree: appCodeTree,
-                            evaluationRootFilePath: ImmutableList.Create("src", "Main.elm"),
-                            evaluationRootDeclarationName: scenarioElmAppCodeEvaluationRootDeclarationName);
+                            expression: "Main." + scenarioElmAppCodeEvaluationRootDeclarationName);
 
                     Assert.AreEqual(
                         expectedValueJson,
