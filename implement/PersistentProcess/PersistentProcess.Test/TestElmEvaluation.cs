@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -13,9 +14,18 @@ namespace Kalmit.PersistentProcess.Test
 
         static string scenarioElmAppCodeEvaluationRootDeclarationName => "evaluation_root";
 
+        class EvaluationScenarioTestResult
+        {
+            public bool passed;
+
+            public Exception exception;
+        }
+
         [TestMethod]
         public void TestElmEvaluationScenarios()
         {
+            var scenariosResults = new Dictionary<string, EvaluationScenarioTestResult>();
+
             foreach (var scenarioDirectory in Directory.EnumerateDirectories(pathToScenariosDirectory))
             {
                 var scenarioName = Path.GetFileName(scenarioDirectory);
@@ -25,6 +35,9 @@ namespace Kalmit.PersistentProcess.Test
                     // Do not stumble over empty directory here. It could be a leftover after git checkout.
                     continue;
                 }
+
+                bool scenarioPassed = false;
+                Exception scenarioException = null;
 
                 try
                 {
@@ -43,11 +56,46 @@ namespace Kalmit.PersistentProcess.Test
                     Assert.AreEqual(
                         expectedValueJson,
                         evaluatedJson, "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
+
+                    scenarioPassed = true;
                 }
                 catch (Exception e)
                 {
-                    throw new Exception("Failed for scenario '" + scenarioName + "'", e);
+                    scenarioException = e;
                 }
+
+                scenariosResults[scenarioName] =
+                    new EvaluationScenarioTestResult
+                    {
+                        passed = scenarioPassed,
+                        exception = scenarioException,
+                    };
+            }
+
+            Console.WriteLine("Total scenarios: " + scenariosResults.Count);
+            Console.WriteLine("Passed: " + scenariosResults.Values.Count(scenarioResult => scenarioResult.passed));
+
+            var failedScenarios =
+                scenariosResults
+                .Where(scenarioNameAndResult => !scenarioNameAndResult.Value.passed)
+                .ToImmutableList();
+
+            foreach (var scenarioNameAndResult in failedScenarios)
+            {
+                var causeText =
+                    scenarioNameAndResult.Value.exception != null ?
+                    "exception:\n" + scenarioNameAndResult.Value.exception.ToString()
+                    :
+                    "unknown cause";
+
+                Console.WriteLine("Scenario '" + scenarioNameAndResult.Key + "' failed with " + causeText);
+            }
+
+            if (0 < failedScenarios.Count)
+            {
+                throw new Exception(
+                    "Failed for " + failedScenarios.Count + " scenarios:\n" +
+                    string.Join("\n", failedScenarios.Select(scenarioNameAndResult => scenarioNameAndResult.Key)));
             }
         }
     }
