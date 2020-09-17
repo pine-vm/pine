@@ -13,24 +13,24 @@ namespace elm_fullstack.ElmEngine
             Composition.TreeComponent appCodeTree,
             string expression)
         {
-            var appCodeFiles =
+            var modulesTexts =
+                appCodeTree == null ? null
+                :
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     appCodeTree.EnumerateBlobsTransitive()
                     .Select(file =>
                         (filePath: (IImmutableList<string>)file.path.Select(pathComponent => Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
-                        content: file.blobContent)));
+                        content: file.blobContent)))
+                .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
+                .WhereNotNull()
+                .ToImmutableList();
 
-            var mainElmModuleFromAppCodeTree =
-                appCodeFiles[ImmutableList.Create("src", "Main.elm")];
-
-            var mainElmModuleText = Encoding.UTF8.GetString(mainElmModuleFromAppCodeTree.ToArray());
-
-            var parseElmAppCodeFiles = elm_fullstack.ElmEngine.EvaluateElm.ParseElmSyntaxAppCodeFiles();
+            var parseElmAppCodeFiles = ParseElmSyntaxAppCodeFiles();
 
             var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
                 new
                 {
-                    modulesTexts = new[] { mainElmModuleText },
+                    modulesTexts = modulesTexts ?? ImmutableList<string>.Empty,
                     expression = expression,
                 }
             );

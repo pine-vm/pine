@@ -468,6 +468,49 @@ namespace elm_fullstack
                 });
             });
 
+            app.Command("devtools", devtoolsCmd =>
+            {
+                devtoolsCmd.Description = "Collection of development tools.";
+                devtoolsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+                devtoolsCmd.Command("eval-expression", evalExpressionCmd =>
+                {
+                    evalExpressionCmd.Description = "Evaluate an expression of Elm syntax.";
+
+                    var expressionArgument =
+                        evalExpressionCmd
+                        .Argument("elm-expression", "The text of the expression to evaluate")
+                        .IsRequired(allowEmptyStrings: false);
+
+                    evalExpressionCmd.OnExecute(() =>
+                    {
+                        var expression = expressionArgument.Value;
+
+                        Console.WriteLine("Got this expression:\n" + expression + "\nStarting evaluation...");
+
+                        try
+                        {
+                            var valueAsJson =
+                                ElmEngine.EvaluateElm.GetValueFromEntryPointAsJsonString(appCodeTree: null, expression: expression);
+
+                            Console.WriteLine("Evaluation result as JSON:\n" + valueAsJson);
+                        }
+                        catch (Exception evalException)
+                        {
+                            Console.WriteLine("Evaluation failed with exception:\n" + evalException.ToString());
+                        }
+                    });
+                });
+
+                devtoolsCmd.OnExecute(() =>
+                {
+                    Console.WriteLine("Please specify a subcommand.");
+                    devtoolsCmd.ShowHelp();
+
+                    return 1;
+                });
+            });
+
             app.OnExecute(() =>
             {
                 Console.WriteLine("Please specify a subcommand.");
