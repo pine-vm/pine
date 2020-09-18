@@ -12,8 +12,6 @@ namespace Kalmit.PersistentProcess.Test
     {
         static string pathToScenariosDirectory => @"./../../../../../test/elm-evaluation-scenarios";
 
-        static string scenarioElmAppCodeEvaluationRootDeclarationName => "evaluation_root";
-
         class EvaluationScenarioTestResult
         {
             public bool passed;
@@ -43,6 +41,9 @@ namespace Kalmit.PersistentProcess.Test
                 {
                     var appCodeTree = LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
 
+                    var expression =
+                        File.ReadAllText(Path.Combine(scenarioDirectory, "expression"), System.Text.Encoding.UTF8);
+
                     var expectedValueFile = File.ReadAllBytes(Path.Combine(scenarioDirectory, "expected-value.json"));
 
                     var expectedValueJson = System.Text.Encoding.UTF8.GetString(expectedValueFile);
@@ -50,7 +51,7 @@ namespace Kalmit.PersistentProcess.Test
                     var evaluatedJson =
                         elm_fullstack.ElmEngine.EvaluateElm.GetValueFromEntryPointAsJsonString(
                             appCodeTree: appCodeTree,
-                            expression: "Main." + scenarioElmAppCodeEvaluationRootDeclarationName);
+                            expression: expression);
 
                     Assert.AreEqual(
                         expectedValueJson,
