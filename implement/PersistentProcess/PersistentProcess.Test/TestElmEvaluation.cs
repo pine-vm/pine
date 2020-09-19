@@ -28,7 +28,7 @@ namespace Kalmit.PersistentProcess.Test
             {
                 var scenarioName = Path.GetFileName(scenarioDirectory);
 
-                if (Directory.EnumerateFiles(scenarioDirectory, "*").Take(1).Count() < 1)
+                if (Directory.EnumerateFiles(scenarioDirectory, "*", searchOption: SearchOption.AllDirectories).Take(1).Count() < 1)
                 {
                     // Do not stumble over empty directory here. It could be a leftover after git checkout.
                     continue;
@@ -44,14 +44,16 @@ namespace Kalmit.PersistentProcess.Test
                     var expression =
                         File.ReadAllText(Path.Combine(scenarioDirectory, "expression"), System.Text.Encoding.UTF8);
 
-                    var expectedValueFile = File.ReadAllBytes(Path.Combine(scenarioDirectory, "expected-value.json"));
-
-                    var expectedValueJson = System.Text.Encoding.UTF8.GetString(expectedValueFile);
+                    var expectedValueJson =
+                        File.ReadAllText(
+                            Path.Combine(scenarioDirectory, "expected-value.json"),
+                            System.Text.Encoding.UTF8);
 
                     var evaluatedJson =
-                        elm_fullstack.ElmEngine.EvaluateElm.GetValueFromEntryPointAsJsonString(
+                        elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
                             appCodeTree: appCodeTree,
-                            expression: expression);
+                            submission: expression,
+                            previousLocalSubmissions: null);
 
                     Assert.AreEqual(
                         expectedValueJson,

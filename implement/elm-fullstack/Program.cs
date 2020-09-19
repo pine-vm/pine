@@ -491,7 +491,8 @@ namespace elm_fullstack
                         try
                         {
                             var valueAsJson =
-                                ElmEngine.EvaluateElm.GetValueFromEntryPointAsJsonString(appCodeTree: null, expression: expression);
+                                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
+                                    appCodeTree: null, submission: expression);
 
                             Console.WriteLine("Evaluation result as JSON:\n" + valueAsJson);
                         }

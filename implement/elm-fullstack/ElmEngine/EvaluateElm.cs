@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -9,9 +10,10 @@ namespace elm_fullstack.ElmEngine
 {
     public class EvaluateElm
     {
-        static public string GetValueFromEntryPointAsJsonString(
+        static public string EvaluateSubmissionAndGetResultingValueJsonString(
             Composition.TreeComponent appCodeTree,
-            string expression)
+            string submission,
+            IReadOnlyList<string> previousLocalSubmissions = null)
         {
             var modulesTexts =
                 appCodeTree == null ? null
@@ -31,7 +33,8 @@ namespace elm_fullstack.ElmEngine
                 new
                 {
                     modulesTexts = modulesTexts ?? ImmutableList<string>.Empty,
-                    expression = expression,
+                    submission = submission,
+                    previousLocalSubmissions = previousLocalSubmissions ?? ImmutableList<string>.Empty,
                 }
             );
 
@@ -45,8 +48,8 @@ namespace elm_fullstack.ElmEngine
             var listFunctionToPublish =
                 new[]
                 {
-                    (functionNameInElm: "Main.evaluateExpressionInProject",
-                    publicName: "evaluateExpressionInProject",
+                    (functionNameInElm: "Main.evaluateSubmissionInInteractive",
+                    publicName: "evaluateSubmissionInInteractive",
                     arity: 1),
                 };
 
@@ -60,11 +63,11 @@ namespace elm_fullstack.ElmEngine
                 var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
 
                 var responseJson =
-                    javascriptEngine.CallFunction("evaluateExpressionInProject", argumentsJson)
+                    javascriptEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson)
                     ?.ToString();
 
                 var responseStructure =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateExpressionResponseStructure>(
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateSubmissionResponseStructure>(
                         responseJson);
 
                 if (responseStructure.DecodedArguments == null)
@@ -73,7 +76,7 @@ namespace elm_fullstack.ElmEngine
                 if (responseStructure.DecodedArguments.Evaluated == null)
                     throw new Exception("Failed to evaluate: " + responseStructure.DecodedArguments.FailedToEvaluate);
 
-                return responseStructure.DecodedArguments.Evaluated.valueAsJsonString;
+                return responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue?.valueAsJsonString;
             }
         }
 
@@ -97,7 +100,7 @@ namespace elm_fullstack.ElmEngine
             }
         }
 
-        class EvaluateExpressionResponseStructure
+        class EvaluateSubmissionResponseStructure
         {
             public string FailedToDecodeArguments = null;
 
@@ -112,6 +115,13 @@ namespace elm_fullstack.ElmEngine
         }
 
         class EvaluatedSctructure
+        {
+            public object SubmissionResponseNoValue = null;
+
+            public SubmissionResponseValueStructure SubmissionResponseValue = null;
+        }
+
+        class SubmissionResponseValueStructure
         {
             public string valueAsJsonString = null;
 

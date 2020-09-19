@@ -41,6 +41,16 @@ type alias EvaluationContextLocals =
     Dict.Dict String FunctionOrValue
 
 
+type InteractiveSubmission
+    = ExpressionSubmission Elm.Syntax.Expression.Expression
+    | DeclarationSubmission Elm.Syntax.Declaration.Declaration
+
+
+type SubmissionResponse
+    = SubmissionResponseValue { valueAsJsonString : String, typeText : String }
+    | SubmissionResponseNoValue
+
+
 withLocalsAdded : EvaluationContextLocals -> EvaluationContext -> EvaluationContext
 withLocalsAdded localsToAdd context =
     { context | locals = localsToAdd |> Dict.union context.locals }
@@ -136,8 +146,16 @@ lookUpValueInContext context name =
 
 evaluateExpressionString : List String -> String -> Result String { valueAsJsonString : String, typeText : String }
 evaluateExpressionString modulesTexts =
-    evaluateExpressionSyntax modulesTexts
-        >> Result.map serializeFunctionOrValue
+    evaluateSubmissionStringInInteractive modulesTexts []
+        >> Result.andThen
+            (\submissionResponse ->
+                case submissionResponse of
+                    SubmissionResponseValue value ->
+                        Ok value
+
+                    SubmissionResponseNoValue ->
+                        Err "Unexpected response: No value"
+            )
 
 
 evaluateExpressionStringWithoutModules : String -> Result String { valueAsJsonString : String, typeText : String }
@@ -178,13 +196,24 @@ serializeFunctionOrValue value =
             { valueAsJsonString = "Error: Got CoreFunction", typeText = "Error: Got CoreFunction" }
 
 
-evaluateExpressionSyntax : List String -> String -> Result String FunctionOrValue
-evaluateExpressionSyntax modulesTexts expressionCode =
-    case parseExpressionFromString expressionCode of
+evaluateSubmissionStringInInteractive : List String -> List String -> String -> Result String SubmissionResponse
+evaluateSubmissionStringInInteractive modulesTexts previousSubmissions expressionCode =
+    case parseInteractiveSubmissionFromString expressionCode of
         Err parseError ->
-            Err ("Failed to parse expression: " ++ parseError)
+            Err
+                ([ "Failed to parse submission:"
+                 , "Failed to parse expression:"
+                 , parseError.asExpressionError
+                 , "Failed to parse declaration:"
+                 , parseError.asDeclarationError
+                 ]
+                    |> String.join "\n"
+                )
 
-        Ok expression ->
+        Ok (DeclarationSubmission _) ->
+            Ok SubmissionResponseNoValue
+
+        Ok (ExpressionSubmission expression) ->
             case modulesTexts |> List.map parseElmModuleText |> Result.Extra.combine of
                 Err _ ->
                     Err "Failed to parse module text"
@@ -205,9 +234,36 @@ evaluateExpressionSyntax modulesTexts expressionCode =
                             , currentModule = Nothing
                             , locals = Dict.empty
                             }
+                                |> withLocalsAdded (getLocalsFromInteractiveSubmissions previousSubmissions)
                     in
                     evaluateExpression context expression
                         |> Result.mapError (\error -> "Failed to evaluate expression '" ++ expressionCode ++ "': " ++ error)
+                        |> Result.map (serializeFunctionOrValue >> SubmissionResponseValue)
+
+
+getLocalsFromInteractiveSubmissions : List String -> Dict.Dict String FunctionOrValue
+getLocalsFromInteractiveSubmissions submissions =
+    let
+        getMaybeDeclarationFromSubmission =
+            parseDeclarationFromString >> Result.toMaybe
+    in
+    submissions
+        |> List.filterMap getMaybeDeclarationFromSubmission
+        |> List.filterMap
+            (\declaration ->
+                case declaration of
+                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                        Result.toMaybe
+                            (getExpressionBindingFromLetDeclaration
+                                (Elm.Syntax.Expression.LetFunction functionDeclaration)
+                            )
+
+                    _ ->
+                        Nothing
+            )
+        |> List.foldl
+            (\binding locals -> locals |> Dict.insert binding.name (ExpressionValue binding.expression))
+            Dict.empty
 
 
 evaluateExpression : EvaluationContext -> Elm.Syntax.Expression.Expression -> Result String FunctionOrValue
@@ -593,6 +649,21 @@ getExpressionBindingFromLetDeclaration letDeclaration =
                 Err "Function with argument is not implemented yet."
 
 
+parseInteractiveSubmissionFromString : String -> Result { asExpressionError : String, asDeclarationError : String } InteractiveSubmission
+parseInteractiveSubmissionFromString submission =
+    case parseExpressionFromString submission of
+        Ok expression ->
+            Ok (ExpressionSubmission expression)
+
+        Err expressionErr ->
+            case parseDeclarationFromString submission of
+                Ok declaration ->
+                    Ok (DeclarationSubmission declaration)
+
+                Err declarationErr ->
+                    Err { asExpressionError = expressionErr, asDeclarationError = declarationErr }
+
+
 parseExpressionFromString : String -> Result String Elm.Syntax.Expression.Expression
 parseExpressionFromString expressionCode =
     let
@@ -633,6 +704,31 @@ wrapping_expression_in_function =
                                 _ ->
                                     Nothing
                         )
+                    |> List.head
+                    |> Result.fromMaybe "Failed to extract the wrapping function."
+            )
+
+
+parseDeclarationFromString : String -> Result String Elm.Syntax.Declaration.Declaration
+parseDeclarationFromString declarationCode =
+    let
+        moduleText =
+            """
+module Main exposing (..)
+
+
+"""
+                ++ declarationCode
+                ++ """
+
+"""
+    in
+    parseElmModuleText moduleText
+        |> Result.mapError (always "Failed to parse module")
+        |> Result.andThen
+            (\file ->
+                file.declarations
+                    |> List.map Elm.Syntax.Node.value
                     |> List.head
                     |> Result.fromMaybe "Failed to extract the wrapping function."
             )
