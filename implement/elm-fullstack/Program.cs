@@ -503,6 +503,34 @@ namespace elm_fullstack
                     });
                 });
 
+                devtoolsCmd.Command("enter-interactive", enterInteractiveCmd =>
+                {
+                    enterInteractiveCmd.Description = "Enter an environment supporting interactive exploration and composition of Elm programs.";
+
+                    enterInteractiveCmd.OnExecute(() =>
+                    {
+                        Console.WriteLine(
+                            "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
+
+                        var previousSubmissions = new List<string>();
+
+                        while (true)
+                        {
+                            var submission = ReadLine.Read("> ");
+
+                            var evaluatedJson =
+                                elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
+                                    appCodeTree: null,
+                                    submission: submission,
+                                    previousLocalSubmissions: previousSubmissions);
+
+                            previousSubmissions.Add(submission);
+
+                            Console.WriteLine(evaluatedJson);
+                        }
+                    });
+                });
+
                 devtoolsCmd.OnExecute(() =>
                 {
                     Console.WriteLine("Please specify a subcommand.");
