@@ -3,7 +3,7 @@ using System.Linq;
 using System.Collections.Immutable;
 using System.Text;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestLoadFromGithub

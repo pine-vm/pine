@@ -1,9 +1,10 @@
+using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestElmWebAppHttpServer

@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Kalmit;
+using Kalmit.PersistentProcess;
 using Kalmit.PersistentProcess.WebHost;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -14,7 +16,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestWebHost
@@ -295,7 +297,7 @@ namespace Kalmit.PersistentProcess.Test
                             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                                 "Basic",
                                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                                    WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+                                    Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
                             Assert.AreEqual(
                                 HttpStatusCode.OK,
@@ -423,7 +425,7 @@ namespace Kalmit.PersistentProcess.Test
                             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                             var echoRequestStructure =
-                                Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.HttpRequest>(responseContentString);
+                                Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.PersistentProcess.InterfaceToHost.HttpRequest>(responseContentString);
 
                             Assert.AreEqual(
                                 Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
@@ -465,7 +467,7 @@ namespace Kalmit.PersistentProcess.Test
                             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                             var echoRequestStructure =
-                                Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.HttpRequest>(responseContentString);
+                                Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.PersistentProcess.InterfaceToHost.HttpRequest>(responseContentString);
 
                             var observedContentType =
                                 echoRequestStructure.headers
@@ -864,7 +866,7 @@ namespace Kalmit.PersistentProcess.Test
                         }
 
                         var processVersionAfterFirstBatch =
-                            WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
+                            Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
                                 testSetup
                                 .BuildProcessStoreReaderInFileDirectory()
                                 .EnumerateSerializedCompositionLogRecordsReverse().First());
@@ -1096,7 +1098,7 @@ namespace Kalmit.PersistentProcess.Test
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
             var deployReport = elm_fullstack.Program.deployApp(
-                sourcePath: "./../../../../../example-apps/docker-image-default-app",
+                sourcePath: "./../../../../example-apps/docker-image-default-app",
                 site: testDirectory,
                 siteDefaultPassword: null,
                 initElmAppState: true,

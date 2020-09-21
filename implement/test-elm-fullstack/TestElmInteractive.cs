@@ -3,14 +3,15 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestElmInteractive
     {
-        static string pathToScenariosDirectory => @"./../../../../../test/elm-interactive-scenarios";
+        static string pathToScenariosDirectory => @"./../../../elm-interactive-scenarios";
 
         class InteractiveScenarioTestResult
         {

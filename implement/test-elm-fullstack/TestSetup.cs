@@ -1,3 +1,5 @@
+using Kalmit;
+using Kalmit.PersistentProcess;
 using Kalmit.ProcessStore;
 using System;
 using System.Collections.Generic;
@@ -5,11 +7,11 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     public class TestSetup
     {
-        static public string PathToExampleElmApps => "./../../../../example-elm-apps";
+        static public string PathToExampleElmApps => "./../../../example-elm-apps";
 
         static public Composition.Component AppConfigComponentFromFiles(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> appFiles) =>
@@ -65,7 +67,7 @@ namespace Kalmit.PersistentProcess.Test
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalWebAppConfig,
             WebAppConfigurationJsonStructure jsonStructure)
         {
-            var filePath = WebHost.StartupAdminInterface.JsonFilePath;
+            var filePath = Kalmit.PersistentProcess.WebHost.StartupAdminInterface.JsonFilePath;
 
             return
                 jsonStructure == null ?

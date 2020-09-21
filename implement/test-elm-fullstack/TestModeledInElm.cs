@@ -3,15 +3,16 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using JavaScriptEngineSwitcher.ChakraCore;
+using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestModeledInElm
     {
         static IImmutableList<string> PathToDirectoryWithTestsModeledInElm =>
-            ImmutableList.Create(".", "..", "..", "..", "..", "..", "test", "modeled-in-elm");
+            ImmutableList.Create(".", "..", "..", "..", "modeled-in-elm");
 
         static string FilePathStringFromPath(IImmutableList<string> path) =>
             Path.Combine(path.ToArray());

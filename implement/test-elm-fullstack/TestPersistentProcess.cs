@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Kalmit;
+using Kalmit.PersistentProcess;
 using Kalmit.ProcessStore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
@@ -7,7 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestPersistentProcess
@@ -89,10 +91,10 @@ namespace Kalmit.PersistentProcess.Test
 
             IDisposableProcessWithStringInterface InstantiatePersistentProcess()
             {
-                var storeReader = new ProcessStore.ProcessStoreReaderInFileStore(
+                var storeReader = new Kalmit.ProcessStore.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(processStoreDirectory));
 
-                var storeWriter = new ProcessStore.ProcessStoreWriterInFileStore(
+                var storeWriter = new Kalmit.ProcessStore.ProcessStoreWriterInFileStore(
                     new FileStoreFromSystemIOFile(processStoreDirectory), null);
 
                 return new PersistentProcessWithControlFlowOverStoreWriter(

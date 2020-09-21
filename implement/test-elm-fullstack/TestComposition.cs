@@ -1,9 +1,10 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestComposition

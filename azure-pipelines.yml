@@ -20,15 +20,15 @@ steps:
   inputs:
     command: restore
     projects: |
-      **/PersistentProcess.Test.csproj
       **/elm-fullstack.csproj
+      **/test-elm-fullstack.csproj
 
 - task: DotNetCoreCLI@2
   displayName: 'test'
   inputs:
     command: test
     projects: |
-      **/PersistentProcess.Test.csproj
+      **/test-elm-fullstack.csproj
     arguments:  --logger trx
     publishTestResults: false
 

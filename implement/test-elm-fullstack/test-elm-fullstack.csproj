@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <RootNamespace>test_elm_fullstack</RootNamespace>
+
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="5.10.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
+    <PackageReference Include="morelinq" Version="3.3.2" />
+    <PackageReference Include="MSTest.TestAdapter" Version="2.1.0" />
+    <PackageReference Include="MSTest.TestFramework" Version="2.1.0" />
+    <PackageReference Include="coverlet.collector" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersistentProcess\PersistentProcess.Common\PersistentProcess.Common.csproj" />
+    <ProjectReference Include="..\PersistentProcess\PersistentProcess.WebHost\PersistentProcess.WebHost.csproj" />
+    <ProjectReference Include="..\elm-fullstack\elm-fullstack.csproj" />
+  </ItemGroup>
+
+</Project>

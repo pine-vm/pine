@@ -1,3 +1,4 @@
+using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 using System.Collections.Generic;
@@ -6,7 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     [TestClass]
     public class TestElmEditor
@@ -20,7 +21,7 @@ namespace Kalmit.PersistentProcess.Test
             var webAppSource =
                 TestSetup.AppConfigComponentFromFiles(
                     TestSetup.GetElmAppFromDirectoryPath(
-                        ImmutableList.Create(".", "..", "..", "..", "..", "..", "elm-editor-server")));
+                        ImmutableList.Create(".", "..", "..", "..", "..", "elm-editor-server")));
 
             var elmModuleTextBeforeFormatting = @"
 module Common exposing (..)

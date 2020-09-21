@@ -1,3 +1,4 @@
+using Kalmit;
 using Kalmit.PersistentProcess.WebHost;
 using Microsoft.AspNetCore.Hosting;
 using Newtonsoft.Json;
@@ -8,7 +9,7 @@ using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 
-namespace Kalmit.PersistentProcess.Test
+namespace test_elm_fullstack
 {
     public class WebHostAdminInterfaceTestSetup : IDisposable
     {
@@ -105,7 +106,7 @@ namespace Kalmit.PersistentProcess.Test
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                 "Basic",
                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                    WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+                    Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
             return client;
         }
@@ -132,29 +133,29 @@ namespace Kalmit.PersistentProcess.Test
             if (deployAppConfigAndInitElmState != null)
             {
                 var compositionLogEvent =
-                    new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
                     {
                         DeployAppConfigAndInitElmAppState =
-                            new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                             {
                                 HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(deployAppConfigAndInitElmState))
                             }
                     };
 
                 var processStoreWriter =
-                    new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                     defaultFileStore);
 
                 processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
 
-                var compositionRecord = new WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
+                var compositionRecord = new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
                 {
-                    parentHashBase16 = WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    parentHashBase16 = Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
                     compositionEvent = compositionLogEvent
                 };
 
                 var serializedCompositionLogRecord =
-                    WebHost.ProcessStoreSupportingMigrations.ProcessStoreInFileStore.Serialize(compositionRecord);
+                    Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreInFileStore.Serialize(compositionRecord);
 
                 processStoreWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
             }
@@ -163,15 +164,15 @@ namespace Kalmit.PersistentProcess.Test
         public Kalmit.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
                 new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
-        public WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
-            new WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+        public Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
+            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                 BuildProcessStoreFileStoreReaderInFileDirectory());
 
-        public IEnumerable<PersistentProcess.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
+        public IEnumerable<Kalmit.PersistentProcess.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
         {
             var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-            PersistentProcess.InterfaceToHost.AppEventStructure eventFromHash(string eventComponentHash)
+            Kalmit.PersistentProcess.InterfaceToHost.AppEventStructure eventFromHash(string eventComponentHash)
             {
                 var component = processStoreReader.LoadComponent(eventComponentHash);
 
@@ -183,7 +184,7 @@ namespace Kalmit.PersistentProcess.Test
 
                 var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
-                return Newtonsoft.Json.JsonConvert.DeserializeObject<PersistentProcess.InterfaceToHost.AppEventStructure>(eventString);
+                return Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.PersistentProcess.InterfaceToHost.AppEventStructure>(eventString);
             }
 
             return
