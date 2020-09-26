@@ -3,6 +3,8 @@ port module FrontendWeb.Main exposing (Event(..), State, init, main, receiveMess
 import Base64
 import Browser
 import Browser.Navigation as Navigation
+import Bytes
+import Bytes.Decode
 import Bytes.Encode
 import Common
 import Element
@@ -11,6 +13,7 @@ import Element.Border
 import Element.Font
 import Element.Input
 import ElmFullstackCompilerInterface.GenerateJsonCoders
+import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
 import FrontendWeb.MonacoEditor
 import Html
@@ -374,57 +377,21 @@ monacoEditorElement _ =
 
 initElmCode : String
 initElmCode =
-    """
-module Main exposing (..)
-
-
-import Html
-import Html.Attributes
-
-
-main =
-    [ Html.text "Hello World!" ]
-    |> Html.div [ Html.Attributes.style "color" "whitesmoke" ]
-
-"""
+    ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
+        |> decodeBytesToString
+        |> Maybe.withDefault "Failed to decode file"
 
 
 initElmJson : String
 initElmJson =
-    """
-{
-    "type": "application",
-    "source-directories": [
-        "src"
-    ],
-    "elm-version": "0.19.1",
-    "dependencies": {
-        "direct": {
-            "danfishgold/base64-bytes": "1.0.3",
-            "elm/browser": "1.0.2",
-            "elm/bytes": "1.0.8",
-            "elm/core": "1.0.5",
-            "elm/html": "1.0.0",
-            "elm/http": "2.0.0",
-            "elm/json": "1.1.3",
-            "elm/url": "1.0.0",
-            "mdgriffith/elm-ui": "1.1.8"
-        },
-        "indirect": {
-            "elm/file": "1.0.5",
-            "elm/time": "1.0.0",
-            "elm/virtual-dom": "1.0.2"
-        }
-    },
-    "test-dependencies": {
-        "direct": {},
-        "indirect": {
-            "elm/parser": "1.1.0",
-            "elm/regex": "1.0.0"
-        }
-    }
-}
-"""
+    ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
+        |> decodeBytesToString
+        |> Maybe.withDefault "Failed to decode file"
+
+
+decodeBytesToString : Bytes.Bytes -> Maybe String
+decodeBytesToString bytes =
+    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 describeHttpError : Http.Error -> String
