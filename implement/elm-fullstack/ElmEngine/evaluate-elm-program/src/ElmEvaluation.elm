@@ -329,9 +329,11 @@ evaluateExpression context expression =
                                     ""
 
                                 else
-                                    " in module " ++ (moduleName |> String.join ".")
+                                    " in module '" ++ (moduleName |> String.join ".") ++ "'"
                                )
-                            ++ ". Available locals: "
+                            ++ ". "
+                            ++ (lookupError.availableLocals |> List.length |> String.fromInt)
+                            ++ " locals available: "
                             ++ (lookupError.availableLocals |> String.join ", ")
                     )
                 |> Result.andThen

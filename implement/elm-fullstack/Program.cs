@@ -507,10 +507,36 @@ namespace elm_fullstack
                 {
                     enterInteractiveCmd.Description = "Enter an environment supporting interactive exploration and composition of Elm programs.";
 
+                    var contextAppOption =
+                        enterInteractiveCmd
+                        .Option(
+                            template: "--context-app",
+                            description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
+                            optionType: CommandOptionType.SingleValue);
+
                     enterInteractiveCmd.OnExecute(() =>
                     {
                         Console.WriteLine(
                             "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
+
+                        Composition.TreeComponent contextAppCodeTree = null;
+
+                        var contextAppPath = contextAppOption.Value();
+
+                        if (contextAppPath != null)
+                        {
+                            var loadContextAppResult = LoadFromPath.LoadTreeFromPath(contextAppPath);
+
+                            if (loadContextAppResult?.Ok == null)
+                            {
+                                throw new Exception("Failed to load from path '" + contextAppPath + "': " + loadContextAppResult?.Err);
+                            }
+
+                            contextAppCodeTree = loadContextAppResult.Ok.tree;
+
+                            if (!(0 < contextAppCodeTree?.EnumerateBlobsTransitive().Take(1).Count()))
+                                throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
+                        }
 
                         var previousSubmissions = new List<string>();
 
@@ -520,7 +546,7 @@ namespace elm_fullstack
 
                             var evaluatedJson =
                                 elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
-                                    appCodeTree: null,
+                                    appCodeTree: contextAppCodeTree,
                                     submission: submission,
                                     previousLocalSubmissions: previousSubmissions);
 

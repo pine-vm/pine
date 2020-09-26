@@ -40,10 +40,8 @@ namespace test_elm_fullstack
 
                 try
                 {
-                    var appCodeTree = LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
-
-                    if (appCodeTree != null)
-                        throw new NotImplementedException("Support with seed from app not implemented yet.");
+                    var appCodeTree =
+                        LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
 
                     var stepsDirectories =
                         Directory.EnumerateDirectories(
