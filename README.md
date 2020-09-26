@@ -41,9 +41,15 @@ The easiest way to test a change in the source code is to trigger the Github act
 
 As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), the project uses .NET core 3.1 to run tests and build the executable file. You can download the `dotnet` tool from https://dotnet.microsoft.com/download/dotnet-core to build and test locally.
 
-## Example Projects
+## Example Apps
 
 ### Rich Chat Room
 
 The [rich chat room example app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
 For a detailed description of this app, see the readme file at https://github.com/elm-fullstack/elm-fullstack/blob/master/implement/example-apps/rich-chat-room/readme.md
+
+### Elm Editor
+
+The [Elm Editor example app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor) is a code editor optimized for the development of Elm apps. It also provides tooling specifically for web frontend-apps to compile and view your app inline.
+
+The Elm Editor frontend builds on the popular [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide code editing and features like syntax highlighting.

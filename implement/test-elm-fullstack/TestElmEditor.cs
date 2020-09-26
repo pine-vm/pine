@@ -21,7 +21,7 @@ namespace test_elm_fullstack
             var webAppSource =
                 TestSetup.AppConfigComponentFromFiles(
                     TestSetup.GetElmAppFromDirectoryPath(
-                        ImmutableList.Create(".", "..", "..", "..", "..", "elm-editor-server")));
+                        ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "elm-editor")));
 
             var elmModuleTextBeforeFormatting = @"
 module Common exposing (..)
