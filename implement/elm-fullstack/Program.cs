@@ -519,6 +519,8 @@ namespace elm_fullstack
 
                     enterInteractiveCmd.OnExecute(() =>
                     {
+                        ReadLine.HistoryEnabled = true;
+
                         Console.WriteLine(
                             "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
 
