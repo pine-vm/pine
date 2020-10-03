@@ -5,12 +5,13 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Kalmit;
+using static Kalmit.Composition;
 
 namespace elm_fullstack.ElmEngine
 {
     public class EvaluateElm
     {
-        static public string EvaluateSubmissionAndGetResultingValueJsonString(
+        static public Result<string, string> EvaluateSubmissionAndGetResultingValueJsonString(
             Composition.TreeComponent appCodeTree,
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
@@ -74,9 +75,10 @@ namespace elm_fullstack.ElmEngine
                     throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
 
                 if (responseStructure.DecodedArguments.Evaluated == null)
-                    throw new Exception("Failed to evaluate: " + responseStructure.DecodedArguments.FailedToEvaluate);
+                    return Result<string, string>.err(responseStructure.DecodedArguments.FailedToEvaluate);
 
-                return responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue?.valueAsJsonString;
+                return Result<string, string>.ok(
+                    responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue?.valueAsJsonString);
             }
         }
 

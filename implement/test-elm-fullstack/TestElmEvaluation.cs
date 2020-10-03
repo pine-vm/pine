@@ -50,7 +50,7 @@ namespace test_elm_fullstack
                             Path.Combine(scenarioDirectory, "expected-value.json"),
                             System.Text.Encoding.UTF8);
 
-                    var evaluatedJson =
+                    var evalResult =
                         elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
                             appCodeTree: appCodeTree,
                             submission: expression,
@@ -58,7 +58,8 @@ namespace test_elm_fullstack
 
                     Assert.AreEqual(
                         expectedValueJson,
-                        evaluatedJson, "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
+                        evalResult.Ok,
+                        "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
 
                     scenarioPassed = true;
                 }
