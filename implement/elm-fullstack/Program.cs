@@ -543,30 +543,26 @@ namespace elm_fullstack
                                 throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
                         }
 
-                        var previousSubmissions = new List<string>();
-
-                        while (true)
+                        using (var interactiveSession = new InteractiveSession(appCodeTree: contextAppCodeTree))
                         {
-                            var submission = ReadLine.Read("> ");
-
-                            if (!(0 < submission?.Trim()?.Length))
-                                continue;
-
-                            var evalResult =
-                                elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
-                                    appCodeTree: contextAppCodeTree,
-                                    submission: submission,
-                                    previousLocalSubmissions: previousSubmissions);
-
-                            if (evalResult.Ok == null)
+                            while (true)
                             {
-                                Console.WriteLine("Failed to evaluate: " + evalResult.Err);
-                                continue;
+                                var submission = ReadLine.Read("> ");
+
+                                if (!(0 < submission?.Trim()?.Length))
+                                    continue;
+
+                                var evalResult =
+                                    interactiveSession.SubmitAndGetResultingValueJsonString(submission);
+
+                                if (evalResult.Ok == null)
+                                {
+                                    Console.WriteLine("Failed to evaluate: " + evalResult.Err);
+                                    continue;
+                                }
+
+                                Console.WriteLine(evalResult.Ok);
                             }
-
-                            previousSubmissions.Add(submission);
-
-                            Console.WriteLine(evalResult.Ok);
                         }
                     });
                 });

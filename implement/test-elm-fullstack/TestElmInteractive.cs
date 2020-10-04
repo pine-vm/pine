@@ -54,40 +54,36 @@ namespace test_elm_fullstack
                     if (stepsDirectories.Count < 1)
                         throw new Exception("stepsDirectories.Count < 1");
 
-                    var previousSubmissions = new List<string>();
-
-                    foreach (var stepDirectory in stepsDirectories)
+                    using (var interactiveSession = new elm_fullstack.InteractiveSession(appCodeTree: appCodeTree))
                     {
-                        var stepName = Path.GetFileName(stepDirectory);
-
-                        try
+                        foreach (var stepDirectory in stepsDirectories)
                         {
-                            var submission =
-                                File.ReadAllText(Path.Combine(stepDirectory, "submission"), System.Text.Encoding.UTF8);
+                            var stepName = Path.GetFileName(stepDirectory);
 
-                            var evalResult =
-                                elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
-                                    appCodeTree: appCodeTree,
-                                    submission: submission,
-                                    previousLocalSubmissions: previousSubmissions);
-
-                            previousSubmissions.Add(submission);
-
-                            var expectedValueFilePath = Path.Combine(stepDirectory, "expected-value.json");
-
-                            if (File.Exists(expectedValueFilePath))
+                            try
                             {
-                                var expectedValueJson = File.ReadAllText(expectedValueFilePath, System.Text.Encoding.UTF8);
+                                var submission =
+                                    File.ReadAllText(Path.Combine(stepDirectory, "submission"), System.Text.Encoding.UTF8);
 
-                                Assert.AreEqual(
-                                    expectedValueJson,
-                                    evalResult.Ok,
-                                    "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
+                                var evalResult =
+                                    interactiveSession.SubmitAndGetResultingValueJsonString(submission);
+
+                                var expectedValueFilePath = Path.Combine(stepDirectory, "expected-value.json");
+
+                                if (File.Exists(expectedValueFilePath))
+                                {
+                                    var expectedValueJson = File.ReadAllText(expectedValueFilePath, System.Text.Encoding.UTF8);
+
+                                    Assert.AreEqual(
+                                        expectedValueJson,
+                                        evalResult.Ok,
+                                        "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
+                                }
                             }
-                        }
-                        catch (Exception e)
-                        {
-                            throw new Exception("Failed step '" + stepName + "' with exception.", e);
+                            catch (Exception e)
+                            {
+                                throw new Exception("Failed step '" + stepName + "' with exception.", e);
+                            }
                         }
                     }
 

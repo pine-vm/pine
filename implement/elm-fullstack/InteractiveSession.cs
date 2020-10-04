@@ -1,0 +1,44 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using Kalmit;
+using static Kalmit.Composition;
+
+namespace elm_fullstack
+{
+
+    public class InteractiveSession : IDisposable
+    {
+        readonly Composition.TreeComponent appCodeTree;
+
+        readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
+            new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(ElmEngine.EvaluateElm.PrepareJsEngineToEvaluateElm);
+
+        readonly IList<string> previousSubmissions = new List<string>();
+
+        public InteractiveSession(Composition.TreeComponent appCodeTree)
+        {
+            this.appCodeTree = appCodeTree;
+        }
+
+        public Result<string, string> SubmitAndGetResultingValueJsonString(string submission)
+        {
+            var result =
+                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
+                    evalElmPreparedJsEngine.Value,
+                    appCodeTree: appCodeTree,
+                    submission: submission,
+                    previousLocalSubmissions: previousSubmissions.ToImmutableList());
+
+            previousSubmissions.Add(submission);
+
+            return result;
+        }
+
+        void IDisposable.Dispose()
+        {
+            if (evalElmPreparedJsEngine.IsValueCreated)
+                evalElmPreparedJsEngine.Value?.Dispose();
+        }
+    }
+}

@@ -16,6 +16,22 @@ namespace elm_fullstack.ElmEngine
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
+            using (var jsEngine = PrepareJsEngineToEvaluateElm())
+            {
+                return EvaluateSubmissionAndGetResultingValueJsonString(
+                    jsEngine,
+                    appCodeTree: appCodeTree,
+                    submission: submission,
+                    previousLocalSubmissions: previousLocalSubmissions);
+            }
+        }
+
+        static public Result<string, string> EvaluateSubmissionAndGetResultingValueJsonString(
+            JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+            Composition.TreeComponent appCodeTree,
+            string submission,
+            IReadOnlyList<string> previousLocalSubmissions = null)
+        {
             var modulesTexts =
                 appCodeTree == null ? null
                 :
@@ -28,8 +44,6 @@ namespace elm_fullstack.ElmEngine
                 .WhereNotNull()
                 .ToImmutableList();
 
-            var parseElmAppCodeFiles = ParseElmSyntaxAppCodeFiles();
-
             var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
                 new
                 {
@@ -38,6 +52,28 @@ namespace elm_fullstack.ElmEngine
                     previousLocalSubmissions = previousLocalSubmissions ?? ImmutableList<string>.Empty,
                 }
             );
+
+            var responseJson =
+                evalElmPreparedJsEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson)
+                ?.ToString();
+
+            var responseStructure =
+                Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateSubmissionResponseStructure>(
+                    responseJson);
+
+            if (responseStructure.DecodedArguments == null)
+                throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
+
+            if (responseStructure.DecodedArguments.Evaluated == null)
+                return Result<string, string>.err(responseStructure.DecodedArguments.FailedToEvaluate);
+
+            return Result<string, string>.ok(
+                responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue?.valueAsJsonString);
+        }
+
+        static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToEvaluateElm()
+        {
+            var parseElmAppCodeFiles = ParseElmSyntaxAppCodeFiles();
 
             var javascriptFromElmMake =
                 ProcessFromElm019Code.CompileElmToJavascript(
@@ -59,27 +95,11 @@ namespace elm_fullstack.ElmEngine
                     javascriptMinusCrashes,
                     listFunctionToPublish);
 
-            using (var javascriptEngine = ProcessHostedWithChakraCore.ConstructJsEngine())
-            {
-                var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
+            var javascriptEngine = ProcessHostedWithChakraCore.ConstructJsEngine();
 
-                var responseJson =
-                    javascriptEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson)
-                    ?.ToString();
+            var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
 
-                var responseStructure =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateSubmissionResponseStructure>(
-                        responseJson);
-
-                if (responseStructure.DecodedArguments == null)
-                    throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
-
-                if (responseStructure.DecodedArguments.Evaluated == null)
-                    return Result<string, string>.err(responseStructure.DecodedArguments.FailedToEvaluate);
-
-                return Result<string, string>.ok(
-                    responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue?.valueAsJsonString);
-            }
+            return javascriptEngine;
         }
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ParseElmSyntaxAppCodeFiles() =>
