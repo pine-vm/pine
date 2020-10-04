@@ -549,6 +549,9 @@ namespace elm_fullstack
                         {
                             var submission = ReadLine.Read("> ");
 
+                            if (!(0 < submission?.Trim()?.Length))
+                                continue;
+
                             var evalResult =
                                 elm_fullstack.ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
                                     appCodeTree: contextAppCodeTree,
