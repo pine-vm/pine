@@ -21,6 +21,7 @@ import Html.Attributes as HA
 import Http
 import Json.Decode
 import Json.Encode
+import Time
 import Url
 import Url.Builder
 
@@ -31,21 +32,28 @@ port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
 port receiveMessageFromMonacoFrame : (Json.Encode.Value -> msg) -> Sub msg
 
 
+type alias ElmMakeRequestStructure =
+    FrontendBackendInterface.ElmMakeRequestStructure
+
+
 type alias ElmMakeResponseStructure =
     FrontendBackendInterface.ElmMakeResponseStructure
 
 
 type alias State =
     { navigationKey : Navigation.Key
+    , time : Maybe Time.Posix
     , editorElmCode : String
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
+    , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
     , elmMakeResult : Maybe (Result Http.Error ElmMakeResultStructure)
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     }
 
 
 type alias ElmMakeResultStructure =
-    { response : ElmMakeResponseStructure
+    { request : ElmMakeRequestStructure
+    , response : ElmMakeResponseStructure
     , compiledHtmlDocument : Maybe String
     }
 
@@ -53,10 +61,11 @@ type alias ElmMakeResultStructure =
 type Event
     = UserInputElmCode String
     | MonacoEditorEvent Json.Decode.Value
+    | TimeHasArrived Time.Posix
     | UserInputFormat
     | UserInputCompile
     | BackendElmFormatResponseEvent (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
-    | BackendElmMakeResponseEvent (Result Http.Error FrontendBackendInterface.ElmMakeResponseStructure)
+    | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
 
@@ -66,11 +75,19 @@ main =
     Browser.application
         { init = init
         , update = update
-        , subscriptions = always (receiveMessageFromMonacoFrame MonacoEditorEvent)
+        , subscriptions = subscriptions
         , view = view
         , onUrlRequest = UrlRequest
         , onUrlChange = UrlChange
         }
+
+
+subscriptions : State -> Sub Event
+subscriptions state =
+    [ receiveMessageFromMonacoFrame MonacoEditorEvent
+    , Time.every 500 TimeHasArrived
+    ]
+        |> Sub.batch
 
 
 init : () -> Url.Url -> Navigation.Key -> ( State, Cmd Event )
@@ -78,8 +95,10 @@ init _ url navigationKey =
     let
         ( model, urlChangeCmd ) =
             { navigationKey = navigationKey
+            , time = Nothing
             , editorElmCode = initElmCode
             , decodeMessageFromMonacoEditorError = Nothing
+            , lastElmMakeRequest = Nothing
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
             }
@@ -112,11 +131,14 @@ update event stateBefore =
                         FrontendWeb.MonacoEditor.CompletedSetupEvent ->
                             ( stateBefore, stateBefore.editorElmCode |> setTextInMonacoEditorCmd )
 
+        TimeHasArrived time ->
+            ( { stateBefore | time = Just time }, Cmd.none )
+
         UserInputFormat ->
             ( stateBefore, elmFormatCmd stateBefore )
 
         UserInputCompile ->
-            ( stateBefore, elmMakeCmd stateBefore )
+            userInputCompile stateBefore
 
         BackendElmFormatResponseEvent httpResponse ->
             let
@@ -127,16 +149,16 @@ update event stateBefore =
             , setTextInMonacoEditorCmd editorElmCode
             )
 
-        BackendElmMakeResponseEvent httpResponse ->
+        BackendElmMakeResponseEvent elmMakeRequest httpResponse ->
             let
                 elmMakeResult =
                     httpResponse
                         |> Result.map
-                            (\responseOk ->
+                            (\elmMakeResponse ->
                                 let
                                     compiledHtmlDocument =
                                         case
-                                            responseOk.files
+                                            elmMakeResponse.files
                                                 |> List.filter (.path >> List.reverse >> List.head >> (==) (Just elmMakeOutputFileName))
                                                 |> List.head
                                         of
@@ -149,7 +171,10 @@ update event stateBefore =
                                                     |> Maybe.withDefault ("Error decoding base64: " ++ newFile.contentBase64)
                                                     |> Just
                                 in
-                                { response = responseOk, compiledHtmlDocument = compiledHtmlDocument }
+                                { request = elmMakeRequest
+                                , response = elmMakeResponse
+                                , compiledHtmlDocument = compiledHtmlDocument
+                                }
                             )
             in
             ( { stateBefore | elmMakeResult = Just elmMakeResult }
@@ -185,8 +210,8 @@ elmFormatCmd state =
     requestToApiCmd request jsonDecoder BackendElmFormatResponseEvent
 
 
-elmMakeCmd : State -> Cmd Event
-elmMakeCmd state =
+userInputCompile : State -> ( State, Cmd Event )
+userInputCompile stateBefore =
     let
         base64FromString : String -> String
         base64FromString =
@@ -205,7 +230,7 @@ elmMakeCmd state =
                   , initElmJson
                   )
                 , ( entryPointFilePath
-                  , state.editorElmCode
+                  , stateBefore.editorElmCode
                   )
                 ]
                     |> List.map
@@ -227,7 +252,13 @@ elmMakeCmd state =
                 _ ->
                     Json.Decode.fail "Unexpected response"
     in
-    requestToApiCmd request jsonDecoder BackendElmMakeResponseEvent
+    ( { stateBefore
+        | lastElmMakeRequest =
+            stateBefore.time |> Maybe.map (\time -> { time = time, request = elmMakeRequest })
+        , elmMakeResult = Nothing
+      }
+    , requestToApiCmd request jsonDecoder (BackendElmMakeResponseEvent elmMakeRequest)
+    )
 
 
 requestToApiCmd :
@@ -259,48 +290,56 @@ view : State -> Browser.Document Event
 view state =
     let
         resultElement =
-            case state.elmMakeResult of
+            case state.lastElmMakeRequest of
                 Nothing ->
-                    Element.text "No compilation so far" |> Element.el [ Element.padding defaultFontSize ]
+                    [ "No compilation started so far. You can use the 'Compile' button to check program text for errors and see your app in action."
+                        |> Element.text
+                    ]
+                        |> Element.paragraph [ Element.padding defaultFontSize ]
 
-                Just (Err elmMakeError) ->
-                    ("Error: " ++ describeHttpError elmMakeError) |> Element.text
-
-                Just (Ok elmMakeOk) ->
-                    case elmMakeOk.compiledHtmlDocument of
+                Just lastElmMakeRequest ->
+                    case state.elmMakeResult of
                         Nothing ->
-                            [ ( "standard error", elmMakeOk.response.processOutput.standardError )
-                            , ( "standard output", elmMakeOk.response.processOutput.standardOutput )
-                            ]
-                                |> List.map
-                                    (\( channel, output ) ->
-                                        [ channel |> Element.text
-                                        , [ Html.text output
-                                                |> Element.html
-                                                |> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
-                                          ]
-                                            |> Element.paragraph
-                                                [ Element.htmlAttribute attributeMonospaceFont ]
-                                            |> indentOneLevel
-                                        ]
-                                            |> Element.column
-                                                [ Element.spacing (defaultFontSize // 2)
-                                                , Element.width Element.fill
-                                                ]
-                                    )
-                                |> Element.column
-                                    [ Element.spacing defaultFontSize
-                                    , Element.width Element.fill
-                                    , Element.scrollbarY
-                                    ]
+                            Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
 
-                        Just compiledHtmlDocument ->
-                            Html.iframe
-                                [ HA.srcdoc compiledHtmlDocument
-                                , HA.style "height" "100%"
-                                ]
-                                []
-                                |> Element.html
+                        Just (Err elmMakeError) ->
+                            ("Error: " ++ describeHttpError elmMakeError) |> Element.text
+
+                        Just (Ok elmMakeOk) ->
+                            case elmMakeOk.compiledHtmlDocument of
+                                Nothing ->
+                                    [ ( "standard error", elmMakeOk.response.processOutput.standardError )
+                                    , ( "standard output", elmMakeOk.response.processOutput.standardOutput )
+                                    ]
+                                        |> List.map
+                                            (\( channel, output ) ->
+                                                [ channel |> Element.text
+                                                , [ Html.text output
+                                                        |> Element.html
+                                                        |> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
+                                                  ]
+                                                    |> Element.paragraph
+                                                        [ Element.htmlAttribute attributeMonospaceFont ]
+                                                    |> indentOneLevel
+                                                ]
+                                                    |> Element.column
+                                                        [ Element.spacing (defaultFontSize // 2)
+                                                        , Element.width Element.fill
+                                                        ]
+                                            )
+                                        |> Element.column
+                                            [ Element.spacing defaultFontSize
+                                            , Element.width Element.fill
+                                            , Element.scrollbarY
+                                            ]
+
+                                Just compiledHtmlDocument ->
+                                    Html.iframe
+                                        [ HA.srcdoc compiledHtmlDocument
+                                        , HA.style "height" "100%"
+                                        ]
+                                        []
+                                        |> Element.html
 
         buttonElement buttonConfig =
             Element.Input.button
