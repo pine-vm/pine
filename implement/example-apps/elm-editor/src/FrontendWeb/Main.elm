@@ -330,6 +330,7 @@ view state =
                                         |> Element.column
                                             [ Element.spacing defaultFontSize
                                             , Element.width Element.fill
+                                            , Element.height Element.fill
                                             , Element.scrollbarY
                                             ]
 
@@ -375,7 +376,14 @@ view state =
                     ]
             , [ [ compileButton ] |> Element.row [ Element.padding (defaultFontSize // 2) ]
               , resultElement
-                    |> Element.el [ Element.width Element.fill, Element.height Element.fill ]
+                    |> Element.el
+                        [ Element.width Element.fill
+                        , Element.height Element.fill
+
+                        -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
+                        , Element.clip
+                        , Element.htmlAttribute (HA.style "flex-shrink" "1")
+                        ]
               ]
                 |> Element.column
                     [ Element.width (Element.fillPortion 4)
