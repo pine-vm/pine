@@ -12,6 +12,7 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Element.Region
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
@@ -313,7 +314,7 @@ view state =
                                     ]
                                         |> List.map
                                             (\( channel, output ) ->
-                                                [ channel |> Element.text
+                                                [ channel |> Element.text |> Element.el (headingAttributes 3)
                                                 , [ Html.text output
                                                         |> Element.html
                                                         |> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
@@ -332,6 +333,7 @@ view state =
                                             , Element.width Element.fill
                                             , Element.height Element.fill
                                             , Element.scrollbarY
+                                            , Element.padding (defaultFontSize // 2)
                                             ]
 
                                 Just compiledHtmlDocument ->
@@ -458,6 +460,22 @@ describeHttpError httpError =
 
         Http.BadBody errorMessage ->
             "BadPayload: " ++ errorMessage
+
+
+headingAttributes : Int -> List (Element.Attribute event)
+headingAttributes rank =
+    let
+        fontSizePercent =
+            max 0 (90 - rank * 20) + 100
+    in
+    [ elementFontSizePercent fontSizePercent
+    , Element.Region.heading rank
+    ]
+
+
+elementFontSizePercent : Int -> Element.Attribute a
+elementFontSizePercent percent =
+    Element.htmlAttribute (HA.style "font-size" ((percent |> String.fromInt) ++ "%"))
 
 
 indentOneLevel : Element.Element a -> Element.Element a
