@@ -5,8 +5,8 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fullstack</AssemblyName>
-    <AssemblyVersion>2020.1004.0.0</AssemblyVersion>
-    <FileVersion>2020.1004.0.0</FileVersion>
+    <AssemblyVersion>2020.1011.0.0</AssemblyVersion>
+    <FileVersion>2020.1011.0.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
