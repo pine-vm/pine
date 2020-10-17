@@ -77,19 +77,26 @@ namespace Kalmit
             var exitCode = process.ExitCode;
             process.Close();
 
-            File.Delete(executableFilePath);
+            var createdFiles =
+                Filesystem.GetFilesFromDirectory(
+                    directoryPath: workingDirectory,
+                    filterByRelativeName: path => path != executableFileName);
 
-            var resultFiles =
-                Filesystem.GetAllFilesFromDirectory(workingDirectory);
-
-            Directory.Delete(workingDirectory, true);
+            try
+            {
+                Directory.Delete(path: workingDirectory, recursive: true);
+            }
+            // Avoid crash in scenario like https://forum.botengine.org/t/farm-manager-tribal-wars-2-farmbot/3038/170
+            catch (UnauthorizedAccessException)
+            {
+            }
 
             return (new ProcessOutput
             {
                 ExitCode = exitCode,
                 StandardError = standardError,
                 StandardOutput = standardOutput,
-            }, resultFiles);
+            }, createdFiles);
         }
 
         //  Helper for Linux platform. Thank you Kyle Spearrin!

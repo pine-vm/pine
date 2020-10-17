@@ -91,8 +91,8 @@ namespace test_elm_fullstack
             string directoryPath) =>
                 ElmApp.ToFlatDictionaryWithPathComparer(
                         Filesystem.GetAllFilesFromDirectory(directoryPath)
-                        .OrderBy(file => file.name)
-                        .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.content)));
+                        .OrderBy(file => file.path)
+                        .Select(filePathAndContent => ((IImmutableList<string>)filePathAndContent.path.Split(new[] { '/', '\\' }).ToImmutableList(), filePathAndContent.content)));
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles) =>

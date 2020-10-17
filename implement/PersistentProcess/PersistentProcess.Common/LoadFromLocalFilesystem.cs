@@ -16,7 +16,7 @@ namespace Kalmit
 
             var blobs =
                 Filesystem.GetAllFilesFromDirectory(path)
-                .Select(file => (path: (System.Collections.Immutable.IImmutableList<string>)file.name.Split('/', '\\').ToImmutableList(), content: file.content))
+                .Select(file => (path: (System.Collections.Immutable.IImmutableList<string>)file.path.Split('/', '\\').ToImmutableList(), content: file.content))
                 .ToImmutableList();
 
             return
