@@ -4,8 +4,8 @@ In this guide, I use the elm-fullstack command-line interface (CLI) program. You
 
 Here are direct links to the downloads, containing the `elm-fullstack` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-08-22/elm-fullstack-bin-33dde927b7eba99db55eff1c3cd0ca49cdfd55fa-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-08-22/elm-fullstack-bin-33dde927b7eba99db55eff1c3cd0ca49cdfd55fa-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-10-17/elm-fullstack-bin-b0d1087e30b0e67ad2dbc3e8b9ab9ec14dbdff16-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-10-17/elm-fullstack-bin-b0d1087e30b0e67ad2dbc3e8b9ab9ec14dbdff16-linux-x64.zip
 
 To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack  install-command` command.
 
@@ -69,9 +69,9 @@ Analogous to the update function in a front-end Elm app, this function returns t
 ### `ElmFullstackCompilerInterface.ElmMake` Elm Module
 
 The `ElmMake` module provides an interface to run the `elm make` command and use the resulting file value in our Elm app.
-For each function in this module, the full-stack compiler replaces the function value with the content of the output file from `elm make`.
+For each name in this module, the full-stack compiler replaces the value with the output from `elm  make`.
 
-Using the function name, we specify flags for `elm make` and the source file name. By default, the value we get is of type `Bytes.Bytes`.
+Using the name in the Elm module, we specify the source file name and optional flags for `elm  make`. By default, the value we get is of type `Bytes.Bytes`.
 Here is an example that depends on the source file located at path `src/FrontendWeb/Main.elm`:
 
 ```Elm
@@ -80,24 +80,24 @@ module ElmFullstackCompilerInterface.ElmMake exposing (..)
 
 elm_make____src_FrontendWeb_Main_elm : Bytes.Bytes
 elm_make____src_FrontendWeb_Main_elm =
-    "The Elm-fullstack compiler replaces this function."
+    "The Elm-fullstack compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 
 
-elm_make__debug____src_FrontendWeb_Main_elm : String
+elm_make__debug____src_FrontendWeb_Main_elm : Bytes.Bytes
 elm_make__debug____src_FrontendWeb_Main_elm =
-    "The Elm-fullstack compiler replaces this function."
+    "The Elm-fullstack compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 ```
 
-We can also get the base64 encoded value instead of `Bytes.Bytes`, by adding the `base64` flag:
+We can also get the value encoded as a base64 string instead of `Bytes.Bytes`, by adding the `base64` flag:
 
 ```Elm
 elm_make__base64____src_FrontendWeb_Main_elm : String
 elm_make__base64____src_FrontendWeb_Main_elm =
-    "The Elm-fullstack compiler replaces this function."
+    "The Elm-fullstack compiler replaces this value."
 ```
 
 Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L48) mentioned earlier:
@@ -120,9 +120,9 @@ Backend apps often use the output from `elm make` send the frontend to web brows
 
 ### `ElmFullstackCompilerInterface.GenerateJsonCoders` Elm Module
 
-This module provides automatically generated JSON encoders and decoders for Elm types, except types containing functions.
+This module provides automatically generated JSON encoders and decoders for Elm types.
 
-By adding a function to this module, we can select a type to generate a JSON encoder or decoder. A common use case for this automation are types used at the interface between the front-end and the back-end.
+By adding a declaration in this module, we instruct the compiler to generate a JSON encoder or decoder. A common use case for this automation is types used at the interface between the front-end and the back-end.
 
 In this module, we can freely choose the names for functions, as we only need type annotations to tell the compiler what we want to have generated. To encode to JSON, add a function which takes this type and returns a `Json.Encode.Value`:
 
@@ -132,7 +132,7 @@ jsonEncodeMessageToClient =
     always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
 ```
 
-To get a decoder, add a 'function' that takes no parameters and returns an instance of `Json.Decode.Decoder`:
+To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
 
 ```Elm
 jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
@@ -144,27 +144,27 @@ jsonDecodeMessageToClient =
 
 This module provides access to the app source code files.
 
-By adding a function to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
+By adding a name to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
 The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
 ```Elm
 file____readme_md : Bytes.Bytes
 file____readme_md =
-    "The Elm-fullstack compiler replaces this function."
+    "The Elm-fullstack compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 ```
 
-To map the source file path to a function name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
+To map the source file path to a name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
 
-| file path                        | Elm function name |
-| -------------------------------- | -------------------------- |
-| `readme.md`                      | `file____readme_md` |
-| `static/readme.md`               | `file____static_readme_md` |
+| file path                        | Name in the Elm module                   |
+| -------------------------------- | --------------------------               |
+| `readme.md`                      | `file____readme_md`                      |
+| `static/readme.md`               | `file____static_readme_md`               |
 | `static/command-from-player.mp3` | `file____static_command_from_player_mp3` |
 
-The compilation will fail if this module contains a function name that matches more than one or none of the source files.
+The compilation will fail if this module contains a name that matches more than one or none of the source files.
 
 ### `MigrateBackendState` Elm Module
 
@@ -233,7 +233,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2020-08-22.
+Welcome to Elm-fullstack version 2020-10-17.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
