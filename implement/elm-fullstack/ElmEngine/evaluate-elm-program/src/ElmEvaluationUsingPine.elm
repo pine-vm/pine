@@ -1,4 +1,4 @@
-module ElmEvaluationUsingPine exposing (evaluateExpressionStringWithoutModules)
+module ElmEvaluationUsingPine exposing (evaluateExpressionText)
 
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
@@ -8,8 +8,8 @@ import Pine exposing (PineExpression(..), PineValue(..))
 import Result.Extra
 
 
-evaluateExpressionStringWithoutModules : String -> Result String { valueAsJsonString : String, typeText : String }
-evaluateExpressionStringWithoutModules elmExpressionText =
+evaluateExpressionText : String -> Result String Json.Encode.Value
+evaluateExpressionText elmExpressionText =
     case parseElmExpressionString elmExpressionText of
         Err error ->
             Err ("Failed to map from Elm to Pine expression: " ++ error)
@@ -23,10 +23,7 @@ evaluateExpressionStringWithoutModules elmExpressionText =
                     case pineValue of
                         PineStringOrInteger string ->
                             -- TODO: Use type inference to distinguish between string and integer
-                            Ok
-                                { valueAsJsonString = string |> Json.Encode.string |> Json.Encode.encode 0
-                                , typeText = "String"
-                                }
+                            Ok (string |> Json.Encode.string)
 
 
 parseElmExpressionString : String -> Result String PineExpression
