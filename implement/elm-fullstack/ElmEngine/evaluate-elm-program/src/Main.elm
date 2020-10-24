@@ -91,7 +91,7 @@ main =
     Platform.worker
         { init = \_ -> ( (), Cmd.none )
         , update =
-            \event stateBefore ->
+            \_ stateBefore ->
                 ( parseElmModuleTextToJson (evaluateSubmissionInInteractive "") |> always stateBefore, Cmd.none )
         , subscriptions = \_ -> Sub.none
         }
