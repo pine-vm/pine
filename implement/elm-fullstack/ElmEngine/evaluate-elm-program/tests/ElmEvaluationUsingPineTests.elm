@@ -15,11 +15,35 @@ suite =
                     { elmExpressionText = """  "just a literal ✔️"  """
                     , expectedValueAsJson = "\"just a literal ✔️\""
                     }
+        , Test.test "Concat string literal" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ "first literal " ++ " second literal ✔️" """
+                    , expectedValueAsJson = "\"first literal  second literal ✔️\""
+                    }
         , Test.test "Apply String.fromInt" <|
             \_ ->
                 expectEvalResultJsonTextEqual
                     { elmExpressionText = " String.fromInt 123 "
                     , expectedValueAsJson = "\"123\""
+                    }
+        , Test.test "Add and apply String.fromInt" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = " String.fromInt (1 + 3) "
+                    , expectedValueAsJson = "\"4\""
+                    }
+        , Test.test "Multiply and apply String.fromInt" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = " String.fromInt (17 * 41) "
+                    , expectedValueAsJson = "\"697\""
+                    }
+        , Test.test "Divide and apply String.fromInt" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = " String.fromInt (31 // 5) "
+                    , expectedValueAsJson = "\"6\""
                     }
         ]
 
