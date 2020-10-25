@@ -1,40 +1,54 @@
 module Pine exposing (..)
 
 import BigInt
+import Dict
 
 
 type PineExpression
     = PineLiteral PineValue
     | PineApplication { function : PineExpression, arguments : List PineExpression }
     | PineFunctionOrValue String
+    | PineContextExpansion PineExpressionContext PineExpression
 
 
 type PineValue
     = PineStringOrInteger String
 
 
-evaluatePineExpression : PineExpression -> Result String PineValue
-evaluatePineExpression expression =
+type alias PineExpressionContext =
+    Dict.Dict String PineExpression
+
+
+evaluatePineExpression : PineExpressionContext -> PineExpression -> Result String PineValue
+evaluatePineExpression context expression =
     case expression of
         PineLiteral pineValue ->
             Ok pineValue
 
         PineApplication application ->
-            evaluatePineApplication application
+            evaluatePineApplication context application
 
-        PineFunctionOrValue _ ->
-            Err "PineFunctionOrValue not implemented yet."
+        PineFunctionOrValue name ->
+            case context |> Dict.get name of
+                Just boundExpression ->
+                    evaluatePineExpression context boundExpression
+
+                Nothing ->
+                    Err ("Failed to look up name: " ++ name)
+
+        PineContextExpansion expansion expressionInExpandedContext ->
+            evaluatePineExpression (context |> Dict.union expansion) expressionInExpandedContext
 
 
-evaluatePineApplication : { function : PineExpression, arguments : List PineExpression } -> Result String PineValue
-evaluatePineApplication application =
+evaluatePineApplication : PineExpressionContext -> { function : PineExpression, arguments : List PineExpression } -> Result String PineValue
+evaluatePineApplication context application =
     case application.function of
         PineFunctionOrValue functionName ->
             case functionName of
                 "String.fromInt" ->
                     case application.arguments of
                         [ argument ] ->
-                            evaluatePineExpression argument
+                            evaluatePineExpression context argument
 
                         _ ->
                             Err
@@ -44,8 +58,8 @@ evaluatePineApplication application =
 
                 "(++)" ->
                     evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression
-                        , mapArg1 = evaluatePineExpression
+                        { mapArg0 = evaluatePineExpression context
+                        , mapArg1 = evaluatePineExpression context
                         , apply =
                             \leftValue rightValue ->
                                 case ( leftValue, rightValue ) of
@@ -56,8 +70,8 @@ evaluatePineApplication application =
 
                 "(+)" ->
                     evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression >> Result.andThen parseAsBigInt
+                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
                         , apply =
                             \leftInt rightInt ->
                                 Ok (PineStringOrInteger (BigInt.add leftInt rightInt |> BigInt.toString))
@@ -66,8 +80,8 @@ evaluatePineApplication application =
 
                 "(*)" ->
                     evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression >> Result.andThen parseAsBigInt
+                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
                         , apply =
                             \leftInt rightInt ->
                                 Ok (PineStringOrInteger (BigInt.mul leftInt rightInt |> BigInt.toString))
@@ -76,8 +90,8 @@ evaluatePineApplication application =
 
                 "(//)" ->
                     evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression >> Result.andThen parseAsBigInt
+                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
                         , apply =
                             \leftInt rightInt ->
                                 Ok (PineStringOrInteger (BigInt.div leftInt rightInt |> BigInt.toString))

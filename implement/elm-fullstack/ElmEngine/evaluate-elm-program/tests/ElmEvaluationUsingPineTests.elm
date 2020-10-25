@@ -45,6 +45,18 @@ suite =
                     { elmExpressionText = " String.fromInt (31 // 5) "
                     , expectedValueAsJson = "\"6\""
                     }
+        , Test.test "Concat string via let" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    binding_from_let =
+        "literal from let "
+in
+binding_from_let ++ " second literal ✔️"
+"""
+                    , expectedValueAsJson = "\"literal from let  second literal ✔️\""
+                    }
         ]
 
 
