@@ -1,6 +1,5 @@
 module ElmEvaluationUsingPine exposing (evaluateExpressionText)
 
-import Dict
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
 import ElmEvaluation
@@ -16,15 +15,30 @@ evaluateExpressionText elmExpressionText =
             Err ("Failed to map from Elm to Pine expression: " ++ error)
 
         Ok pineExpression ->
-            case Pine.evaluatePineExpression Dict.empty pineExpression of
+            case Pine.evaluatePineExpression [] pineExpression of
                 Err error ->
                     Err ("Failed to evaluate Pine expression: " ++ error)
 
                 Ok pineValue ->
-                    case pineValue of
-                        PineStringOrInteger string ->
-                            -- TODO: Use type inference to distinguish between string and integer
-                            Ok (string |> Json.Encode.string)
+                    pineValueAsJson pineValue
+
+
+pineValueAsJson : PineValue -> Result String Json.Encode.Value
+pineValueAsJson pineValue =
+    case pineValue of
+        PineStringOrInteger string ->
+            -- TODO: Use type inference to distinguish between string and integer
+            Ok (string |> Json.Encode.string)
+
+        PineList list ->
+            list
+                |> List.map pineValueAsJson
+                |> Result.Extra.combine
+                |> Result.mapError (\error -> "Failed to combine list: " ++ error)
+                |> Result.map (Json.Encode.list identity)
+
+        PineExpressionValue _ ->
+            Err "PineExpressionValue"
 
 
 parseElmExpressionString : String -> Result String PineExpression
@@ -116,7 +130,23 @@ pineExpressionFromElm elmExpression =
                             Err ("Failed to map expression in let block: " ++ error)
 
                         Ok expressionInExpandedContext ->
-                            Ok (PineContextExpansion (declarations |> Dict.fromList) expressionInExpandedContext)
+                            case declarations of
+                                [] ->
+                                    Ok expressionInExpandedContext
+
+                                firstDeclaration :: remainingDeclarations ->
+                                    let
+                                        pineValueFromDeclaration ( declName, declValue ) =
+                                            PineList [ PineStringOrInteger declName, PineExpressionValue declValue ]
+                                    in
+                                    Ok
+                                        (remainingDeclarations
+                                            |> List.foldl
+                                                (\declaration combinedExpr ->
+                                                    PineContextExpansion (pineValueFromDeclaration declaration) combinedExpr
+                                                )
+                                                (PineContextExpansion (pineValueFromDeclaration firstDeclaration) expressionInExpandedContext)
+                                        )
 
         Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
             pineExpressionFromElm (Elm.Syntax.Node.value parenthesizedExpression)

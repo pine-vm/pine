@@ -1,22 +1,24 @@
 module Pine exposing (..)
 
 import BigInt
-import Dict
 
 
 type PineExpression
     = PineLiteral PineValue
     | PineApplication { function : PineExpression, arguments : List PineExpression }
     | PineFunctionOrValue String
-    | PineContextExpansion PineExpressionContext PineExpression
+    | PineContextExpansion PineValue PineExpression
 
 
 type PineValue
     = PineStringOrInteger String
+    | PineList (List PineValue)
+      -- TODO: Replace PineExpressionValue with convention for mapping value to expression.
+    | PineExpressionValue PineExpression
 
 
 type alias PineExpressionContext =
-    Dict.Dict String PineExpression
+    List PineValue
 
 
 evaluatePineExpression : PineExpressionContext -> PineExpression -> Result String PineValue
@@ -29,15 +31,69 @@ evaluatePineExpression context expression =
             evaluatePineApplication context application
 
         PineFunctionOrValue name ->
-            case context |> Dict.get name of
-                Just boundExpression ->
-                    evaluatePineExpression context boundExpression
+            let
+                beforeCheckForExpression =
+                    lookUpNameInContext (String.split "." name) context
+                        |> Result.mapError
+                            (\error -> "Failed to look up name '" ++ name ++ "': " ++ error)
+            in
+            case beforeCheckForExpression of
+                Ok (PineExpressionValue expressionFromLookup) ->
+                    evaluatePineExpression context expressionFromLookup
 
-                Nothing ->
-                    Err ("Failed to look up name: " ++ name)
+                _ ->
+                    beforeCheckForExpression
 
         PineContextExpansion expansion expressionInExpandedContext ->
-            evaluatePineExpression (context |> Dict.union expansion) expressionInExpandedContext
+            evaluatePineExpression (expansion :: context) expressionInExpandedContext
+
+
+lookUpNameInContext : List String -> PineExpressionContext -> Result String PineValue
+lookUpNameInContext nameElements context =
+    case nameElements of
+        [] ->
+            Err "nameElements is empty"
+
+        nameFirstElement :: nameRemainingElements ->
+            let
+                maybeMatchingValue =
+                    context
+                        |> List.filterMap
+                            (\contextElement ->
+                                case contextElement of
+                                    PineStringOrInteger _ ->
+                                        Nothing
+
+                                    PineList [ elementLabel, elementValue ] ->
+                                        if elementLabel == PineStringOrInteger nameFirstElement then
+                                            Just elementValue
+
+                                        else
+                                            Nothing
+
+                                    PineList _ ->
+                                        Nothing
+
+                                    PineExpressionValue _ ->
+                                        Nothing
+                            )
+                        |> List.head
+            in
+            case maybeMatchingValue of
+                Nothing ->
+                    Err ("Did not find '" ++ nameFirstElement ++ "'")
+
+                Just firstNameValue ->
+                    if nameRemainingElements == [] then
+                        Ok firstNameValue
+
+                    else
+                        case firstNameValue of
+                            PineList firstNameList ->
+                                lookUpNameInContext nameRemainingElements firstNameList
+
+                            _ ->
+                                Err ("'" ++ nameFirstElement ++ "' has unexpected type: Not a list.")
 
 
 evaluatePineApplication : PineExpressionContext -> { function : PineExpression, arguments : List PineExpression } -> Result String PineValue
@@ -65,6 +121,12 @@ evaluatePineApplication context application =
                                 case ( leftValue, rightValue ) of
                                     ( PineStringOrInteger leftLiteral, PineStringOrInteger rightLiteral ) ->
                                         Ok (PineStringOrInteger (leftLiteral ++ rightLiteral))
+
+                                    ( PineList leftList, PineList rightList ) ->
+                                        Ok (PineList (leftList ++ rightList))
+
+                                    _ ->
+                                        Err "Unexpected combination of operands."
                         }
                         application.arguments
 
@@ -111,6 +173,12 @@ parseAsBigInt value =
         PineStringOrInteger stringOrInt ->
             BigInt.fromIntString stringOrInt
                 |> Result.fromMaybe ("Failed to parse as integer: " ++ stringOrInt)
+
+        PineList _ ->
+            Err "Unexpected type of value: List"
+
+        PineExpressionValue _ ->
+            Err "Unexpected type of value: ExpressionValue"
 
 
 evaluatePineApplicationExpectingExactlyTwoArguments :
