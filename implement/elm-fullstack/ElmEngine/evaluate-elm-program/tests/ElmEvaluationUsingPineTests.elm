@@ -87,6 +87,24 @@ d
 """
                     , expectedValueAsJson = "\"just a literal\""
                     }
+        , Test.test "Branch using if and literal True" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ if True then "condition is true" else "condition is false" """
+                    , expectedValueAsJson = "\"condition is true\""
+                    }
+        , Test.test "Branch using if and literal False" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ if False then "condition is true" else "condition is false" """
+                    , expectedValueAsJson = "\"condition is false\""
+                    }
+        , Test.test "Branch using if and (not False)" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ if not False then "condition is true" else "condition is false" """
+                    , expectedValueAsJson = "\"condition is true\""
+                    }
         ]
 
 

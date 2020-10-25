@@ -98,6 +98,24 @@ pineExpressionFromElm elmExpression =
                 _ ->
                     Err "Failed to map OperatorApplication left or right expression. TODO: Expand error details."
 
+        Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
+            case pineExpressionFromElm (Elm.Syntax.Node.value elmCondition) of
+                Err error ->
+                    Err ("Failed to map Elm condition: " ++ error)
+
+                Ok condition ->
+                    case pineExpressionFromElm (Elm.Syntax.Node.value elmExpressionIfTrue) of
+                        Err error ->
+                            Err ("Failed to map Elm expressionIfTrue: " ++ error)
+
+                        Ok expressionIfTrue ->
+                            case pineExpressionFromElm (Elm.Syntax.Node.value elmExpressionIfFalse) of
+                                Err error ->
+                                    Err ("Failed to map Elm expressionIfFalse: " ++ error)
+
+                                Ok expressionIfFalse ->
+                                    Ok (PineIfBlock condition expressionIfTrue expressionIfFalse)
+
         Elm.Syntax.Expression.LetExpression letBlock ->
             let
                 declarationsResults =

@@ -8,6 +8,7 @@ type PineExpression
     | PineApplication { function : PineExpression, arguments : List PineExpression }
     | PineFunctionOrValue String
     | PineContextExpansion PineValue PineExpression
+    | PineIfBlock PineExpression PineExpression PineExpression
 
 
 type PineValue
@@ -44,6 +45,20 @@ evaluatePineExpression context expression =
                 _ ->
                     beforeCheckForExpression
 
+        PineIfBlock condition expressionIfTrue expressionIfFalse ->
+            case evaluatePineExpression context condition of
+                Err error ->
+                    Err ("Failed to evaluate condition: " ++ error)
+
+                Ok conditionValue ->
+                    evaluatePineExpression context
+                        (if conditionValue == truePineValue then
+                            expressionIfTrue
+
+                         else
+                            expressionIfFalse
+                        )
+
         PineContextExpansion expansion expressionInExpandedContext ->
             evaluatePineExpression (expansion :: context) expressionInExpandedContext
 
@@ -53,6 +68,12 @@ lookUpNameInContext nameElements context =
     case nameElements of
         [] ->
             Err "nameElements is empty"
+
+        [ "True" ] ->
+            Ok truePineValue
+
+        [ "False" ] ->
+            Ok falsePineValue
 
         nameFirstElement :: nameRemainingElements ->
             let
@@ -160,8 +181,21 @@ evaluatePineApplication context application =
                         }
                         application.arguments
 
+                "not" ->
+                    evaluatePineApplicationExpectingExactlyOneArgument
+                        { mapArg = evaluatePineExpression context
+                        , apply =
+                            \argument ->
+                                if argument == truePineValue then
+                                    Ok falsePineValue
+
+                                else
+                                    Ok truePineValue
+                        }
+                        application.arguments
+
                 _ ->
-                    Err ("Function " ++ functionName ++ " not implemented yet.")
+                    Err ("Function '" ++ functionName ++ "' is not implemented yet.")
 
         _ ->
             Err "Application not implemented yet."
@@ -208,3 +242,41 @@ evaluatePineApplicationExpectingExactlyTwoArguments configuration arguments =
                 ("Unexpected number of arguments for: "
                     ++ String.fromInt (List.length arguments)
                 )
+
+
+evaluatePineApplicationExpectingExactlyOneArgument :
+    { mapArg : PineExpression -> Result String arg
+    , apply : arg -> Result String PineValue
+    }
+    -> List PineExpression
+    -> Result String PineValue
+evaluatePineApplicationExpectingExactlyOneArgument configuration arguments =
+    case arguments of
+        [ arg ] ->
+            case configuration.mapArg arg of
+                Err error ->
+                    Err ("Failed to map argument: " ++ error)
+
+                Ok mappedArg ->
+                    configuration.apply mappedArg
+
+        _ ->
+            Err
+                ("Unexpected number of arguments for: "
+                    ++ String.fromInt (List.length arguments)
+                )
+
+
+truePineValue : PineValue
+truePineValue =
+    tagValue "True" []
+
+
+falsePineValue : PineValue
+falsePineValue =
+    tagValue "False" []
+
+
+tagValue : String -> List PineValue -> PineValue
+tagValue tagName tagArguments =
+    PineList [ PineStringOrInteger tagName, PineList tagArguments ]
