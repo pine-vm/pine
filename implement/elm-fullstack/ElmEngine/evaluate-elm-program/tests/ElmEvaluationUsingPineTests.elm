@@ -57,6 +57,36 @@ binding_from_let ++ " second literal ✔️"
 """
                     , expectedValueAsJson = "\"literal from let  second literal ✔️\""
                     }
+        , Test.test "Dependency within let" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    a = "just a literal"
+
+    b = a
+in
+b
+"""
+                    , expectedValueAsJson = "\"just a literal\""
+                    }
+        , Test.test "Support any order in let" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    d = c
+
+    a = "just a literal"
+
+    c = b
+
+    b = a
+in
+d
+"""
+                    , expectedValueAsJson = "\"just a literal\""
+                    }
         ]
 
 
