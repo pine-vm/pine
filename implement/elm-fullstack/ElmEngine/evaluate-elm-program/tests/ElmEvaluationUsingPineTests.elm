@@ -105,6 +105,62 @@ d
                     { elmExpressionText = """ if not False then "condition is true" else "condition is false" """
                     , expectedValueAsJson = "\"condition is true\""
                     }
+        , Test.test "Function application one argument" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    function_with_one_parameter param0 =
+        "literal from function " ++ param0
+in
+function_with_one_parameter "argument"
+"""
+                    , expectedValueAsJson = "\"literal from function argument\""
+                    }
+        , Test.test "Function application two arguments" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    function_with_two_parameters param0 param1 =
+        "literal from function, " ++ param0 ++ ", " ++ param1
+in
+function_with_two_parameters "argument 0" "argument 1"
+"""
+                    , expectedValueAsJson = "\"literal from function, argument 0, argument 1\""
+                    }
+        , Test.test "Partial application two arguments" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    partially_applied_a =
+        function_with_two_parameters "argument 0"
+
+
+    function_with_two_parameters param0 param1 =
+        "literal from function, " ++ param0 ++ ", " ++ param1
+in
+partially_applied_a "argument 1"
+           """
+                    , expectedValueAsJson = "\"literal from function, argument 0, argument 1\""
+                    }
+        , Test.test "Partial application three arguments in two groups" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    partially_applied_a =
+        function_with_three_parameters "argument 0"  "argument 1"
+
+
+    function_with_three_parameters param0 param1 param2 =
+        "literal from function, " ++ param0 ++ ", " ++ param1 ++ ", " ++ param2
+in
+partially_applied_a "argument 2"
+           """
+                    , expectedValueAsJson = "\"literal from function, argument 0, argument 1, argument 2\""
+                    }
         ]
 
 

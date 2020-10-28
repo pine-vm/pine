@@ -1,14 +1,16 @@
 module Pine exposing (..)
 
 import BigInt
+import Result.Extra
 
 
 type PineExpression
     = PineLiteral PineValue
     | PineApplication { function : PineExpression, arguments : List PineExpression }
     | PineFunctionOrValue String
-    | PineContextExpansion PineValue PineExpression
+    | PineContextExpansionWithName ( String, PineValue ) PineExpression
     | PineIfBlock PineExpression PineExpression PineExpression
+    | PineFunction String PineExpression
 
 
 type PineValue
@@ -19,7 +21,10 @@ type PineValue
 
 
 type alias PineExpressionContext =
-    List PineValue
+    -- TODO: Test consolidate into simple PineValue
+    { commonModel : List PineValue
+    , provisionalArgumentStack : List PineValue
+    }
 
 
 evaluatePineExpression : PineExpressionContext -> PineExpression -> Result String PineValue
@@ -29,7 +34,15 @@ evaluatePineExpression context expression =
             Ok pineValue
 
         PineApplication application ->
-            evaluatePineApplication context application
+            case evaluatePineApplication context application of
+                Err error ->
+                    Err ("Failed application: " ++ error)
+
+                Ok (PineExpressionValue expressionAfterApplication) ->
+                    evaluatePineExpression context expressionAfterApplication
+
+                otherResult ->
+                    otherResult
 
         PineFunctionOrValue name ->
             let
@@ -59,8 +72,25 @@ evaluatePineExpression context expression =
                             expressionIfFalse
                         )
 
-        PineContextExpansion expansion expressionInExpandedContext ->
-            evaluatePineExpression (expansion :: context) expressionInExpandedContext
+        PineContextExpansionWithName expansion expressionInExpandedContext ->
+            evaluatePineExpression
+                { context | commonModel = pineValueFromContextExpansionWithName expansion :: context.commonModel }
+                expressionInExpandedContext
+
+        PineFunction argumentName expressionInExpandedContext ->
+            case context.provisionalArgumentStack of
+                nextArgumentValue :: remainingArgumentValues ->
+                    evaluatePineExpression
+                        { context | provisionalArgumentStack = remainingArgumentValues }
+                        (PineContextExpansionWithName ( argumentName, nextArgumentValue ) expressionInExpandedContext)
+
+                [] ->
+                    Ok (PineExpressionValue expression)
+
+
+pineValueFromContextExpansionWithName : ( String, PineValue ) -> PineValue
+pineValueFromContextExpansionWithName ( declName, declValue ) =
+    PineList [ PineStringOrInteger declName, declValue ]
 
 
 lookUpNameInContext : List String -> PineExpressionContext -> Result String PineValue
@@ -78,7 +108,7 @@ lookUpNameInContext nameElements context =
         nameFirstElement :: nameRemainingElements ->
             let
                 maybeMatchingValue =
-                    context
+                    context.commonModel
                         |> List.filterMap
                             (\contextElement ->
                                 case contextElement of
@@ -111,7 +141,8 @@ lookUpNameInContext nameElements context =
                     else
                         case firstNameValue of
                             PineList firstNameList ->
-                                lookUpNameInContext nameRemainingElements firstNameList
+                                lookUpNameInContext nameRemainingElements
+                                    { commonModel = firstNameList, provisionalArgumentStack = [] }
 
                             _ ->
                                 Err ("'" ++ nameFirstElement ++ "' has unexpected type: Not a list.")
@@ -195,7 +226,22 @@ evaluatePineApplication context application =
                         application.arguments
 
                 _ ->
-                    Err ("Function '" ++ functionName ++ "' is not implemented yet.")
+                    case lookUpNameInContext (String.split "." functionName) context of
+                        Err lookupError ->
+                            Err ("Failed to look up name '" ++ functionName ++ "': " ++ lookupError)
+
+                        Ok (PineExpressionValue expression) ->
+                            case application.arguments |> List.map (evaluatePineExpression context) |> Result.Extra.combine of
+                                Err evalArgError ->
+                                    Err ("Failed to evaluate argument: " ++ evalArgError)
+
+                                Ok arguments ->
+                                    evaluatePineExpression
+                                        { context | provisionalArgumentStack = arguments ++ context.provisionalArgumentStack }
+                                        expression
+
+                        _ ->
+                            Err "Unexpected value for function in appliction: Not an expression."
 
         _ ->
             Err "Application not implemented yet."

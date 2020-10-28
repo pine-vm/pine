@@ -2,6 +2,7 @@ module ElmEvaluationUsingPine exposing (evaluateExpressionText)
 
 import Elm.Syntax.Expression
 import Elm.Syntax.Node
+import Elm.Syntax.Pattern
 import ElmEvaluation
 import Json.Encode
 import Pine exposing (PineExpression(..), PineValue(..))
@@ -15,7 +16,7 @@ evaluateExpressionText elmExpressionText =
             Err ("Failed to map from Elm to Pine expression: " ++ error)
 
         Ok pineExpression ->
-            case Pine.evaluatePineExpression [] pineExpression of
+            case Pine.evaluatePineExpression { commonModel = [], provisionalArgumentStack = [] } pineExpression of
                 Err error ->
                     Err ("Failed to evaluate Pine expression: " ++ error)
 
@@ -117,54 +118,7 @@ pineExpressionFromElm elmExpression =
                                     Ok (PineIfBlock condition expressionIfTrue expressionIfFalse)
 
         Elm.Syntax.Expression.LetExpression letBlock ->
-            let
-                declarationsResults =
-                    letBlock.declarations
-                        |> List.map
-                            (\declaration ->
-                                case Elm.Syntax.Node.value declaration of
-                                    Elm.Syntax.Expression.LetFunction letFunctionNode ->
-                                        case pineExpressionFromElm (Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunctionNode.declaration).expression) of
-                                            Err error ->
-                                                Err ("Failed to map expression in let function: " ++ error)
-
-                                            Ok letFunctionExpression ->
-                                                Ok
-                                                    ( Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunctionNode.declaration).name
-                                                    , letFunctionExpression
-                                                    )
-
-                                    Elm.Syntax.Expression.LetDestructuring _ _ ->
-                                        Err "Destructuring in let block not implemented yet."
-                            )
-            in
-            case declarationsResults |> Result.Extra.combine of
-                Err error ->
-                    Err ("Failed to map declaration in let block: " ++ error)
-
-                Ok declarations ->
-                    case pineExpressionFromElm (Elm.Syntax.Node.value letBlock.expression) of
-                        Err error ->
-                            Err ("Failed to map expression in let block: " ++ error)
-
-                        Ok expressionInExpandedContext ->
-                            case declarations of
-                                [] ->
-                                    Ok expressionInExpandedContext
-
-                                firstDeclaration :: remainingDeclarations ->
-                                    let
-                                        pineValueFromDeclaration ( declName, declValue ) =
-                                            PineList [ PineStringOrInteger declName, PineExpressionValue declValue ]
-                                    in
-                                    Ok
-                                        (remainingDeclarations
-                                            |> List.foldl
-                                                (\declaration combinedExpr ->
-                                                    PineContextExpansion (pineValueFromDeclaration declaration) combinedExpr
-                                                )
-                                                (PineContextExpansion (pineValueFromDeclaration firstDeclaration) expressionInExpandedContext)
-                                        )
+            pineExpressionFromElmLetBlock letBlock
 
         Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
             pineExpressionFromElm (Elm.Syntax.Node.value parenthesizedExpression)
@@ -174,3 +128,90 @@ pineExpressionFromElm elmExpression =
                 ("Unsupported type of expression: "
                     ++ (elmExpression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0)
                 )
+
+
+pineExpressionFromElmLetBlock : Elm.Syntax.Expression.LetBlock -> Result String PineExpression
+pineExpressionFromElmLetBlock letBlock =
+    let
+        declarationsResults =
+            letBlock.declarations
+                |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmLetDeclaration)
+    in
+    case declarationsResults |> Result.Extra.combine of
+        Err error ->
+            Err ("Failed to map declaration in let block: " ++ error)
+
+        Ok declarations ->
+            case pineExpressionFromElm (Elm.Syntax.Node.value letBlock.expression) of
+                Err error ->
+                    Err ("Failed to map expression in let block: " ++ error)
+
+                Ok expressionInExpandedContext ->
+                    case declarations of
+                        [] ->
+                            Ok expressionInExpandedContext
+
+                        firstDeclaration :: remainingDeclarations ->
+                            let
+                                pineValueFromDeclaration =
+                                    Tuple.mapSecond PineExpressionValue
+                            in
+                            Ok
+                                (remainingDeclarations
+                                    |> List.foldl
+                                        (\declaration combinedExpr ->
+                                            PineContextExpansionWithName
+                                                (pineValueFromDeclaration declaration)
+                                                combinedExpr
+                                        )
+                                        (PineContextExpansionWithName
+                                            (pineValueFromDeclaration firstDeclaration)
+                                            expressionInExpandedContext
+                                        )
+                                )
+
+
+pineExpressionFromElmLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> Result String ( String, PineExpression )
+pineExpressionFromElmLetDeclaration declaration =
+    case declaration of
+        Elm.Syntax.Expression.LetFunction letFunctionNode ->
+            case pineExpressionFromElm (Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunctionNode.declaration).expression) of
+                Err error ->
+                    Err ("Failed to map expression in let function: " ++ error)
+
+                Ok letFunctionExpression ->
+                    let
+                        mapArgumentsToOnlyNameResults =
+                            (Elm.Syntax.Node.value letFunctionNode.declaration).arguments
+                                |> List.map Elm.Syntax.Node.value
+                                |> List.map
+                                    (\argumentPattern ->
+                                        case argumentPattern of
+                                            Elm.Syntax.Pattern.VarPattern argumentName ->
+                                                Ok argumentName
+
+                                            _ ->
+                                                Err "Only var pattern is implemented so far."
+                                    )
+                    in
+                    case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
+                        Err error ->
+                            Err ("Failed to map function argument pattern: " ++ error)
+
+                        Ok argumentsNames ->
+                            let
+                                functionExpression =
+                                    argumentsNames
+                                        |> List.foldr
+                                            (\argumentName prevExpression ->
+                                                PineFunction argumentName prevExpression
+                                            )
+                                            letFunctionExpression
+                            in
+                            Ok
+                                ( Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunctionNode.declaration).name
+                                , functionExpression
+                                )
+
+        Elm.Syntax.Expression.LetDestructuring _ _ ->
+            Err "Destructuring in let block not implemented yet."
