@@ -6,6 +6,7 @@ import Result.Extra
 
 type PineExpression
     = PineLiteral PineValue
+    | PineListExpr (List PineExpression)
     | PineApplication { function : PineExpression, arguments : List PineExpression }
     | PineFunctionOrValue String
     | PineContextExpansionWithName ( String, PineValue ) PineExpression
@@ -32,6 +33,13 @@ evaluatePineExpression context expression =
     case expression of
         PineLiteral pineValue ->
             Ok pineValue
+
+        PineListExpr listElements ->
+            listElements
+                |> List.map (evaluatePineExpression context)
+                |> Result.Extra.combine
+                |> Result.map PineList
+                |> Result.mapError (\error -> "Failed to evaluate list element: " ++ error)
 
         PineApplication application ->
             case evaluatePineApplication context application of

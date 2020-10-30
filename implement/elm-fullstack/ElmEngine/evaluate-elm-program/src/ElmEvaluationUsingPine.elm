@@ -123,6 +123,12 @@ pineExpressionFromElm elmExpression =
         Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
             pineExpressionFromElm (Elm.Syntax.Node.value parenthesizedExpression)
 
+        Elm.Syntax.Expression.ListExpr listExpression ->
+            listExpression
+                |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm)
+                |> Result.Extra.combine
+                |> Result.map PineListExpr
+
         _ ->
             Err
                 ("Unsupported type of expression: "

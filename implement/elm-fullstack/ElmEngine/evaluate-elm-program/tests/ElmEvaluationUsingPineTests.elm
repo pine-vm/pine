@@ -9,11 +9,17 @@ import Test
 suite : Test.Test
 suite =
     Test.describe "Elm evaluation using common engine"
-        [ Test.test "Just a literal" <|
+        [ Test.test "Just a literal String" <|
             \_ ->
                 expectEvalResultJsonTextEqual
                     { elmExpressionText = """  "just a literal ✔️"  """
                     , expectedValueAsJson = "\"just a literal ✔️\""
+                    }
+        , Test.test "Just a literal List String" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """  [ "just a literal ✔️", "another string" ]  """
+                    , expectedValueAsJson = """["just a literal ✔️","another string"]"""
                     }
         , Test.test "Concat string literal" <|
             \_ ->
