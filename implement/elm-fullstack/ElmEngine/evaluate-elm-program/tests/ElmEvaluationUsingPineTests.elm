@@ -167,6 +167,47 @@ partially_applied_a "argument 2"
            """
                     , expectedValueAsJson = "\"literal from function, argument 0, argument 1, argument 2\""
                     }
+        , Test.test "List.drop 0" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ List.drop 0 ["a", "b", "c", "d"]  """
+                    , expectedValueAsJson = """["a","b","c","d"]"""
+                    }
+        , Test.test "List.drop 2" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ List.drop 2 ["a", "b", "c", "d"]  """
+                    , expectedValueAsJson = """["c","d"]"""
+                    }
+        , Test.test "Case of expression deconstructing List into empty and non-empty" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    describe_list list =
+        case list of
+        [] -> "This list is empty."
+        firstElement :: otherElements ->
+            "First element is '" ++ firstElement
+                ++ "', " ++ (String.fromInt (List.length otherElements))
+                ++ " other elements remaining."
+in
+[ describe_list [], describe_list [ "single" ], describe_list [ "first_of_two", "second_of_two" ] ]
+           """
+                    , expectedValueAsJson = """["This list is empty.","First element is 'single', 0 other elements remaining.","First element is 'first_of_two', 1 other elements remaining."]"""
+                    }
+        , Test.test "Simple List.foldl" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """
+let
+    concat a b =
+        a ++ b
+in
+List.foldl concat "_init_" [ "a", "b", "c" ]
+           """
+                    , expectedValueAsJson = "\"cba_init_\""
+                    }
         ]
 
 
