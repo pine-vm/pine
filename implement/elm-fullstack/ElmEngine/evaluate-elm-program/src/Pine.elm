@@ -114,6 +114,16 @@ pineValueFromContextExpansionWithName ( declName, declValue ) =
     PineList [ PineStringOrInteger declName, declValue ]
 
 
+pineNamedValueFromValue : PineValue -> Maybe ( String, PineValue )
+pineNamedValueFromValue value =
+    case value of
+        PineList [ PineStringOrInteger elementLabel, elementValue ] ->
+            Just ( elementLabel, elementValue )
+
+        _ ->
+            Nothing
+
+
 lookUpNameInContext : String -> PineExpressionContext -> Result String ( PineValue, List PineValue )
 lookUpNameInContext name context =
     case name |> String.split "." of
@@ -122,32 +132,26 @@ lookUpNameInContext name context =
 
         nameFirstElement :: nameRemainingElements ->
             let
-                maybeMatchingValue =
+                availableNames =
                     context.commonModel
-                        |> List.filterMap
-                            (\contextElement ->
-                                case contextElement of
-                                    PineStringOrInteger _ ->
-                                        Nothing
+                        |> List.filterMap pineNamedValueFromValue
 
-                                    PineList [ elementLabel, elementValue ] ->
-                                        if elementLabel == PineStringOrInteger nameFirstElement then
-                                            Just elementValue
-
-                                        else
-                                            Nothing
-
-                                    PineList _ ->
-                                        Nothing
-
-                                    PineExpressionValue _ ->
-                                        Nothing
-                            )
+                maybeMatchingValue =
+                    availableNames
+                        |> List.filter (Tuple.first >> (==) nameFirstElement)
                         |> List.head
+                        |> Maybe.map Tuple.second
             in
             case maybeMatchingValue of
                 Nothing ->
-                    Err ("Did not find '" ++ nameFirstElement ++ "'")
+                    Err
+                        ("Did not find '"
+                            ++ nameFirstElement
+                            ++ "'. "
+                            ++ (availableNames |> List.length |> String.fromInt)
+                            ++ " names available: "
+                            ++ (availableNames |> List.map Tuple.first |> String.join ", ")
+                        )
 
                 Just firstNameValue ->
                     if nameRemainingElements == [] then
@@ -165,154 +169,140 @@ lookUpNameInContext name context =
 
 evaluatePineApplication : PineExpressionContext -> { function : PineExpression, arguments : List PineExpression } -> Result String PineValue
 evaluatePineApplication context application =
-    case application.function of
-        PineFunctionOrValue functionName ->
-            case functionName of
-                "PineKernel.listFirstElement" ->
-                    evaluatePineApplicationExpectingExactlyOneArgument
-                        { mapArg = evaluatePineExpression context
-                        , apply =
-                            \argument ->
-                                case argument of
-                                    PineList list ->
-                                        list
-                                            |> List.head
-                                            |> Maybe.withDefault (PineList [])
-                                            |> Ok
+    case application.arguments |> List.map (evaluatePineExpression context) |> Result.Extra.combine of
+        Err evalArgError ->
+            Err ("Failed to evaluate argument: " ++ evalArgError)
 
-                                    _ ->
-                                        Err "Argument is not a list."
-                        }
-                        application.arguments
+        Ok arguments ->
+            case application.function of
+                PineFunctionOrValue functionName ->
+                    case functionName of
+                        "PineKernel.listFirstElement" ->
+                            evaluatePineApplicationExpectingExactlyOneArgument
+                                { mapArg = evaluatePineExpression context
+                                , apply =
+                                    \argument ->
+                                        case argument of
+                                            PineList list ->
+                                                list
+                                                    |> List.head
+                                                    |> Maybe.withDefault (PineList [])
+                                                    |> Ok
 
-                "List.length" ->
-                    evaluatePineApplicationExpectingExactlyOneArgument
-                        { mapArg = evaluatePineExpression context
-                        , apply =
-                            \argument ->
-                                case argument of
-                                    PineList list ->
-                                        Ok (PineStringOrInteger (list |> List.length |> String.fromInt))
+                                            _ ->
+                                                Err "Argument is not a list."
+                                }
+                                application.arguments
 
-                                    _ ->
-                                        Err "Argument is not a list."
-                        }
-                        application.arguments
+                        "List.drop" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt >> Result.andThen intFromBigInt
+                                , mapArg1 = evaluatePineExpression context
+                                , apply =
+                                    \arg0 arg1 ->
+                                        case arg1 of
+                                            PineList list ->
+                                                Ok (PineList (List.drop arg0 list))
 
-                "List.drop" ->
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt >> Result.andThen intFromBigInt
-                        , mapArg1 = evaluatePineExpression context
-                        , apply =
-                            \arg0 arg1 ->
-                                case arg1 of
-                                    PineList list ->
-                                        Ok (PineList (List.drop arg0 list))
+                                            _ ->
+                                                Err "Unexpected operand for List.drop."
+                                }
+                                application.arguments
 
-                                    _ ->
-                                        Err "Unexpected operand for List.drop."
-                        }
-                        application.arguments
+                        "String.fromInt" ->
+                            case application.arguments of
+                                [ argument ] ->
+                                    evaluatePineExpression context argument
 
-                "String.fromInt" ->
-                    case application.arguments of
-                        [ argument ] ->
-                            evaluatePineExpression context argument
+                                _ ->
+                                    Err
+                                        ("Unexpected number of arguments for String.fromInt: "
+                                            ++ String.fromInt (List.length application.arguments)
+                                        )
+
+                        "(==)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context
+                                , mapArg1 = evaluatePineExpression context
+                                , apply =
+                                    \leftValue rightValue ->
+                                        Ok
+                                            (if leftValue == rightValue then
+                                                truePineValue
+
+                                             else
+                                                falsePineValue
+                                            )
+                                }
+                                application.arguments
+
+                        "(++)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context
+                                , mapArg1 = evaluatePineExpression context
+                                , apply =
+                                    \leftValue rightValue ->
+                                        case ( leftValue, rightValue ) of
+                                            ( PineStringOrInteger leftLiteral, PineStringOrInteger rightLiteral ) ->
+                                                Ok (PineStringOrInteger (leftLiteral ++ rightLiteral))
+
+                                            ( PineList leftList, PineList rightList ) ->
+                                                Ok (PineList (leftList ++ rightList))
+
+                                            _ ->
+                                                Err "Unexpected combination of operands."
+                                }
+                                application.arguments
+
+                        "(+)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , apply =
+                                    \leftInt rightInt ->
+                                        Ok (PineStringOrInteger (BigInt.add leftInt rightInt |> BigInt.toString))
+                                }
+                                application.arguments
+
+                        "(*)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , apply =
+                                    \leftInt rightInt ->
+                                        Ok (PineStringOrInteger (BigInt.mul leftInt rightInt |> BigInt.toString))
+                                }
+                                application.arguments
+
+                        "(//)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , apply =
+                                    \leftInt rightInt ->
+                                        Ok (PineStringOrInteger (BigInt.div leftInt rightInt |> BigInt.toString))
+                                }
+                                application.arguments
+
+                        "not" ->
+                            evaluatePineApplicationExpectingExactlyOneArgument
+                                { mapArg = evaluatePineExpression context
+                                , apply =
+                                    \argument ->
+                                        if argument == truePineValue then
+                                            Ok falsePineValue
+
+                                        else
+                                            Ok truePineValue
+                                }
+                                application.arguments
 
                         _ ->
-                            Err
-                                ("Unexpected number of arguments for String.fromInt: "
-                                    ++ String.fromInt (List.length application.arguments)
-                                )
+                            case lookUpNameInContext functionName context of
+                                Err lookupError ->
+                                    Err ("Failed to look up name '" ++ functionName ++ "': " ++ lookupError)
 
-                "(==)" ->
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context
-                        , mapArg1 = evaluatePineExpression context
-                        , apply =
-                            \leftValue rightValue ->
-                                Ok
-                                    (if leftValue == rightValue then
-                                        truePineValue
-
-                                     else
-                                        falsePineValue
-                                    )
-                        }
-                        application.arguments
-
-                "(++)" ->
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context
-                        , mapArg1 = evaluatePineExpression context
-                        , apply =
-                            \leftValue rightValue ->
-                                case ( leftValue, rightValue ) of
-                                    ( PineStringOrInteger leftLiteral, PineStringOrInteger rightLiteral ) ->
-                                        Ok (PineStringOrInteger (leftLiteral ++ rightLiteral))
-
-                                    ( PineList leftList, PineList rightList ) ->
-                                        Ok (PineList (leftList ++ rightList))
-
-                                    _ ->
-                                        Err "Unexpected combination of operands."
-                        }
-                        application.arguments
-
-                "(+)" ->
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , apply =
-                            \leftInt rightInt ->
-                                Ok (PineStringOrInteger (BigInt.add leftInt rightInt |> BigInt.toString))
-                        }
-                        application.arguments
-
-                "(*)" ->
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , apply =
-                            \leftInt rightInt ->
-                                Ok (PineStringOrInteger (BigInt.mul leftInt rightInt |> BigInt.toString))
-                        }
-                        application.arguments
-
-                "(//)" ->
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , apply =
-                            \leftInt rightInt ->
-                                Ok (PineStringOrInteger (BigInt.div leftInt rightInt |> BigInt.toString))
-                        }
-                        application.arguments
-
-                "not" ->
-                    evaluatePineApplicationExpectingExactlyOneArgument
-                        { mapArg = evaluatePineExpression context
-                        , apply =
-                            \argument ->
-                                if argument == truePineValue then
-                                    Ok falsePineValue
-
-                                else
-                                    Ok truePineValue
-                        }
-                        application.arguments
-
-                _ ->
-                    case lookUpNameInContext functionName context of
-                        Err lookupError ->
-                            Err ("Failed to look up name '" ++ functionName ++ "': " ++ lookupError)
-
-                        Ok ( PineExpressionValue expression, contextFromLookup ) ->
-                            case application.arguments |> List.map (evaluatePineExpression context) |> Result.Extra.combine of
-                                Err evalArgError ->
-                                    Err ("Failed to evaluate argument: " ++ evalArgError)
-
-                                Ok arguments ->
+                                Ok ( PineExpressionValue expression, contextFromLookup ) ->
                                     evaluatePineExpression
                                         (addToContext
                                             contextFromLookup
@@ -322,11 +312,24 @@ evaluatePineApplication context application =
                                         )
                                         expression
 
-                        _ ->
-                            Err "Unexpected value for function in appliction: Not an expression."
+                                _ ->
+                                    Err "Unexpected value for function in application: Not an expression."
 
-        _ ->
-            Err "Application not implemented yet."
+                PineFunction argumentName functionExpression ->
+                    case arguments of
+                        [] ->
+                            Ok (PineExpressionValue application.function)
+
+                        firstArgument :: remainingArguments ->
+                            evaluatePineExpression
+                                (addToContext
+                                    [ pineValueFromContextExpansionWithName ( argumentName, firstArgument ) ]
+                                    { context | provisionalArgumentStack = remainingArguments }
+                                )
+                                functionExpression
+
+                _ ->
+                    Err "Application not implemented yet."
 
 
 parseAsBigInt : PineValue -> Result String BigInt.BigInt

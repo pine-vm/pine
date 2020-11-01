@@ -82,7 +82,7 @@ pineExpressionContextBaseForElm =
                                             |> Elm.Syntax.Node.value
                                             |> String.join "."
 
-                                    declarations =
+                                    declarationsResults =
                                         file.declarations
                                             |> List.map Elm.Syntax.Node.value
                                             |> List.filterMap
@@ -94,19 +94,24 @@ pineExpressionContextBaseForElm =
                                                         _ ->
                                                             Nothing
                                                 )
-
-                                    declarationsValues =
-                                        declarations
-                                            |> List.filterMap Result.toMaybe
-                                            |> List.map
-                                                (\( declaredName, namedExpression ) ->
-                                                    PineList
-                                                        [ PineStringOrInteger declaredName
-                                                        , PineExpressionValue namedExpression
-                                                        ]
-                                                )
                                 in
-                                Ok (Pine.pineValueFromContextExpansionWithName ( moduleName, PineList declarationsValues ))
+                                case declarationsResults |> Result.Extra.combine of
+                                    Err error ->
+                                        Err ("Failed to translate declaration: " ++ error)
+
+                                    Ok declarations ->
+                                        let
+                                            declarationsValues =
+                                                declarations
+                                                    |> List.map
+                                                        (\( declaredName, namedExpression ) ->
+                                                            PineList
+                                                                [ PineStringOrInteger declaredName
+                                                                , PineExpressionValue namedExpression
+                                                                ]
+                                                        )
+                                        in
+                                        Ok (Pine.pineValueFromContextExpansionWithName ( moduleName, PineList declarationsValues ))
                     )
     in
     case compileElmCoreModulesResults |> Result.Extra.combine of
@@ -122,11 +127,12 @@ pineExpressionContextBaseForElm =
 
 elmCoreModulesTexts : List String
 elmCoreModulesTexts =
-    [ -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm#L150-L157
+    [ -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm
       """
 module List exposing (..)
 
 
+foldl : (a -> b -> b) -> b -> List a -> b
 foldl func acc list =
     case list of
         [] ->
@@ -134,6 +140,12 @@ foldl func acc list =
 
         x :: xs ->
             foldl func (func x acc) xs
+
+
+length : List a -> Int
+length xs =
+    foldl (\\_ i -> i + 1) 0 xs
+
 """
     ]
 
@@ -213,6 +225,9 @@ pineExpressionFromElm elmExpression =
         Elm.Syntax.Expression.CaseExpression caseBlock ->
             pineExpressionFromElmCaseBlock caseBlock
 
+        Elm.Syntax.Expression.LambdaExpression lambdaExpression ->
+            pineExpressionFromElmLambda lambdaExpression
+
         _ ->
             Err
                 ("Unsupported type of expression: "
@@ -264,23 +279,41 @@ pineExpressionFromElmLetDeclaration declaration =
 
 pineExpressionFromElmFunction : Elm.Syntax.Expression.Function -> Result String ( String, PineExpression )
 pineExpressionFromElmFunction function =
-    case pineExpressionFromElm (Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).expression) of
+    pineExpressionFromElmFunctionWithoutName
+        { arguments = (Elm.Syntax.Node.value function.declaration).arguments |> List.map Elm.Syntax.Node.value
+        , expression = Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).expression
+        }
+        |> Result.map
+            (\functionWithoutName ->
+                ( Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).name
+                , functionWithoutName
+                )
+            )
+
+
+pineExpressionFromElmFunctionWithoutName :
+    { arguments : List Elm.Syntax.Pattern.Pattern, expression : Elm.Syntax.Expression.Expression }
+    -> Result String PineExpression
+pineExpressionFromElmFunctionWithoutName function =
+    case pineExpressionFromElm function.expression of
         Err error ->
             Err ("Failed to map expression in let function: " ++ error)
 
         Ok letFunctionExpression ->
             let
                 mapArgumentsToOnlyNameResults =
-                    (Elm.Syntax.Node.value function.declaration).arguments
-                        |> List.map Elm.Syntax.Node.value
+                    function.arguments
                         |> List.map
                             (\argumentPattern ->
                                 case argumentPattern of
                                     Elm.Syntax.Pattern.VarPattern argumentName ->
                                         Ok argumentName
 
+                                    Elm.Syntax.Pattern.AllPattern ->
+                                        Ok "unused_from_elm_all_pattern"
+
                                     _ ->
-                                        Err "Only var pattern is implemented so far."
+                                        Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
                             )
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
@@ -288,10 +321,7 @@ pineExpressionFromElmFunction function =
                     Err ("Failed to map function argument pattern: " ++ error)
 
                 Ok argumentsNames ->
-                    Ok
-                        ( Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).name
-                        , functionExpressionFromArgumentsNamesAndExpression argumentsNames letFunctionExpression
-                        )
+                    Ok (functionExpressionFromArgumentsNamesAndExpression argumentsNames letFunctionExpression)
 
 
 functionExpressionFromArgumentsNamesAndExpression : List String -> PineExpression -> PineExpression
@@ -373,3 +403,11 @@ pineExpressionFromElmCaseBlock caseBlock =
                                     |> Json.Encode.encode 0
                                )
                         )
+
+
+pineExpressionFromElmLambda : Elm.Syntax.Expression.Lambda -> Result String PineExpression
+pineExpressionFromElmLambda lambda =
+    pineExpressionFromElmFunctionWithoutName
+        { arguments = lambda.args |> List.map Elm.Syntax.Node.value
+        , expression = Elm.Syntax.Node.value lambda.expression
+        }

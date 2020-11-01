@@ -167,6 +167,18 @@ partially_applied_a "argument 2"
            """
                     , expectedValueAsJson = "\"literal from function, argument 0, argument 1, argument 2\""
                     }
+        , Test.test "Lambda with 'var' pattern" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ (\\x -> x) "test" """
+                    , expectedValueAsJson = "\"test\""
+                    }
+        , Test.test "Lambda with 'all' pattern" <|
+            \_ ->
+                expectEvalResultJsonTextEqual
+                    { elmExpressionText = """ (\\_ -> "constant") "test" """
+                    , expectedValueAsJson = "\"constant\""
+                    }
         , Test.test "List.drop 0" <|
             \_ ->
                 expectEvalResultJsonTextEqual
