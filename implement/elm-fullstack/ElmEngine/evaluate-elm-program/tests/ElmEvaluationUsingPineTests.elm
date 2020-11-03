@@ -290,6 +290,29 @@ function_with_three_parameters param0 param1 param2 =
                     , elmExpressionText = """ ModuleB.partially_applied_b "c" """
                     , expectedValueAsJson = "\"a b c\""
                     }
+        , Test.describe "Operator precedence"
+            [ Test.test "Operator asterisk precedes operator plus" <|
+                \_ ->
+                    expectEvalResultJsonTextEqual
+                        { context = DefaultContext
+                        , elmExpressionText = """ 4 + 4 * 3 + 1 """
+                        , expectedValueAsJson = "17" |> Json.Encode.string |> Json.Encode.encode 0
+                        }
+            , Test.test "Parentheses override operator precedence" <|
+                \_ ->
+                    expectEvalResultJsonTextEqual
+                        { context = DefaultContext
+                        , elmExpressionText = """ (1 + 2) * (3 + 1) """
+                        , expectedValueAsJson = "12" |> Json.Encode.string |> Json.Encode.encode 0
+                        }
+            , Test.test "Multiplication and division operators have same priority and are applied left to right" <|
+                \_ ->
+                    expectEvalResultJsonTextEqual
+                        { context = DefaultContext
+                        , elmExpressionText = """ 20 * 20 // 30  """
+                        , expectedValueAsJson = "13" |> Json.Encode.string |> Json.Encode.encode 0
+                        }
+            ]
         ]
 
 

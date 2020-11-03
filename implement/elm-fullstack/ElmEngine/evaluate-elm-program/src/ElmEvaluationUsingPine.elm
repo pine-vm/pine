@@ -192,21 +192,29 @@ pineExpressionFromElm elmExpression =
                             Err "Invalid shape of application: Zero elements in the application list"
 
         Elm.Syntax.Expression.OperatorApplication operator _ leftExpr rightExpr ->
-            case
-                ( pineExpressionFromElm (Elm.Syntax.Node.value leftExpr)
-                , pineExpressionFromElm (Elm.Syntax.Node.value rightExpr)
-                )
-            of
-                ( Ok left, Ok right ) ->
-                    Ok
-                        (PineApplication
-                            { function = PineFunctionOrValue ("(" ++ operator ++ ")")
-                            , arguments = [ left, right ]
-                            }
-                        )
+            let
+                orderedElmExpression =
+                    ElmEvaluation.mapExpressionForOperatorPrecedence elmExpression
+            in
+            if orderedElmExpression /= elmExpression then
+                pineExpressionFromElm orderedElmExpression
 
-                _ ->
-                    Err "Failed to map OperatorApplication left or right expression. TODO: Expand error details."
+            else
+                case
+                    ( pineExpressionFromElm (Elm.Syntax.Node.value leftExpr)
+                    , pineExpressionFromElm (Elm.Syntax.Node.value rightExpr)
+                    )
+                of
+                    ( Ok left, Ok right ) ->
+                        Ok
+                            (PineApplication
+                                { function = PineFunctionOrValue ("(" ++ operator ++ ")")
+                                , arguments = [ left, right ]
+                                }
+                            )
+
+                    _ ->
+                        Err "Failed to map OperatorApplication left or right expression. TODO: Expand error details."
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case pineExpressionFromElm (Elm.Syntax.Node.value elmCondition) of
