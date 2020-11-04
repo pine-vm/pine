@@ -1,4 +1,9 @@
-module ElmEvaluationUsingPine exposing (InteractiveContext(..), evaluateExpressionText)
+module ElmInteractive exposing
+    ( InteractiveContext(..)
+    , SubmissionResponse(..)
+    , evaluateExpressionText
+    , evaluateSubmissionInInteractive
+    )
 
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
@@ -15,24 +20,91 @@ type InteractiveContext
     | InitContextFromApp { modulesTexts : List String }
 
 
+type SubmissionResponse
+    = SubmissionResponseValue { valueAsJson : Json.Encode.Value }
+    | SubmissionResponseNoValue
+
+
 evaluateExpressionText : InteractiveContext -> String -> Result String Json.Encode.Value
 evaluateExpressionText context elmExpressionText =
-    case parseElmExpressionString elmExpressionText of
+    evaluateSubmissionInInteractive context [] elmExpressionText
+        |> Result.andThen
+            (\submissionResponse ->
+                case submissionResponse of
+                    SubmissionResponseNoValue ->
+                        Err "This submission does not evaluate to a value."
+
+                    SubmissionResponseValue responseWithValue ->
+                        Ok responseWithValue.valueAsJson
+            )
+
+
+evaluateSubmissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
+evaluateSubmissionInInteractive context previousSubmissions submission =
+    case ElmEvaluation.parseInteractiveSubmissionFromString submission of
         Err error ->
-            Err ("Failed to map from Elm to Pine expression: " ++ error)
+            Err ("Failed to parse submission: " ++ error.asExpressionError)
 
-        Ok pineExpression ->
-            case pineExpressionContextForElmInteractive context of
+        Ok (ElmEvaluation.DeclarationSubmission _) ->
+            Ok SubmissionResponseNoValue
+
+        Ok (ElmEvaluation.ExpressionSubmission elmExpression) ->
+            case pineExpressionFromElm elmExpression of
                 Err error ->
-                    Err ("Failed to prepare the context: " ++ error)
+                    Err ("Failed to map from Elm to Pine expression: " ++ error)
 
-                Ok expressionContext ->
-                    case Pine.evaluatePineExpression expressionContext pineExpression of
+                Ok pineExpression ->
+                    case pineExpressionContextForElmInteractive context of
                         Err error ->
-                            Err ("Failed to evaluate Pine expression: " ++ error)
+                            Err ("Failed to prepare the initial context: " ++ error)
 
-                        Ok pineValue ->
-                            pineValueAsJson pineValue
+                        Ok initialContext ->
+                            case expandContextWithListOfInteractiveSubmissions previousSubmissions initialContext of
+                                Err error ->
+                                    Err ("Failed to apply previous submissions: " ++ error)
+
+                                Ok expressionContext ->
+                                    case Pine.evaluatePineExpression expressionContext pineExpression of
+                                        Err error ->
+                                            Err ("Failed to evaluate Pine expression: " ++ error)
+
+                                        Ok pineValue ->
+                                            case pineValueAsJson pineValue of
+                                                Err error ->
+                                                    Err ("Failed to encode as JSON: " ++ error)
+
+                                                Ok valueAsJson ->
+                                                    Ok (SubmissionResponseValue { valueAsJson = valueAsJson })
+
+
+expandContextWithListOfInteractiveSubmissions : List String -> Pine.PineExpressionContext -> Result String Pine.PineExpressionContext
+expandContextWithListOfInteractiveSubmissions submissions contextBefore =
+    submissions
+        |> List.foldl
+            (\submission -> Result.andThen (expandContextWithInteractiveSubmission submission))
+            (Ok contextBefore)
+
+
+expandContextWithInteractiveSubmission : String -> Pine.PineExpressionContext -> Result String Pine.PineExpressionContext
+expandContextWithInteractiveSubmission submission contextBefore =
+    case ElmEvaluation.parseInteractiveSubmissionFromString submission of
+        Ok (ElmEvaluation.DeclarationSubmission elmDeclaration) ->
+            case elmDeclaration of
+                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                    case pineExpressionFromElmFunction functionDeclaration of
+                        Err error ->
+                            Err ("Failed to translate Elm function declaration: " ++ error)
+
+                        Ok ( declaredName, declaredFunctionExpression ) ->
+                            contextBefore
+                                |> Pine.addToContext [ Pine.pineValueFromContextExpansionWithName ( declaredName, PineExpressionValue declaredFunctionExpression ) ]
+                                |> Ok
+
+                _ ->
+                    Ok contextBefore
+
+        _ ->
+            Ok contextBefore
 
 
 pineValueAsJson : PineValue -> Result String Json.Encode.Value
@@ -51,21 +123,6 @@ pineValueAsJson pineValue =
 
         PineExpressionValue _ ->
             Err "PineExpressionValue"
-
-
-parseElmExpressionString : String -> Result String PineExpression
-parseElmExpressionString elmExpressionText =
-    case ElmEvaluation.parseExpressionFromString elmExpressionText of
-        Err error ->
-            Err ("Failed to parse Elm syntax: " ++ error)
-
-        Ok elmSyntax ->
-            case pineExpressionFromElm elmSyntax of
-                Err error ->
-                    Err ("Failed to map from Elm to Pine: " ++ error)
-
-                Ok ok ->
-                    Ok ok
 
 
 pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.PineExpressionContext
