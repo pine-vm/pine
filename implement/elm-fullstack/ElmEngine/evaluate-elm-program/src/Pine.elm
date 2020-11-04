@@ -177,7 +177,7 @@ evaluatePineApplication context application =
             case application.function of
                 PineFunctionOrValue functionName ->
                     case functionName of
-                        "PineKernel.listFirstElement" ->
+                        "PineKernel.listHead" ->
                             evaluatePineApplicationExpectingExactlyOneArgument
                                 { mapArg = evaluatePineExpression context
                                 , apply =
@@ -194,18 +194,21 @@ evaluatePineApplication context application =
                                 }
                                 application.arguments
 
-                        "List.drop" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt >> Result.andThen intFromBigInt
-                                , mapArg1 = evaluatePineExpression context
+                        "PineKernel.listTail" ->
+                            evaluatePineApplicationExpectingExactlyOneArgument
+                                { mapArg = evaluatePineExpression context
                                 , apply =
-                                    \arg0 arg1 ->
-                                        case arg1 of
+                                    \argument ->
+                                        case argument of
                                             PineList list ->
-                                                Ok (PineList (List.drop arg0 list))
+                                                list
+                                                    |> List.tail
+                                                    |> Maybe.withDefault []
+                                                    |> PineList
+                                                    |> Ok
 
                                             _ ->
-                                                Err "Unexpected operand for List.drop."
+                                                Err "Argument is not a list."
                                 }
                                 application.arguments
 
@@ -264,6 +267,16 @@ evaluatePineApplication context application =
                                 }
                                 application.arguments
 
+                        "(-)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , apply =
+                                    \leftInt rightInt ->
+                                        Ok (PineStringOrInteger (BigInt.sub leftInt rightInt |> BigInt.toString))
+                                }
+                                application.arguments
+
                         "(*)" ->
                             evaluatePineApplicationExpectingExactlyTwoArguments
                                 { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
@@ -281,6 +294,22 @@ evaluatePineApplication context application =
                                 , apply =
                                     \leftInt rightInt ->
                                         Ok (PineStringOrInteger (BigInt.div leftInt rightInt |> BigInt.toString))
+                                }
+                                application.arguments
+
+                        "(<=)" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , apply =
+                                    \leftInt rightInt ->
+                                        Ok
+                                            (if BigInt.lte leftInt rightInt then
+                                                truePineValue
+
+                                             else
+                                                falsePineValue
+                                            )
                                 }
                                 application.arguments
 

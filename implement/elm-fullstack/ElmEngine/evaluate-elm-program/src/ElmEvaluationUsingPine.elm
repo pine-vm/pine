@@ -162,6 +162,20 @@ length : List a -> Int
 length xs =
     foldl (\\_ i -> i + 1) 0 xs
 
+
+drop : Int -> List a -> List a
+drop n list =
+    if n <= 0 then
+        list
+
+    else
+        case list of
+        [] ->
+            list
+
+        x :: xs ->
+            drop (n - 1) xs
+
 """
     ]
 
@@ -381,17 +395,14 @@ pineExpressionFromElmCaseBlock caseBlock =
                                                 nonEmptyCaseDeclarations =
                                                     [ ( unconsLeftName
                                                       , PineApplication
-                                                            { function = PineFunctionOrValue "PineKernel.listFirstElement"
+                                                            { function = PineFunctionOrValue "PineKernel.listHead"
                                                             , arguments = [ expression ]
                                                             }
                                                       )
                                                     , ( unconsRightName
                                                       , PineApplication
-                                                            { function = PineFunctionOrValue "List.drop"
-                                                            , arguments =
-                                                                [ PineLiteral (PineStringOrInteger "1")
-                                                                , expression
-                                                                ]
+                                                            { function = PineFunctionOrValue "PineKernel.listTail"
+                                                            , arguments = [ expression ]
                                                             }
                                                       )
                                                     ]
