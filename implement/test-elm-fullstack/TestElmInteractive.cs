@@ -41,7 +41,7 @@ namespace test_elm_fullstack
                 try
                 {
                     var appCodeTree =
-                        LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
+                        LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "context-app"));
 
                     var stepsDirectories =
                         Directory.EnumerateDirectories(

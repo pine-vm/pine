@@ -40,7 +40,7 @@ namespace test_elm_fullstack
 
                 try
                 {
-                    var appCodeTree = LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "app-code"));
+                    var appCodeTree = LoadFromLocalFilesystem.LoadSortedTreeFromPath(Path.Combine(scenarioDirectory, "context-app"));
 
                     var expression =
                         File.ReadAllText(Path.Combine(scenarioDirectory, "expression"), System.Text.Encoding.UTF8);
