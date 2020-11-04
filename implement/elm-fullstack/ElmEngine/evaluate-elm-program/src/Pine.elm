@@ -174,43 +174,55 @@ evaluatePineApplication context application =
             Err ("Failed to evaluate argument: " ++ evalArgError)
 
         Ok arguments ->
+            let
+                functionOnTwoBigIntWithBooleanResult functionOnBigInt =
+                    evaluatePineApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , apply =
+                            \leftInt rightInt ->
+                                Ok
+                                    (if functionOnBigInt leftInt rightInt then
+                                        truePineValue
+
+                                     else
+                                        falsePineValue
+                                    )
+                        }
+                        application.arguments
+
+                functionOnTwoBigIntWithBigIntResult functionOnBigInt =
+                    evaluatePineApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                        , apply =
+                            \leftInt rightInt ->
+                                Ok (PineStringOrInteger (functionOnBigInt leftInt rightInt |> BigInt.toString))
+                        }
+                        application.arguments
+
+                functionExpectingOneArgumentOfTypeList functionOnList =
+                    evaluatePineApplicationExpectingExactlyOneArgument
+                        { mapArg = evaluatePineExpression context
+                        , apply =
+                            \argument ->
+                                case argument of
+                                    PineList list ->
+                                        list |> functionOnList |> Ok
+
+                                    _ ->
+                                        Err "Argument is not a list."
+                        }
+                        application.arguments
+            in
             case application.function of
                 PineFunctionOrValue functionName ->
                     case functionName of
                         "PineKernel.listHead" ->
-                            evaluatePineApplicationExpectingExactlyOneArgument
-                                { mapArg = evaluatePineExpression context
-                                , apply =
-                                    \argument ->
-                                        case argument of
-                                            PineList list ->
-                                                list
-                                                    |> List.head
-                                                    |> Maybe.withDefault (PineList [])
-                                                    |> Ok
-
-                                            _ ->
-                                                Err "Argument is not a list."
-                                }
-                                application.arguments
+                            functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (PineList []))
 
                         "PineKernel.listTail" ->
-                            evaluatePineApplicationExpectingExactlyOneArgument
-                                { mapArg = evaluatePineExpression context
-                                , apply =
-                                    \argument ->
-                                        case argument of
-                                            PineList list ->
-                                                list
-                                                    |> List.tail
-                                                    |> Maybe.withDefault []
-                                                    |> PineList
-                                                    |> Ok
-
-                                            _ ->
-                                                Err "Argument is not a list."
-                                }
-                                application.arguments
+                            functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> PineList)
 
                         "String.fromInt" ->
                             case application.arguments of
@@ -258,60 +270,28 @@ evaluatePineApplication context application =
                                 application.arguments
 
                         "(+)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , apply =
-                                    \leftInt rightInt ->
-                                        Ok (PineStringOrInteger (BigInt.add leftInt rightInt |> BigInt.toString))
-                                }
-                                application.arguments
+                            functionOnTwoBigIntWithBigIntResult BigInt.add
 
                         "(-)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , apply =
-                                    \leftInt rightInt ->
-                                        Ok (PineStringOrInteger (BigInt.sub leftInt rightInt |> BigInt.toString))
-                                }
-                                application.arguments
+                            functionOnTwoBigIntWithBigIntResult BigInt.sub
 
                         "(*)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , apply =
-                                    \leftInt rightInt ->
-                                        Ok (PineStringOrInteger (BigInt.mul leftInt rightInt |> BigInt.toString))
-                                }
-                                application.arguments
+                            functionOnTwoBigIntWithBigIntResult BigInt.mul
 
                         "(//)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , apply =
-                                    \leftInt rightInt ->
-                                        Ok (PineStringOrInteger (BigInt.div leftInt rightInt |> BigInt.toString))
-                                }
-                                application.arguments
+                            functionOnTwoBigIntWithBigIntResult BigInt.div
+
+                        "(<)" ->
+                            functionOnTwoBigIntWithBooleanResult BigInt.lt
 
                         "(<=)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , apply =
-                                    \leftInt rightInt ->
-                                        Ok
-                                            (if BigInt.lte leftInt rightInt then
-                                                truePineValue
+                            functionOnTwoBigIntWithBooleanResult BigInt.lte
 
-                                             else
-                                                falsePineValue
-                                            )
-                                }
-                                application.arguments
+                        "(>)" ->
+                            functionOnTwoBigIntWithBooleanResult BigInt.gt
+
+                        "(>=)" ->
+                            functionOnTwoBigIntWithBooleanResult BigInt.gte
 
                         "not" ->
                             evaluatePineApplicationExpectingExactlyOneArgument
