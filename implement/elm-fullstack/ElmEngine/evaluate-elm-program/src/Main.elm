@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Elm.Syntax.File
-import ElmEvaluation
+import ElmInteractive
 import Json.Decode
 import Json.Encode
 import Parser
@@ -17,12 +17,12 @@ type alias EvaluateSubmissionArguments =
 
 parseElmModuleTextToJson : String -> String
 parseElmModuleTextToJson =
-    ElmEvaluation.parseElmModuleTextToJson
+    ElmInteractive.parseElmModuleTextToJson
 
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
-    ElmEvaluation.parseElmModuleText
+    ElmInteractive.parseElmModuleText
 
 
 evaluateSubmissionInInteractive : String -> String
@@ -40,8 +40,8 @@ evaluateSubmissionInInteractive argumentsJson =
                 Json.Encode.object
                     [ ( "DecodedArguments"
                       , case
-                            ElmEvaluation.evaluateSubmissionStringInInteractive
-                                args.modulesTexts
+                            ElmInteractive.submissionInInteractive
+                                (ElmInteractive.InitContextFromApp { modulesTexts = args.modulesTexts })
                                 args.previousLocalSubmissions
                                 args.submission
                         of
@@ -56,20 +56,19 @@ evaluateSubmissionInInteractive argumentsJson =
         )
 
 
-jsonEncodeSubmissionResponse : ElmEvaluation.SubmissionResponse -> Json.Encode.Value
+jsonEncodeSubmissionResponse : ElmInteractive.SubmissionResponse -> Json.Encode.Value
 jsonEncodeSubmissionResponse submissionResponse =
     case submissionResponse of
-        ElmEvaluation.SubmissionResponseNoValue ->
+        ElmInteractive.SubmissionResponseNoValue ->
             Json.Encode.object
                 [ ( "SubmissionResponseNoValue", Json.Encode.list (always Json.Encode.null) [] )
                 ]
 
-        ElmEvaluation.SubmissionResponseValue evalOk ->
+        ElmInteractive.SubmissionResponseValue evalOk ->
             Json.Encode.object
                 [ ( "SubmissionResponseValue"
                   , Json.Encode.object
-                        [ ( "valueAsJsonString", Json.Encode.string evalOk.valueAsJsonString )
-                        , ( "typeText", Json.Encode.string evalOk.typeText )
+                        [ ( "valueAsJsonString", evalOk.valueAsJson |> Json.Encode.encode 0 |> Json.Encode.string )
                         ]
                   )
                 ]

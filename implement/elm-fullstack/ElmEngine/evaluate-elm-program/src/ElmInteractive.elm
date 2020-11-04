@@ -2,17 +2,30 @@ module ElmInteractive exposing
     ( InteractiveContext(..)
     , SubmissionResponse(..)
     , evaluateExpressionText
-    , evaluateSubmissionInInteractive
+    , parseElmModuleText
+    , parseElmModuleTextToJson
+    , submissionInInteractive
     )
 
+import Dict
+import Elm.Parser
+import Elm.Processing
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
+import Elm.Syntax.File
+import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
-import ElmEvaluation
+import Elm.Syntax.Range
 import Json.Encode
+import Parser
 import Pine exposing (PineExpression(..), PineValue(..))
 import Result.Extra
+
+
+type InteractiveSubmission
+    = ExpressionSubmission Elm.Syntax.Expression.Expression
+    | DeclarationSubmission Elm.Syntax.Declaration.Declaration
 
 
 type InteractiveContext
@@ -27,7 +40,7 @@ type SubmissionResponse
 
 evaluateExpressionText : InteractiveContext -> String -> Result String Json.Encode.Value
 evaluateExpressionText context elmExpressionText =
-    evaluateSubmissionInInteractive context [] elmExpressionText
+    submissionInInteractive context [] elmExpressionText
         |> Result.andThen
             (\submissionResponse ->
                 case submissionResponse of
@@ -39,16 +52,16 @@ evaluateExpressionText context elmExpressionText =
             )
 
 
-evaluateSubmissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
-evaluateSubmissionInInteractive context previousSubmissions submission =
-    case ElmEvaluation.parseInteractiveSubmissionFromString submission of
+submissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
+submissionInInteractive context previousSubmissions submission =
+    case parseInteractiveSubmissionFromString submission of
         Err error ->
             Err ("Failed to parse submission: " ++ error.asExpressionError)
 
-        Ok (ElmEvaluation.DeclarationSubmission _) ->
+        Ok (DeclarationSubmission _) ->
             Ok SubmissionResponseNoValue
 
-        Ok (ElmEvaluation.ExpressionSubmission elmExpression) ->
+        Ok (ExpressionSubmission elmExpression) ->
             case pineExpressionFromElm elmExpression of
                 Err error ->
                     Err ("Failed to map from Elm to Pine expression: " ++ error)
@@ -87,8 +100,8 @@ expandContextWithListOfInteractiveSubmissions submissions contextBefore =
 
 expandContextWithInteractiveSubmission : String -> Pine.PineExpressionContext -> Result String Pine.PineExpressionContext
 expandContextWithInteractiveSubmission submission contextBefore =
-    case ElmEvaluation.parseInteractiveSubmissionFromString submission of
-        Ok (ElmEvaluation.DeclarationSubmission elmDeclaration) ->
+    case parseInteractiveSubmissionFromString submission of
+        Ok (DeclarationSubmission elmDeclaration) ->
             case elmDeclaration of
                 Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
                     case pineExpressionFromElmFunction functionDeclaration of
@@ -154,7 +167,7 @@ pineExpressionContextForElmInteractive context =
 
 parseElmModuleTextIntoPineValue : String -> Result String PineValue
 parseElmModuleTextIntoPineValue moduleText =
-    case ElmEvaluation.parseElmModuleText moduleText of
+    case parseElmModuleText moduleText of
         Err _ ->
             Err ("Failed to parse module text: " ++ (moduleText |> String.left 100))
 
@@ -162,7 +175,7 @@ parseElmModuleTextIntoPineValue moduleText =
             let
                 moduleName =
                     file
-                        |> ElmEvaluation.moduleNameFromSyntaxFile
+                        |> moduleNameFromSyntaxFile
                         |> Elm.Syntax.Node.value
                         |> String.join "."
 
@@ -265,7 +278,7 @@ pineExpressionFromElm elmExpression =
         Elm.Syntax.Expression.OperatorApplication operator _ leftExpr rightExpr ->
             let
                 orderedElmExpression =
-                    ElmEvaluation.mapExpressionForOperatorPrecedence elmExpression
+                    mapExpressionForOperatorPrecedence elmExpression
             in
             if orderedElmExpression /= elmExpression then
                 pineExpressionFromElm orderedElmExpression
@@ -503,3 +516,189 @@ pineExpressionFromElmLambda lambda =
         { arguments = lambda.args |> List.map Elm.Syntax.Node.value
         , expression = Elm.Syntax.Node.value lambda.expression
         }
+
+
+moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)
+moduleNameFromSyntaxFile file =
+    case Elm.Syntax.Node.value file.moduleDefinition of
+        Elm.Syntax.Module.NormalModule normalModule ->
+            normalModule.moduleName
+
+        Elm.Syntax.Module.PortModule portModule ->
+            portModule.moduleName
+
+        Elm.Syntax.Module.EffectModule effectModule ->
+            effectModule.moduleName
+
+
+mapExpressionForOperatorPrecedence : Elm.Syntax.Expression.Expression -> Elm.Syntax.Expression.Expression
+mapExpressionForOperatorPrecedence originalExpression =
+    case originalExpression of
+        Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightExpr ->
+            let
+                mappedRightExpr =
+                    Elm.Syntax.Node.Node (Elm.Syntax.Node.range rightExpr)
+                        (mapExpressionForOperatorPrecedence (Elm.Syntax.Node.value rightExpr))
+            in
+            case Elm.Syntax.Node.value mappedRightExpr of
+                Elm.Syntax.Expression.OperatorApplication rightOperator _ rightLeftExpr rightRightExpr ->
+                    let
+                        operatorPriority =
+                            operatorPrecendencePriority |> Dict.get operator |> Maybe.withDefault 0
+
+                        operatorRightPriority =
+                            operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0
+
+                        areStillOrderedBySyntaxRange =
+                            compareLocations
+                                (Elm.Syntax.Node.range leftExpr).start
+                                (Elm.Syntax.Node.range rightLeftExpr).start
+                                == LT
+                    in
+                    if
+                        (operatorRightPriority < operatorPriority)
+                            || ((operatorRightPriority == operatorPriority) && areStillOrderedBySyntaxRange)
+                    then
+                        Elm.Syntax.Expression.OperatorApplication rightOperator
+                            direction
+                            (Elm.Syntax.Node.Node
+                                (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftExpr, Elm.Syntax.Node.range rightLeftExpr ])
+                                (Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightLeftExpr)
+                            )
+                            rightRightExpr
+
+                    else
+                        Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
+
+                _ ->
+                    Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
+
+        _ ->
+            originalExpression
+
+
+compareLocations : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location -> Order
+compareLocations left right =
+    if left.row < right.row then
+        LT
+
+    else if right.row < left.row then
+        GT
+
+    else
+        compare left.column right.column
+
+
+operatorPrecendencePriority : Dict.Dict String Int
+operatorPrecendencePriority =
+    [ ( "+", 0 )
+    , ( "-", 0 )
+    , ( "*", 1 )
+    , ( "//", 1 )
+    , ( "/", 1 )
+    ]
+        |> Dict.fromList
+
+
+parseInteractiveSubmissionFromString : String -> Result { asExpressionError : String, asDeclarationError : String } InteractiveSubmission
+parseInteractiveSubmissionFromString submission =
+    case parseExpressionFromString submission of
+        Ok expression ->
+            Ok (ExpressionSubmission expression)
+
+        Err expressionErr ->
+            case parseDeclarationFromString submission of
+                Ok declaration ->
+                    Ok (DeclarationSubmission declaration)
+
+                Err declarationErr ->
+                    Err { asExpressionError = expressionErr, asDeclarationError = declarationErr }
+
+
+parseExpressionFromString : String -> Result String Elm.Syntax.Expression.Expression
+parseExpressionFromString expressionCode =
+    let
+        indentedExpressionCode =
+            expressionCode
+                |> String.lines
+                |> List.map ((++) "    ")
+                |> String.join "\n"
+
+        moduleText =
+            """
+module Main exposing (..)
+
+
+wrapping_expression_in_function =
+"""
+                ++ indentedExpressionCode
+                ++ """
+
+"""
+    in
+    parseElmModuleText moduleText
+        |> Result.mapError (always "Failed to parse module")
+        |> Result.andThen
+            (\file ->
+                file.declarations
+                    |> List.filterMap
+                        (\declaration ->
+                            case Elm.Syntax.Node.value declaration of
+                                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                    functionDeclaration
+                                        |> .declaration
+                                        |> Elm.Syntax.Node.value
+                                        |> .expression
+                                        |> Elm.Syntax.Node.value
+                                        |> Just
+
+                                _ ->
+                                    Nothing
+                        )
+                    |> List.head
+                    |> Result.fromMaybe "Failed to extract the wrapping function."
+            )
+
+
+parseDeclarationFromString : String -> Result String Elm.Syntax.Declaration.Declaration
+parseDeclarationFromString declarationCode =
+    let
+        moduleText =
+            """
+module Main exposing (..)
+
+
+"""
+                ++ declarationCode
+                ++ """
+
+"""
+    in
+    parseElmModuleText moduleText
+        |> Result.mapError (always "Failed to parse module")
+        |> Result.andThen
+            (\file ->
+                file.declarations
+                    |> List.map Elm.Syntax.Node.value
+                    |> List.head
+                    |> Result.fromMaybe "Failed to extract the wrapping function."
+            )
+
+
+parseElmModuleTextToJson : String -> String
+parseElmModuleTextToJson elmModule =
+    let
+        jsonValue =
+            case parseElmModuleText elmModule of
+                Err _ ->
+                    [ ( "Err", "Failed to parse this as module text" |> Json.Encode.string ) ] |> Json.Encode.object
+
+                Ok file ->
+                    [ ( "Ok", file |> Elm.Syntax.File.encode ) ] |> Json.Encode.object
+    in
+    jsonValue |> Json.Encode.encode 0
+
+
+parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
+parseElmModuleText =
+    Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)

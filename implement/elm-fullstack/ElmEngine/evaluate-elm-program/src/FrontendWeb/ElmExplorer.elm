@@ -3,10 +3,11 @@ module FrontendWeb.ElmExplorer exposing (State, main)
 import Browser
 import Element
 import Element.Font
-import ElmEvaluation
+import ElmInteractive
 import Html
 import Html.Attributes as HA
 import Html.Events
+import Json.Encode
 
 
 type alias State =
@@ -45,7 +46,7 @@ view : State -> Html.Html Event
 view state =
     let
         evalResult =
-            ElmEvaluation.evaluateExpressionString [] state.expression
+            ElmInteractive.evaluateExpressionText ElmInteractive.DefaultContext state.expression
 
         expressionTextareaHeight =
             (((state.expression
@@ -84,7 +85,7 @@ view state =
                     Element.text ("Error: " ++ error)
 
                 Ok evalSuccess ->
-                    Element.text (evalSuccess.valueAsJsonString ++ " : " ++ evalSuccess.typeText)
+                    Element.text (Json.Encode.encode 0 evalSuccess)
     in
     [ Element.text "Expression to evaluate"
     , indentOneLevel inputExpressionElement

@@ -106,7 +106,8 @@ namespace elm_fullstack.ElmEngine
             ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
             .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.elm.json").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "ElmEvaluation.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.ElmEvaluation.elm").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "Pine.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.Pine.elm").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "ElmInteractive.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.ElmInteractive.elm").ToImmutableList())
             .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.Main.elm").ToImmutableList());
 
         static byte[] GetManifestResourceStreamContent(string name)

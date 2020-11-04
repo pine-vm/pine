@@ -361,7 +361,7 @@ expectationForElmInteractiveScenario :
     -> Expect.Expectation
 expectationForElmInteractiveScenario scenario =
     Expect.equal (Ok scenario.expectedValueAsJson)
-        (ElmInteractive.evaluateSubmissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
+        (ElmInteractive.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
             |> Result.andThen
                 (\submissionResponse ->
                     case submissionResponse of
