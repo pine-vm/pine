@@ -218,6 +218,9 @@ elmCoreModulesTexts =
 module List exposing (..)
 
 
+import Char exposing (Char)
+
+
 foldl : (a -> b -> b) -> b -> List a -> b
 foldl func acc list =
     case list of
@@ -247,6 +250,18 @@ drop n list =
             drop (n - 1) xs
 
 """
+    , """
+module Char exposing (..)
+
+
+type alias Char = Int
+
+
+toCode : Char -> Int
+toCode char =
+    char
+
+"""
     ]
 
 
@@ -255,6 +270,9 @@ pineExpressionFromElm elmExpression =
     case elmExpression of
         Elm.Syntax.Expression.Literal literal ->
             Ok (PineLiteral (PineStringOrInteger literal))
+
+        Elm.Syntax.Expression.CharLiteral char ->
+            Ok (PineLiteral (PineStringOrInteger (String.fromInt (Char.toCode char))))
 
         Elm.Syntax.Expression.Integer integer ->
             Ok (PineLiteral (PineStringOrInteger (String.fromInt integer)))
