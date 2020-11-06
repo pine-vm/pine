@@ -68,15 +68,15 @@ namespace test_elm_fullstack
                                 var evalResult =
                                     interactiveSession.SubmitAndGetResultingValue(submission);
 
-                                var expectedValueFilePath = Path.Combine(stepDirectory, "expected-value.json");
+                                var expectedValueFilePath = Path.Combine(stepDirectory, "expected-value");
 
                                 if (File.Exists(expectedValueFilePath))
                                 {
-                                    var expectedValueJson = File.ReadAllText(expectedValueFilePath, System.Text.Encoding.UTF8);
+                                    var expectedValue = File.ReadAllText(expectedValueFilePath, System.Text.Encoding.UTF8);
 
                                     Assert.AreEqual(
-                                        expectedValueJson,
-                                        evalResult.Ok.valueAsJsonString,
+                                        expectedValue,
+                                        evalResult.Ok?.valueAsElmExpressionText,
                                         "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
                                 }
                             }
