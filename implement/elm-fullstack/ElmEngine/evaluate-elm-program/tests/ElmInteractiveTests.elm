@@ -8,7 +8,7 @@ import Test
 
 suite : Test.Test
 suite =
-    Test.describe "Elm evaluation using common engine"
+    Test.describe "Elm interactive scenarios"
         [ Test.test "Just a literal String" <|
             \_ ->
                 expectationForElmInteractiveScenario
@@ -348,15 +348,15 @@ function_with_three_parameters param0 param1 param2 =
                         , submission = """ custom_name ++ " world!" """
                         , expectedValueAsJson = "hello world!" |> Json.Encode.string |> Json.Encode.encode 0
                         }
-            , Test.test "Char.toCode" <|
-                \_ ->
-                    expectationForElmInteractiveScenario
-                        { context = DefaultContext
-                        , previousSubmissions = []
-                        , submission = """ String.fromInt (Char.toCode '😃') """
-                        , expectedValueAsJson = "128515" |> Json.Encode.string |> Json.Encode.encode 0
-                        }
             ]
+        , Test.test "Char.toCode" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = """ String.fromInt (Char.toCode '😃') """
+                    , expectedValueAsJson = "128515" |> Json.Encode.string |> Json.Encode.encode 0
+                    }
         ]
 
 
