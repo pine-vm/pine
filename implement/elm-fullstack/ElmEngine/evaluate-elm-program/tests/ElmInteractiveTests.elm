@@ -373,6 +373,14 @@ function_with_three_parameters param0 param1 param2 =
                     , submission = """ 1 < 3 """
                     , expectedValueElmExpression = "True"
                     }
+        , Test.test "Record syntax with two fields" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = """ { beta =  "1",  alpha = "0" } """
+                    , expectedValueElmExpression = """{ alpha = "0", beta = "1" }"""
+                    }
         ]
 
 

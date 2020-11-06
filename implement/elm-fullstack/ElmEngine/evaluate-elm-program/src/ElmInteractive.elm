@@ -434,6 +434,9 @@ pineExpressionFromElm elmExpression =
         Elm.Syntax.Expression.LambdaExpression lambdaExpression ->
             pineExpressionFromElmLambda lambdaExpression
 
+        Elm.Syntax.Expression.RecordExpr recordExpr ->
+            recordExpr |> List.map Elm.Syntax.Node.value |> pineExpressionFromElmRecord
+
         _ ->
             Err
                 ("Unsupported type of expression: "
@@ -614,6 +617,29 @@ pineExpressionFromElmLambda lambda =
         { arguments = lambda.args |> List.map Elm.Syntax.Node.value
         , expression = Elm.Syntax.Node.value lambda.expression
         }
+
+
+pineExpressionFromElmRecord : List Elm.Syntax.Expression.RecordSetter -> Result String PineExpression
+pineExpressionFromElmRecord recordSetters =
+    recordSetters
+        |> List.map (Tuple.mapFirst Elm.Syntax.Node.value)
+        |> List.sortBy Tuple.first
+        |> List.map
+            (\( fieldName, fieldExpressionNode ) ->
+                case pineExpressionFromElm (Elm.Syntax.Node.value fieldExpressionNode) of
+                    Err error ->
+                        Err ("Failed to map record field: " ++ error)
+
+                    Ok fieldExpression ->
+                        Ok
+                            (Pine.PineListExpr
+                                [ PineLiteral (PineStringOrInteger fieldName)
+                                , fieldExpression
+                                ]
+                            )
+            )
+        |> Result.Extra.combine
+        |> Result.map Pine.PineListExpr
 
 
 moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)
