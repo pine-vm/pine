@@ -7,7 +7,6 @@ import ElmInteractive
 import Html
 import Html.Attributes as HA
 import Html.Events
-import Json.Encode
 
 
 type alias State =
@@ -46,7 +45,7 @@ view : State -> Html.Html Event
 view state =
     let
         evalResult =
-            ElmInteractive.evaluateExpressionText ElmInteractive.DefaultContext state.expression
+            ElmInteractive.submissionInInteractive ElmInteractive.DefaultContext [] state.expression
 
         expressionTextareaHeight =
             (((state.expression
@@ -85,7 +84,12 @@ view state =
                     Element.text ("Error: " ++ error)
 
                 Ok evalSuccess ->
-                    Element.text (Json.Encode.encode 0 evalSuccess)
+                    case evalSuccess of
+                        ElmInteractive.SubmissionResponseNoValue ->
+                            Element.text "Got no value in response for this submission."
+
+                        ElmInteractive.SubmissionResponseValue responseValue ->
+                            Element.text (responseValue.value |> ElmInteractive.elmValueAsExpression)
     in
     [ Element.text "Expression to evaluate"
     , indentOneLevel inputExpressionElement

@@ -491,13 +491,13 @@ namespace elm_fullstack
                         try
                         {
                             var evalResult =
-                                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
+                                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValue(
                                     appCodeTree: null, submission: expression);
 
                             if (evalResult.Ok == null)
                                 Console.WriteLine("Failed to evaluate: " + evalResult.Err);
                             else
-                                Console.WriteLine("Evaluation result as JSON:\n" + evalResult.Ok);
+                                Console.WriteLine("Evaluation result:\n" + evalResult.Ok.valueAsElmExpressionText);
                         }
                         catch (Exception evalException)
                         {
@@ -553,7 +553,7 @@ namespace elm_fullstack
                                     continue;
 
                                 var evalResult =
-                                    interactiveSession.SubmitAndGetResultingValueJsonString(submission);
+                                    interactiveSession.SubmitAndGetResultingValue(submission);
 
                                 if (evalResult.Ok == null)
                                 {
@@ -561,7 +561,7 @@ namespace elm_fullstack
                                     continue;
                                 }
 
-                                Console.WriteLine(evalResult.Ok);
+                                Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
                             }
                         }
                     });

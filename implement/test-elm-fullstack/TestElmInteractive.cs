@@ -66,7 +66,7 @@ namespace test_elm_fullstack
                                     File.ReadAllText(Path.Combine(stepDirectory, "submission"), System.Text.Encoding.UTF8);
 
                                 var evalResult =
-                                    interactiveSession.SubmitAndGetResultingValueJsonString(submission);
+                                    interactiveSession.SubmitAndGetResultingValue(submission);
 
                                 var expectedValueFilePath = Path.Combine(stepDirectory, "expected-value.json");
 
@@ -76,7 +76,7 @@ namespace test_elm_fullstack
 
                                     Assert.AreEqual(
                                         expectedValueJson,
-                                        evalResult.Ok,
+                                        evalResult.Ok.valueAsJsonString,
                                         "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
                                 }
                             }

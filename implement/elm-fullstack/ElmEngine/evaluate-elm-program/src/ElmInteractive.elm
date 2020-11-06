@@ -1,6 +1,8 @@
 module ElmInteractive exposing
     ( InteractiveContext(..)
     , SubmissionResponse(..)
+    , elmValueAsExpression
+    , elmValueAsJson
     , evaluateExpressionText
     , parseElmModuleText
     , parseElmModuleTextToJson
@@ -34,8 +36,15 @@ type InteractiveContext
 
 
 type SubmissionResponse
-    = SubmissionResponseValue { valueAsJson : Json.Encode.Value }
+    = SubmissionResponseValue { value : ElmValue }
     | SubmissionResponseNoValue
+
+
+type ElmValue
+    = ElmList (List ElmValue)
+    | ElmStringOrInteger String
+    | ElmTag String (List ElmValue)
+    | ElmRecord (List ( String, ElmValue ))
 
 
 evaluateExpressionText : InteractiveContext -> String -> Result String Json.Encode.Value
@@ -48,7 +57,7 @@ evaluateExpressionText context elmExpressionText =
                         Err "This submission does not evaluate to a value."
 
                     SubmissionResponseValue responseWithValue ->
-                        Ok responseWithValue.valueAsJson
+                        Ok (elmValueAsJson responseWithValue.value)
             )
 
 
@@ -82,12 +91,12 @@ submissionInInteractive context previousSubmissions submission =
                                             Err ("Failed to evaluate Pine expression: " ++ error)
 
                                         Ok pineValue ->
-                                            case pineValueAsJson pineValue of
+                                            case pineValueAsElmValue pineValue of
                                                 Err error ->
-                                                    Err ("Failed to encode as JSON: " ++ error)
+                                                    Err ("Failed to encode as Elm value: " ++ error)
 
-                                                Ok valueAsJson ->
-                                                    Ok (SubmissionResponseValue { valueAsJson = valueAsJson })
+                                                Ok valueAsElmValue ->
+                                                    Ok (SubmissionResponseValue { value = valueAsElmValue })
 
 
 expandContextWithListOfInteractiveSubmissions : List String -> Pine.PineExpressionContext -> Result String Pine.PineExpressionContext
@@ -120,19 +129,90 @@ expandContextWithInteractiveSubmission submission contextBefore =
             Ok contextBefore
 
 
-pineValueAsJson : PineValue -> Result String Json.Encode.Value
-pineValueAsJson pineValue =
+elmValueAsExpression : ElmValue -> String
+elmValueAsExpression elmValue =
+    case elmValue of
+        ElmList list ->
+            "[" ++ (list |> List.map elmValueAsExpression |> String.join ",") ++ "]"
+
+        ElmStringOrInteger string ->
+            string |> Json.Encode.string |> Json.Encode.encode 0
+
+        ElmRecord fields ->
+            "{ " ++ (fields |> List.map (\( fieldName, fieldValue ) -> fieldName ++ " = " ++ elmValueAsExpression fieldValue) |> String.join ", ") ++ " }"
+
+        ElmTag tagName tagArguments ->
+            tagName :: (tagArguments |> List.map elmValueAsExpression) |> String.join " "
+
+
+elmValueAsJson : ElmValue -> Json.Encode.Value
+elmValueAsJson elmValue =
+    case elmValue of
+        ElmStringOrInteger string ->
+            Json.Encode.string string
+
+        ElmList list ->
+            Json.Encode.list elmValueAsJson list
+
+        ElmRecord fields ->
+            Json.Encode.list (\( fieldName, fieldValue ) -> Json.Encode.list identity [ Json.Encode.string fieldName, elmValueAsJson fieldValue ]) fields
+
+        ElmTag tagName tagArguments ->
+            Json.Encode.list identity [ Json.Encode.string tagName, Json.Encode.list elmValueAsJson tagArguments ]
+
+
+pineValueAsElmValue : PineValue -> Result String ElmValue
+pineValueAsElmValue pineValue =
     case pineValue of
         PineStringOrInteger string ->
             -- TODO: Use type inference to distinguish between string and integer
-            Ok (string |> Json.Encode.string)
+            Ok (ElmStringOrInteger string)
 
         PineList list ->
-            list
-                |> List.map pineValueAsJson
-                |> Result.Extra.combine
-                |> Result.mapError (\error -> "Failed to combine list: " ++ error)
-                |> Result.map (Json.Encode.list identity)
+            case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
+                Err error ->
+                    Err ("Failed to combine list: " ++ error)
+
+                Ok listValues ->
+                    let
+                        resultAsList =
+                            Ok (ElmList listValues)
+
+                        tryMapToRecordField possiblyRecordField =
+                            case possiblyRecordField of
+                                ElmList [ ElmStringOrInteger fieldName, fieldValue ] ->
+                                    if not (stringStartsWithUpper fieldName) then
+                                        Just ( fieldName, fieldValue )
+
+                                    else
+                                        Nothing
+
+                                _ ->
+                                    Nothing
+                    in
+                    case listValues |> List.map (tryMapToRecordField >> Result.fromMaybe "") |> Result.Extra.combine of
+                        Ok recordFields ->
+                            let
+                                recordFieldsNames =
+                                    List.map Tuple.first recordFields
+                            in
+                            if recordFieldsNames /= [] && List.sort recordFieldsNames == recordFieldsNames then
+                                Ok (ElmRecord recordFields)
+
+                            else
+                                resultAsList
+
+                        Err _ ->
+                            case listValues of
+                                [ ElmStringOrInteger tagName, ElmList tagArguments ] ->
+                                    if stringStartsWithUpper tagName then
+                                        Ok (ElmTag tagName tagArguments)
+
+                                    else
+                                        resultAsList
+
+                                _ ->
+                                    resultAsList
 
         PineExpressionValue _ ->
             Err "PineExpressionValue"
@@ -720,3 +800,8 @@ parseElmModuleTextToJson elmModule =
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
     Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
+
+
+stringStartsWithUpper : String -> Bool
+stringStartsWithUpper =
+    String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False

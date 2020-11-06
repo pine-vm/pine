@@ -21,10 +21,10 @@ namespace elm_fullstack
             this.appCodeTree = appCodeTree;
         }
 
-        public Result<string, string> SubmitAndGetResultingValueJsonString(string submission)
+        public Result<string, ElmEngine.EvaluateElm.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
         {
             var result =
-                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValueJsonString(
+                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValue(
                     evalElmPreparedJsEngine.Value,
                     appCodeTree: appCodeTree,
                     submission: submission,

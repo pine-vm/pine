@@ -11,14 +11,14 @@ namespace elm_fullstack.ElmEngine
 {
     public class EvaluateElm
     {
-        static public Result<string, string> EvaluateSubmissionAndGetResultingValueJsonString(
+        static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
             Composition.TreeComponent appCodeTree,
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
             using (var jsEngine = PrepareJsEngineToEvaluateElm())
             {
-                return EvaluateSubmissionAndGetResultingValueJsonString(
+                return EvaluateSubmissionAndGetResultingValue(
                     jsEngine,
                     appCodeTree: appCodeTree,
                     submission: submission,
@@ -26,7 +26,7 @@ namespace elm_fullstack.ElmEngine
             }
         }
 
-        static public Result<string, string> EvaluateSubmissionAndGetResultingValueJsonString(
+        static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
             JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
             Composition.TreeComponent appCodeTree,
             string submission,
@@ -65,10 +65,10 @@ namespace elm_fullstack.ElmEngine
                 throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
 
             if (responseStructure.DecodedArguments.Evaluated == null)
-                return Result<string, string>.err(responseStructure.DecodedArguments.FailedToEvaluate);
+                return Result<string, SubmissionResponseValueStructure>.err(responseStructure.DecodedArguments.FailedToEvaluate);
 
-            return Result<string, string>.ok(
-                responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue?.valueAsJsonString);
+            return Result<string, ElmEngine.EvaluateElm.SubmissionResponseValueStructure>.ok(
+                responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue);
         }
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToEvaluateElm()
@@ -144,8 +144,10 @@ namespace elm_fullstack.ElmEngine
             public SubmissionResponseValueStructure SubmissionResponseValue = null;
         }
 
-        class SubmissionResponseValueStructure
+        public class SubmissionResponseValueStructure
         {
+            public string valueAsElmExpressionText = null;
+
             public string valueAsJsonString = null;
 
             public string typeText = null;

@@ -68,7 +68,8 @@ jsonEncodeSubmissionResponse submissionResponse =
             Json.Encode.object
                 [ ( "SubmissionResponseValue"
                   , Json.Encode.object
-                        [ ( "valueAsJsonString", evalOk.valueAsJson |> Json.Encode.encode 0 |> Json.Encode.string )
+                        [ ( "valueAsElmExpressionText", evalOk.value |> ElmInteractive.elmValueAsExpression |> Json.Encode.string )
+                        , ( "valueAsJsonString", evalOk.value |> ElmInteractive.elmValueAsJson |> Json.Encode.encode 0 |> Json.Encode.string )
                         ]
                   )
                 ]

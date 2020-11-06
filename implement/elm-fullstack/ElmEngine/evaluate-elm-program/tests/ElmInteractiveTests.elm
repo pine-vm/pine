@@ -15,7 +15,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """  "just a literal ✔️"  """
-                    , expectedValueAsJson = "\"just a literal ✔️\""
+                    , expectedValueElmExpression = "\"just a literal ✔️\""
                     }
         , Test.test "Just a literal List String" <|
             \_ ->
@@ -23,7 +23,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """  [ "just a literal ✔️", "another string" ]  """
-                    , expectedValueAsJson = """["just a literal ✔️","another string"]"""
+                    , expectedValueElmExpression = """["just a literal ✔️","another string"]"""
                     }
         , Test.test "Concat string literal" <|
             \_ ->
@@ -31,7 +31,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ "first literal " ++ " second literal ✔️" """
-                    , expectedValueAsJson = "\"first literal  second literal ✔️\""
+                    , expectedValueElmExpression = "\"first literal  second literal ✔️\""
                     }
         , Test.test "Apply String.fromInt" <|
             \_ ->
@@ -39,7 +39,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = " String.fromInt 123 "
-                    , expectedValueAsJson = "\"123\""
+                    , expectedValueElmExpression = "\"123\""
                     }
         , Test.test "Add and apply String.fromInt" <|
             \_ ->
@@ -47,7 +47,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = " String.fromInt (1 + 3) "
-                    , expectedValueAsJson = "\"4\""
+                    , expectedValueElmExpression = "\"4\""
                     }
         , Test.test "Multiply and apply String.fromInt" <|
             \_ ->
@@ -55,7 +55,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = " String.fromInt (17 * 41) "
-                    , expectedValueAsJson = "\"697\""
+                    , expectedValueElmExpression = "\"697\""
                     }
         , Test.test "Divide and apply String.fromInt" <|
             \_ ->
@@ -63,7 +63,7 @@ suite =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = " String.fromInt (31 // 5) "
-                    , expectedValueAsJson = "\"6\""
+                    , expectedValueElmExpression = "\"6\""
                     }
         , Test.test "Concat string via let" <|
             \_ ->
@@ -77,7 +77,7 @@ let
 in
 binding_from_let ++ " second literal ✔️"
 """
-                    , expectedValueAsJson = "\"literal from let  second literal ✔️\""
+                    , expectedValueElmExpression = "\"literal from let  second literal ✔️\""
                     }
         , Test.test "Dependency within let" <|
             \_ ->
@@ -92,7 +92,7 @@ let
 in
 b
 """
-                    , expectedValueAsJson = "\"just a literal\""
+                    , expectedValueElmExpression = "\"just a literal\""
                     }
         , Test.test "Support any order in let" <|
             \_ ->
@@ -111,7 +111,7 @@ let
 in
 d
 """
-                    , expectedValueAsJson = "\"just a literal\""
+                    , expectedValueElmExpression = "\"just a literal\""
                     }
         , Test.test "Branch using if and literal True" <|
             \_ ->
@@ -119,7 +119,7 @@ d
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ if True then "condition is true" else "condition is false" """
-                    , expectedValueAsJson = "\"condition is true\""
+                    , expectedValueElmExpression = "\"condition is true\""
                     }
         , Test.test "Branch using if and literal False" <|
             \_ ->
@@ -127,7 +127,7 @@ d
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ if False then "condition is true" else "condition is false" """
-                    , expectedValueAsJson = "\"condition is false\""
+                    , expectedValueElmExpression = "\"condition is false\""
                     }
         , Test.test "Branch using if and (not False)" <|
             \_ ->
@@ -135,7 +135,7 @@ d
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ if not False then "condition is true" else "condition is false" """
-                    , expectedValueAsJson = "\"condition is true\""
+                    , expectedValueElmExpression = "\"condition is true\""
                     }
         , Test.test "Function application one argument" <|
             \_ ->
@@ -149,7 +149,7 @@ let
 in
 function_with_one_parameter "argument"
 """
-                    , expectedValueAsJson = "\"literal from function argument\""
+                    , expectedValueElmExpression = "\"literal from function argument\""
                     }
         , Test.test "Function application two arguments" <|
             \_ ->
@@ -163,7 +163,7 @@ let
 in
 function_with_two_parameters "argument 0" "argument 1"
 """
-                    , expectedValueAsJson = "\"literal from function, argument 0, argument 1\""
+                    , expectedValueElmExpression = "\"literal from function, argument 0, argument 1\""
                     }
         , Test.test "Partial application two arguments" <|
             \_ ->
@@ -181,7 +181,7 @@ let
 in
 partially_applied_a "argument 1"
            """
-                    , expectedValueAsJson = "\"literal from function, argument 0, argument 1\""
+                    , expectedValueElmExpression = "\"literal from function, argument 0, argument 1\""
                     }
         , Test.test "Partial application three arguments in two groups" <|
             \_ ->
@@ -199,7 +199,7 @@ let
 in
 partially_applied_a "argument 2"
            """
-                    , expectedValueAsJson = "\"literal from function, argument 0, argument 1, argument 2\""
+                    , expectedValueElmExpression = "\"literal from function, argument 0, argument 1, argument 2\""
                     }
         , Test.test "Lambda with 'var' pattern" <|
             \_ ->
@@ -207,7 +207,7 @@ partially_applied_a "argument 2"
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ (\\x -> x) "test" """
-                    , expectedValueAsJson = "\"test\""
+                    , expectedValueElmExpression = "\"test\""
                     }
         , Test.test "Lambda with 'all' pattern" <|
             \_ ->
@@ -215,7 +215,7 @@ partially_applied_a "argument 2"
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ (\\_ -> "constant") "test" """
-                    , expectedValueAsJson = "\"constant\""
+                    , expectedValueElmExpression = "\"constant\""
                     }
         , Test.test "List.drop 0" <|
             \_ ->
@@ -223,7 +223,7 @@ partially_applied_a "argument 2"
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ List.drop 0 ["a", "b", "c", "d"]  """
-                    , expectedValueAsJson = """["a","b","c","d"]"""
+                    , expectedValueElmExpression = """["a","b","c","d"]"""
                     }
         , Test.test "List.drop 2" <|
             \_ ->
@@ -231,7 +231,7 @@ partially_applied_a "argument 2"
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ List.drop 2 ["a", "b", "c", "d"]  """
-                    , expectedValueAsJson = """["c","d"]"""
+                    , expectedValueElmExpression = """["c","d"]"""
                     }
         , Test.test "Case of expression deconstructing List into empty and non-empty" <|
             \_ ->
@@ -250,7 +250,7 @@ let
 in
 [ describe_list [], describe_list [ "single" ], describe_list [ "first_of_two", "second_of_two" ] ]
            """
-                    , expectedValueAsJson = """["This list is empty.","First element is 'single', 0 other elements remaining.","First element is 'first_of_two', 1 other elements remaining."]"""
+                    , expectedValueElmExpression = """["This list is empty.","First element is 'single', 0 other elements remaining.","First element is 'first_of_two', 1 other elements remaining."]"""
                     }
         , Test.test "Simple List.foldl" <|
             \_ ->
@@ -264,7 +264,7 @@ let
 in
 List.foldl concat "_init_" [ "a", "b", "c" ]
            """
-                    , expectedValueAsJson = "\"cba_init_\""
+                    , expectedValueElmExpression = "\"cba_init_\""
                     }
         , Test.test "Literal from module" <|
             \_ ->
@@ -280,7 +280,7 @@ module_level_binding =
 """ ] }
                     , previousSubmissions = []
                     , submission = """ ModuleName.module_level_binding """
-                    , expectedValueAsJson = "\"literal\""
+                    , expectedValueElmExpression = "\"literal\""
                     }
         , Test.test "Partial application via multiple modules" <|
             \_ ->
@@ -313,7 +313,7 @@ function_with_three_parameters param0 param1 param2 =
 """ ] }
                     , previousSubmissions = []
                     , submission = """ ModuleB.partially_applied_b "c" """
-                    , expectedValueAsJson = "\"a b c\""
+                    , expectedValueElmExpression = "\"a b c\""
                     }
         , Test.describe "Operator precedence"
             [ Test.test "Operator asterisk precedes operator plus" <|
@@ -322,7 +322,7 @@ function_with_three_parameters param0 param1 param2 =
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ 4 + 4 * 3 + 1 """
-                        , expectedValueAsJson = "17" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = "17" |> Json.Encode.string |> Json.Encode.encode 0
                         }
             , Test.test "Parentheses override operator precedence" <|
                 \_ ->
@@ -330,7 +330,7 @@ function_with_three_parameters param0 param1 param2 =
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ (1 + 2) * (3 + 1) """
-                        , expectedValueAsJson = "12" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = "12" |> Json.Encode.string |> Json.Encode.encode 0
                         }
             , Test.test "Multiplication and division operators have same priority and are applied left to right" <|
                 \_ ->
@@ -338,7 +338,7 @@ function_with_three_parameters param0 param1 param2 =
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ 20 * 20 // 30  """
-                        , expectedValueAsJson = "13" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = "13" |> Json.Encode.string |> Json.Encode.encode 0
                         }
             , Test.test "Use value from previous submission" <|
                 \_ ->
@@ -346,7 +346,7 @@ function_with_three_parameters param0 param1 param2 =
                         { context = DefaultContext
                         , previousSubmissions = [ """custom_name = "hello" """ ]
                         , submission = """ custom_name ++ " world!" """
-                        , expectedValueAsJson = "hello world!" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = "hello world!" |> Json.Encode.string |> Json.Encode.encode 0
                         }
             ]
         , Test.test "Char.toCode" <|
@@ -355,7 +355,23 @@ function_with_three_parameters param0 param1 param2 =
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """ String.fromInt (Char.toCode '😃') """
-                    , expectedValueAsJson = "128515" |> Json.Encode.string |> Json.Encode.encode 0
+                    , expectedValueElmExpression = "128515" |> Json.Encode.string |> Json.Encode.encode 0
+                    }
+        , Test.test "Literal False" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = """ False """
+                    , expectedValueElmExpression = "False"
+                    }
+        , Test.test "1 < 3 evaluates to True" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = """ 1 < 3 """
+                    , expectedValueElmExpression = "True"
                     }
         ]
 
@@ -364,11 +380,11 @@ expectationForElmInteractiveScenario :
     { context : ElmInteractive.InteractiveContext
     , previousSubmissions : List String
     , submission : String
-    , expectedValueAsJson : String
+    , expectedValueElmExpression : String
     }
     -> Expect.Expectation
 expectationForElmInteractiveScenario scenario =
-    Expect.equal (Ok scenario.expectedValueAsJson)
+    Expect.equal (Ok scenario.expectedValueElmExpression)
         (ElmInteractive.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
             |> Result.andThen
                 (\submissionResponse ->
@@ -377,7 +393,7 @@ expectationForElmInteractiveScenario scenario =
                             Err "This submission does not evaluate to a value."
 
                         ElmInteractive.SubmissionResponseValue responseWithValue ->
-                            Ok responseWithValue.valueAsJson
+                            Ok responseWithValue.value
                 )
-            |> Result.map (Json.Encode.encode 0)
+            |> Result.map ElmInteractive.elmValueAsExpression
         )
