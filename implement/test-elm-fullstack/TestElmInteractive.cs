@@ -60,9 +60,11 @@ namespace test_elm_fullstack
                         {
                             var stepName = Path.GetFileName(stepDirectory);
 
+                            string submission = null;
+
                             try
                             {
-                                var submission =
+                                submission =
                                     File.ReadAllText(Path.Combine(stepDirectory, "submission"), System.Text.Encoding.UTF8);
 
                                 var evalResult =
@@ -74,15 +76,17 @@ namespace test_elm_fullstack
                                 {
                                     var expectedValue = File.ReadAllText(expectedValueFilePath, System.Text.Encoding.UTF8);
 
+                                    Assert.IsNull(evalResult.Err, "Submission result has error: " + evalResult.Err);
+
                                     Assert.AreEqual(
                                         expectedValue,
                                         evalResult.Ok?.valueAsElmExpressionText,
-                                        "Value from evaluation matches expected value in scenario '" + scenarioName + "'");
+                                        "Value from evaluation does not match expected value.");
                                 }
                             }
                             catch (Exception e)
                             {
-                                throw new Exception("Failed step '" + stepName + "' with exception.", e);
+                                throw new Exception("Failed step '" + stepName + "' with exception.\nSubmission in this step:\n" + submission, e);
                             }
                         }
                     }

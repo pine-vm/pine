@@ -2,6 +2,7 @@ module Pine exposing (..)
 
 import BigInt
 import Result.Extra
+import Set
 
 
 type PineExpression
@@ -132,12 +133,17 @@ lookUpNameInContext name context =
 
         nameFirstElement :: nameRemainingElements ->
             let
-                availableNames =
+                availableNamedValues =
                     context.commonModel
                         |> List.filterMap pineNamedValueFromValue
 
+                availableNames =
+                    availableNamedValues
+                        |> List.map Tuple.first
+                        |> Set.fromList
+
                 maybeMatchingValue =
-                    availableNames
+                    availableNamedValues
                         |> List.filter (Tuple.first >> (==) nameFirstElement)
                         |> List.head
                         |> Maybe.map Tuple.second
@@ -148,9 +154,9 @@ lookUpNameInContext name context =
                         ("Did not find '"
                             ++ nameFirstElement
                             ++ "'. "
-                            ++ (availableNames |> List.length |> String.fromInt)
+                            ++ (availableNames |> Set.size |> String.fromInt)
                             ++ " names available: "
-                            ++ (availableNames |> List.map Tuple.first |> String.join ", ")
+                            ++ (availableNames |> Set.toList |> String.join ", ")
                         )
 
                 Just firstNameValue ->
