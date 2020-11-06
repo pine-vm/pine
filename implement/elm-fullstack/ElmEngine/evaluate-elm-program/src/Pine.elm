@@ -230,6 +230,21 @@ evaluatePineApplication context application =
                         "PineKernel.listTail" ->
                             functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> PineList)
 
+                        "PineKernel.listCons" ->
+                            evaluatePineApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluatePineExpression context
+                                , mapArg1 = evaluatePineExpression context
+                                , apply =
+                                    \leftValue rightValue ->
+                                        case rightValue of
+                                            PineList rightList ->
+                                                Ok (PineList (leftValue :: rightList))
+
+                                            _ ->
+                                                Err "Right operand for listCons is not a list."
+                                }
+                                application.arguments
+
                         "String.fromInt" ->
                             case application.arguments of
                                 [ argument ] ->

@@ -298,7 +298,9 @@ elmCoreModulesTexts =
 module List exposing (..)
 
 
-import Char exposing (Char)
+cons : a -> List a -> List a
+cons element list =
+    PineKernel.listCons element list
 
 
 foldl : (a -> b -> b) -> b -> List a -> b
@@ -314,6 +316,30 @@ foldl func acc list =
 length : List a -> Int
 length xs =
     foldl (\\_ i -> i + 1) 0 xs
+
+
+reverse : List a -> List a
+reverse list =
+    foldl cons [] list
+
+
+member : a -> List a -> Bool
+member x xs =
+    any (\\a -> a == x) xs
+
+
+any : (a -> Bool) -> List a -> Bool
+any isOkay list =
+    case list of
+        [] ->
+            False
+
+        next :: xs ->
+            if isOkay next then
+                True
+
+            else
+                any isOkay xs
 
 
 drop : Int -> List a -> List a
