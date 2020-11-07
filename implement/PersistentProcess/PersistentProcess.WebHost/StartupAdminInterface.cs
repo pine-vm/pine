@@ -543,13 +543,21 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         lock (avoidConcurrencyLock)
                         {
+                            var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                             publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
+
+                            storeReductionStopwatch.Stop();
+
+                            var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                             var filesForRestore =
                                 PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(
                                     processStoreFileStore).files
                                 .Select(filePathAndContent => filePathAndContent.Key)
                                 .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>());
+
+                            getFilesForRestoreStopwatch.Stop();
 
                             var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -573,6 +581,8 @@ namespace Kalmit.PersistentProcess.WebHost
                             {
                                 beginTime = beginTime,
                                 deletedFilesCount = deletedFilesCount,
+                                storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
+                                getFilesForRestoreTimeSpentMilli = (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
                                 deleteFilesTimeSpentMilli = (int)deleteFilesStopwatch.ElapsedMilliseconds,
                                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
                             };
@@ -723,6 +733,10 @@ namespace Kalmit.PersistentProcess.WebHost
         public int deletedFilesCount;
 
         public int totalTimeSpentMilli;
+
+        public int storeReductionTimeSpentMilli;
+
+        public int getFilesForRestoreTimeSpentMilli;
 
         public int deleteFilesTimeSpentMilli;
     }
