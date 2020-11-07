@@ -470,7 +470,7 @@ namespace elm_fullstack
 
             app.Command("devtools", devtoolsCmd =>
             {
-                devtoolsCmd.Description = "Collection of development tools.";
+                devtoolsCmd.Description = "Collection of development tools, including the Elm Interactive environment.";
                 devtoolsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 devtoolsCmd.Command("eval-expression", evalExpressionCmd =>
