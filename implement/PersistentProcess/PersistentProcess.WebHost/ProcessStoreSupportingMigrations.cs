@@ -195,6 +195,13 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
         static protected IImmutableList<string> CompositionHeadHashFilePath =>
             ImmutableList.Create("composition-log-head-hash");
 
+        static protected string ComponentSubdirectory => "component";
+
+        static protected string DeflatedComponentSubdirectory => "deflated-component";
+
+        static protected string ProvisionalReductionSubdirectory => "provisional-reduction";
+
+
         static readonly protected Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
 
         static public IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
@@ -216,23 +223,41 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
         protected IFileStoreReader fileStore;
 
         //  Plain Kalmit component.
-        protected IFileStoreReader componentFileStore => fileStore.ForSubdirectory("component");
+        protected IFileStoreReader componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
 
-        protected IFileStoreReader provisionalReductionFileStore => fileStore.ForSubdirectory("provisional-reduction");
+        protected IFileStoreReader deflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
+
+        protected IFileStoreReader provisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
         public ProcessStoreReaderInFileStore(IFileStoreReader fileStore)
         {
             this.fileStore = fileStore;
         }
 
-        IReadOnlyList<byte> LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
-            componentFileStore.GetFileContent(
-                GetFilePathForComponentInComponentFileStore(CommonConversion.StringBase16FromByteArray(componentHash.ToArray())));
+        byte[] LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
+            LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16FromByteArray(componentHash.ToArray()));
+
+        byte[] LoadComponentSerialRepresentationForHash(string componentHashBase16)
+        {
+            var originalFile =
+                componentFileStore.GetFileContent(GetFilePathForComponentInComponentFileStore(componentHashBase16));
+
+            if (originalFile == null)
+            {
+                var deflatedFile =
+                    deflatedComponentFileStore.GetFileContent(
+                        GetFilePathForComponentInComponentFileStore(componentHashBase16));
+
+                if (deflatedFile != null)
+                    return CommonConversion.Inflate(deflatedFile);
+            }
+
+            return originalFile;
+        }
 
         public Composition.Component LoadComponent(string componentHashBase16)
         {
-            var fromComponentStore = componentFileStore.GetFileContent(
-                GetFilePathForComponentInComponentFileStore(componentHashBase16));
+            var fromComponentStore = LoadComponentSerialRepresentationForHash(componentHashBase16);
 
             if (fromComponentStore == null)
                 return null;
@@ -331,12 +356,16 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
     public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
     {
+        static int tryDeflateSizeThreshold => 10_000;
+
         protected IFileStoreWriter fileStore;
 
         //  Plain Kalmit component.
-        protected IFileStoreWriter componentFileStore => fileStore.ForSubdirectory("component");
+        protected IFileStoreWriter componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
 
-        protected IFileStoreWriter provisionalReductionFileStore => fileStore.ForSubdirectory("provisional-reduction");
+        protected IFileStoreWriter deflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
+
+        protected IFileStoreWriter provisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
         public ProcessStoreWriterInFileStore(IFileStoreWriter fileStore)
         {
@@ -375,9 +404,28 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
             var hashBase16 = CommonConversion.StringBase16FromByteArray(hash);
 
-            componentFileStore.SetFileContent(
-                GetFilePathForComponentInComponentFileStore(hashBase16),
-                serialRepresentation);
+            void storeSelf()
+            {
+                if (tryDeflateSizeThreshold <= serialRepresentation.Length)
+                {
+                    var deflated = CommonConversion.Deflate(serialRepresentation);
+
+                    if (deflated.Length * 10 < serialRepresentation.Length * 8)
+                    {
+                        deflatedComponentFileStore.SetFileContent(
+                            GetFilePathForComponentInComponentFileStore(hashBase16),
+                            deflated);
+
+                        return;
+                    }
+                }
+
+                componentFileStore.SetFileContent(
+                    GetFilePathForComponentInComponentFileStore(hashBase16),
+                    serialRepresentation);
+            }
+
+            storeSelf();
 
             foreach (var dependency in dependencies)
                 StoreComponent(dependency);

@@ -45,6 +45,32 @@ namespace Kalmit
             }
         }
 
+        static public byte[] Deflate(byte[] input)
+        {
+            using (var deflatedStream = new System.IO.MemoryStream())
+            using (var compressor = new System.IO.Compression.DeflateStream(
+                deflatedStream, System.IO.Compression.CompressionMode.Compress))
+            {
+                compressor.Write(input, 0, input.Length);
+                compressor.Close();
+                return deflatedStream.ToArray();
+            }
+        }
+
+        static public byte[] Inflate(byte[] input)
+        {
+            using (var inflatedStream = new System.IO.MemoryStream())
+            {
+                using (var deflateStream = new System.IO.Compression.DeflateStream(
+                    new System.IO.MemoryStream(input), System.IO.Compression.CompressionMode.Decompress))
+                {
+                    deflateStream.CopyTo(inflatedStream);
+
+                    return inflatedStream.ToArray();
+                }
+            }
+        }
+
         static public string TimeStringViewForReport(DateTimeOffset time) =>
             time.ToString("yyyy-MM-ddTHH-mm-ss");
     }

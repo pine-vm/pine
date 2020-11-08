@@ -765,59 +765,61 @@ main =
 
         public ProvisionalReductionRecordInFile StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter)
         {
+            string elmAppState = null;
+
             lock (processLock)
             {
                 if (lastCompositionLogRecordHashBase16 == CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
                     return null;
 
-                var elmAppState = lastElmAppVolatileProcess?.GetSerializedState();
-
-                var elmAppStateBlob =
-                    elmAppState == null
-                    ?
-                    null
-                    :
-                    Encoding.UTF8.GetBytes(elmAppState);
-
-                var elmAppStateComponent =
-                    elmAppStateBlob == null
-                    ?
-                    null
-                    :
-                    Composition.Component.Blob(elmAppStateBlob);
-
-                var reductionRecord =
-                    new ProvisionalReductionRecordInFile
-                    {
-                        reducedCompositionHashBase16 = lastCompositionLogRecordHashBase16,
-                        elmAppState =
-                            elmAppStateComponent == null
-                            ? null
-                            : new ValueInFileStructure
-                            {
-                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
-                            },
-                        appConfig =
-                            lastAppConfig == null
-                            ? null
-                            : new ValueInFileStructure
-                            {
-                                HashBase16 = CommonConversion.StringBase16FromByteArray(
-                                    Composition.GetHash(lastAppConfig.Value.appConfigComponent)),
-                            },
-                    };
-
-                var dependencies =
-                    new[] { elmAppStateComponent, lastAppConfig?.appConfigComponent }
-                    .Where(c => null != c).ToImmutableList();
-
-                foreach (var dependency in dependencies)
-                    storeWriter.StoreComponent(dependency);
-
-                storeWriter.StoreProvisionalReduction(reductionRecord);
-
-                return reductionRecord;
+                elmAppState = lastElmAppVolatileProcess?.GetSerializedState();
             }
+
+            var elmAppStateBlob =
+                elmAppState == null
+                ?
+                null
+                :
+                Encoding.UTF8.GetBytes(elmAppState);
+
+            var elmAppStateComponent =
+                elmAppStateBlob == null
+                ?
+                null
+                :
+                Composition.Component.Blob(elmAppStateBlob);
+
+            var reductionRecord =
+                new ProvisionalReductionRecordInFile
+                {
+                    reducedCompositionHashBase16 = lastCompositionLogRecordHashBase16,
+                    elmAppState =
+                        elmAppStateComponent == null
+                        ? null
+                        : new ValueInFileStructure
+                        {
+                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
+                        },
+                    appConfig =
+                        lastAppConfig == null
+                        ? null
+                        : new ValueInFileStructure
+                        {
+                            HashBase16 = CommonConversion.StringBase16FromByteArray(
+                                Composition.GetHash(lastAppConfig.Value.appConfigComponent)),
+                        },
+                };
+
+            var dependencies =
+                new[] { elmAppStateComponent, lastAppConfig?.appConfigComponent }
+                .Where(c => null != c).ToImmutableList();
+
+            foreach (var dependency in dependencies)
+                storeWriter.StoreComponent(dependency);
+
+            storeWriter.StoreProvisionalReduction(reductionRecord);
+
+            return reductionRecord;
         }
     }
 }
