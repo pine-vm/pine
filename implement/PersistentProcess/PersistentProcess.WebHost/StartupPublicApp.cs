@@ -345,7 +345,7 @@ namespace Kalmit.PersistentProcess.WebHost
             processEventTimeHasArrived();
 
             app
-            .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
+                .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
                 .Run(async (context) =>
                 {
                     var currentDateTime = getDateTimeOffset();
@@ -380,15 +380,14 @@ namespace Kalmit.PersistentProcess.WebHost
                         if (appTaskCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
                         {
                             var headerContentType =
-                            httpResponse.headersToAdd
-                            ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
-                            ?.values?.FirstOrDefault();
+                                httpResponse.headersToAdd
+                                ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
+                                ?.values?.FirstOrDefault();
 
                             context.Response.StatusCode = httpResponse.statusCode;
 
                             foreach (var headerToAdd in (httpResponse.headersToAdd).EmptyIfNull())
-                                context.Response.Headers[headerToAdd.name] =
-                                new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
+                                context.Response.Headers[headerToAdd.name] = new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
 
                             if (headerContentType != null)
                                 context.Response.ContentType = headerContentType;
@@ -402,9 +401,9 @@ namespace Kalmit.PersistentProcess.WebHost
                                 if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
                                 {
                                     throw new FormatException(
-                                    "Failed to convert from base64. bytesWritten=" + bytesWritten +
-                                    ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
-                                    httpResponse.bodyAsBase64);
+                                        "Failed to convert from base64. bytesWritten=" + bytesWritten +
+                                        ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
+                                        httpResponse.bodyAsBase64);
                                 }
 
                                 contentAsByteArray = buffer.AsSpan(0, bytesWritten).ToArray();
@@ -420,13 +419,12 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
                             throw new TimeoutException(
-                            "The app did not return a HTTP response within " +
-                            (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
-                            " seconds.");
+                                "The app did not return a HTTP response within " +
+                                (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
+                                " seconds.");
 
                         System.Threading.Thread.Sleep(100);
                     }
-
 
                 });
         }
