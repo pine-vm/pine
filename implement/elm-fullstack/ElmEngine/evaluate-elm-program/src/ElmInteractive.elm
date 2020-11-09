@@ -240,10 +240,22 @@ pineExpressionContextForElmInteractive context =
                     Err ("Failed to compile elm module from context: " ++ error)
 
                 Ok contextModules ->
-                    Ok
-                        { commonModel = contextModules ++ elmCoreModules
-                        , provisionalArgumentStack = []
-                        }
+                    elmValuesToExposeToGlobal
+                        |> List.foldl exposeFromElmModuleToGlobal
+                            { commonModel = contextModules ++ elmCoreModules
+                            , provisionalArgumentStack = []
+                            }
+                        |> Ok
+
+
+exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.PineExpressionContext -> Pine.PineExpressionContext
+exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
+    case Pine.lookUpNameInContext (moduleName ++ [ nameInModule ] |> String.join ".") context of
+        Err _ ->
+            context
+
+        Ok ( valueFromName, _ ) ->
+            { context | commonModel = Pine.pineValueFromContextExpansionWithName ( nameInModule, valueFromName ) :: context.commonModel }
 
 
 parseElmModuleTextIntoPineValue : String -> Result String PineValue
@@ -287,10 +299,7 @@ parseElmModuleTextIntoPineValue moduleText =
                             declarations
                                 |> List.map
                                     (\( declaredName, namedExpression ) ->
-                                        PineList
-                                            [ PineStringOrInteger declaredName
-                                            , PineExpressionValue namedExpression
-                                            ]
+                                        Pine.pineValueFromContextExpansionWithName ( declaredName, PineExpressionValue namedExpression )
                                     )
                     in
                     Ok (Pine.pineValueFromContextExpansionWithName ( moduleName, PineList declarationsValues ))
@@ -298,7 +307,21 @@ parseElmModuleTextIntoPineValue moduleText =
 
 elmCoreModulesTexts : List String
 elmCoreModulesTexts =
-    [ -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm
+    [ """
+module Basics exposing (..)
+
+
+identity : a -> a
+identity x =
+    x
+
+
+always : a -> b -> a
+always a _ =
+    a
+
+"""
+    , -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm
       """
 module List exposing (..)
 
@@ -382,6 +405,15 @@ type Maybe a
     | Nothing
 
 """
+    ]
+
+
+elmValuesToExposeToGlobal : List ( List String, String )
+elmValuesToExposeToGlobal =
+    [ ( [ "Basics" ], "identity" )
+    , ( [ "Basics" ], "always" )
+    , ( [ "Maybe" ], "Nothing" )
+    , ( [ "Maybe" ], "Just" )
     ]
 
 
