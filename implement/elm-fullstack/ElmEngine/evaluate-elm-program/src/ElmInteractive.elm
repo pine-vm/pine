@@ -19,6 +19,7 @@ import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
+import Elm.Syntax.Type
 import Json.Encode
 import Parser
 import Pine exposing (PineExpression(..), PineValue(..))
@@ -266,11 +267,15 @@ parseElmModuleTextIntoPineValue moduleText =
                             (\declaration ->
                                 case declaration of
                                     Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                        Just (pineExpressionFromElmFunction functionDeclaration)
+                                        Just [ pineExpressionFromElmFunction functionDeclaration ]
+
+                                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                                        Just (customTypeDeclaration.constructors |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmValueConstructor))
 
                                     _ ->
                                         Nothing
                             )
+                        |> List.concat
             in
             case declarationsResults |> Result.Extra.combine of
                 Err error ->
@@ -366,6 +371,15 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     char
+
+"""
+    , """
+module Maybe exposing (..)
+
+
+type Maybe a
+    = Just a
+    | Nothing
 
 """
     ]
@@ -565,6 +579,24 @@ functionExpressionFromArgumentsNamesAndExpression argumentsNames expression =
         |> List.foldr
             (\argumentName prevExpression -> PineFunction argumentName prevExpression)
             expression
+
+
+pineExpressionFromElmValueConstructor : Elm.Syntax.Type.ValueConstructor -> Result String ( String, PineExpression )
+pineExpressionFromElmValueConstructor valueConstructor =
+    let
+        constructorName =
+            Elm.Syntax.Node.value valueConstructor.name
+
+        argumentsNames =
+            valueConstructor.arguments |> List.indexedMap (\i _ -> "value_constructor_argument_" ++ String.fromInt i)
+    in
+    Ok
+        ( constructorName
+        , argumentsNames
+            |> List.foldl
+                (\argumentName prevExpression -> PineFunction argumentName prevExpression)
+                (Pine.tagValueExpression constructorName (argumentsNames |> List.map PineFunctionOrValue))
+        )
 
 
 pineExpressionFromElmCaseBlock : Elm.Syntax.Expression.CaseBlock -> Result String PineExpression

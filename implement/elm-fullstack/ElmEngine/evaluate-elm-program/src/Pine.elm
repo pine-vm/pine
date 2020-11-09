@@ -455,3 +455,8 @@ falsePineValue =
 tagValue : String -> List PineValue -> PineValue
 tagValue tagName tagArguments =
     PineList [ PineStringOrInteger tagName, PineList tagArguments ]
+
+
+tagValueExpression : String -> List PineExpression -> PineExpression
+tagValueExpression tagName tagArgumentsExpressions =
+    PineListExpr [ PineLiteral (PineStringOrInteger tagName), PineListExpr tagArgumentsExpressions ]
