@@ -4,6 +4,8 @@ namespace Kalmit.PersistentProcess
     {
         public RateLimitWindow singleRateLimitWindowPerClientIPv4Address;
 
+        public int? httpRequestEventSizeLimit;
+
         public FluffySpoon.AspNet.LetsEncrypt.LetsEncryptOptions letsEncryptOptions;
 
         public class ConditionalMapFromStringToString

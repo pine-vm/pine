@@ -215,63 +215,76 @@ namespace Kalmit.PersistentProcess.WebHost
 
             void processEventAndResultingRequests(InterfaceToHost.AppEventStructure interfaceEvent)
             {
-                if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
-                    return;
+                var prepareProcessEvent = prepareProcessEventAndResultingRequests(interfaceEvent);
 
+                prepareProcessEvent.processEventAndResultingRequests();
+            }
+
+            (string serializedInterfaceEvent, Action processEventAndResultingRequests) prepareProcessEventAndResultingRequests(
+                InterfaceToHost.AppEventStructure interfaceEvent)
+            {
                 var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
 
-                string serializedResponse = null;
+                var processEvent = new Action(() =>
+                {
+                    if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                        return;
 
-                try
-                {
-                    serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
-                }
-                catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
-                {
-                    return;
-                }
+                    string serializedResponse = null;
 
-                InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
+                    try
+                    {
+                        serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+                    }
+                    catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                    {
+                        return;
+                    }
 
-                try
-                {
-                    structuredResponse =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                            serializedResponse);
-                }
-                catch (Exception parseException)
-                {
-                    throw new Exception(
-                        "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
-                        parseException);
-                }
+                    InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
 
-                if (structuredResponse?.DecodeEventSuccess == null)
-                {
-                    throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
-                }
+                    try
+                    {
+                        structuredResponse =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
+                                serializedResponse);
+                    }
+                    catch (Exception parseException)
+                    {
+                        throw new Exception(
+                            "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
+                            parseException);
+                    }
 
-                if (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime != null)
-                {
-                    System.Threading.Tasks.Task.Run(() =>
-                        {
-                            lock (nextTimeToNotifyLock)
+                    if (structuredResponse?.DecodeEventSuccess == null)
+                    {
+                        throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
+                    }
+
+                    if (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime != null)
+                    {
+                        System.Threading.Tasks.Task.Run(() =>
                             {
-                                nextTimeToNotify = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime;
-                            }
-                        });
-                }
+                                lock (nextTimeToNotifyLock)
+                                {
+                                    nextTimeToNotify = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime;
+                                }
+                            });
+                    }
 
-                foreach (var startTask in structuredResponse.DecodeEventSuccess.startTasks)
-                {
-                    System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(startTask));
-                }
+                    foreach (var startTask in structuredResponse.DecodeEventSuccess.startTasks)
+                    {
+                        System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(startTask));
+                    }
 
-                foreach (var completeHttpResponse in structuredResponse.DecodeEventSuccess.completeHttpResponses)
-                {
-                    appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] =
-                        completeHttpResponse.response;
-                }
+                    foreach (var completeHttpResponse in structuredResponse.DecodeEventSuccess.completeHttpResponses)
+                    {
+                        appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] =
+                            completeHttpResponse.response;
+                    }
+                });
+
+                return (serializedInterfaceEvent, processEvent);
             }
 
             void processEventTimeHasArrived()
@@ -341,17 +354,24 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
 
+                    var httpRequestEvent =
+                        await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
+
+                    var httpRequestInterfaceEvent = new InterfaceToHost.AppEventStructure
                     {
-                        var httpRequestEvent =
-                            await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
+                        HttpRequestEvent = httpRequestEvent,
+                    };
 
-                        var httpRequestInterfaceEvent = new InterfaceToHost.AppEventStructure
-                        {
-                            HttpRequestEvent = httpRequestEvent,
-                        };
+                    var preparedProcessEvent = prepareProcessEventAndResultingRequests(httpRequestInterfaceEvent);
 
-                        processEventAndResultingRequests(httpRequestInterfaceEvent);
+                    if (webAppAndElmAppConfig.WebAppConfiguration?.httpRequestEventSizeLimit < preparedProcessEvent.serializedInterfaceEvent?.Length)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        await context.Response.WriteAsync("Request is too large.");
+                        return;
                     }
+
+                    preparedProcessEvent.processEventAndResultingRequests();
 
                     var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
 

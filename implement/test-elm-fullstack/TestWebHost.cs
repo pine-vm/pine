@@ -250,6 +250,67 @@ namespace test_elm_fullstack
         }
 
         [TestMethod]
+        public void Web_host_limits_http_request_size_reaching_persistent_process()
+        {
+            const int requestSizeLimit = 20_000;
+
+            var webAppConfig =
+                TestSetup.WithElmFullstackJson(
+                    TestSetup.StringBuilderElmWebApp,
+                    new WebAppConfigurationJsonStructure
+                    {
+                        httpRequestEventSizeLimit = requestSizeLimit,
+                    });
+
+            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+                deployAppConfigAndInitElmState: Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig))))
+            {
+                IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
+                    testSetup.EnumerateStoredUpdateElmAppStateForEvents()
+                    .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
+                    .WhereNotNull()
+                    .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
+
+                HttpResponseMessage PostStringContentToPublicApp(string requestContent)
+                {
+                    using (var client = testSetup.BuildPublicAppHttpClient())
+                    {
+                        return client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
+                    }
+                }
+
+                using (var server = testSetup.StartWebHost())
+                {
+                    var sufficientlySmallRequestContentSize =
+                        // Consider overhead from base64 encoding plus additional properties of an HTTP request.
+                        requestSizeLimit / 4 * 3 - 2000;
+
+                    var httpRequestEventsInStoreBefore = EnumerateStoredProcessEventsHttpRequestsBodies().Count();
+
+                    Assert.AreEqual(
+                        HttpStatusCode.OK,
+                        PostStringContentToPublicApp("small enough content" + new String('_', sufficientlySmallRequestContentSize)).StatusCode,
+                        "Receive OK status code for sufficiently small request.");
+
+                    Assert.AreEqual(
+                        httpRequestEventsInStoreBefore + 1,
+                        EnumerateStoredProcessEventsHttpRequestsBodies().Count(),
+                        "Sufficiently small HTTP request ended up in event.");
+
+                    Assert.AreEqual(
+                        HttpStatusCode.BadRequest,
+                        PostStringContentToPublicApp("too large content" + new String('_', requestSizeLimit)).StatusCode,
+                        "Receive BadRequest status code for too large request.");
+
+                    Assert.AreEqual(
+                        httpRequestEventsInStoreBefore + 1,
+                        EnumerateStoredProcessEventsHttpRequestsBodies().Count(),
+                        "Too large HTTP request did not end up in event.");
+                }
+            }
+        }
+
+        [TestMethod]
         public void Web_host_supports_setting_elm_app_state_only_after_authorization()
         {
             const string adminPassword = "Password_1234567";
