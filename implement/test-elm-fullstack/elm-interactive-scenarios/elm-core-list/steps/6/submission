@@ -1,0 +1,4 @@
+[ List.tail []
+, List.tail [ "alpha" ]
+, List.tail [ "alpha", "beta" ]
+]

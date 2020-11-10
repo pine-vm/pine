@@ -326,6 +326,9 @@ always a _ =
 module List exposing (..)
 
 
+import Maybe exposing (Maybe(..))
+
+
 cons : a -> List a -> List a
 cons element list =
     PineKernel.listCons element list
@@ -339,6 +342,16 @@ foldl func acc list =
 
         x :: xs ->
             foldl func (func x acc) xs
+
+
+foldr : (a -> b -> b) -> b -> List a -> b
+foldr func acc list =
+    foldl func acc (reverse list)
+
+
+filter : (a -> Bool) -> List a -> List a
+filter isGood list =
+    foldr (\\x xs -> if isGood x then cons x xs else xs) [] list
 
 
 length : List a -> Int
@@ -368,6 +381,36 @@ any isOkay list =
 
             else
                 any isOkay xs
+
+
+isEmpty : List a -> Bool
+isEmpty xs =
+    case xs of
+        [] ->
+            True
+
+        _ ->
+            False
+
+
+head : List a -> Maybe a
+head list =
+    case list of
+        x :: xs ->
+            Just x
+
+        [] ->
+            Nothing
+
+
+tail : List a -> Maybe (List a)
+tail list =
+    case list of
+        x :: xs ->
+            Just xs
+
+        [] ->
+            Nothing
 
 
 drop : Int -> List a -> List a
@@ -404,6 +447,33 @@ type Maybe a
     = Just a
     | Nothing
 
+
+withDefault : a -> Maybe a -> a
+withDefault default maybe =
+    case maybe of
+        Just value -> value
+        Nothing -> default
+
+
+map : (a -> b) -> Maybe a -> Maybe b
+map f maybe =
+    case maybe of
+        Just value ->
+            Just (f value)
+
+        Nothing ->
+            Nothing
+
+
+andThen : (a -> Maybe b) -> Maybe a -> Maybe b
+andThen callback maybeValue =
+    case maybeValue of
+        Just value ->
+            callback value
+
+        Nothing ->
+            Nothing
+
 """
     ]
 
@@ -428,6 +498,14 @@ pineExpressionFromElm elmExpression =
 
         Elm.Syntax.Expression.Integer integer ->
             Ok (PineLiteral (PineStringOrInteger (String.fromInt integer)))
+
+        Elm.Syntax.Expression.Negation negatedElmExpression ->
+            case pineExpressionFromElm (Elm.Syntax.Node.value negatedElmExpression) of
+                Err error ->
+                    Err ("Failed to map negated expression: " ++ error)
+
+                Ok negatedExpression ->
+                    Ok (PineApplication { function = PineFunctionOrValue "PineKernel.negate", arguments = [ negatedExpression ] })
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             Ok (PineFunctionOrValue (String.join "." (moduleName ++ [ localName ])))
@@ -638,66 +716,183 @@ pineExpressionFromElmCaseBlock caseBlock =
             Err ("Failed to map case block expression: " ++ error)
 
         Ok expression ->
-            case caseBlock.cases |> List.map (Tuple.mapFirst Elm.Syntax.Node.value) of
-                [ ( Elm.Syntax.Pattern.ListPattern [], emptyCaseElmExpression ), ( Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight, nonEmptyCaseElmExpression ) ] ->
-                    case pineExpressionFromElm (Elm.Syntax.Node.value emptyCaseElmExpression) of
-                        Err error ->
-                            Err ("Failed to translate emptyCaseElmExpression: " ++ error)
+            case caseBlock.cases |> List.map (pineExpressionFromElmCaseBlockCase expression) |> Result.Extra.combine of
+                Err error ->
+                    Err ("Failed to map case in case-of block: " ++ error)
 
-                        Ok emptyCaseExpression ->
-                            case pineExpressionFromElm (Elm.Syntax.Node.value nonEmptyCaseElmExpression) of
-                                Err error ->
-                                    Err ("Failed to translate nonEmptyCaseElmExpression: " ++ error)
+                Ok cases ->
+                    let
+                        ifBlockFromCase deconstructedCase nextBlockExpression =
+                            PineIfBlock
+                                deconstructedCase.conditionExpression
+                                (pineExpressionFromLetBlockDeclarationsAndExpression
+                                    deconstructedCase.declarations
+                                    deconstructedCase.thenExpression
+                                )
+                                nextBlockExpression
+                    in
+                    Ok
+                        (List.foldr
+                            ifBlockFromCase
+                            (PineFunctionOrValue "Error in mapping of case-of block: No matching branch.")
+                            cases
+                        )
 
-                                Ok nonEmptyCaseExpression ->
-                                    case ( Elm.Syntax.Node.value unconsLeft, Elm.Syntax.Node.value unconsRight ) of
-                                        ( Elm.Syntax.Pattern.VarPattern unconsLeftName, Elm.Syntax.Pattern.VarPattern unconsRightName ) ->
-                                            let
-                                                nonEmptyCaseDeclarations =
-                                                    [ ( unconsLeftName
-                                                      , PineApplication
-                                                            { function = PineFunctionOrValue "PineKernel.listHead"
-                                                            , arguments = [ expression ]
-                                                            }
-                                                      )
-                                                    , ( unconsRightName
-                                                      , PineApplication
-                                                            { function = PineFunctionOrValue "PineKernel.listTail"
-                                                            , arguments = [ expression ]
-                                                            }
-                                                      )
-                                                    ]
 
-                                                conditionExpression =
-                                                    PineApplication
-                                                        { function = PineFunctionOrValue "(==)"
-                                                        , arguments =
-                                                            [ expression
-                                                            , PineListExpr []
-                                                            ]
+pineExpressionFromElmCaseBlockCase :
+    PineExpression
+    -> Elm.Syntax.Expression.Case
+    -> Result String { conditionExpression : PineExpression, declarations : List ( String, PineExpression ), thenExpression : PineExpression }
+pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExpression ) =
+    case pineExpressionFromElm (Elm.Syntax.Node.value elmExpression) of
+        Err error ->
+            Err ("Failed to map case expression: " ++ error)
+
+        Ok expressionAfterDeconstruction ->
+            case Elm.Syntax.Node.value elmPattern of
+                Elm.Syntax.Pattern.AllPattern ->
+                    Ok
+                        { conditionExpression = PineLiteral Pine.truePineValue
+                        , declarations = []
+                        , thenExpression = expressionAfterDeconstruction
+                        }
+
+                Elm.Syntax.Pattern.ListPattern [] ->
+                    let
+                        conditionExpression =
+                            PineApplication
+                                { function = PineFunctionOrValue "(==)"
+                                , arguments =
+                                    [ caseBlockValueExpression
+                                    , PineListExpr []
+                                    ]
+                                }
+                    in
+                    Ok
+                        { conditionExpression = conditionExpression
+                        , declarations = []
+                        , thenExpression = expressionAfterDeconstruction
+                        }
+
+                Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight ->
+                    case ( Elm.Syntax.Node.value unconsLeft, Elm.Syntax.Node.value unconsRight ) of
+                        ( Elm.Syntax.Pattern.VarPattern unconsLeftName, Elm.Syntax.Pattern.VarPattern unconsRightName ) ->
+                            let
+                                declarations =
+                                    [ ( unconsLeftName
+                                      , PineApplication
+                                            { function = PineFunctionOrValue "PineKernel.listHead"
+                                            , arguments = [ caseBlockValueExpression ]
+                                            }
+                                      )
+                                    , ( unconsRightName
+                                      , PineApplication
+                                            { function = PineFunctionOrValue "PineKernel.listTail"
+                                            , arguments = [ caseBlockValueExpression ]
+                                            }
+                                      )
+                                    ]
+
+                                conditionExpression =
+                                    PineApplication
+                                        { function = PineFunctionOrValue "not"
+                                        , arguments =
+                                            [ PineApplication
+                                                { function = PineFunctionOrValue "PineKernel.equals"
+                                                , arguments =
+                                                    [ caseBlockValueExpression
+                                                    , PineApplication
+                                                        { function = PineFunctionOrValue "PineKernel.listTail"
+                                                        , arguments = [ caseBlockValueExpression ]
                                                         }
-                                            in
-                                            Ok
-                                                (PineIfBlock
-                                                    conditionExpression
-                                                    emptyCaseExpression
-                                                    (pineExpressionFromLetBlockDeclarationsAndExpression
-                                                        nonEmptyCaseDeclarations
-                                                        nonEmptyCaseExpression
-                                                    )
-                                                )
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                            in
+                            Ok
+                                { conditionExpression = conditionExpression
+                                , declarations = declarations
+                                , thenExpression = expressionAfterDeconstruction
+                                }
 
-                                        _ ->
-                                            Err "Unsupported shape of uncons pattern."
+                        _ ->
+                            Err "Unsupported shape of uncons pattern."
+
+                Elm.Syntax.Pattern.NamedPattern qualifiedName customTypeArgumentPatterns ->
+                    let
+                        mapArgumentsToOnlyNameResults =
+                            customTypeArgumentPatterns
+                                |> List.map Elm.Syntax.Node.value
+                                |> List.map
+                                    (\argumentPattern ->
+                                        case argumentPattern of
+                                            Elm.Syntax.Pattern.VarPattern argumentName ->
+                                                Ok argumentName
+
+                                            Elm.Syntax.Pattern.AllPattern ->
+                                                Ok "unused_from_elm_all_pattern"
+
+                                            _ ->
+                                                Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
+                                    )
+
+                        conditionExpression =
+                            PineApplication
+                                { function = PineFunctionOrValue "PineKernel.equals"
+                                , arguments =
+                                    [ PineLiteral (PineStringOrInteger qualifiedName.name)
+                                    , PineApplication
+                                        { function = PineFunctionOrValue "PineKernel.listHead"
+                                        , arguments = [ caseBlockValueExpression ]
+                                        }
+                                    ]
+                                }
+                    in
+                    case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
+                        Err error ->
+                            Err ("Failed to map pattern in case block: " ++ error)
+
+                        Ok declarationsNames ->
+                            let
+                                declarations =
+                                    declarationsNames
+                                        |> List.indexedMap
+                                            (\argumentIndex declarationName ->
+                                                ( declarationName
+                                                , PineApplication
+                                                    { function = PineFunctionOrValue "PineKernel.listHead"
+                                                    , arguments =
+                                                        [ PineApplication
+                                                            { function = PineFunctionOrValue "List.drop"
+                                                            , arguments =
+                                                                [ PineLiteral (PineStringOrInteger (String.fromInt argumentIndex))
+                                                                , PineApplication
+                                                                    { function = PineFunctionOrValue "PineKernel.listHead"
+                                                                    , arguments =
+                                                                        [ PineApplication
+                                                                            { function = PineFunctionOrValue "PineKernel.listTail"
+                                                                            , arguments = [ caseBlockValueExpression ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                )
+                                            )
+                            in
+                            Ok
+                                { conditionExpression = conditionExpression
+                                , declarations = declarations
+                                , thenExpression = expressionAfterDeconstruction
+                                }
 
                 _ ->
                     Err
-                        ("Unsupported shape of cases in case block: "
-                            ++ (caseBlock
-                                    |> Elm.Syntax.Expression.CaseExpression
-                                    |> Elm.Syntax.Expression.encode
-                                    |> Json.Encode.encode 0
-                               )
+                        ("Unsupported type of pattern in case-of block case: "
+                            ++ Json.Encode.encode 0 (Elm.Syntax.Pattern.encode (Elm.Syntax.Node.value elmPattern))
                         )
 
 

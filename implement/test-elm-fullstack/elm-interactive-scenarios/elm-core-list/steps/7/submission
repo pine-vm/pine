@@ -1,0 +1,5 @@
+[ List.drop -1 [ "alpha", "beta", "gamma" ]
+, List.drop 0 [ "alpha", "beta", "gamma" ]
+, List.drop 1 [ "alpha", "beta", "gamma" ]
+, List.drop 2 [ "alpha", "beta", "gamma" ]
+]

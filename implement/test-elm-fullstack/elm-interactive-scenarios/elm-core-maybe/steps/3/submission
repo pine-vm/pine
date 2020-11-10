@@ -1,0 +1,7 @@
+let
+    greet string =
+        "hello " ++ string
+in
+[ Maybe.map greet Nothing
+, Maybe.map greet (Just "world")
+]

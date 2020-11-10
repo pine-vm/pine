@@ -1,0 +1,4 @@
+[ List.member "a" [ "ab", "ba" ]
+, List.member "hello" [ "test", "hello" ]
+, List.member True [ False ]
+]

@@ -1,6 +1,7 @@
 module Pine exposing (..)
 
 import BigInt
+import Json.Encode
 import Result.Extra
 import Set
 
@@ -217,13 +218,39 @@ evaluatePineApplication context application =
                                         list |> functionOnList |> Ok
 
                                     _ ->
-                                        Err "Argument is not a list."
+                                        Err ("Argument is not a list ('" ++ describePineValue argument ++ ")")
+                        }
+                        application.arguments
+
+                functionEquals =
+                    evaluatePineApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = evaluatePineExpression context
+                        , mapArg1 = evaluatePineExpression context
+                        , apply =
+                            \leftValue rightValue ->
+                                Ok
+                                    (if leftValue == rightValue then
+                                        truePineValue
+
+                                     else
+                                        falsePineValue
+                                    )
                         }
                         application.arguments
             in
             case application.function of
                 PineFunctionOrValue functionName ->
                     case functionName of
+                        "PineKernel.equals" ->
+                            functionEquals
+
+                        "PineKernel.negate" ->
+                            evaluatePineApplicationExpectingExactlyOneArgument
+                                { mapArg = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                                , apply = BigInt.negate >> BigInt.toString >> PineStringOrInteger >> Ok
+                                }
+                                application.arguments
+
                         "PineKernel.listHead" ->
                             functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (PineList []))
 
@@ -257,20 +284,7 @@ evaluatePineApplication context application =
                                         )
 
                         "(==)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context
-                                , mapArg1 = evaluatePineExpression context
-                                , apply =
-                                    \leftValue rightValue ->
-                                        Ok
-                                            (if leftValue == rightValue then
-                                                truePineValue
-
-                                             else
-                                                falsePineValue
-                                            )
-                                }
-                                application.arguments
+                            functionEquals
 
                         "(++)" ->
                             evaluatePineApplicationExpectingExactlyTwoArguments
@@ -460,3 +474,16 @@ tagValue tagName tagArguments =
 tagValueExpression : String -> List PineExpression -> PineExpression
 tagValueExpression tagName tagArgumentsExpressions =
     PineListExpr [ PineLiteral (PineStringOrInteger tagName), PineListExpr tagArgumentsExpressions ]
+
+
+describePineValue : PineValue -> String
+describePineValue value =
+    case value of
+        PineStringOrInteger string ->
+            "PineStringOrInteger " ++ Json.Encode.encode 0 (Json.Encode.string string)
+
+        PineList list ->
+            "[" ++ String.join ", " (List.map describePineValue list) ++ "]"
+
+        PineExpressionValue _ ->
+            "<expression>"

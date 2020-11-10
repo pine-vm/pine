@@ -1,0 +1,4 @@
+[ Maybe.andThen (\_ -> Nothing) (Just "test")
+, Maybe.andThen (\_ -> Just "beta") (Just "alpha")
+, Maybe.andThen Just (Just "alpha")
+]
