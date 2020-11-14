@@ -25,6 +25,7 @@ import Json.Encode
 import Parser
 import Pine
 import Result.Extra
+import SHA256
 import Set
 
 
@@ -391,6 +392,44 @@ always a _ =
     a
 
 """
+    , """
+module Tuple exposing
+  ( pair
+  , first, second
+  , mapFirst, mapSecond, mapBoth
+  )
+
+
+pair : a -> b -> (a, b)
+pair a b =
+  (a, b)
+
+
+first : (a, b) -> a
+first (x,_) =
+    x
+
+
+second : (a, b) -> b
+second (_,y) =
+    y
+
+
+mapFirst : (a -> x) -> (a, b) -> (x, b)
+mapFirst func (x,y) =
+    (func x, y)
+
+
+mapSecond : (b -> y) -> (a, b) -> (a, y)
+mapSecond func (x,y) =
+    (x, func y)
+
+
+mapBoth : (a -> x) -> (b -> y) -> (a, b) -> (x, y)
+mapBoth funcA funcB (x,y) =
+    ( funcA x, funcB y )
+
+"""
     , -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm
       """
 module List exposing (..)
@@ -693,6 +732,12 @@ pineExpressionFromElm elmExpression =
         Elm.Syntax.Expression.RecordExpr recordExpr ->
             recordExpr |> List.map Elm.Syntax.Node.value |> pineExpressionFromElmRecord
 
+        Elm.Syntax.Expression.TupledExpression tupleElements ->
+            tupleElements
+                |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm)
+                |> Result.Extra.combine
+                |> Result.map Pine.ListExpression
+
         _ ->
             Err
                 ("Unsupported type of expression: "
@@ -764,29 +809,85 @@ pineExpressionFromElmFunctionWithoutName function =
         Err error ->
             Err ("Failed to map expression in let function: " ++ error)
 
-        Ok letFunctionExpression ->
-            let
-                mapArgumentsToOnlyNameResults =
-                    function.arguments
-                        |> List.map
-                            (\argumentPattern ->
-                                case argumentPattern of
-                                    Elm.Syntax.Pattern.VarPattern argumentName ->
-                                        Ok argumentName
-
-                                    Elm.Syntax.Pattern.AllPattern ->
-                                        Ok "unused_from_elm_all_pattern"
-
-                                    _ ->
-                                        Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
-                            )
-            in
-            case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
+        Ok functionBodyExpression ->
+            case function.arguments |> List.map declarationsFromPattern |> Result.Extra.combine of
                 Err error ->
                     Err ("Failed to map function argument pattern: " ++ error)
 
-                Ok argumentsNames ->
-                    Ok (functionExpressionFromArgumentsNamesAndExpression argumentsNames letFunctionExpression)
+                Ok argumentsDeconstructDeclarationsBuilders ->
+                    let
+                        functionId =
+                            function.expression
+                                |> Elm.Syntax.Expression.encode
+                                |> Json.Encode.encode 0
+                                |> SHA256.fromString
+                                |> SHA256.toHex
+                                |> String.left 8
+
+                        argumentsDeconstructionDeclarations =
+                            argumentsDeconstructDeclarationsBuilders
+                                |> List.indexedMap
+                                    (\argIndex deconstruction ->
+                                        let
+                                            argumentNameBeforeDeconstruct =
+                                                String.join "_" [ "function", functionId, "argument", String.fromInt argIndex ]
+                                        in
+                                        ( argumentNameBeforeDeconstruct
+                                        , deconstruction (Pine.FunctionOrValueExpression argumentNameBeforeDeconstruct)
+                                        )
+                                    )
+
+                        letBlockExpression =
+                            pineExpressionFromLetBlockDeclarationsAndExpression
+                                (List.concatMap Tuple.second argumentsDeconstructionDeclarations)
+                                functionBodyExpression
+                    in
+                    Ok
+                        (functionExpressionFromArgumentsNamesAndExpression
+                            (argumentsDeconstructionDeclarations |> List.map Tuple.first)
+                            letBlockExpression
+                        )
+
+
+declarationsFromPattern : Elm.Syntax.Pattern.Pattern -> Result String (Pine.Expression -> List ( String, Pine.Expression ))
+declarationsFromPattern pattern =
+    case pattern of
+        Elm.Syntax.Pattern.VarPattern varName ->
+            Ok (\deconstructedExpression -> [ ( varName, deconstructedExpression ) ])
+
+        Elm.Syntax.Pattern.AllPattern ->
+            Ok (always [])
+
+        Elm.Syntax.Pattern.TuplePattern tupleElements ->
+            let
+                getTupleElementExpression tupleElementIndex tupleExpression =
+                    Pine.ApplicationExpression
+                        { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
+                        , arguments = [ listDropExpression tupleElementIndex tupleExpression ]
+                        }
+            in
+            case
+                tupleElements
+                    |> List.map Elm.Syntax.Node.value
+                    |> List.map declarationsFromPattern
+                    |> Result.Extra.combine
+            of
+                Err error ->
+                    Err ("Failed to map tuple element: " ++ error)
+
+                Ok tupleElementsDeconstructions ->
+                    Ok
+                        (\deconstructedExpression ->
+                            tupleElementsDeconstructions
+                                |> List.indexedMap
+                                    (\tupleElementIndex tupleElement ->
+                                        tupleElement (getTupleElementExpression tupleElementIndex deconstructedExpression)
+                                    )
+                                |> List.concat
+                        )
+
+        _ ->
+            Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
 
 
 functionExpressionFromArgumentsNamesAndExpression : List String -> Pine.Expression -> Pine.Expression
@@ -961,21 +1062,9 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
 
                         Ok declarationsNames ->
                             let
-                                listDropExpression listExpression numberToDrop =
-                                    if numberToDrop < 1 then
-                                        listExpression
-
-                                    else
-                                        listDropExpression
-                                            (Pine.ApplicationExpression
-                                                { function = Pine.FunctionOrValueExpression "PineKernel.listTail"
-                                                , arguments = [ listExpression ]
-                                                }
-                                            )
-                                            (numberToDrop - 1)
-
                                 argumentFromIndexExpression argumentIndex =
                                     listDropExpression
+                                        argumentIndex
                                         (Pine.ApplicationExpression
                                             { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
                                             , arguments =
@@ -986,7 +1075,6 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                                                 ]
                                             }
                                         )
-                                        argumentIndex
 
                                 declarations =
                                     declarationsNames
@@ -1011,6 +1099,21 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                         ("Unsupported type of pattern in case-of block case: "
                             ++ Json.Encode.encode 0 (Elm.Syntax.Pattern.encode (Elm.Syntax.Node.value elmPattern))
                         )
+
+
+listDropExpression : Int -> Pine.Expression -> Pine.Expression
+listDropExpression numberToDrop listExpression =
+    if numberToDrop < 1 then
+        listExpression
+
+    else
+        listDropExpression
+            (numberToDrop - 1)
+            (Pine.ApplicationExpression
+                { function = Pine.FunctionOrValueExpression "PineKernel.listTail"
+                , arguments = [ listExpression ]
+                }
+            )
 
 
 pineExpressionFromElmLambda : Elm.Syntax.Expression.Lambda -> Result String Pine.Expression

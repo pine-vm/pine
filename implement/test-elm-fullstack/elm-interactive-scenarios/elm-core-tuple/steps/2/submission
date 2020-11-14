@@ -1,0 +1,11 @@
+let
+    append string =
+        string ++ "_appendix"
+
+    toList (a, b) =
+        [ a, b ]
+in
+[ toList (Tuple.pair "alpha" "beta")
+, toList (Tuple.mapFirst (append) ("gamma", "delta"))
+, toList (Tuple.mapSecond (append) ("epsilon", "zeta"))
+]
