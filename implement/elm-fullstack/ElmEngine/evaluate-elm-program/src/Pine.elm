@@ -3,7 +3,6 @@ module Pine exposing (..)
 import BigInt
 import Json.Encode
 import Result.Extra
-import Set
 
 
 type PineExpression
@@ -32,7 +31,7 @@ type alias PineExpressionContext =
 
 addToContext : List PineValue -> PineExpressionContext -> PineExpressionContext
 addToContext names context =
-    { context | commonModel = context.commonModel ++ names }
+    { context | commonModel = names ++ context.commonModel }
 
 
 evaluatePineExpression : PineExpressionContext -> PineExpression -> Result String PineValue
@@ -134,17 +133,12 @@ lookUpNameInContext name context =
 
         nameFirstElement :: nameRemainingElements ->
             let
-                availableNamedValues =
+                availableNames =
                     context.commonModel
                         |> List.filterMap pineNamedValueFromValue
 
-                availableNames =
-                    availableNamedValues
-                        |> List.map Tuple.first
-                        |> Set.fromList
-
                 maybeMatchingValue =
-                    availableNamedValues
+                    availableNames
                         |> List.filter (Tuple.first >> (==) nameFirstElement)
                         |> List.head
                         |> Maybe.map Tuple.second
@@ -155,9 +149,9 @@ lookUpNameInContext name context =
                         ("Did not find '"
                             ++ nameFirstElement
                             ++ "'. "
-                            ++ (availableNames |> Set.size |> String.fromInt)
+                            ++ (availableNames |> List.length |> String.fromInt)
                             ++ " names available: "
-                            ++ (availableNames |> Set.toList |> String.join ", ")
+                            ++ (availableNames |> List.map Tuple.first |> String.join ", ")
                         )
 
                 Just firstNameValue ->
@@ -350,8 +344,8 @@ evaluatePineApplication context application =
                                     evaluatePineExpression
                                         (addToContext
                                             contextFromLookup
-                                            { context
-                                                | provisionalArgumentStack = arguments ++ context.provisionalArgumentStack
+                                            { commonModel = []
+                                            , provisionalArgumentStack = arguments ++ context.provisionalArgumentStack
                                             }
                                         )
                                         expression
@@ -368,7 +362,7 @@ evaluatePineApplication context application =
                             evaluatePineExpression
                                 (addToContext
                                     [ pineValueFromContextExpansionWithName ( argumentName, firstArgument ) ]
-                                    { context | provisionalArgumentStack = remainingArguments }
+                                    { commonModel = [], provisionalArgumentStack = remainingArguments }
                                 )
                                 functionExpression
 

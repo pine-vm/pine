@@ -16,6 +16,7 @@ import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Module
+import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
@@ -24,6 +25,7 @@ import Json.Encode
 import Parser
 import Pine exposing (PineExpression(..), PineValue(..))
 import Result.Extra
+import Set
 
 
 type InteractiveSubmission
@@ -221,7 +223,7 @@ pineValueAsElmValue pineValue =
 
 pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.PineExpressionContext
 pineExpressionContextForElmInteractive context =
-    case elmCoreModulesTexts |> List.map parseElmModuleTextIntoPineValue |> Result.Extra.combine of
+    case elmCoreModulesTexts |> List.map (parseElmModuleTextIntoPineValue elmCoreModulesTexts) |> Result.Extra.combine of
         Err error ->
             Err ("Failed to compile elm core module: " ++ error)
 
@@ -235,14 +237,24 @@ pineExpressionContextForElmInteractive context =
                         InitContextFromApp { modulesTexts } ->
                             modulesTexts
             in
-            case contextModulesTexts |> List.map parseElmModuleTextIntoPineValue |> Result.Extra.combine of
+            case
+                contextModulesTexts
+                    |> List.map (parseElmModuleTextIntoPineValue (elmCoreModulesTexts ++ contextModulesTexts))
+                    |> Result.Extra.combine
+            of
                 Err error ->
                     Err ("Failed to compile elm module from context: " ++ error)
 
                 Ok contextModules ->
+                    let
+                        modulesValues =
+                            (contextModules ++ elmCoreModules)
+                                |> List.map (Tuple.mapFirst (String.join "."))
+                                |> List.map Pine.pineValueFromContextExpansionWithName
+                    in
                     elmValuesToExposeToGlobal
                         |> List.foldl exposeFromElmModuleToGlobal
-                            { commonModel = contextModules ++ elmCoreModules
+                            { commonModel = modulesValues
                             , provisionalArgumentStack = []
                             }
                         |> Ok
@@ -258,51 +270,109 @@ exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
             { context | commonModel = Pine.pineValueFromContextExpansionWithName ( nameInModule, valueFromName ) :: context.commonModel }
 
 
-parseElmModuleTextIntoPineValue : String -> Result String PineValue
-parseElmModuleTextIntoPineValue moduleText =
+parseElmModuleTextIntoPineValue : List String -> String -> Result String ( Elm.Syntax.ModuleName.ModuleName, PineValue )
+parseElmModuleTextIntoPineValue allModulesTexts moduleText =
+    parseElmModuleTextIntoNamedExports allModulesTexts moduleText
+        |> Result.map (Tuple.mapSecond (List.map Pine.pineValueFromContextExpansionWithName >> PineList))
+
+
+parseElmModuleTextIntoNamedExports : List String -> String -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, PineValue ) )
+parseElmModuleTextIntoNamedExports allModulesTexts moduleText =
     case parseElmModuleText moduleText of
         Err _ ->
             Err ("Failed to parse module text: " ++ (moduleText |> String.left 100))
 
         Ok file ->
             let
+                otherModulesTexts =
+                    allModulesTexts |> Set.fromList |> Set.remove moduleText
+
                 moduleName =
-                    file
-                        |> moduleNameFromSyntaxFile
-                        |> Elm.Syntax.Node.value
-                        |> String.join "."
+                    Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)
 
-                declarationsResults =
-                    file.declarations
-                        |> List.map Elm.Syntax.Node.value
-                        |> List.filterMap
-                            (\declaration ->
-                                case declaration of
-                                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                        Just [ pineExpressionFromElmFunction functionDeclaration ]
+                valueForImportedModule : Elm.Syntax.ModuleName.ModuleName -> Result String PineValue
+                valueForImportedModule importedModuleName =
+                    otherModulesTexts
+                        |> Set.toList
+                        |> List.foldl
+                            (\otherModuleText intermediateResult ->
+                                if intermediateResult /= Nothing then
+                                    intermediateResult
 
-                                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                        Just (customTypeDeclaration.constructors |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmValueConstructor))
+                                else
+                                    case parseElmModuleTextIntoPineValue allModulesTexts otherModuleText of
+                                        Err parseOtherModuleError ->
+                                            Just (Err ("Failed to parse candidate for imported module: " ++ parseOtherModuleError))
 
-                                    _ ->
-                                        Nothing
+                                        Ok ( otherModuleName, otherModuleExports ) ->
+                                            if otherModuleName /= importedModuleName then
+                                                Nothing
+
+                                            else
+                                                Just (Ok otherModuleExports)
                             )
-                        |> List.concat
-            in
-            case declarationsResults |> Result.Extra.combine of
-                Err error ->
-                    Err ("Failed to translate declaration: " ++ error)
+                            Nothing
+                        |> Maybe.withDefault (Err ("Did not find the module with name " ++ String.join "." importedModuleName))
 
-                Ok declarations ->
+                valuesFromImportsResults : List (Result String ( String, PineValue ))
+                valuesFromImportsResults =
+                    file.imports
+                        |> List.map
+                            (\importSyntax ->
+                                let
+                                    importedModuleName =
+                                        Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).moduleName
+                                in
+                                valueForImportedModule importedModuleName
+                                    |> Result.map (\importValue -> ( String.join "." importedModuleName, importValue ))
+                            )
+            in
+            case valuesFromImportsResults |> Result.Extra.combine of
+                Err error ->
+                    Err ("Failed to translate imports: " ++ error)
+
+                Ok importsValues ->
                     let
-                        declarationsValues =
-                            declarations
+                        globalExposingValues =
+                            elmValuesToExposeToGlobal
                                 |> List.map
-                                    (\( declaredName, namedExpression ) ->
-                                        Pine.pineValueFromContextExpansionWithName ( declaredName, PineExpressionValue namedExpression )
+                                    (\( sourceModuleName, exposedNameInModule ) ->
+                                        ( exposedNameInModule
+                                        , PineExpressionValue
+                                            (PineFunctionOrValue
+                                                (String.join "." (sourceModuleName ++ [ exposedNameInModule ]))
+                                            )
+                                        )
                                     )
+
+                        declarationsResults =
+                            file.declarations
+                                |> List.map Elm.Syntax.Node.value
+                                |> List.filterMap
+                                    (\declaration ->
+                                        case declaration of
+                                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                                Just [ pineExpressionFromElmFunction functionDeclaration ]
+
+                                            Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                                                Just
+                                                    (customTypeDeclaration.constructors |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmValueConstructor))
+
+                                            _ ->
+                                                Nothing
+                                    )
+                                |> List.concat
                     in
-                    Ok (Pine.pineValueFromContextExpansionWithName ( moduleName, PineList declarationsValues ))
+                    case declarationsResults |> Result.Extra.combine of
+                        Err error ->
+                            Err ("Failed to translate declaration: " ++ error)
+
+                        Ok declarations ->
+                            let
+                                declarationsValues =
+                                    declarations |> List.map (Tuple.mapSecond PineExpressionValue)
+                            in
+                            Ok ( moduleName, declarationsValues ++ importsValues ++ globalExposingValues )
 
 
 elmCoreModulesTexts : List String
