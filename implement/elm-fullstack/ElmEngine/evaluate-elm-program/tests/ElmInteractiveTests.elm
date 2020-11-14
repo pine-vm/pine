@@ -299,6 +299,8 @@ function_with_three_parameters param0 param1 param2 =
 """, """
 module ModuleB exposing (partially_applied_b)
 
+import ModuleA exposing (..)
+
 
 partially_applied_b =
     ModuleA.partially_applied_a named_literal
@@ -306,9 +308,6 @@ partially_applied_b =
 
 named_literal =
     "b"
-
-function_with_three_parameters param0 param1 param2 =
-    param0 ++ " " ++ param1 ++ " " ++ param2
 
 """ ] }
                     , previousSubmissions = []
