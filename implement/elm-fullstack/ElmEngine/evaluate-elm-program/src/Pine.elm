@@ -5,66 +5,66 @@ import Json.Encode
 import Result.Extra
 
 
-type PineExpression
-    = PineLiteral PineValue
-    | PineListExpr (List PineExpression)
-    | PineApplication { function : PineExpression, arguments : List PineExpression }
-    | PineFunctionOrValue String
-    | PineContextExpansionWithName ( String, PineValue ) PineExpression
-    | PineIfBlock PineExpression PineExpression PineExpression
-    | PineFunction String PineExpression
+type Expression
+    = LiteralExpression Value
+    | ListExpression (List Expression)
+    | ApplicationExpression { function : Expression, arguments : List Expression }
+    | FunctionOrValueExpression String
+    | ContextExpansionWithNameExpression ( String, Value ) Expression
+    | IfBlockExpression Expression Expression Expression
+    | FunctionExpression String Expression
 
 
-type PineValue
-    = PineStringOrInteger String
-    | PineList (List PineValue)
-      -- TODO: Replace PineExpressionValue with convention for mapping value to expression.
-    | PineExpressionValue PineExpression
+type Value
+    = StringOrIntegerValue String
+    | ListValue (List Value)
+      -- TODO: Replace ExpressionValue with convention for mapping value to expression.
+    | ExpressionValue Expression
 
 
-type alias PineExpressionContext =
-    -- TODO: Test consolidate into simple PineValue
-    { commonModel : List PineValue
-    , provisionalArgumentStack : List PineValue
+type alias ExpressionContext =
+    -- TODO: Test consolidate into simple Value
+    { commonModel : List Value
+    , provisionalArgumentStack : List Value
     }
 
 
-addToContext : List PineValue -> PineExpressionContext -> PineExpressionContext
+addToContext : List Value -> ExpressionContext -> ExpressionContext
 addToContext names context =
     { context | commonModel = names ++ context.commonModel }
 
 
-evaluatePineExpression : PineExpressionContext -> PineExpression -> Result String PineValue
-evaluatePineExpression context expression =
+evaluateExpression : ExpressionContext -> Expression -> Result String Value
+evaluateExpression context expression =
     case expression of
-        PineLiteral pineValue ->
-            Ok pineValue
+        LiteralExpression value ->
+            Ok value
 
-        PineListExpr listElements ->
+        ListExpression listElements ->
             listElements
-                |> List.map (evaluatePineExpression context)
+                |> List.map (evaluateExpression context)
                 |> Result.Extra.combine
-                |> Result.map PineList
+                |> Result.map ListValue
                 |> Result.mapError (\error -> "Failed to evaluate list element: " ++ error)
 
-        PineApplication application ->
-            case evaluatePineApplication context application of
+        ApplicationExpression application ->
+            case evaluateFunctionApplication context application of
                 Err error ->
                     Err ("Failed application: " ++ error)
 
-                Ok (PineExpressionValue expressionAfterApplication) ->
-                    evaluatePineExpression context expressionAfterApplication
+                Ok (ExpressionValue expressionAfterApplication) ->
+                    evaluateExpression context expressionAfterApplication
 
                 otherResult ->
                     otherResult
 
-        PineFunctionOrValue name ->
+        FunctionOrValueExpression name ->
             case name of
                 "True" ->
-                    Ok truePineValue
+                    Ok trueValue
 
                 "False" ->
-                    Ok falsePineValue
+                    Ok falseValue
 
                 _ ->
                     let
@@ -74,58 +74,58 @@ evaluatePineExpression context expression =
                                     (\error -> "Failed to look up name '" ++ name ++ "': " ++ error)
                     in
                     case beforeCheckForExpression of
-                        Ok ( PineExpressionValue expressionFromLookup, contextFromLookup ) ->
-                            evaluatePineExpression (addToContext contextFromLookup context) expressionFromLookup
+                        Ok ( ExpressionValue expressionFromLookup, contextFromLookup ) ->
+                            evaluateExpression (addToContext contextFromLookup context) expressionFromLookup
 
                         _ ->
                             Result.map Tuple.first beforeCheckForExpression
 
-        PineIfBlock condition expressionIfTrue expressionIfFalse ->
-            case evaluatePineExpression context condition of
+        IfBlockExpression condition expressionIfTrue expressionIfFalse ->
+            case evaluateExpression context condition of
                 Err error ->
                     Err ("Failed to evaluate condition: " ++ error)
 
                 Ok conditionValue ->
-                    evaluatePineExpression context
-                        (if conditionValue == truePineValue then
+                    evaluateExpression context
+                        (if conditionValue == trueValue then
                             expressionIfTrue
 
                          else
                             expressionIfFalse
                         )
 
-        PineContextExpansionWithName expansion expressionInExpandedContext ->
-            evaluatePineExpression
-                { context | commonModel = pineValueFromContextExpansionWithName expansion :: context.commonModel }
+        ContextExpansionWithNameExpression expansion expressionInExpandedContext ->
+            evaluateExpression
+                { context | commonModel = valueFromContextExpansionWithName expansion :: context.commonModel }
                 expressionInExpandedContext
 
-        PineFunction argumentName expressionInExpandedContext ->
+        FunctionExpression argumentName expressionInExpandedContext ->
             case context.provisionalArgumentStack of
                 nextArgumentValue :: remainingArgumentValues ->
-                    evaluatePineExpression
+                    evaluateExpression
                         { context | provisionalArgumentStack = remainingArgumentValues }
-                        (PineContextExpansionWithName ( argumentName, nextArgumentValue ) expressionInExpandedContext)
+                        (ContextExpansionWithNameExpression ( argumentName, nextArgumentValue ) expressionInExpandedContext)
 
                 [] ->
-                    Ok (PineExpressionValue expression)
+                    Ok (ExpressionValue expression)
 
 
-pineValueFromContextExpansionWithName : ( String, PineValue ) -> PineValue
-pineValueFromContextExpansionWithName ( declName, declValue ) =
-    PineList [ PineStringOrInteger declName, declValue ]
+valueFromContextExpansionWithName : ( String, Value ) -> Value
+valueFromContextExpansionWithName ( declName, declValue ) =
+    ListValue [ StringOrIntegerValue declName, declValue ]
 
 
-pineNamedValueFromValue : PineValue -> Maybe ( String, PineValue )
-pineNamedValueFromValue value =
+namedValueFromValue : Value -> Maybe ( String, Value )
+namedValueFromValue value =
     case value of
-        PineList [ PineStringOrInteger elementLabel, elementValue ] ->
+        ListValue [ StringOrIntegerValue elementLabel, elementValue ] ->
             Just ( elementLabel, elementValue )
 
         _ ->
             Nothing
 
 
-lookUpNameInContext : String -> PineExpressionContext -> Result String ( PineValue, List PineValue )
+lookUpNameInContext : String -> ExpressionContext -> Result String ( Value, List Value )
 lookUpNameInContext name context =
     case name |> String.split "." of
         [] ->
@@ -134,8 +134,7 @@ lookUpNameInContext name context =
         nameFirstElement :: nameRemainingElements ->
             let
                 availableNames =
-                    context.commonModel
-                        |> List.filterMap pineNamedValueFromValue
+                    context.commonModel |> List.filterMap namedValueFromValue
 
                 maybeMatchingValue =
                     availableNames
@@ -160,7 +159,7 @@ lookUpNameInContext name context =
 
                     else
                         case firstNameValue of
-                            PineList firstNameList ->
+                            ListValue firstNameList ->
                                 lookUpNameInContext (String.join "." nameRemainingElements)
                                     { commonModel = firstNameList, provisionalArgumentStack = [] }
 
@@ -168,98 +167,98 @@ lookUpNameInContext name context =
                                 Err ("'" ++ nameFirstElement ++ "' has unexpected type: Not a list.")
 
 
-evaluatePineApplication : PineExpressionContext -> { function : PineExpression, arguments : List PineExpression } -> Result String PineValue
-evaluatePineApplication context application =
-    case application.arguments |> List.map (evaluatePineExpression context) |> Result.Extra.combine of
+evaluateFunctionApplication : ExpressionContext -> { function : Expression, arguments : List Expression } -> Result String Value
+evaluateFunctionApplication context application =
+    case application.arguments |> List.map (evaluateExpression context) |> Result.Extra.combine of
         Err evalArgError ->
             Err ("Failed to evaluate argument: " ++ evalArgError)
 
         Ok arguments ->
             let
                 functionOnTwoBigIntWithBooleanResult functionOnBigInt =
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                    evaluateFunctionApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = evaluateExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluateExpression context >> Result.andThen parseAsBigInt
                         , apply =
                             \leftInt rightInt ->
                                 Ok
                                     (if functionOnBigInt leftInt rightInt then
-                                        truePineValue
+                                        trueValue
 
                                      else
-                                        falsePineValue
+                                        falseValue
                                     )
                         }
                         application.arguments
 
                 functionOnTwoBigIntWithBigIntResult functionOnBigInt =
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluatePineExpression context >> Result.andThen parseAsBigInt
+                    evaluateFunctionApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = evaluateExpression context >> Result.andThen parseAsBigInt
+                        , mapArg1 = evaluateExpression context >> Result.andThen parseAsBigInt
                         , apply =
                             \leftInt rightInt ->
-                                Ok (PineStringOrInteger (functionOnBigInt leftInt rightInt |> BigInt.toString))
+                                Ok (StringOrIntegerValue (functionOnBigInt leftInt rightInt |> BigInt.toString))
                         }
                         application.arguments
 
                 functionExpectingOneArgumentOfTypeList functionOnList =
-                    evaluatePineApplicationExpectingExactlyOneArgument
-                        { mapArg = evaluatePineExpression context
+                    evaluateFunctionApplicationExpectingExactlyOneArgument
+                        { mapArg = evaluateExpression context
                         , apply =
                             \argument ->
                                 case argument of
-                                    PineList list ->
+                                    ListValue list ->
                                         list |> functionOnList |> Ok
 
                                     _ ->
-                                        Err ("Argument is not a list ('" ++ describePineValue argument ++ ")")
+                                        Err ("Argument is not a list ('" ++ describeValue argument ++ ")")
                         }
                         application.arguments
 
                 functionEquals =
-                    evaluatePineApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluatePineExpression context
-                        , mapArg1 = evaluatePineExpression context
+                    evaluateFunctionApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = evaluateExpression context
+                        , mapArg1 = evaluateExpression context
                         , apply =
                             \leftValue rightValue ->
                                 Ok
                                     (if leftValue == rightValue then
-                                        truePineValue
+                                        trueValue
 
                                      else
-                                        falsePineValue
+                                        falseValue
                                     )
                         }
                         application.arguments
             in
             case application.function of
-                PineFunctionOrValue functionName ->
+                FunctionOrValueExpression functionName ->
                     case functionName of
                         "PineKernel.equals" ->
                             functionEquals
 
                         "PineKernel.negate" ->
-                            evaluatePineApplicationExpectingExactlyOneArgument
-                                { mapArg = evaluatePineExpression context >> Result.andThen parseAsBigInt
-                                , apply = BigInt.negate >> BigInt.toString >> PineStringOrInteger >> Ok
+                            evaluateFunctionApplicationExpectingExactlyOneArgument
+                                { mapArg = evaluateExpression context >> Result.andThen parseAsBigInt
+                                , apply = BigInt.negate >> BigInt.toString >> StringOrIntegerValue >> Ok
                                 }
                                 application.arguments
 
                         "PineKernel.listHead" ->
-                            functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (PineList []))
+                            functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []))
 
                         "PineKernel.listTail" ->
-                            functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> PineList)
+                            functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> ListValue)
 
                         "PineKernel.listCons" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context
-                                , mapArg1 = evaluatePineExpression context
+                            evaluateFunctionApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluateExpression context
+                                , mapArg1 = evaluateExpression context
                                 , apply =
                                     \leftValue rightValue ->
                                         case rightValue of
-                                            PineList rightList ->
-                                                Ok (PineList (leftValue :: rightList))
+                                            ListValue rightList ->
+                                                Ok (ListValue (leftValue :: rightList))
 
                                             _ ->
                                                 Err "Right operand for listCons is not a list."
@@ -269,7 +268,7 @@ evaluatePineApplication context application =
                         "String.fromInt" ->
                             case application.arguments of
                                 [ argument ] ->
-                                    evaluatePineExpression context argument
+                                    evaluateExpression context argument
 
                                 _ ->
                                     Err
@@ -281,17 +280,17 @@ evaluatePineApplication context application =
                             functionEquals
 
                         "(++)" ->
-                            evaluatePineApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluatePineExpression context
-                                , mapArg1 = evaluatePineExpression context
+                            evaluateFunctionApplicationExpectingExactlyTwoArguments
+                                { mapArg0 = evaluateExpression context
+                                , mapArg1 = evaluateExpression context
                                 , apply =
                                     \leftValue rightValue ->
                                         case ( leftValue, rightValue ) of
-                                            ( PineStringOrInteger leftLiteral, PineStringOrInteger rightLiteral ) ->
-                                                Ok (PineStringOrInteger (leftLiteral ++ rightLiteral))
+                                            ( StringOrIntegerValue leftLiteral, StringOrIntegerValue rightLiteral ) ->
+                                                Ok (StringOrIntegerValue (leftLiteral ++ rightLiteral))
 
-                                            ( PineList leftList, PineList rightList ) ->
-                                                Ok (PineList (leftList ++ rightList))
+                                            ( ListValue leftList, ListValue rightList ) ->
+                                                Ok (ListValue (leftList ++ rightList))
 
                                             _ ->
                                                 Err "Unexpected combination of operands."
@@ -323,15 +322,15 @@ evaluatePineApplication context application =
                             functionOnTwoBigIntWithBooleanResult BigInt.gte
 
                         "not" ->
-                            evaluatePineApplicationExpectingExactlyOneArgument
-                                { mapArg = evaluatePineExpression context
+                            evaluateFunctionApplicationExpectingExactlyOneArgument
+                                { mapArg = evaluateExpression context
                                 , apply =
                                     \argument ->
-                                        if argument == truePineValue then
-                                            Ok falsePineValue
+                                        if argument == trueValue then
+                                            Ok falseValue
 
                                         else
-                                            Ok truePineValue
+                                            Ok trueValue
                                 }
                                 application.arguments
 
@@ -340,8 +339,8 @@ evaluatePineApplication context application =
                                 Err lookupError ->
                                     Err ("Failed to look up name '" ++ functionName ++ "': " ++ lookupError)
 
-                                Ok ( PineExpressionValue expression, contextFromLookup ) ->
-                                    evaluatePineExpression
+                                Ok ( ExpressionValue expression, contextFromLookup ) ->
+                                    evaluateExpression
                                         (addToContext
                                             contextFromLookup
                                             { commonModel = []
@@ -353,15 +352,15 @@ evaluatePineApplication context application =
                                 _ ->
                                     Err "Unexpected value for function in application: Not an expression."
 
-                PineFunction argumentName functionExpression ->
+                FunctionExpression argumentName functionExpression ->
                     case arguments of
                         [] ->
-                            Ok (PineExpressionValue application.function)
+                            Ok (ExpressionValue application.function)
 
                         firstArgument :: remainingArguments ->
-                            evaluatePineExpression
+                            evaluateExpression
                                 (addToContext
-                                    [ pineValueFromContextExpansionWithName ( argumentName, firstArgument ) ]
+                                    [ valueFromContextExpansionWithName ( argumentName, firstArgument ) ]
                                     { commonModel = [], provisionalArgumentStack = remainingArguments }
                                 )
                                 functionExpression
@@ -370,17 +369,17 @@ evaluatePineApplication context application =
                     Err "Application not implemented yet."
 
 
-parseAsBigInt : PineValue -> Result String BigInt.BigInt
+parseAsBigInt : Value -> Result String BigInt.BigInt
 parseAsBigInt value =
     case value of
-        PineStringOrInteger stringOrInt ->
+        StringOrIntegerValue stringOrInt ->
             BigInt.fromIntString stringOrInt
                 |> Result.fromMaybe ("Failed to parse as integer: " ++ stringOrInt)
 
-        PineList _ ->
+        ListValue _ ->
             Err "Unexpected type of value: List"
 
-        PineExpressionValue _ ->
+        ExpressionValue _ ->
             Err "Unexpected type of value: ExpressionValue"
 
 
@@ -398,14 +397,14 @@ intFromBigInt bigInt =
                 Ok int
 
 
-evaluatePineApplicationExpectingExactlyTwoArguments :
-    { mapArg0 : PineExpression -> Result String arg0
-    , mapArg1 : PineExpression -> Result String arg1
-    , apply : arg0 -> arg1 -> Result String PineValue
+evaluateFunctionApplicationExpectingExactlyTwoArguments :
+    { mapArg0 : Expression -> Result String arg0
+    , mapArg1 : Expression -> Result String arg1
+    , apply : arg0 -> arg1 -> Result String Value
     }
-    -> List PineExpression
-    -> Result String PineValue
-evaluatePineApplicationExpectingExactlyTwoArguments configuration arguments =
+    -> List Expression
+    -> Result String Value
+evaluateFunctionApplicationExpectingExactlyTwoArguments configuration arguments =
     case arguments of
         [ arg0, arg1 ] ->
             case configuration.mapArg0 arg0 of
@@ -427,13 +426,13 @@ evaluatePineApplicationExpectingExactlyTwoArguments configuration arguments =
                 )
 
 
-evaluatePineApplicationExpectingExactlyOneArgument :
-    { mapArg : PineExpression -> Result String arg
-    , apply : arg -> Result String PineValue
+evaluateFunctionApplicationExpectingExactlyOneArgument :
+    { mapArg : Expression -> Result String arg
+    , apply : arg -> Result String Value
     }
-    -> List PineExpression
-    -> Result String PineValue
-evaluatePineApplicationExpectingExactlyOneArgument configuration arguments =
+    -> List Expression
+    -> Result String Value
+evaluateFunctionApplicationExpectingExactlyOneArgument configuration arguments =
     case arguments of
         [ arg ] ->
             case configuration.mapArg arg of
@@ -450,34 +449,34 @@ evaluatePineApplicationExpectingExactlyOneArgument configuration arguments =
                 )
 
 
-truePineValue : PineValue
-truePineValue =
+trueValue : Value
+trueValue =
     tagValue "True" []
 
 
-falsePineValue : PineValue
-falsePineValue =
+falseValue : Value
+falseValue =
     tagValue "False" []
 
 
-tagValue : String -> List PineValue -> PineValue
+tagValue : String -> List Value -> Value
 tagValue tagName tagArguments =
-    PineList [ PineStringOrInteger tagName, PineList tagArguments ]
+    ListValue [ StringOrIntegerValue tagName, ListValue tagArguments ]
 
 
-tagValueExpression : String -> List PineExpression -> PineExpression
+tagValueExpression : String -> List Expression -> Expression
 tagValueExpression tagName tagArgumentsExpressions =
-    PineListExpr [ PineLiteral (PineStringOrInteger tagName), PineListExpr tagArgumentsExpressions ]
+    ListExpression [ LiteralExpression (StringOrIntegerValue tagName), ListExpression tagArgumentsExpressions ]
 
 
-describePineValue : PineValue -> String
-describePineValue value =
+describeValue : Value -> String
+describeValue value =
     case value of
-        PineStringOrInteger string ->
-            "PineStringOrInteger " ++ Json.Encode.encode 0 (Json.Encode.string string)
+        StringOrIntegerValue string ->
+            "StringOrIntegerValue " ++ Json.Encode.encode 0 (Json.Encode.string string)
 
-        PineList list ->
-            "[" ++ String.join ", " (List.map describePineValue list) ++ "]"
+        ListValue list ->
+            "[" ++ String.join ", " (List.map describeValue list) ++ "]"
 
-        PineExpressionValue _ ->
+        ExpressionValue _ ->
             "<expression>"
