@@ -855,6 +855,33 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
 
                         Ok declarationsNames ->
                             let
+                                listDropExpression listExpression numberToDrop =
+                                    if numberToDrop < 1 then
+                                        listExpression
+
+                                    else
+                                        listDropExpression
+                                            (PineApplication
+                                                { function = PineFunctionOrValue "PineKernel.listTail"
+                                                , arguments = [ listExpression ]
+                                                }
+                                            )
+                                            (numberToDrop - 1)
+
+                                argumentFromIndexExpression argumentIndex =
+                                    listDropExpression
+                                        (PineApplication
+                                            { function = PineFunctionOrValue "PineKernel.listHead"
+                                            , arguments =
+                                                [ PineApplication
+                                                    { function = PineFunctionOrValue "PineKernel.listTail"
+                                                    , arguments = [ caseBlockValueExpression ]
+                                                    }
+                                                ]
+                                            }
+                                        )
+                                        argumentIndex
+
                                 declarations =
                                     declarationsNames
                                         |> List.indexedMap
@@ -862,23 +889,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                                                 ( declarationName
                                                 , PineApplication
                                                     { function = PineFunctionOrValue "PineKernel.listHead"
-                                                    , arguments =
-                                                        [ PineApplication
-                                                            { function = PineFunctionOrValue "List.drop"
-                                                            , arguments =
-                                                                [ PineLiteral (PineStringOrInteger (String.fromInt argumentIndex))
-                                                                , PineApplication
-                                                                    { function = PineFunctionOrValue "PineKernel.listHead"
-                                                                    , arguments =
-                                                                        [ PineApplication
-                                                                            { function = PineFunctionOrValue "PineKernel.listTail"
-                                                                            , arguments = [ caseBlockValueExpression ]
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
+                                                    , arguments = [ argumentFromIndexExpression argumentIndex ]
                                                     }
                                                 )
                                             )
