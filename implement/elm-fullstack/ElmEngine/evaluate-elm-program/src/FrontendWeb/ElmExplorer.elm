@@ -79,22 +79,33 @@ view state =
                 |> Element.column []
 
         evalResultElement =
-            case evalResult of
-                Err error ->
-                    Element.text ("Error: " ++ error)
+            if String.isEmpty (String.trim state.expression) then
+                Element.none
 
-                Ok evalSuccess ->
-                    case evalSuccess of
-                        ElmInteractive.SubmissionResponseNoValue ->
-                            Element.text "Got no value in response for this submission."
+            else
+                case evalResult of
+                    Err error ->
+                        Element.text ("Error: " ++ error)
 
-                        ElmInteractive.SubmissionResponseValue responseValue ->
-                            Element.text (responseValue.value |> ElmInteractive.elmValueAsExpression)
+                    Ok evalSuccess ->
+                        case evalSuccess of
+                            ElmInteractive.SubmissionResponseNoValue ->
+                                Element.text "Got no value in response for this submission."
+
+                            ElmInteractive.SubmissionResponseValue responseValue ->
+                                (responseValue.value |> ElmInteractive.elmValueAsExpression)
+                                    |> Html.text
+                                    |> List.singleton
+                                    |> Html.div [ HA.style "white-space" "pre-wrap" ]
+                                    |> Element.html
     in
     [ Element.text "Expression to evaluate"
     , indentOneLevel inputExpressionElement
     , Element.text "Evaluation result"
-    , indentOneLevel (Element.paragraph [ Element.htmlAttribute attributeMonospaceFont ] [ evalResultElement ])
+    , indentOneLevel
+        (Element.paragraph [ Element.htmlAttribute attributeMonospaceFont ]
+            [ evalResultElement ]
+        )
     ]
         |> Element.column
             [ Element.spacing defaultFontSize
