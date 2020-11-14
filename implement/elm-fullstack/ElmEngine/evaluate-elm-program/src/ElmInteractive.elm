@@ -399,9 +399,45 @@ module List exposing (..)
 import Maybe exposing (Maybe(..))
 
 
+singleton : a -> List a
+singleton value =
+    [value]
+
+
+repeat : Int -> a -> List a
+repeat n value =
+    repeatHelp [] n value
+
+
+repeatHelp : List a -> Int -> a -> List a
+repeatHelp result n value =
+    if n <= 0 then
+        result
+    else
+        repeatHelp (cons value result) (n - 1) value
+
+
+range : Int -> Int -> List Int
+range lo hi =
+    rangeHelp lo hi []
+
+
+rangeHelp : Int -> Int -> List Int -> List Int
+rangeHelp lo hi list =
+    if lo <= hi then
+        rangeHelp lo (hi - 1) (cons hi list)
+    else
+        list
+
+
 cons : a -> List a -> List a
 cons element list =
     PineKernel.listCons element list
+
+
+map : (a -> b) -> List a -> List b
+map f xs =
+    foldr (\\x acc -> cons (f x) acc) [] xs
 
 
 foldl : (a -> b -> b) -> b -> List a -> b
