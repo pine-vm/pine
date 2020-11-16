@@ -468,111 +468,64 @@ namespace elm_fullstack
                 });
             });
 
-            app.Command("devtools", devtoolsCmd =>
+            app.Command("enter-interactive", enterInteractiveCmd =>
             {
-                devtoolsCmd.Description = "Collection of development tools, including the Elm Interactive environment.";
-                devtoolsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                enterInteractiveCmd.Description = "Enter an environment supporting interactive exploration and composition of Elm programs.";
 
-                devtoolsCmd.Command("eval-expression", evalExpressionCmd =>
+                var contextAppOption =
+                    enterInteractiveCmd
+                    .Option(
+                        template: "--context-app",
+                        description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
+                        optionType: CommandOptionType.SingleValue);
+
+                enterInteractiveCmd.OnExecute(() =>
                 {
-                    evalExpressionCmd.Description = "Evaluate an expression of Elm syntax.";
+                    ReadLine.HistoryEnabled = true;
 
-                    var expressionArgument =
-                        evalExpressionCmd
-                        .Argument("elm-expression", "The text of the expression to evaluate")
-                        .IsRequired(allowEmptyStrings: false);
+                    Console.WriteLine(
+                        "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
 
-                    evalExpressionCmd.OnExecute(() =>
+                    Composition.TreeComponent contextAppCodeTree = null;
+
+                    var contextAppPath = contextAppOption.Value();
+
+                    if (contextAppPath != null)
                     {
-                        var expression = expressionArgument.Value;
+                        var loadContextAppResult = LoadFromPath.LoadTreeFromPath(contextAppPath);
 
-                        Console.WriteLine("Got this expression:\n" + expression + "\nStarting evaluation...");
-
-                        try
+                        if (loadContextAppResult?.Ok == null)
                         {
+                            throw new Exception("Failed to load from path '" + contextAppPath + "': " + loadContextAppResult?.Err);
+                        }
+
+                        contextAppCodeTree = loadContextAppResult.Ok.tree;
+
+                        if (!(0 < contextAppCodeTree?.EnumerateBlobsTransitive().Take(1).Count()))
+                            throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
+                    }
+
+                    using (var interactiveSession = new InteractiveSession(appCodeTree: contextAppCodeTree))
+                    {
+                        while (true)
+                        {
+                            var submission = ReadLine.Read("> ");
+
+                            if (!(0 < submission?.Trim()?.Length))
+                                continue;
+
                             var evalResult =
-                                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValue(
-                                    appCodeTree: null, submission: expression);
+                                interactiveSession.SubmitAndGetResultingValue(submission);
 
                             if (evalResult.Ok == null)
+                            {
                                 Console.WriteLine("Failed to evaluate: " + evalResult.Err);
-                            else
-                                Console.WriteLine("Evaluation result:\n" + evalResult.Ok.valueAsElmExpressionText);
-                        }
-                        catch (Exception evalException)
-                        {
-                            Console.WriteLine("Evaluation failed with exception:\n" + evalException.ToString());
-                        }
-                    });
-                });
-
-                devtoolsCmd.Command("enter-interactive", enterInteractiveCmd =>
-                {
-                    enterInteractiveCmd.Description = "Enter an environment supporting interactive exploration and composition of Elm programs.";
-
-                    var contextAppOption =
-                        enterInteractiveCmd
-                        .Option(
-                            template: "--context-app",
-                            description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
-                            optionType: CommandOptionType.SingleValue);
-
-                    enterInteractiveCmd.OnExecute(() =>
-                    {
-                        ReadLine.HistoryEnabled = true;
-
-                        Console.WriteLine(
-                            "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
-
-                        Composition.TreeComponent contextAppCodeTree = null;
-
-                        var contextAppPath = contextAppOption.Value();
-
-                        if (contextAppPath != null)
-                        {
-                            var loadContextAppResult = LoadFromPath.LoadTreeFromPath(contextAppPath);
-
-                            if (loadContextAppResult?.Ok == null)
-                            {
-                                throw new Exception("Failed to load from path '" + contextAppPath + "': " + loadContextAppResult?.Err);
+                                continue;
                             }
 
-                            contextAppCodeTree = loadContextAppResult.Ok.tree;
-
-                            if (!(0 < contextAppCodeTree?.EnumerateBlobsTransitive().Take(1).Count()))
-                                throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
+                            Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
                         }
-
-                        using (var interactiveSession = new InteractiveSession(appCodeTree: contextAppCodeTree))
-                        {
-                            while (true)
-                            {
-                                var submission = ReadLine.Read("> ");
-
-                                if (!(0 < submission?.Trim()?.Length))
-                                    continue;
-
-                                var evalResult =
-                                    interactiveSession.SubmitAndGetResultingValue(submission);
-
-                                if (evalResult.Ok == null)
-                                {
-                                    Console.WriteLine("Failed to evaluate: " + evalResult.Err);
-                                    continue;
-                                }
-
-                                Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
-                            }
-                        }
-                    });
-                });
-
-                devtoolsCmd.OnExecute(() =>
-                {
-                    Console.WriteLine("Please specify a subcommand.");
-                    devtoolsCmd.ShowHelp();
-
-                    return 1;
+                    }
                 });
             });
 
