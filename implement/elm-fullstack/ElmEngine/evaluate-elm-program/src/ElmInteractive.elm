@@ -92,7 +92,7 @@ submissionInInteractive context previousSubmissions submission =
                                 Ok expressionContext ->
                                     case Pine.evaluateExpression expressionContext pineExpression of
                                         Err error ->
-                                            Err ("Failed to evaluate Pine expression: " ++ error)
+                                            Err ("Failed to evaluate expression:\n" ++ displayStringFromPineError error)
 
                                         Ok pineValue ->
                                             case pineValueAsElmValue pineValue of
@@ -101,6 +101,16 @@ submissionInInteractive context previousSubmissions submission =
 
                                                 Ok valueAsElmValue ->
                                                     Ok (SubmissionResponseValue { value = valueAsElmValue })
+
+
+displayStringFromPineError : Pine.PathDescription String -> String
+displayStringFromPineError error =
+    case error of
+        Pine.DescribePathEnd end ->
+            end
+
+        Pine.DescribePathNode nodeDescription node ->
+            nodeDescription ++ "\n" ++ prependAllLines "  " (displayStringFromPineError node)
 
 
 expandContextWithListOfInteractiveSubmissions : List String -> Pine.ExpressionContext -> Result String Pine.ExpressionContext
@@ -221,6 +231,9 @@ pineValueAsElmValue pineValue =
         Pine.ExpressionValue _ ->
             Err "ExpressionValue"
 
+        Pine.ClosureValue _ _ _ ->
+            Err "ClosureValue"
+
 
 pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.ExpressionContext
 pineExpressionContextForElmInteractive context =
@@ -254,10 +267,7 @@ pineExpressionContextForElmInteractive context =
                                 |> List.map Pine.valueFromContextExpansionWithName
                     in
                     elmValuesToExposeToGlobal
-                        |> List.foldl exposeFromElmModuleToGlobal
-                            { commonModel = modulesValues
-                            , provisionalArgumentStack = []
-                            }
+                        |> List.foldl exposeFromElmModuleToGlobal { commonModel = modulesValues }
                         |> Ok
 
 
@@ -520,8 +530,8 @@ any isOkay list =
         [] ->
             False
 
-        next :: xs ->
-            if isOkay next then
+        x :: xs ->
+            if isOkay x then
                 True
 
             else
@@ -810,7 +820,15 @@ pineExpressionFromElmFunctionWithoutName function =
             Err ("Failed to map expression in let function: " ++ error)
 
         Ok functionBodyExpression ->
-            case function.arguments |> List.map declarationsFromPattern |> Result.Extra.combine of
+            case
+                function.arguments
+                    |> List.map
+                        (\pattern ->
+                            declarationsFromPattern pattern
+                                |> Result.map (\deconstruct -> ( deconstruct, inspectionSymbolFromPattern pattern ))
+                        )
+                    |> Result.Extra.combine
+            of
                 Err error ->
                     Err ("Failed to map function argument pattern: " ++ error)
 
@@ -827,10 +845,10 @@ pineExpressionFromElmFunctionWithoutName function =
                         argumentsDeconstructionDeclarations =
                             argumentsDeconstructDeclarationsBuilders
                                 |> List.indexedMap
-                                    (\argIndex deconstruction ->
+                                    (\argIndex ( deconstruction, inspectionSymbol ) ->
                                         let
                                             argumentNameBeforeDeconstruct =
-                                                String.join "_" [ "function", functionId, "argument", String.fromInt argIndex ]
+                                                String.join "_" [ "function", functionId, "argument", String.fromInt argIndex, inspectionSymbol ]
                                         in
                                         ( argumentNameBeforeDeconstruct
                                         , deconstruction (Pine.FunctionOrValueExpression argumentNameBeforeDeconstruct)
@@ -847,6 +865,19 @@ pineExpressionFromElmFunctionWithoutName function =
                             (argumentsDeconstructionDeclarations |> List.map Tuple.first)
                             letBlockExpression
                         )
+
+
+inspectionSymbolFromPattern : Elm.Syntax.Pattern.Pattern -> String
+inspectionSymbolFromPattern pattern =
+    case pattern of
+        Elm.Syntax.Pattern.AllPattern ->
+            "ignored"
+
+        Elm.Syntax.Pattern.VarPattern name ->
+            name
+
+        _ ->
+            "other_pattern"
 
 
 declarationsFromPattern : Elm.Syntax.Pattern.Pattern -> Result String (Pine.Expression -> List ( String, Pine.Expression ))
@@ -1336,3 +1367,11 @@ parseElmModuleText =
 stringStartsWithUpper : String -> Bool
 stringStartsWithUpper =
     String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False
+
+
+prependAllLines : String -> String -> String
+prependAllLines prefix text =
+    text
+        |> String.lines
+        |> List.map ((++) prefix)
+        |> String.join "\n"

@@ -1,0 +1,5 @@
+let
+    function_with_two_parameters param0 param1 =
+        "literal from function, " ++ param0 ++ ", " ++ param1
+in
+function_with_two_parameters "argument 0" "argument 1"

@@ -1,0 +1,9 @@
+let
+    partially_applied_a =
+        function_with_three_parameters "argument 0"  "argument 1"
+
+
+    function_with_three_parameters param0 param1 param2 =
+        "literal from function, " ++ param0 ++ ", " ++ param1 ++ ", " ++ param2
+in
+partially_applied_a "argument 2"

@@ -20,13 +20,18 @@ type Value
     | ListValue (List Value)
       -- TODO: Replace ExpressionValue with convention for mapping value to expression.
     | ExpressionValue Expression
+    | ClosureValue ExpressionContext String Expression
 
 
 type alias ExpressionContext =
     -- TODO: Test consolidate into simple Value
     { commonModel : List Value
-    , provisionalArgumentStack : List Value
     }
+
+
+type PathDescription a
+    = DescribePathNode a (PathDescription a)
+    | DescribePathEnd a
 
 
 addToContext : List Value -> ExpressionContext -> ExpressionContext
@@ -34,7 +39,7 @@ addToContext names context =
     { context | commonModel = names ++ context.commonModel }
 
 
-evaluateExpression : ExpressionContext -> Expression -> Result String Value
+evaluateExpression : ExpressionContext -> Expression -> Result (PathDescription String) Value
 evaluateExpression context expression =
     case expression of
         LiteralExpression value ->
@@ -45,18 +50,11 @@ evaluateExpression context expression =
                 |> List.map (evaluateExpression context)
                 |> Result.Extra.combine
                 |> Result.map ListValue
-                |> Result.mapError (\error -> "Failed to evaluate list element: " ++ error)
+                |> Result.mapError (DescribePathNode "Failed to evaluate list element")
 
         ApplicationExpression application ->
-            case evaluateFunctionApplication context application of
-                Err error ->
-                    Err ("Failed application: " ++ error)
-
-                Ok (ExpressionValue expressionAfterApplication) ->
-                    evaluateExpression context expressionAfterApplication
-
-                otherResult ->
-                    otherResult
+            evaluateFunctionApplication context application
+                |> Result.mapError (DescribePathNode ("Failed application of '" ++ describeExpression application.function ++ "'"))
 
         FunctionOrValueExpression name ->
             case name of
@@ -70,12 +68,12 @@ evaluateExpression context expression =
                     let
                         beforeCheckForExpression =
                             lookUpNameInContext name context
-                                |> Result.mapError
-                                    (\error -> "Failed to look up name '" ++ name ++ "': " ++ error)
+                                |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
                     in
                     case beforeCheckForExpression of
                         Ok ( ExpressionValue expressionFromLookup, contextFromLookup ) ->
                             evaluateExpression (addToContext contextFromLookup context) expressionFromLookup
+                                |> Result.mapError (DescribePathNode "Failed to evaluate expression from name")
 
                         _ ->
                             Result.map Tuple.first beforeCheckForExpression
@@ -83,7 +81,7 @@ evaluateExpression context expression =
         IfBlockExpression condition expressionIfTrue expressionIfFalse ->
             case evaluateExpression context condition of
                 Err error ->
-                    Err ("Failed to evaluate condition: " ++ error)
+                    Err (DescribePathNode "Failed to evaluate condition" error)
 
                 Ok conditionValue ->
                     evaluateExpression context
@@ -100,14 +98,7 @@ evaluateExpression context expression =
                 expressionInExpandedContext
 
         FunctionExpression argumentName expressionInExpandedContext ->
-            case context.provisionalArgumentStack of
-                nextArgumentValue :: remainingArgumentValues ->
-                    evaluateExpression
-                        { context | provisionalArgumentStack = remainingArgumentValues }
-                        (ContextExpansionWithNameExpression ( argumentName, nextArgumentValue ) expressionInExpandedContext)
-
-                [] ->
-                    Ok (ExpressionValue expression)
+            Ok (ClosureValue context argumentName expressionInExpandedContext)
 
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
@@ -125,11 +116,11 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameInContext : String -> ExpressionContext -> Result String ( Value, List Value )
+lookUpNameInContext : String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
 lookUpNameInContext name context =
     case name |> String.split "." of
         [] ->
-            Err "nameElements is empty"
+            Err (DescribePathEnd "nameElements is empty")
 
         nameFirstElement :: nameRemainingElements ->
             let
@@ -145,12 +136,14 @@ lookUpNameInContext name context =
             case maybeMatchingValue of
                 Nothing ->
                     Err
-                        ("Did not find '"
-                            ++ nameFirstElement
-                            ++ "'. "
-                            ++ (availableNames |> List.length |> String.fromInt)
-                            ++ " names available: "
-                            ++ (availableNames |> List.map Tuple.first |> String.join ", ")
+                        (DescribePathEnd
+                            ("Did not find '"
+                                ++ nameFirstElement
+                                ++ "'. "
+                                ++ (availableNames |> List.length |> String.fromInt)
+                                ++ " names available: "
+                                ++ (availableNames |> List.map Tuple.first |> String.join ", ")
+                            )
                         )
 
                 Just firstNameValue ->
@@ -161,212 +154,247 @@ lookUpNameInContext name context =
                         case firstNameValue of
                             ListValue firstNameList ->
                                 lookUpNameInContext (String.join "." nameRemainingElements)
-                                    { commonModel = firstNameList, provisionalArgumentStack = [] }
+                                    { commonModel = firstNameList }
 
                             _ ->
-                                Err ("'" ++ nameFirstElement ++ "' has unexpected type: Not a list.")
+                                Err (DescribePathEnd ("'" ++ nameFirstElement ++ "' has unexpected type: Not a list."))
 
 
-evaluateFunctionApplication : ExpressionContext -> { function : Expression, arguments : List Expression } -> Result String Value
+evaluateFunctionApplication : ExpressionContext -> { function : Expression, arguments : List Expression } -> Result (PathDescription String) Value
 evaluateFunctionApplication context application =
-    case application.arguments |> List.map (evaluateExpression context) |> Result.Extra.combine of
-        Err evalArgError ->
-            Err ("Failed to evaluate argument: " ++ evalArgError)
+    application.arguments
+        |> List.map
+            (\argumentExpression ->
+                evaluateExpression context argumentExpression
+                    |> Result.mapError (DescribePathNode ("Failed to evaluate argument '" ++ describeExpression argumentExpression ++ "'"))
+            )
+        |> Result.Extra.combine
+        |> Result.andThen
+            (\arguments ->
+                evaluateFunctionApplicationWithEvaluatedArgs context { function = application.function, arguments = arguments }
+            )
 
-        Ok arguments ->
-            let
-                functionOnTwoBigIntWithBooleanResult functionOnBigInt =
-                    evaluateFunctionApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluateExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluateExpression context >> Result.andThen parseAsBigInt
-                        , apply =
-                            \leftInt rightInt ->
-                                Ok
-                                    (if functionOnBigInt leftInt rightInt then
-                                        trueValue
 
-                                     else
-                                        falseValue
-                                    )
-                        }
-                        application.arguments
+evaluateFunctionApplicationWithEvaluatedArgs : ExpressionContext -> { function : Expression, arguments : List Value } -> Result (PathDescription String) Value
+evaluateFunctionApplicationWithEvaluatedArgs context application =
+    let
+        functionOnTwoBigIntWithBooleanResult functionOnBigInt =
+            evaluateFunctionApplicationExpectingExactlyTwoArguments
+                { mapArg0 = parseAsBigInt >> Result.mapError DescribePathEnd
+                , mapArg1 = parseAsBigInt >> Result.mapError DescribePathEnd
+                , apply =
+                    \leftInt rightInt ->
+                        Ok
+                            (if functionOnBigInt leftInt rightInt then
+                                trueValue
 
-                functionOnTwoBigIntWithBigIntResult functionOnBigInt =
-                    evaluateFunctionApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluateExpression context >> Result.andThen parseAsBigInt
-                        , mapArg1 = evaluateExpression context >> Result.andThen parseAsBigInt
-                        , apply =
-                            \leftInt rightInt ->
-                                Ok (StringOrIntegerValue (functionOnBigInt leftInt rightInt |> BigInt.toString))
-                        }
-                        application.arguments
+                             else
+                                falseValue
+                            )
+                }
+                application.arguments
 
-                functionExpectingOneArgumentOfTypeList functionOnList =
+        functionOnTwoBigIntWithBigIntResult functionOnBigInt =
+            evaluateFunctionApplicationExpectingExactlyTwoArguments
+                { mapArg0 = parseAsBigInt >> Result.mapError DescribePathEnd
+                , mapArg1 = parseAsBigInt >> Result.mapError DescribePathEnd
+                , apply =
+                    \leftInt rightInt ->
+                        Ok (StringOrIntegerValue (functionOnBigInt leftInt rightInt |> BigInt.toString))
+                }
+                application.arguments
+
+        functionExpectingOneArgumentOfTypeList functionOnList =
+            evaluateFunctionApplicationExpectingExactlyOneArgument
+                { mapArg = Ok
+                , apply =
+                    \argument ->
+                        case argument of
+                            ListValue list ->
+                                list |> functionOnList |> Ok
+
+                            _ ->
+                                Err (DescribePathEnd ("Argument is not a list ('" ++ describeValue argument ++ ")"))
+                }
+                application.arguments
+
+        functionEquals =
+            evaluateFunctionApplicationExpectingExactlyTwoArguments
+                { mapArg0 = Ok
+                , mapArg1 = Ok
+                , apply =
+                    \leftValue rightValue ->
+                        Ok
+                            (if leftValue == rightValue then
+                                trueValue
+
+                             else
+                                falseValue
+                            )
+                }
+                application.arguments
+
+        resultIgnoringAtomBindings =
+            evaluateFunctionApplicationIgnoringAtomBindings
+                context
+                application
+    in
+    case application.function of
+        FunctionOrValueExpression functionName ->
+            case functionName of
+                "PineKernel.equals" ->
+                    functionEquals
+
+                "PineKernel.negate" ->
                     evaluateFunctionApplicationExpectingExactlyOneArgument
-                        { mapArg = evaluateExpression context
-                        , apply =
-                            \argument ->
-                                case argument of
-                                    ListValue list ->
-                                        list |> functionOnList |> Ok
-
-                                    _ ->
-                                        Err ("Argument is not a list ('" ++ describeValue argument ++ ")")
+                        { mapArg = parseAsBigInt >> Result.mapError DescribePathEnd
+                        , apply = BigInt.negate >> BigInt.toString >> StringOrIntegerValue >> Ok
                         }
                         application.arguments
 
-                functionEquals =
+                "PineKernel.listHead" ->
+                    functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []))
+
+                "PineKernel.listTail" ->
+                    functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> ListValue)
+
+                "PineKernel.listCons" ->
                     evaluateFunctionApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = evaluateExpression context
-                        , mapArg1 = evaluateExpression context
+                        { mapArg0 = Ok
+                        , mapArg1 = Ok
                         , apply =
                             \leftValue rightValue ->
-                                Ok
-                                    (if leftValue == rightValue then
-                                        trueValue
+                                case rightValue of
+                                    ListValue rightList ->
+                                        Ok (ListValue (leftValue :: rightList))
 
-                                     else
-                                        falseValue
-                                    )
+                                    _ ->
+                                        Err (DescribePathEnd "Right operand for listCons is not a list.")
                         }
                         application.arguments
-            in
-            case application.function of
-                FunctionOrValueExpression functionName ->
-                    case functionName of
-                        "PineKernel.equals" ->
-                            functionEquals
 
-                        "PineKernel.negate" ->
-                            evaluateFunctionApplicationExpectingExactlyOneArgument
-                                { mapArg = evaluateExpression context >> Result.andThen parseAsBigInt
-                                , apply = BigInt.negate >> BigInt.toString >> StringOrIntegerValue >> Ok
-                                }
-                                application.arguments
-
-                        "PineKernel.listHead" ->
-                            functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []))
-
-                        "PineKernel.listTail" ->
-                            functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> ListValue)
-
-                        "PineKernel.listCons" ->
-                            evaluateFunctionApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluateExpression context
-                                , mapArg1 = evaluateExpression context
-                                , apply =
-                                    \leftValue rightValue ->
-                                        case rightValue of
-                                            ListValue rightList ->
-                                                Ok (ListValue (leftValue :: rightList))
-
-                                            _ ->
-                                                Err "Right operand for listCons is not a list."
-                                }
-                                application.arguments
-
-                        "String.fromInt" ->
-                            case application.arguments of
-                                [ argument ] ->
-                                    evaluateExpression context argument
-
-                                _ ->
-                                    Err
-                                        ("Unexpected number of arguments for String.fromInt: "
-                                            ++ String.fromInt (List.length application.arguments)
-                                        )
-
-                        "(==)" ->
-                            functionEquals
-
-                        "(++)" ->
-                            evaluateFunctionApplicationExpectingExactlyTwoArguments
-                                { mapArg0 = evaluateExpression context
-                                , mapArg1 = evaluateExpression context
-                                , apply =
-                                    \leftValue rightValue ->
-                                        case ( leftValue, rightValue ) of
-                                            ( StringOrIntegerValue leftLiteral, StringOrIntegerValue rightLiteral ) ->
-                                                Ok (StringOrIntegerValue (leftLiteral ++ rightLiteral))
-
-                                            ( ListValue leftList, ListValue rightList ) ->
-                                                Ok (ListValue (leftList ++ rightList))
-
-                                            _ ->
-                                                Err "Unexpected combination of operands."
-                                }
-                                application.arguments
-
-                        "(+)" ->
-                            functionOnTwoBigIntWithBigIntResult BigInt.add
-
-                        "(-)" ->
-                            functionOnTwoBigIntWithBigIntResult BigInt.sub
-
-                        "(*)" ->
-                            functionOnTwoBigIntWithBigIntResult BigInt.mul
-
-                        "(//)" ->
-                            functionOnTwoBigIntWithBigIntResult BigInt.div
-
-                        "(<)" ->
-                            functionOnTwoBigIntWithBooleanResult BigInt.lt
-
-                        "(<=)" ->
-                            functionOnTwoBigIntWithBooleanResult BigInt.lte
-
-                        "(>)" ->
-                            functionOnTwoBigIntWithBooleanResult BigInt.gt
-
-                        "(>=)" ->
-                            functionOnTwoBigIntWithBooleanResult BigInt.gte
-
-                        "not" ->
-                            evaluateFunctionApplicationExpectingExactlyOneArgument
-                                { mapArg = evaluateExpression context
-                                , apply =
-                                    \argument ->
-                                        if argument == trueValue then
-                                            Ok falseValue
-
-                                        else
-                                            Ok trueValue
-                                }
-                                application.arguments
+                "String.fromInt" ->
+                    case application.arguments of
+                        [ argument ] ->
+                            Ok argument
 
                         _ ->
-                            case lookUpNameInContext functionName context of
-                                Err lookupError ->
-                                    Err ("Failed to look up name '" ++ functionName ++ "': " ++ lookupError)
-
-                                Ok ( ExpressionValue expression, contextFromLookup ) ->
-                                    evaluateExpression
-                                        (addToContext
-                                            contextFromLookup
-                                            { commonModel = []
-                                            , provisionalArgumentStack = arguments ++ context.provisionalArgumentStack
-                                            }
-                                        )
-                                        expression
-
-                                _ ->
-                                    Err "Unexpected value for function in application: Not an expression."
-
-                FunctionExpression argumentName functionExpression ->
-                    case arguments of
-                        [] ->
-                            Ok (ExpressionValue application.function)
-
-                        firstArgument :: remainingArguments ->
-                            evaluateExpression
-                                (addToContext
-                                    [ valueFromContextExpansionWithName ( argumentName, firstArgument ) ]
-                                    { commonModel = [], provisionalArgumentStack = remainingArguments }
+                            Err
+                                (DescribePathEnd
+                                    ("Unexpected number of arguments for String.fromInt: "
+                                        ++ String.fromInt (List.length application.arguments)
+                                    )
                                 )
-                                functionExpression
+
+                "(==)" ->
+                    functionEquals
+
+                "(++)" ->
+                    evaluateFunctionApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = Ok
+                        , mapArg1 = Ok
+                        , apply =
+                            \leftValue rightValue ->
+                                case ( leftValue, rightValue ) of
+                                    ( StringOrIntegerValue leftLiteral, StringOrIntegerValue rightLiteral ) ->
+                                        Ok (StringOrIntegerValue (leftLiteral ++ rightLiteral))
+
+                                    ( ListValue leftList, ListValue rightList ) ->
+                                        Ok (ListValue (leftList ++ rightList))
+
+                                    _ ->
+                                        Err (DescribePathEnd "Unexpected combination of operands.")
+                        }
+                        application.arguments
+
+                "(+)" ->
+                    functionOnTwoBigIntWithBigIntResult BigInt.add
+
+                "(-)" ->
+                    functionOnTwoBigIntWithBigIntResult BigInt.sub
+
+                "(*)" ->
+                    functionOnTwoBigIntWithBigIntResult BigInt.mul
+
+                "(//)" ->
+                    functionOnTwoBigIntWithBigIntResult BigInt.div
+
+                "(<)" ->
+                    functionOnTwoBigIntWithBooleanResult BigInt.lt
+
+                "(<=)" ->
+                    functionOnTwoBigIntWithBooleanResult BigInt.lte
+
+                "(>)" ->
+                    functionOnTwoBigIntWithBooleanResult BigInt.gt
+
+                "(>=)" ->
+                    functionOnTwoBigIntWithBooleanResult BigInt.gte
+
+                "not" ->
+                    evaluateFunctionApplicationExpectingExactlyOneArgument
+                        { mapArg = Ok
+                        , apply =
+                            \argument ->
+                                if argument == trueValue then
+                                    Ok falseValue
+
+                                else
+                                    Ok trueValue
+                        }
+                        application.arguments
 
                 _ ->
-                    Err "Application not implemented yet."
+                    resultIgnoringAtomBindings
+
+        _ ->
+            resultIgnoringAtomBindings
+
+
+evaluateFunctionApplicationIgnoringAtomBindings : ExpressionContext -> { function : Expression, arguments : List Value } -> Result (PathDescription String) Value
+evaluateFunctionApplicationIgnoringAtomBindings context application =
+    evaluateExpression context application.function
+        |> Result.mapError (DescribePathNode ("Failed to evaluate function expression '" ++ describeExpression application.function ++ "'"))
+        |> Result.andThen
+            (\functionOrValue ->
+                case application.arguments of
+                    [] ->
+                        Ok functionOrValue
+
+                    firstArgument :: remainingArguments ->
+                        let
+                            continueWithClosure closureContext argumentName functionExpression =
+                                evaluateFunctionApplicationIgnoringAtomBindings
+                                    (addToContext
+                                        [ valueFromContextExpansionWithName ( argumentName, firstArgument ) ]
+                                        closureContext
+                                    )
+                                    { function = functionExpression, arguments = remainingArguments }
+                                    |> Result.mapError
+                                        (DescribePathNode
+                                            ("Failed application of '"
+                                                ++ describeExpression application.function
+                                                ++ "' with argument '"
+                                                ++ argumentName
+                                            )
+                                        )
+                        in
+                        case functionOrValue of
+                            ExpressionValue (FunctionExpression argumentName functionExpression) ->
+                                continueWithClosure context argumentName functionExpression
+
+                            ClosureValue closureContext argumentName functionExpression ->
+                                continueWithClosure closureContext argumentName functionExpression
+
+                            _ ->
+                                Err
+                                    (DescribePathEnd
+                                        ("Failed to apply: Value "
+                                            ++ describeValue functionOrValue
+                                            ++ " is not a function (Too many arguments)."
+                                        )
+                                    )
+            )
 
 
 parseAsBigInt : Value -> Result String BigInt.BigInt
@@ -381,6 +409,9 @@ parseAsBigInt value =
 
         ExpressionValue _ ->
             Err "Unexpected type of value: ExpressionValue"
+
+        ClosureValue _ _ _ ->
+            Err "Unexpected type of value: ClosureValue"
 
 
 intFromBigInt : BigInt.BigInt -> Result String Int
@@ -398,54 +429,58 @@ intFromBigInt bigInt =
 
 
 evaluateFunctionApplicationExpectingExactlyTwoArguments :
-    { mapArg0 : Expression -> Result String arg0
-    , mapArg1 : Expression -> Result String arg1
-    , apply : arg0 -> arg1 -> Result String Value
+    { mapArg0 : Value -> Result (PathDescription String) arg0
+    , mapArg1 : Value -> Result (PathDescription String) arg1
+    , apply : arg0 -> arg1 -> Result (PathDescription String) Value
     }
-    -> List Expression
-    -> Result String Value
+    -> List Value
+    -> Result (PathDescription String) Value
 evaluateFunctionApplicationExpectingExactlyTwoArguments configuration arguments =
     case arguments of
         [ arg0, arg1 ] ->
             case configuration.mapArg0 arg0 of
                 Err error ->
-                    Err ("Failed to map argument 0: " ++ error)
+                    Err (DescribePathNode "Failed to map argument 0" error)
 
                 Ok mappedArg0 ->
                     case configuration.mapArg1 arg1 of
                         Err error ->
-                            Err ("Failed to map argument 1: " ++ error)
+                            Err (DescribePathNode "Failed to map argument 1" error)
 
                         Ok mappedArg1 ->
                             configuration.apply mappedArg0 mappedArg1
 
         _ ->
             Err
-                ("Unexpected number of arguments for: "
-                    ++ String.fromInt (List.length arguments)
+                (DescribePathEnd
+                    ("Unexpected number of arguments for: "
+                        ++ String.fromInt (List.length arguments)
+                    )
                 )
 
 
 evaluateFunctionApplicationExpectingExactlyOneArgument :
-    { mapArg : Expression -> Result String arg
-    , apply : arg -> Result String Value
+    { mapArg : Value -> Result (PathDescription String) arg
+    , apply : arg -> Result (PathDescription String) Value
     }
-    -> List Expression
-    -> Result String Value
+    -> List Value
+    -> Result (PathDescription String) Value
 evaluateFunctionApplicationExpectingExactlyOneArgument configuration arguments =
     case arguments of
         [ arg ] ->
             case configuration.mapArg arg of
                 Err error ->
-                    Err ("Failed to map argument: " ++ error)
+                    Err (DescribePathNode "Failed to map argument" error)
 
                 Ok mappedArg ->
                     configuration.apply mappedArg
 
         _ ->
             Err
-                ("Unexpected number of arguments for: "
-                    ++ String.fromInt (List.length arguments)
+                (DescribePathEnd
+                    ("Unexpected number of arguments for: "
+                        ++ String.fromInt (List.length arguments)
+                    )
                 )
 
 
@@ -469,6 +504,31 @@ tagValueExpression tagName tagArgumentsExpressions =
     ListExpression [ LiteralExpression (StringOrIntegerValue tagName), ListExpression tagArgumentsExpressions ]
 
 
+describeExpression : Expression -> String
+describeExpression expression =
+    case expression of
+        FunctionOrValueExpression name ->
+            "name(" ++ name ++ ")"
+
+        ListExpression list ->
+            "[" ++ String.join "," (list |> List.map describeExpression) ++ ")"
+
+        LiteralExpression literal ->
+            "literal(" ++ describeValue literal ++ ")"
+
+        ApplicationExpression application ->
+            "application(" ++ describeExpression application.function ++ ")"
+
+        FunctionExpression argumentName functionExpression ->
+            "function(" ++ argumentName ++ ", " ++ describeExpression functionExpression ++ ")"
+
+        IfBlockExpression _ _ _ ->
+            "if-block"
+
+        ContextExpansionWithNameExpression ( newName, _ ) _ ->
+            "context-expansion(" ++ newName ++ ")"
+
+
 describeValue : Value -> String
 describeValue value =
     case value of
@@ -478,5 +538,8 @@ describeValue value =
         ListValue list ->
             "[" ++ String.join ", " (List.map describeValue list) ++ "]"
 
-        ExpressionValue _ ->
-            "<expression>"
+        ExpressionValue expression ->
+            "expression(" ++ describeExpression expression ++ ")"
+
+        ClosureValue _ argumentName expression ->
+            "closure(" ++ argumentName ++ "," ++ describeExpression expression ++ ")"
