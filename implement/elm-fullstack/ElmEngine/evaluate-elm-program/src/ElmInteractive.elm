@@ -69,7 +69,7 @@ submissionInInteractive : InteractiveContext -> List String -> String -> Result 
 submissionInInteractive context previousSubmissions submission =
     case parseInteractiveSubmissionFromString submission of
         Err error ->
-            Err ("Failed to parse submission: " ++ error.asExpressionError)
+            Err ("Failed to parse submission: " ++ error)
 
         Ok (DeclarationSubmission _) ->
             Ok SubmissionResponseNoValue
@@ -1260,89 +1260,109 @@ operatorPrecendencePriority =
         |> Dict.fromList
 
 
-parseInteractiveSubmissionFromString : String -> Result { asExpressionError : String, asDeclarationError : String } InteractiveSubmission
+parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission
 parseInteractiveSubmissionFromString submission =
-    case parseExpressionFromString submission of
-        Ok expression ->
-            Ok (ExpressionSubmission expression)
-
-        Err expressionErr ->
-            case parseDeclarationFromString submission of
-                Ok declaration ->
-                    Ok (DeclarationSubmission declaration)
-
-                Err declarationErr ->
-                    Err { asExpressionError = expressionErr, asDeclarationError = declarationErr }
-
-
-parseExpressionFromString : String -> Result String Elm.Syntax.Expression.Expression
-parseExpressionFromString expressionCode =
     let
+        unified =
+            String.replace "\n" " " submission
+    in
+    if
+        String.contains " = " unified
+            && not (String.startsWith "let " (String.trim unified))
+            && not (String.startsWith "{" (String.trim submission))
+    then
+        parseDeclarationFromString submission
+            |> Result.mapError parserDeadEndsToString
+            |> Result.Extra.join
+            |> Result.map DeclarationSubmission
+
+    else
+        parseExpressionFromString submission
+            |> Result.mapError parserDeadEndsToString
+            |> Result.Extra.join
+            |> Result.map ExpressionSubmission
+
+
+parseExpressionFromString : String -> Result (List Parser.DeadEnd) (Result String Elm.Syntax.Expression.Expression)
+parseExpressionFromString expressionCode =
+    -- https://github.com/stil4m/elm-syntax/issues/34
+    let
+        indentAmount =
+            4
+
         indentedExpressionCode =
             expressionCode
                 |> String.lines
-                |> List.map ((++) "    ")
+                |> List.map ((++) (String.repeat indentAmount (String.fromChar ' ')))
                 |> String.join "\n"
 
-        moduleText =
-            """
-module Main exposing (..)
-
-
-wrapping_expression_in_function =
-"""
-                ++ indentedExpressionCode
-                ++ """
-
-"""
+        declarationTextBeforeExpression =
+            "wrapping_expression_in_function = \n"
     in
-    parseElmModuleText moduleText
-        |> Result.mapError (always "Failed to parse module")
-        |> Result.andThen
-            (\file ->
-                file.declarations
-                    |> List.filterMap
-                        (\declaration ->
-                            case Elm.Syntax.Node.value declaration of
-                                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                    functionDeclaration
-                                        |> .declaration
-                                        |> Elm.Syntax.Node.value
-                                        |> .expression
-                                        |> Elm.Syntax.Node.value
-                                        |> Just
+    parseDeclarationFromString (declarationTextBeforeExpression ++ indentedExpressionCode)
+        |> Result.mapError (List.map (mapLocationForPrefixText declarationTextBeforeExpression >> mapLocationForIndentAmount indentAmount))
+        |> Result.map
+            (Result.andThen
+                (\declaration ->
+                    case declaration of
+                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                            functionDeclaration
+                                |> .declaration
+                                |> Elm.Syntax.Node.value
+                                |> .expression
+                                |> Elm.Syntax.Node.value
+                                |> Ok
 
-                                _ ->
-                                    Nothing
-                        )
-                    |> List.head
-                    |> Result.fromMaybe "Failed to extract the wrapping function."
+                        _ ->
+                            Err "Failed to extract the wrapping function."
+                )
             )
 
 
-parseDeclarationFromString : String -> Result String Elm.Syntax.Declaration.Declaration
+parseDeclarationFromString : String -> Result (List Parser.DeadEnd) (Result String Elm.Syntax.Declaration.Declaration)
 parseDeclarationFromString declarationCode =
+    -- https://github.com/stil4m/elm-syntax/issues/34
     let
-        moduleText =
+        moduleTextBeforeDeclaration =
             """
 module Main exposing (..)
 
 
 """
-                ++ declarationCode
-                ++ """
 
-"""
+        moduleText =
+            moduleTextBeforeDeclaration ++ declarationCode
     in
     parseElmModuleText moduleText
-        |> Result.mapError (always "Failed to parse module")
-        |> Result.andThen
-            (\file ->
-                file.declarations
-                    |> List.map Elm.Syntax.Node.value
-                    |> List.head
-                    |> Result.fromMaybe "Failed to extract the wrapping function."
+        |> Result.mapError (List.map (mapLocationForPrefixText moduleTextBeforeDeclaration))
+        |> Result.map
+            (.declarations
+                >> List.map Elm.Syntax.Node.value
+                >> List.head
+                >> Result.fromMaybe "Failed to extract the declaration from the parsed module."
             )
+
+
+mapLocationForPrefixText : String -> Parser.DeadEnd -> Parser.DeadEnd
+mapLocationForPrefixText prefixText =
+    let
+        prefixLines =
+            String.lines prefixText
+    in
+    mapLocation
+        { row = 1 - List.length prefixLines
+        , col = -(prefixLines |> List.reverse |> List.head |> Maybe.withDefault "" |> String.length)
+        }
+
+
+mapLocationForIndentAmount : Int -> Parser.DeadEnd -> Parser.DeadEnd
+mapLocationForIndentAmount indentAmount =
+    mapLocation { row = 0, col = -indentAmount }
+
+
+mapLocation : { row : Int, col : Int } -> Parser.DeadEnd -> Parser.DeadEnd
+mapLocation offset deadEnd =
+    { deadEnd | row = deadEnd.row + offset.row, col = deadEnd.col + offset.col }
 
 
 parseElmModuleTextToJson : String -> String
@@ -1362,6 +1382,62 @@ parseElmModuleTextToJson elmModule =
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
     Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
+
+
+parserDeadEndsToString : List Parser.DeadEnd -> String
+parserDeadEndsToString deadEnds =
+    String.concat (List.intersperse "; " (List.map parserDeadEndToString deadEnds))
+
+
+parserDeadEndToString : Parser.DeadEnd -> String
+parserDeadEndToString deadend =
+    parserProblemToString deadend.problem ++ " at row " ++ String.fromInt deadend.row ++ ", col " ++ String.fromInt deadend.col
+
+
+parserProblemToString : Parser.Problem -> String
+parserProblemToString p =
+    case p of
+        Parser.Expecting s ->
+            "expecting '" ++ s ++ "'"
+
+        Parser.ExpectingInt ->
+            "expecting int"
+
+        Parser.ExpectingHex ->
+            "expecting hex"
+
+        Parser.ExpectingOctal ->
+            "expecting octal"
+
+        Parser.ExpectingBinary ->
+            "expecting binary"
+
+        Parser.ExpectingFloat ->
+            "expecting float"
+
+        Parser.ExpectingNumber ->
+            "expecting number"
+
+        Parser.ExpectingVariable ->
+            "expecting variable"
+
+        Parser.ExpectingSymbol s ->
+            "expecting symbol '" ++ s ++ "'"
+
+        Parser.ExpectingKeyword s ->
+            "expecting keyword '" ++ s ++ "'"
+
+        Parser.ExpectingEnd ->
+            "expecting end"
+
+        Parser.UnexpectedChar ->
+            "unexpected char"
+
+        Parser.Problem s ->
+            "problem " ++ s
+
+        Parser.BadRepeat ->
+            "bad repeat"
 
 
 stringStartsWithUpper : String -> Bool
