@@ -4,6 +4,7 @@ import FrontendBackendInterface
 import FrontendWeb.MonacoEditor
 import Json.Decode
 import Json.Encode
+import ProjectState
 
 
 jsonEncodeRequestStructure : FrontendBackendInterface.RequestStructure -> Json.Encode.Value
@@ -28,4 +29,14 @@ jsonEncodeMessageToMonacoEditor =
 
 jsonDecodeMessageFromMonacoEditor : Json.Decode.Decoder FrontendWeb.MonacoEditor.MessageFromEditor
 jsonDecodeMessageFromMonacoEditor =
+    Json.Decode.fail "The Elm-fullstack compiler replaces this function."
+
+
+jsonEncodeProjectState_2020_12 : ProjectState.ProjectState_2020_12 -> Json.Encode.Value
+jsonEncodeProjectState_2020_12 =
+    always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
+
+
+jsonDecodeProjectState_2020_12 : Json.Decode.Decoder ProjectState.ProjectState_2020_12
+jsonDecodeProjectState_2020_12 =
     Json.Decode.fail "The Elm-fullstack compiler replaces this function."

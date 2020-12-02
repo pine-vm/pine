@@ -7,9 +7,11 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import Common
+import Dict
 import Element
 import Element.Background
 import Element.Border
+import Element.Events
 import Element.Font
 import Element.Input
 import Element.Region
@@ -17,11 +19,14 @@ import ElmFullstackCompilerInterface.GenerateJsonCoders
 import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
 import FrontendWeb.MonacoEditor
+import FrontendWeb.ProjectStateInUrl
 import Html
 import Html.Attributes as HA
+import Html.Events
 import Http
 import Json.Decode
 import Json.Encode
+import ProjectState
 import Time
 import Url
 import Url.Builder
@@ -43,12 +48,15 @@ type alias ElmMakeResponseStructure =
 
 type alias State =
     { navigationKey : Navigation.Key
+    , url : Url.Url
     , time : Maybe Time.Posix
-    , editorElmCode : String
+    , projectFiles : Dict.Dict (List String) String
+    , fileInEditor : Maybe ( List String, String )
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
     , elmMakeResult : Maybe (Result Http.Error ElmMakeResultStructure)
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
+    , saveOrShareDialog : Maybe SaveOrShareDialog
     }
 
 
@@ -60,15 +68,22 @@ type alias ElmMakeResultStructure =
 
 
 type Event
-    = UserInputElmCode String
+    = UserInputChangeTextInEditor String
     | MonacoEditorEvent Json.Decode.Value
     | TimeHasArrived Time.Posix
+    | UserInputOpenFileInEditor (List String)
     | UserInputFormat
     | UserInputCompile
-    | BackendElmFormatResponseEvent (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
+    | UserInputSave Bool
+    | UserInputCloseModalDialog
+    | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
+
+
+type alias SaveOrShareDialog =
+    { urlToProject : Maybe String }
 
 
 main : Program () State Event
@@ -96,25 +111,70 @@ init _ url navigationKey =
     let
         ( model, urlChangeCmd ) =
             { navigationKey = navigationKey
+            , url = url
             , time = Nothing
-            , editorElmCode = initElmCode
+            , projectFiles = Dict.empty
+            , fileInEditor = Nothing
             , decodeMessageFromMonacoEditorError = Nothing
             , lastElmMakeRequest = Nothing
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
+            , saveOrShareDialog = Nothing
             }
+                |> loadProject defaultProject
                 |> update (UrlChange url)
     in
     ( model, urlChangeCmd )
 
 
+loadProject : ProjectState.ProjectState -> State -> State
+loadProject project state =
+    let
+        projectFiles =
+            project
+                |> List.map (\file -> ( file.filePath, file.fileContentText ))
+
+        fileInEditor =
+            case projectFiles |> List.filter offerToOpenFileInEditor of
+                [ singleMatch ] ->
+                    Just singleMatch
+
+                _ ->
+                    Nothing
+    in
+    { state | projectFiles = projectFiles |> Dict.fromList, fileInEditor = fileInEditor }
+
+
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
     case event of
-        UserInputElmCode inputElmCode ->
-            ( { stateBefore | editorElmCode = inputElmCode }
-            , Cmd.none
-            )
+        UserInputOpenFileInEditor filePath ->
+            case stateBefore.projectFiles |> Dict.get filePath of
+                Nothing ->
+                    ( stateBefore, Cmd.none )
+
+                Just fileContent ->
+                    ( { stateBefore | fileInEditor = Just ( filePath, fileContent ) }
+                    , setTextInMonacoEditorCmd fileContent
+                    )
+
+        UserInputChangeTextInEditor inputElmCode ->
+            case stateBefore.fileInEditor of
+                Nothing ->
+                    ( stateBefore, Cmd.none )
+
+                Just ( filePath, _ ) ->
+                    let
+                        fileInEditor =
+                            ( filePath, inputElmCode )
+
+                        projectFiles =
+                            stateBefore.projectFiles
+                                |> Dict.insert filePath inputElmCode
+                    in
+                    ( { stateBefore | projectFiles = projectFiles, fileInEditor = Just fileInEditor }
+                    , Cmd.none
+                    )
 
         MonacoEditorEvent monacoEditorEvent ->
             case
@@ -127,10 +187,14 @@ update event stateBefore =
                 Ok decodedMonacoEditorEvent ->
                     case decodedMonacoEditorEvent of
                         FrontendWeb.MonacoEditor.DidChangeContentEvent content ->
-                            stateBefore |> update (UserInputElmCode content)
+                            stateBefore |> update (UserInputChangeTextInEditor content)
 
                         FrontendWeb.MonacoEditor.CompletedSetupEvent ->
-                            ( stateBefore, stateBefore.editorElmCode |> setTextInMonacoEditorCmd )
+                            ( stateBefore
+                            , stateBefore.fileInEditor
+                                |> Maybe.map (Tuple.second >> setTextInMonacoEditorCmd)
+                                |> Maybe.withDefault Cmd.none
+                            )
 
         TimeHasArrived time ->
             ( { stateBefore | time = Just time }, Cmd.none )
@@ -141,14 +205,31 @@ update event stateBefore =
         UserInputCompile ->
             userInputCompile stateBefore
 
-        BackendElmFormatResponseEvent httpResponse ->
-            let
-                editorElmCode =
-                    httpResponse |> Result.toMaybe |> Maybe.andThen .formattedText |> Maybe.withDefault stateBefore.editorElmCode
-            in
-            ( { stateBefore | elmFormatResult = Just httpResponse, editorElmCode = editorElmCode }
-            , setTextInMonacoEditorCmd editorElmCode
-            )
+        BackendElmFormatResponseEvent formatResponseEvent ->
+            if Just formatResponseEvent.filePath /= Maybe.map Tuple.first stateBefore.fileInEditor then
+                ( stateBefore, Cmd.none )
+
+            else
+                case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
+                    Nothing ->
+                        ( stateBefore, Cmd.none )
+
+                    Just formattedText ->
+                        let
+                            projectFiles =
+                                stateBefore.projectFiles
+                                    |> Dict.insert formatResponseEvent.filePath formattedText
+
+                            fileInEditor =
+                                ( formatResponseEvent.filePath, formattedText )
+                        in
+                        ( { stateBefore
+                            | elmFormatResult = Just formatResponseEvent.result
+                            , projectFiles = projectFiles
+                            , fileInEditor = Just fileInEditor
+                          }
+                        , setTextInMonacoEditorCmd (Tuple.second fileInEditor)
+                        )
 
         BackendElmMakeResponseEvent elmMakeRequest httpResponse ->
             let
@@ -178,12 +259,21 @@ update event stateBefore =
                                 }
                             )
             in
-            ( { stateBefore | elmMakeResult = Just elmMakeResult }
+            ( { stateBefore | elmMakeResult = Just elmMakeResult }, Cmd.none )
+
+        UrlChange url ->
+            let
+                state =
+                    case FrontendWeb.ProjectStateInUrl.projectStateFromUrl url |> Maybe.andThen Result.toMaybe of
+                        Nothing ->
+                            stateBefore
+
+                        Just project ->
+                            stateBefore |> loadProject project
+            in
+            ( state
             , Cmd.none
             )
-
-        UrlChange _ ->
-            ( stateBefore, Cmd.none )
 
         UrlRequest urlRequest ->
             case urlRequest of
@@ -193,73 +283,113 @@ update event stateBefore =
                 Browser.External url ->
                     ( stateBefore, Navigation.load url )
 
+        UserInputSave generateLink ->
+            let
+                dialogBefore =
+                    Maybe.withDefault { urlToProject = Nothing } stateBefore.saveOrShareDialog
+
+                ( dialog, cmd ) =
+                    if generateLink then
+                        let
+                            projectState =
+                                stateBefore.projectFiles
+                                    |> Dict.toList
+                                    |> List.map
+                                        (\( filePath, fileContentText ) ->
+                                            { filePath = filePath, fileContentText = fileContentText }
+                                        )
+
+                            url =
+                                stateBefore.url
+                                    |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl projectState
+                                    |> Url.toString
+                        in
+                        ( { dialogBefore | urlToProject = Just url }
+                        , Navigation.replaceUrl stateBefore.navigationKey url
+                        )
+
+                    else
+                        ( dialogBefore, Cmd.none )
+            in
+            ( { stateBefore | saveOrShareDialog = Just dialog }, cmd )
+
+        UserInputCloseModalDialog ->
+            ( { stateBefore | saveOrShareDialog = Nothing }, Cmd.none )
+
 
 elmFormatCmd : State -> Cmd Event
 elmFormatCmd state =
-    let
-        request =
-            state.editorElmCode |> FrontendBackendInterface.FormatElmModuleTextRequest
+    case state.fileInEditor of
+        Nothing ->
+            Cmd.none
 
-        jsonDecoder backendResponse =
-            case backendResponse of
-                FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
-                    Json.Decode.succeed formatResponse
+        Just ( filePath, fileContent ) ->
+            let
+                request =
+                    fileContent |> FrontendBackendInterface.FormatElmModuleTextRequest
 
-                _ ->
-                    Json.Decode.fail "Unexpected response"
-    in
-    requestToApiCmd request jsonDecoder BackendElmFormatResponseEvent
+                jsonDecoder backendResponse =
+                    case backendResponse of
+                        FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
+                            Json.Decode.succeed formatResponse
+
+                        _ ->
+                            Json.Decode.fail "Unexpected response"
+            in
+            requestToApiCmd request
+                jsonDecoder
+                (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
 
 
 userInputCompile : State -> ( State, Cmd Event )
 userInputCompile stateBefore =
-    let
-        base64FromString : String -> String
-        base64FromString =
-            Bytes.Encode.string
-                >> Bytes.Encode.encode
-                >> Base64.fromBytes
-                >> Maybe.withDefault "Error encoding in base64"
+    case stateBefore.fileInEditor of
+        Nothing ->
+            ( stateBefore, Cmd.none )
 
-        entryPointFilePath =
-            [ "src", "Main.elm" ]
+        Just ( filePath, _ ) ->
+            let
+                base64FromString : String -> String
+                base64FromString =
+                    Bytes.Encode.string
+                        >> Bytes.Encode.encode
+                        >> Base64.fromBytes
+                        >> Maybe.withDefault "Error encoding in base64"
 
-        elmMakeRequest =
-            { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
-            , files =
-                [ ( [ "elm.json" ]
-                  , initElmJson
-                  )
-                , ( entryPointFilePath
-                  , stateBefore.editorElmCode
-                  )
-                ]
-                    |> List.map
-                        (\( path, content ) ->
-                            { path = path
-                            , contentBase64 = base64FromString content
-                            }
-                        )
-            }
+                entryPointFilePath =
+                    filePath
 
-        request =
-            elmMakeRequest |> FrontendBackendInterface.ElmMakeRequest
+                elmMakeRequest =
+                    { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
+                    , files =
+                        stateBefore.projectFiles
+                            |> Dict.toList
+                            |> List.map
+                                (\( path, content ) ->
+                                    { path = path
+                                    , contentBase64 = base64FromString content
+                                    }
+                                )
+                    }
 
-        jsonDecoder backendResponse =
-            case backendResponse of
-                FrontendBackendInterface.ElmMakeResponse elmMakeResponse ->
-                    Json.Decode.succeed elmMakeResponse
+                request =
+                    elmMakeRequest |> FrontendBackendInterface.ElmMakeRequest
 
-                _ ->
-                    Json.Decode.fail "Unexpected response"
-    in
-    ( { stateBefore
-        | lastElmMakeRequest =
-            stateBefore.time |> Maybe.map (\time -> { time = time, request = elmMakeRequest })
-        , elmMakeResult = Nothing
-      }
-    , requestToApiCmd request jsonDecoder (BackendElmMakeResponseEvent elmMakeRequest)
-    )
+                jsonDecoder backendResponse =
+                    case backendResponse of
+                        FrontendBackendInterface.ElmMakeResponse elmMakeResponse ->
+                            Json.Decode.succeed elmMakeResponse
+
+                        _ ->
+                            Json.Decode.fail "Unexpected response"
+            in
+            ( { stateBefore
+                | lastElmMakeRequest =
+                    stateBefore.time |> Maybe.map (\time -> { time = time, request = elmMakeRequest })
+                , elmMakeResult = Nothing
+              }
+            , requestToApiCmd request jsonDecoder (BackendElmMakeResponseEvent elmMakeRequest)
+            )
 
 
 requestToApiCmd :
@@ -287,8 +417,146 @@ elmMakeOutputFileName =
     "elm-make-output.html"
 
 
+offerToOpenFileInEditor : ( List String, String ) -> Bool
+offerToOpenFileInEditor =
+    Tuple.first >> List.reverse >> List.head >> Maybe.map (String.endsWith ".elm") >> Maybe.withDefault False
+
+
 view : State -> Browser.Document Event
 view state =
+    let
+        mainContent =
+            case state.fileInEditor of
+                Nothing ->
+                    let
+                        projectFiles =
+                            state.projectFiles |> Dict.toList
+
+                        otherFilesList =
+                            case projectFiles |> List.filter (offerToOpenFileInEditor >> not) of
+                                [] ->
+                                    Element.none
+
+                                otherFilesInTheProject ->
+                                    [ Element.text ("There are " ++ (String.fromInt (List.length otherFilesInTheProject) ++ " other files in this project:"))
+                                    , otherFilesInTheProject
+                                        |> List.map (\( filePath, _ ) -> Element.text (String.join "/" filePath))
+                                        |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                    ]
+                                        |> Element.column []
+
+                        chooseElmFileElement =
+                            case projectFiles |> List.filter offerToOpenFileInEditor of
+                                [] ->
+                                    Element.text "Did not find any .elm file in this project."
+
+                                elmFilesInTheProject ->
+                                    [ Element.text "Choose one of the files in the project to open in the editor:"
+                                    , elmFilesInTheProject
+                                        |> List.map
+                                            (\( filePath, _ ) ->
+                                                Element.Input.button
+                                                    [ Element.mouseOver [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
+                                                    ]
+                                                    { label = Element.text (String.join "/" filePath)
+                                                    , onPress = Just (UserInputOpenFileInEditor filePath)
+                                                    }
+                                            )
+                                        |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                    ]
+                                        |> Element.column []
+                    in
+                    [ [ saveButton ]
+                        |> Element.row
+                            [ Element.spacing defaultFontSize
+                            , Element.padding (defaultFontSize // 2)
+                            ]
+                    , [ chooseElmFileElement, otherFilesList ]
+                        |> Element.column
+                            [ Element.spacing defaultFontSize
+                            , Element.centerX
+                            , Element.centerY
+                            ]
+                    ]
+                        |> Element.column
+                            [ Element.spacing (defaultFontSize // 2)
+                            , Element.width (Element.fillPortion 4)
+                            , Element.height Element.fill
+                            ]
+
+                Just _ ->
+                    viewWhenEditorOpen state
+
+        popupAttributes =
+            case state.saveOrShareDialog of
+                Nothing ->
+                    []
+
+                Just saveOrShareDialog ->
+                    let
+                        buttonGenerateUrl =
+                            buttonElement { label = "Generate link to project", onPress = Just (UserInputSave True) }
+
+                        urlElement =
+                            case saveOrShareDialog.urlToProject of
+                                Nothing ->
+                                    Element.el [ Element.transparent True ] (Element.html (htmlOfferingTextToCopy ""))
+
+                                Just urlToProject ->
+                                    Element.html (htmlOfferingTextToCopy urlToProject)
+
+                        popup =
+                            [ buttonGenerateUrl |> Element.el [ Element.centerX ]
+                            , urlElement |> Element.el [ Element.width (Element.px 500) ]
+                            ]
+                                |> Element.column
+                                    [ Element.spacing defaultFontSize
+                                    , Element.padding defaultFontSize
+                                    ]
+                                |> Element.el
+                                    [ Element.Background.color (Element.rgb 0 0 0)
+                                    , Element.Border.color (Element.rgb 0.8 0.8 0.8)
+                                    , Element.Border.width 2
+                                    , Element.htmlAttribute
+                                        (Html.Events.custom "click"
+                                            (Json.Decode.succeed
+                                                { message = UserInputSave False
+                                                , stopPropagation = True
+                                                , preventDefault = False
+                                                }
+                                            )
+                                        )
+                                    ]
+                    in
+                    [ Element.el
+                        [ Element.Background.color (Element.rgba 0 0 0 0.3)
+                        , Element.width Element.fill
+                        , Element.height Element.fill
+                        , Element.Events.onClick UserInputCloseModalDialog
+                        , Element.htmlAttribute (HA.style "backdrop-filter" "blur(1px)")
+                        , Element.inFront (Element.el [ Element.centerX, Element.centerY ] popup)
+                        ]
+                        Element.none
+                        |> Element.inFront
+                    ]
+
+        body =
+            Element.layout
+                ([ Element.Font.family (rootFontFamily |> List.map Element.Font.typeface)
+                 , Element.Font.size defaultFontSize
+                 , Element.Font.color (Element.rgb 0.95 0.95 0.95)
+                 , Element.Background.color backgroundColor
+                 , Element.width Element.fill
+                 ]
+                    ++ popupAttributes
+                )
+                mainContent
+    in
+    { title = "Elm Editor", body = [ body ] }
+
+
+viewWhenEditorOpen : State -> Element.Element Event
+viewWhenEditorOpen state =
     let
         resultElement =
             case state.lastElmMakeRequest of
@@ -344,64 +612,61 @@ view state =
                                         []
                                         |> Element.html
 
-        buttonElement buttonConfig =
-            Element.Input.button
-                [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
-                , Element.mouseOver
-                    [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
-                , Element.paddingXY defaultFontSize (defaultFontSize // 2)
-                , Element.Border.widthEach { left = 0, right = 0, top = 0, bottom = 2 }
-                , Element.Border.color (Element.rgb 0 0.5 0.8)
-                ]
-                { label = Element.text buttonConfig.label
-                , onPress = buttonConfig.onPress
-                }
-
         formatButton =
             buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
 
         compileButton =
             buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
-
-        body =
-            [ [ [ formatButton ]
-                    |> Element.row
-                        [ Element.spacing defaultFontSize
-                        , Element.padding (defaultFontSize // 2)
-                        ]
-              , monacoEditorElement state
-              ]
-                |> Element.column
-                    [ Element.spacing (defaultFontSize // 2)
-                    , Element.width (Element.fillPortion 4)
-                    , Element.height Element.fill
-                    ]
-            , [ [ compileButton ] |> Element.row [ Element.padding (defaultFontSize // 2) ]
-              , resultElement
-                    |> Element.el
-                        [ Element.width Element.fill
-                        , Element.height Element.fill
-
-                        -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
-                        , Element.clip
-                        , Element.htmlAttribute (HA.style "flex-shrink" "1")
-                        ]
-              ]
-                |> Element.column
-                    [ Element.width (Element.fillPortion 4)
-                    , Element.height Element.fill
-                    ]
-            ]
-                |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
-                |> Element.layout
-                    [ Element.Font.family (rootFontFamily |> List.map Element.Font.typeface)
-                    , Element.Font.size defaultFontSize
-                    , Element.Font.color (Element.rgb 0.95 0.95 0.95)
-                    , Element.Background.color backgroundColor
-                    , Element.width Element.fill
-                    ]
     in
-    { title = "Elm Editor", body = [ body ] }
+    [ [ [ saveButton, formatButton ]
+            |> Element.row
+                [ Element.spacing defaultFontSize
+                , Element.padding (defaultFontSize // 2)
+                ]
+      , monacoEditorElement state
+      ]
+        |> Element.column
+            [ Element.spacing (defaultFontSize // 2)
+            , Element.width (Element.fillPortion 4)
+            , Element.height Element.fill
+            ]
+    , [ [ compileButton ] |> Element.row [ Element.padding (defaultFontSize // 2) ]
+      , resultElement
+            |> Element.el
+                [ Element.width Element.fill
+                , Element.height Element.fill
+
+                -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
+                , Element.clip
+                , Element.htmlAttribute (HA.style "flex-shrink" "1")
+                ]
+      ]
+        |> Element.column
+            [ Element.width (Element.fillPortion 4)
+            , Element.height Element.fill
+            ]
+    ]
+        |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+
+
+buttonElement : { label : String, onPress : Maybe Event } -> Element.Element Event
+buttonElement buttonConfig =
+    Element.Input.button
+        [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
+        , Element.mouseOver
+            [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
+        , Element.paddingXY defaultFontSize (defaultFontSize // 2)
+        , Element.Border.widthEach { left = 0, right = 0, top = 0, bottom = 2 }
+        , Element.Border.color (Element.rgb 0 0.5 0.8)
+        ]
+        { label = Element.text buttonConfig.label
+        , onPress = buttonConfig.onPress
+        }
+
+
+saveButton : Element.Element Event
+saveButton =
+    buttonElement { label = "💾 Save", onPress = Just (UserInputSave False) }
 
 
 setTextInMonacoEditorCmd : String -> Cmd Event
@@ -424,23 +689,41 @@ monacoEditorElement _ =
         |> Element.html
 
 
-initElmCode : String
-initElmCode =
-    ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
-        |> decodeBytesToString
-        |> Maybe.withDefault "Failed to decode file"
-
-
-initElmJson : String
-initElmJson =
-    ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
-        |> decodeBytesToString
-        |> Maybe.withDefault "Failed to decode file"
+defaultProject : ProjectState.ProjectState
+defaultProject =
+    [ { filePath = [ "src", "Main.elm" ]
+      , fileContentText =
+            ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
+                |> decodeBytesToString
+                |> Maybe.withDefault "Failed to decode file"
+      }
+    , { filePath = [ "elm.json" ]
+      , fileContentText =
+            ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
+                |> decodeBytesToString
+                |> Maybe.withDefault "Failed to decode file"
+      }
+    ]
 
 
 decodeBytesToString : Bytes.Bytes -> Maybe String
 decodeBytesToString bytes =
     bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
+
+
+htmlOfferingTextToCopy : String -> Html.Html event
+htmlOfferingTextToCopy text =
+    Html.input
+        [ HA.type_ "text"
+        , HA.value text
+        , HA.readonly True
+        , HA.style "width" "100%"
+        , HA.style "padding" "0.4em"
+        , HA.style "font-family" "inherit"
+        , HA.style "color" "inherit"
+        , HA.style "background" "inherit"
+        ]
+        []
 
 
 describeHttpError : Http.Error -> String

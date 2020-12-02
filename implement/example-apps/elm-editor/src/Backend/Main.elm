@@ -261,7 +261,7 @@ var app = Elm.FrontendWeb.Main.init({
 });
 
 app.ports.sendMessageToMonacoFrame.subscribe(function(message) {
-    document.getElementById('monaco-iframe').contentWindow?.dispatchMessage?.(message);
+    document.getElementById('monaco-iframe')?.contentWindow?.dispatchMessage?.(message);
 });
 
 function messageFromMonacoFrame(message) {
