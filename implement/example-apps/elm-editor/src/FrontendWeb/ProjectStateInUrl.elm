@@ -21,7 +21,7 @@ setProjectStateInUrl projectState url =
     Url.Builder.crossOrigin
         (Url.toString { url | path = "", query = Nothing, fragment = Nothing })
         []
-        [ Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (encodeProjectState projectState)) ]
+        [ Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (jsonEncodeProjectState projectState)) ]
         |> Url.fromString
         |> Maybe.withDefault url
 
@@ -32,17 +32,21 @@ projectStateFromUrl url =
         |> Url.Parser.parse
             (Url.Parser.top <?> Url.Parser.Query.string projectStateQueryParameterName)
         |> Maybe.Extra.join
-        |> Maybe.map (Json.Decode.decodeString decodeProjectState)
+        |> Maybe.map (Json.Decode.decodeString jsonDecodeProjectState)
 
 
-encodeProjectState : ProjectState -> Json.Encode.Value
-encodeProjectState =
-    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12
+jsonEncodeProjectState : ProjectState -> Json.Encode.Value
+jsonEncodeProjectState project =
+    Json.Encode.object
+        [ ( "version_2020_12", ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12 project )
+        ]
 
 
-decodeProjectState : Json.Decode.Decoder ProjectState
-decodeProjectState =
-    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
+jsonDecodeProjectState : Json.Decode.Decoder ProjectState
+jsonDecodeProjectState =
+    Json.Decode.oneOf
+        [ Json.Decode.field "version_2020_12" ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
+        ]
 
 
 projectStateStringFromUrl : Url.Url -> Maybe String
