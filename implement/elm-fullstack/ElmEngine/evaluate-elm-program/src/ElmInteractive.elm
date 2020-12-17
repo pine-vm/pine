@@ -9,6 +9,7 @@ module ElmInteractive exposing
     , submissionInInteractive
     )
 
+import BigInt
 import Dict
 import Elm.Parser
 import Elm.Processing
@@ -22,6 +23,7 @@ import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.Type
 import Json.Encode
+import Maybe.Extra
 import Parser
 import Pine
 import Result.Extra
@@ -46,7 +48,9 @@ type SubmissionResponse
 
 type ElmValue
     = ElmList (List ElmValue)
-    | ElmStringOrInteger String
+    | ElmChar Char
+    | ElmInteger BigInt.BigInt
+    | ElmString String
     | ElmTag String (List ElmValue)
     | ElmRecord (List ( String, ElmValue ))
 
@@ -149,7 +153,17 @@ elmValueAsExpression elmValue =
         ElmList list ->
             "[" ++ (list |> List.map elmValueAsExpression |> String.join ",") ++ "]"
 
-        ElmStringOrInteger string ->
+        ElmInteger integer ->
+            -- TODO: Switch to Int
+            integer |> BigInt.toString |> Json.Encode.string |> Json.Encode.encode 0
+
+        ElmChar char ->
+            {- 2020-12-16 TODO: Switch to Char
+               "'" ++ (char |> String.fromChar) ++ "'"
+            -}
+            char |> Char.toCode |> BigInt.fromInt |> ElmInteger |> elmValueAsExpression
+
+        ElmString string ->
             string |> Json.Encode.string |> Json.Encode.encode 0
 
         ElmRecord fields ->
@@ -162,7 +176,17 @@ elmValueAsExpression elmValue =
 elmValueAsJson : ElmValue -> Json.Encode.Value
 elmValueAsJson elmValue =
     case elmValue of
-        ElmStringOrInteger string ->
+        ElmInteger integer ->
+            integer
+                |> BigInt.toString
+                |> String.toInt
+                |> Maybe.map Json.Encode.int
+                |> Maybe.withDefault (Json.Encode.string "Failed to map from BigInt to Int")
+
+        ElmChar char ->
+            Json.Encode.string (String.fromChar char)
+
+        ElmString string ->
             Json.Encode.string string
 
         ElmList list ->
@@ -177,10 +201,32 @@ elmValueAsJson elmValue =
 
 pineValueAsElmValue : Pine.Value -> Result String ElmValue
 pineValueAsElmValue pineValue =
+    {-
+       2020-12-16 TODO:
+       Replace the many heuristics in here with something more robust.
+    -}
     case pineValue of
-        Pine.StringOrIntegerValue string ->
+        Pine.BlobValue blobValue ->
             -- TODO: Use type inference to distinguish between string and integer
-            Ok (ElmStringOrInteger string)
+            case blobValue of
+                [] ->
+                    Ok (ElmString "")
+
+                firstByte :: _ ->
+                    if firstByte == 0 || firstByte == 0x80 then
+                        blobValue
+                            |> Pine.bigIntFromBlobValue
+                            |> Result.map ElmInteger
+
+                    else
+                        blobValue
+                            |> Pine.bigIntFromUnsignedBlobValue
+                            |> BigInt.toString
+                            |> String.toInt
+                            |> Maybe.withDefault 0
+                            |> Char.fromCode
+                            |> ElmChar
+                            |> Ok
 
         Pine.ListValue list ->
             case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
@@ -189,12 +235,20 @@ pineValueAsElmValue pineValue =
 
                 Ok listValues ->
                     let
+                        tryMapToChar elmValue =
+                            case elmValue of
+                                ElmChar char ->
+                                    Just char
+
+                                _ ->
+                                    Nothing
+
                         resultAsList =
                             Ok (ElmList listValues)
 
                         tryMapToRecordField possiblyRecordField =
                             case possiblyRecordField of
-                                ElmList [ ElmStringOrInteger fieldName, fieldValue ] ->
+                                ElmList [ ElmString fieldName, fieldValue ] ->
                                     if not (stringStartsWithUpper fieldName) then
                                         Just ( fieldName, fieldValue )
 
@@ -204,29 +258,38 @@ pineValueAsElmValue pineValue =
                                 _ ->
                                     Nothing
                     in
-                    case listValues |> List.map (tryMapToRecordField >> Result.fromMaybe "") |> Result.Extra.combine of
-                        Ok recordFields ->
-                            let
-                                recordFieldsNames =
-                                    List.map Tuple.first recordFields
-                            in
-                            if recordFieldsNames /= [] && List.sort recordFieldsNames == recordFieldsNames then
-                                Ok (ElmRecord recordFields)
+                    if listValues == [] then
+                        resultAsList
 
-                            else
-                                resultAsList
+                    else
+                        case listValues |> List.map tryMapToChar |> Maybe.Extra.combine of
+                            Just chars ->
+                                chars |> String.fromList |> ElmString |> Ok
 
-                        Err _ ->
-                            case listValues of
-                                [ ElmStringOrInteger tagName, ElmList tagArguments ] ->
-                                    if stringStartsWithUpper tagName then
-                                        Ok (ElmTag tagName tagArguments)
+                            Nothing ->
+                                case listValues |> List.map (tryMapToRecordField >> Result.fromMaybe "") |> Result.Extra.combine of
+                                    Ok recordFields ->
+                                        let
+                                            recordFieldsNames =
+                                                List.map Tuple.first recordFields
+                                        in
+                                        if recordFieldsNames /= [] && List.sort recordFieldsNames == recordFieldsNames then
+                                            Ok (ElmRecord recordFields)
 
-                                    else
-                                        resultAsList
+                                        else
+                                            resultAsList
 
-                                _ ->
-                                    resultAsList
+                                    Err _ ->
+                                        case listValues of
+                                            [ ElmString tagName, ElmList tagArguments ] ->
+                                                if stringStartsWithUpper tagName then
+                                                    Ok (ElmTag tagName tagArguments)
+
+                                                else
+                                                    resultAsList
+
+                                            _ ->
+                                                resultAsList
 
         Pine.ExpressionValue _ ->
             Err "ExpressionValue"
@@ -591,7 +654,8 @@ type alias Char = Int
 
 toCode : Char -> Int
 toCode char =
-    char
+    -- Add the sign prefix byte
+    PineKernel.blobValueOneByteZero ++ char
 
 """
     , """
@@ -644,15 +708,18 @@ elmValuesToExposeToGlobal =
 
 pineExpressionFromElm : Elm.Syntax.Expression.Expression -> Result String Pine.Expression
 pineExpressionFromElm elmExpression =
+    {-
+       2020-12-16 TODO: Add tags for 'Int' and 'String'?
+    -}
     case elmExpression of
         Elm.Syntax.Expression.Literal literal ->
-            Ok (Pine.LiteralExpression (Pine.StringOrIntegerValue literal))
+            Ok (Pine.LiteralExpression (Pine.valueFromString literal))
 
         Elm.Syntax.Expression.CharLiteral char ->
-            Ok (Pine.LiteralExpression (Pine.StringOrIntegerValue (String.fromInt (Char.toCode char))))
+            Ok (Pine.LiteralExpression (Pine.valueFromChar char))
 
         Elm.Syntax.Expression.Integer integer ->
-            Ok (Pine.LiteralExpression (Pine.StringOrIntegerValue (String.fromInt integer)))
+            Ok (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer)))
 
         Elm.Syntax.Expression.Negation negatedElmExpression ->
             case pineExpressionFromElm (Elm.Syntax.Node.value negatedElmExpression) of
@@ -663,7 +730,11 @@ pineExpressionFromElm elmExpression =
                     Ok (Pine.ApplicationExpression { function = Pine.FunctionOrValueExpression "PineKernel.negate", arguments = [ negatedExpression ] })
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            Ok (Pine.FunctionOrValueExpression (String.join "." (moduleName ++ [ localName ])))
+            Ok
+                (pineValueFromFunctionOrValue moduleName localName
+                    |> Maybe.map Pine.LiteralExpression
+                    |> Maybe.withDefault (Pine.FunctionOrValueExpression (String.join "." (moduleName ++ [ localName ])))
+                )
 
         Elm.Syntax.Expression.Application application ->
             case application |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm) |> Result.Extra.combine of
@@ -753,6 +824,20 @@ pineExpressionFromElm elmExpression =
                 ("Unsupported type of expression: "
                     ++ (elmExpression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0)
                 )
+
+
+pineValueFromFunctionOrValue : List String -> String -> Maybe Pine.Value
+pineValueFromFunctionOrValue moduleName nameInModule =
+    if moduleName == [ "PineKernel" ] then
+        case nameInModule of
+            "blobValueOneByteZero" ->
+                Just (Pine.BlobValue [ 0 ])
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
 
 
 pineExpressionFromElmLetBlock : Elm.Syntax.Expression.LetBlock -> Result String Pine.Expression
@@ -1079,7 +1164,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                             Pine.ApplicationExpression
                                 { function = Pine.FunctionOrValueExpression "PineKernel.equals"
                                 , arguments =
-                                    [ Pine.LiteralExpression (Pine.StringOrIntegerValue qualifiedName.name)
+                                    [ Pine.LiteralExpression (Pine.valueFromString qualifiedName.name)
                                     , Pine.ApplicationExpression
                                         { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
                                         , arguments = [ caseBlockValueExpression ]
@@ -1169,7 +1254,7 @@ pineExpressionFromElmRecord recordSetters =
                     Ok fieldExpression ->
                         Ok
                             (Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.StringOrIntegerValue fieldName)
+                                [ Pine.LiteralExpression (Pine.valueFromString fieldName)
                                 , fieldExpression
                                 ]
                             )

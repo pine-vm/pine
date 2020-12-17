@@ -2,6 +2,7 @@ module Pine exposing (..)
 
 import BigInt
 import Json.Encode
+import Maybe.Extra
 import Result.Extra
 
 
@@ -16,7 +17,7 @@ type Expression
 
 
 type Value
-    = StringOrIntegerValue String
+    = BlobValue (List Int)
     | ListValue (List Value)
       -- TODO: Replace ExpressionValue with convention for mapping value to expression.
     | ExpressionValue Expression
@@ -103,14 +104,19 @@ evaluateExpression context expression =
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
 valueFromContextExpansionWithName ( declName, declValue ) =
-    ListValue [ StringOrIntegerValue declName, declValue ]
+    ListValue [ valueFromString declName, declValue ]
 
 
 namedValueFromValue : Value -> Maybe ( String, Value )
 namedValueFromValue value =
     case value of
-        ListValue [ StringOrIntegerValue elementLabel, elementValue ] ->
-            Just ( elementLabel, elementValue )
+        ListValue [ elementLabelCandidate, elementValue ] ->
+            case stringFromValue elementLabelCandidate of
+                Just elementLabel ->
+                    Just ( elementLabel, elementValue )
+
+                Nothing ->
+                    Nothing
 
         _ ->
             Nothing
@@ -180,8 +186,8 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
     let
         functionOnTwoBigIntWithBooleanResult functionOnBigInt =
             evaluateFunctionApplicationExpectingExactlyTwoArguments
-                { mapArg0 = parseAsBigInt >> Result.mapError DescribePathEnd
-                , mapArg1 = parseAsBigInt >> Result.mapError DescribePathEnd
+                { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+                , mapArg1 = bigIntFromValue >> Result.mapError DescribePathEnd
                 , apply =
                     \leftInt rightInt ->
                         Ok
@@ -196,11 +202,11 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
 
         functionOnTwoBigIntWithBigIntResult functionOnBigInt =
             evaluateFunctionApplicationExpectingExactlyTwoArguments
-                { mapArg0 = parseAsBigInt >> Result.mapError DescribePathEnd
-                , mapArg1 = parseAsBigInt >> Result.mapError DescribePathEnd
+                { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+                , mapArg1 = bigIntFromValue >> Result.mapError DescribePathEnd
                 , apply =
                     \leftInt rightInt ->
-                        Ok (StringOrIntegerValue (functionOnBigInt leftInt rightInt |> BigInt.toString))
+                        Ok (valueFromBigInt (functionOnBigInt leftInt rightInt))
                 }
                 application.arguments
 
@@ -247,8 +253,8 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
 
                 "PineKernel.negate" ->
                     evaluateFunctionApplicationExpectingExactlyOneArgument
-                        { mapArg = parseAsBigInt >> Result.mapError DescribePathEnd
-                        , apply = BigInt.negate >> BigInt.toString >> StringOrIntegerValue >> Ok
+                        { mapArg = bigIntFromValue >> Result.mapError DescribePathEnd
+                        , apply = BigInt.negate >> valueFromBigInt >> Ok
                         }
                         application.arguments
 
@@ -276,7 +282,12 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                 "String.fromInt" ->
                     case application.arguments of
                         [ argument ] ->
-                            Ok argument
+                            case bigIntFromValue argument of
+                                Err error ->
+                                    Err (DescribePathEnd ("Failed to map to integer: " ++ error))
+
+                                Ok bigInt ->
+                                    bigInt |> BigInt.toString |> valueFromString |> Ok
 
                         _ ->
                             Err
@@ -296,14 +307,22 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                         , apply =
                             \leftValue rightValue ->
                                 case ( leftValue, rightValue ) of
-                                    ( StringOrIntegerValue leftLiteral, StringOrIntegerValue rightLiteral ) ->
-                                        Ok (StringOrIntegerValue (leftLiteral ++ rightLiteral))
+                                    ( BlobValue leftLiteral, BlobValue rightLiteral ) ->
+                                        Ok (BlobValue (leftLiteral ++ rightLiteral))
 
                                     ( ListValue leftList, ListValue rightList ) ->
                                         Ok (ListValue (leftList ++ rightList))
 
                                     _ ->
-                                        Err (DescribePathEnd "Unexpected combination of operands.")
+                                        Err
+                                            (DescribePathEnd
+                                                ("Unexpected combination of operands for '++' ("
+                                                    ++ describeValueSuperficial leftValue
+                                                    ++ ", "
+                                                    ++ describeValueSuperficial rightValue
+                                                    ++ ")."
+                                                )
+                                            )
                         }
                         application.arguments
 
@@ -397,23 +416,6 @@ evaluateFunctionApplicationIgnoringAtomBindings context application =
             )
 
 
-parseAsBigInt : Value -> Result String BigInt.BigInt
-parseAsBigInt value =
-    case value of
-        StringOrIntegerValue stringOrInt ->
-            BigInt.fromIntString stringOrInt
-                |> Result.fromMaybe ("Failed to parse as integer: " ++ stringOrInt)
-
-        ListValue _ ->
-            Err "Unexpected type of value: List"
-
-        ExpressionValue _ ->
-            Err "Unexpected type of value: ExpressionValue"
-
-        ClosureValue _ _ _ ->
-            Err "Unexpected type of value: ClosureValue"
-
-
 intFromBigInt : BigInt.BigInt -> Result String Int
 intFromBigInt bigInt =
     case bigInt |> BigInt.toString |> String.toInt of
@@ -496,12 +498,12 @@ falseValue =
 
 tagValue : String -> List Value -> Value
 tagValue tagName tagArguments =
-    ListValue [ StringOrIntegerValue tagName, ListValue tagArguments ]
+    ListValue [ valueFromString tagName, ListValue tagArguments ]
 
 
 tagValueExpression : String -> List Expression -> Expression
 tagValueExpression tagName tagArgumentsExpressions =
-    ListExpression [ LiteralExpression (StringOrIntegerValue tagName), ListExpression tagArgumentsExpressions ]
+    ListExpression [ LiteralExpression (valueFromString tagName), ListExpression tagArgumentsExpressions ]
 
 
 describeExpression : Expression -> String
@@ -529,11 +531,27 @@ describeExpression expression =
             "context-expansion(" ++ newName ++ ")"
 
 
+describeValueSuperficial : Value -> String
+describeValueSuperficial value =
+    case value of
+        BlobValue _ ->
+            "BlobValue"
+
+        ListValue _ ->
+            "ListValue"
+
+        ExpressionValue _ ->
+            "ExpressionValue"
+
+        ClosureValue _ _ _ ->
+            "ClosureValue"
+
+
 describeValue : Value -> String
 describeValue value =
     case value of
-        StringOrIntegerValue string ->
-            "StringOrIntegerValue " ++ Json.Encode.encode 0 (Json.Encode.string string)
+        BlobValue blob ->
+            "BlobValue 0x" ++ Json.Encode.encode 0 (Json.Encode.string (hexadecimalRepresentationFromBlobValue blob))
 
         ListValue list ->
             "[" ++ String.join ", " (List.map describeValue list) ++ "]"
@@ -543,3 +561,141 @@ describeValue value =
 
         ClosureValue _ argumentName expression ->
             "closure(" ++ argumentName ++ "," ++ describeExpression expression ++ ")"
+
+
+valueFromString : String -> Value
+valueFromString =
+    String.toList
+        >> List.map valueFromChar
+        >> ListValue
+
+
+valueFromChar : Char -> Value
+valueFromChar =
+    Char.toCode >> BigInt.fromInt >> unsignedBlobValueFromBigInt >> Maybe.withDefault [] >> BlobValue
+
+
+stringFromValue : Value -> Maybe String
+stringFromValue value =
+    case value of
+        ListValue chars ->
+            chars
+                |> List.map bigIntFromUnsignedValue
+                |> List.map (Maybe.andThen (BigInt.toString >> String.toInt >> Maybe.map Char.fromCode))
+                |> Maybe.Extra.combine
+                |> Maybe.map String.fromList
+
+        _ ->
+            Nothing
+
+
+valueFromBigInt : BigInt.BigInt -> Value
+valueFromBigInt =
+    blobValueFromBigInt >> BlobValue
+
+
+blobValueFromBigInt : BigInt.BigInt -> List Int
+blobValueFromBigInt bigint =
+    let
+        value =
+            BigInt.abs bigint
+
+        signByte =
+            if value == bigint then
+                0
+
+            else
+                0x80
+
+        unsignedBytesFromIntValue intValue =
+            if BigInt.lt intValue (BigInt.fromInt 0x0100) then
+                String.toInt (BigInt.toString intValue) |> Maybe.map List.singleton
+
+            else
+                case BigInt.divmod intValue (BigInt.fromInt 0x0100) of
+                    Nothing ->
+                        Nothing
+
+                    Just ( upper, lower ) ->
+                        case unsignedBytesFromIntValue upper of
+                            Nothing ->
+                                Nothing
+
+                            Just upperBytes ->
+                                case String.toInt (BigInt.toString lower) of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just lowerByte ->
+                                        Just (upperBytes ++ [ lowerByte ])
+    in
+    signByte :: Maybe.withDefault [] (unsignedBytesFromIntValue value)
+
+
+unsignedBlobValueFromBigInt : BigInt.BigInt -> Maybe (List Int)
+unsignedBlobValueFromBigInt bigint =
+    case blobValueFromBigInt bigint of
+        [] ->
+            Nothing
+
+        signByte :: unsignedBytes ->
+            if signByte == 0 then
+                Just unsignedBytes
+
+            else
+                Nothing
+
+
+bigIntFromValue : Value -> Result String BigInt.BigInt
+bigIntFromValue value =
+    case value of
+        BlobValue blobValue ->
+            bigIntFromBlobValue blobValue
+
+        _ ->
+            Err "Only a BlobValue can represent an integer."
+
+
+bigIntFromBlobValue : List Int -> Result String BigInt.BigInt
+bigIntFromBlobValue blobValue =
+    case blobValue of
+        [] ->
+            Err "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?"
+
+        sign :: intValueBytes ->
+            intValueBytes
+                |> bigIntFromUnsignedBlobValue
+                |> (if sign == 0 then
+                        identity
+
+                    else
+                        BigInt.negate
+                   )
+                |> Ok
+
+
+bigIntFromUnsignedValue : Value -> Maybe BigInt.BigInt
+bigIntFromUnsignedValue value =
+    case value of
+        BlobValue intValueBytes ->
+            Just (bigIntFromUnsignedBlobValue intValueBytes)
+
+        _ ->
+            Nothing
+
+
+bigIntFromUnsignedBlobValue : List Int -> BigInt.BigInt
+bigIntFromUnsignedBlobValue intValueBytes =
+    intValueBytes
+        |> List.foldl
+            (\nextByte aggregate ->
+                BigInt.add (BigInt.fromInt nextByte) (BigInt.mul (BigInt.fromInt 0x0100) aggregate)
+            )
+            (BigInt.fromInt 0)
+
+
+hexadecimalRepresentationFromBlobValue : List Int -> String
+hexadecimalRepresentationFromBlobValue =
+    List.map BigInt.fromInt
+        >> List.map (BigInt.toHexString >> String.padLeft 2 '0')
+        >> String.join ""
