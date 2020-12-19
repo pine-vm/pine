@@ -154,20 +154,25 @@ elmValueAsExpression elmValue =
             "[" ++ (list |> List.map elmValueAsExpression |> String.join ",") ++ "]"
 
         ElmInteger integer ->
-            -- TODO: Switch to Int
-            integer |> BigInt.toString |> Json.Encode.string |> Json.Encode.encode 0
+            integer
+                |> BigInt.toString
+                |> String.toInt
+                |> Maybe.map Json.Encode.int
+                |> Maybe.withDefault (Json.Encode.string "Failed to encode integer")
+                |> Json.Encode.encode 0
 
         ElmChar char ->
-            {- 2020-12-16 TODO: Switch to Char
-               "'" ++ (char |> String.fromChar) ++ "'"
-            -}
-            char |> Char.toCode |> BigInt.fromInt |> ElmInteger |> elmValueAsExpression
+            "'" ++ (char |> String.fromChar) ++ "'"
 
         ElmString string ->
             string |> Json.Encode.string |> Json.Encode.encode 0
 
         ElmRecord fields ->
-            "{ " ++ (fields |> List.map (\( fieldName, fieldValue ) -> fieldName ++ " = " ++ elmValueAsExpression fieldValue) |> String.join ", ") ++ " }"
+            if fields == [] then
+                "{}"
+
+            else
+                "{ " ++ (fields |> List.map (\( fieldName, fieldValue ) -> fieldName ++ " = " ++ elmValueAsExpression fieldValue) |> String.join ", ") ++ " }"
 
         ElmTag tagName tagArguments ->
             tagName :: (tagArguments |> List.map elmValueAsExpression) |> String.join " "
@@ -201,13 +206,8 @@ elmValueAsJson elmValue =
 
 pineValueAsElmValue : Pine.Value -> Result String ElmValue
 pineValueAsElmValue pineValue =
-    {-
-       2020-12-16 TODO:
-       Replace the many heuristics in here with something more robust.
-    -}
     case pineValue of
         Pine.BlobValue blobValue ->
-            -- TODO: Use type inference to distinguish between string and integer
             case blobValue of
                 [] ->
                     Ok (ElmString "")
@@ -245,18 +245,6 @@ pineValueAsElmValue pineValue =
 
                         resultAsList =
                             Ok (ElmList listValues)
-
-                        tryMapToRecordField possiblyRecordField =
-                            case possiblyRecordField of
-                                ElmList [ ElmString fieldName, fieldValue ] ->
-                                    if not (stringStartsWithUpper fieldName) then
-                                        Just ( fieldName, fieldValue )
-
-                                    else
-                                        Nothing
-
-                                _ ->
-                                    Nothing
                     in
                     if listValues == [] then
                         resultAsList
@@ -267,35 +255,69 @@ pineValueAsElmValue pineValue =
                                 chars |> String.fromList |> ElmString |> Ok
 
                             Nothing ->
-                                case listValues |> List.map (tryMapToRecordField >> Result.fromMaybe "") |> Result.Extra.combine of
-                                    Ok recordFields ->
-                                        let
-                                            recordFieldsNames =
-                                                List.map Tuple.first recordFields
-                                        in
-                                        if recordFieldsNames /= [] && List.sort recordFieldsNames == recordFieldsNames then
-                                            Ok (ElmRecord recordFields)
+                                case listValues of
+                                    [ ElmString tagName, ElmList tagArguments ] ->
+                                        if stringStartsWithUpper tagName then
+                                            if tagName == elmRecordTypeTagName then
+                                                (case tagArguments of
+                                                    [ recordValue ] ->
+                                                        elmValueAsElmRecord recordValue
+
+                                                    _ ->
+                                                        Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
+                                                )
+                                                    |> Result.mapError ((++) "Failed to extract value under record tag: ")
+
+                                            else
+                                                Ok (ElmTag tagName tagArguments)
 
                                         else
                                             resultAsList
 
-                                    Err _ ->
-                                        case listValues of
-                                            [ ElmString tagName, ElmList tagArguments ] ->
-                                                if stringStartsWithUpper tagName then
-                                                    Ok (ElmTag tagName tagArguments)
-
-                                                else
-                                                    resultAsList
-
-                                            _ ->
-                                                resultAsList
+                                    _ ->
+                                        resultAsList
 
         Pine.ExpressionValue _ ->
             Err "ExpressionValue"
 
         Pine.ClosureValue _ _ _ ->
             Err "ClosureValue"
+
+
+elmValueAsElmRecord : ElmValue -> Result String ElmValue
+elmValueAsElmRecord elmValue =
+    let
+        tryMapToRecordField possiblyRecordField =
+            case possiblyRecordField of
+                ElmList [ ElmString fieldName, fieldValue ] ->
+                    if not (stringStartsWithUpper fieldName) then
+                        Ok ( fieldName, fieldValue )
+
+                    else
+                        Err ("Field name does start with uppercase: '" ++ fieldName ++ "'")
+
+                _ ->
+                    Err "Not a list."
+    in
+    case elmValue of
+        ElmList recordFieldList ->
+            case recordFieldList |> List.map tryMapToRecordField |> Result.Extra.combine of
+                Ok recordFields ->
+                    let
+                        recordFieldsNames =
+                            List.map Tuple.first recordFields
+                    in
+                    if List.sort recordFieldsNames == recordFieldsNames then
+                        Ok (ElmRecord recordFields)
+
+                    else
+                        Err "Unexpected order of fields."
+
+                Err parseFieldError ->
+                    Err ("Failed to parse field: " ++ parseFieldError)
+
+        _ ->
+            Err "Value is not a list."
 
 
 pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.ExpressionContext
@@ -708,9 +730,6 @@ elmValuesToExposeToGlobal =
 
 pineExpressionFromElm : Elm.Syntax.Expression.Expression -> Result String Pine.Expression
 pineExpressionFromElm elmExpression =
-    {-
-       2020-12-16 TODO: Add tags for 'Int' and 'String'?
-    -}
     case elmExpression of
         Elm.Syntax.Expression.Literal literal ->
             Ok (Pine.LiteralExpression (Pine.valueFromString literal))
@@ -1260,7 +1279,7 @@ pineExpressionFromElmRecord recordSetters =
                             )
             )
         |> Result.Extra.combine
-        |> Result.map Pine.ListExpression
+        |> Result.map (Pine.ListExpression >> List.singleton >> Pine.tagValueExpression elmRecordTypeTagName)
 
 
 moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)
@@ -1332,6 +1351,11 @@ compareLocations left right =
 
     else
         compare left.column right.column
+
+
+elmRecordTypeTagName : String
+elmRecordTypeTagName =
+    "Elm_Record"
 
 
 operatorPrecendencePriority : Dict.Dict String Int

@@ -321,7 +321,7 @@ named_literal =
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ 4 + 4 * 3 + 1 """
-                        , expectedValueElmExpression = "17" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = 17 |> Json.Encode.int |> Json.Encode.encode 0
                         }
             , Test.test "Parentheses override operator precedence" <|
                 \_ ->
@@ -329,7 +329,7 @@ named_literal =
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ (1 + 2) * (3 + 1) """
-                        , expectedValueElmExpression = "12" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = 12 |> Json.Encode.int |> Json.Encode.encode 0
                         }
             , Test.test "Multiplication and division operators have same priority and are applied left to right" <|
                 \_ ->
@@ -337,7 +337,7 @@ named_literal =
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ 20 * 20 // 30  """
-                        , expectedValueElmExpression = "13" |> Json.Encode.string |> Json.Encode.encode 0
+                        , expectedValueElmExpression = 13 |> Json.Encode.int |> Json.Encode.encode 0
                         }
             , Test.test "Use value from previous submission" <|
                 \_ ->
@@ -379,6 +379,14 @@ named_literal =
                     , previousSubmissions = []
                     , submission = """ { beta =  "1",  alpha = "0" } """
                     , expectedValueElmExpression = """{ alpha = "0", beta = "1" }"""
+                    }
+        , Test.test "Empty record syntax" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = """ {   } """
+                    , expectedValueElmExpression = """{}"""
                     }
         ]
 
