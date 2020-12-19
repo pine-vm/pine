@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace Kalmit
@@ -178,9 +179,18 @@ namespace Kalmit
 
         public class TreeWithStringPath : IEquatable<TreeWithStringPath>
         {
+            static public readonly IComparer<string> TreeEntryNameComparer = StringComparer.Ordinal;
+
             public IImmutableList<byte> BlobContent;
 
             public IImmutableList<(string name, TreeWithStringPath component)> TreeContent;
+
+            static public TreeWithStringPath blob(ImmutableList<byte> blobContent) =>
+                new TreeWithStringPath { BlobContent = blobContent };
+
+            static public TreeWithStringPath blob(IReadOnlyList<byte> blobContent) =>
+                blob(blobContent.ToImmutableList());
+
 
             public IImmutableList<(IImmutableList<string> path, IImmutableList<byte> blobContent)> EnumerateBlobsTransitive() =>
                 TreeContent == null ? null :
@@ -368,6 +378,14 @@ namespace Kalmit
             SortedTreeFromSetOfBlobsWithStringPath(
                 blobsWithPath.Select(pathAndBlobContent => (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
+        static public TreeWithStringPath SortedTreeFromTree(
+            TreeWithStringPath tree) =>
+            tree.BlobContent != null
+            ?
+            tree
+            :
+            SortedTreeFromSetOfBlobs(tree.EnumerateBlobsTransitive());
+
         static public TreeWithStringPath SortedTreeFromSetOfBlobs(
             IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             new TreeWithStringPath
@@ -411,7 +429,7 @@ namespace Kalmit
                 treeContentBefore
                 .RemoveAll(c => c.name == pathFirstElement)
                 .Add((pathFirstElement, component))
-                .OrderBy(c => c.name)
+                .OrderBy(c => c.name, TreeWithStringPath.TreeEntryNameComparer)
                 .ToImmutableList();
         }
 

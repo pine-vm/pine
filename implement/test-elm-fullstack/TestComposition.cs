@@ -320,5 +320,69 @@ namespace test_elm_fullstack
 
             Assert.IsNotNull(Composition.ComponentFromUnsignedInteger(-1).Err);
         }
+
+        [TestMethod]
+        public void Tree_with_string_path_sorting()
+        {
+            var testCases = new[]
+            {
+                new
+                {
+                    input = new Composition.TreeWithStringPath
+                    {
+                        TreeContent = ImmutableList.Create(
+                            ("ba-", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(0))),
+                            ("ba", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(1))),
+                            ("bb", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(2))),
+                            ("a", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(3))),
+                            ("test😃", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(4))),
+                            ("testa", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(5))),
+                            ("tesz", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(6))),
+                            ("", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(7))),
+                            ("🌿", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(8))),
+                            ("🌲", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(9))),
+                            ("c", new Composition.TreeWithStringPath
+                            {
+                                TreeContent = ImmutableList.Create(
+                                    ("gamma", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(10))),
+                                    ("alpha", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(11)))
+                                    ),
+                            }),
+                            ("bA", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(12)))
+                            ),
+                    },
+                    expected = new Composition.TreeWithStringPath
+                    {
+                        TreeContent = ImmutableList.Create(
+                            ("", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(7))),
+                            ("a", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(3))),
+                            ("bA", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(12))),
+                            ("ba", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(1))),
+                            ("ba-", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(0))),
+                            ("bb", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(2))),
+                            ("c", new Composition.TreeWithStringPath
+                            {
+                                TreeContent = ImmutableList.Create(
+                                    ("alpha", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(11))),
+                                    ("gamma", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(10)))
+                                    ),
+                            }),
+                            ("testa", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(5))),
+                            ("test😃", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(4))),
+                            ("tesz", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(6))),
+                            ("🌲", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(9))),
+                            ("🌿", Composition.TreeWithStringPath.blob(ImmutableList.Create<byte>(8)))
+                            ),
+                    },
+                }
+            };
+
+            foreach (var testCase in testCases)
+            {
+                var sortedTree = Composition.SortedTreeFromTree(testCase.input);
+
+                Assert.AreEqual(expected: testCase.expected, sortedTree);
+            }
+        }
     }
 }
