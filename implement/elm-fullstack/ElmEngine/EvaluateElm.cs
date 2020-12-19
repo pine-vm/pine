@@ -12,7 +12,7 @@ namespace elm_fullstack.ElmEngine
     public class EvaluateElm
     {
         static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
-            Composition.TreeComponent appCodeTree,
+            Composition.TreeWithStringPath appCodeTree,
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
@@ -28,18 +28,14 @@ namespace elm_fullstack.ElmEngine
 
         static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
             JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-            Composition.TreeComponent appCodeTree,
+            Composition.TreeWithStringPath appCodeTree,
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
             var modulesTexts =
                 appCodeTree == null ? null
                 :
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    appCodeTree.EnumerateBlobsTransitive()
-                    .Select(file =>
-                        (filePath: (IImmutableList<string>)file.path.Select(pathComponent => Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
-                        content: file.blobContent)))
+                ElmApp.ToFlatDictionaryWithPathComparer(appCodeTree.EnumerateBlobsTransitive())
                 .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
                 .WhereNotNull()
                 .ToImmutableList();

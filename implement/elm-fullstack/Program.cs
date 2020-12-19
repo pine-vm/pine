@@ -151,7 +151,7 @@ namespace elm_fullstack
                             Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                                 ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
-                        var appConfigComponent = Composition.FromTree(appConfigTree);
+                        var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
                         var processStoreWriter =
                             new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
@@ -384,7 +384,7 @@ namespace elm_fullstack
                         throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
                     }
 
-                    var sourceComposition = Composition.FromTree(loadFromPathResult.Ok.tree);
+                    var sourceComposition = Composition.FromTreeWithStringPath(loadFromPathResult.Ok.tree);
 
                     var (sourceCompositionId, sourceSummary) = compileSourceSummary(loadFromPathResult.Ok.tree);
 
@@ -399,7 +399,7 @@ namespace elm_fullstack
                     var compilationLog = new List<string>();
 
                     string compilationException = null;
-                    Composition.TreeComponent compiledTree = null;
+                    Composition.TreeWithStringPath compiledTree = null;
 
                     try
                     {
@@ -423,7 +423,7 @@ namespace elm_fullstack
                     var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
 
                     var compiledComposition =
-                        compiledTree == null ? null : Composition.FromTree(compiledTree);
+                        compiledTree == null ? null : Composition.FromTreeWithStringPath(compiledTree);
 
                     var compiledCompositionId =
                         compiledComposition == null ? null :
@@ -433,11 +433,7 @@ namespace elm_fullstack
                     {
                         var compiledFiles =
                             ElmApp.ToFlatDictionaryWithPathComparer(
-                                compiledTree.EnumerateBlobsTransitive()
-                                .Select(filePathAndContent =>
-                                    (path: (IImmutableList<string>)filePathAndContent.path.Select(pathComponent => System.Text.Encoding.UTF8.GetString(pathComponent.ToArray())).ToImmutableList(),
-                                    filePathAndContent.blobContent))
-                                    .ToImmutableList());
+                                compiledTree.EnumerateBlobsTransitive().ToImmutableList());
 
                         var compiledCompositionArchive =
                             ZipArchive.ZipArchiveFromEntries(compiledFiles);
@@ -486,7 +482,7 @@ namespace elm_fullstack
                     Console.WriteLine(
                         "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
 
-                    Composition.TreeComponent contextAppCodeTree = null;
+                    Composition.TreeWithStringPath contextAppCodeTree = null;
 
                     var contextAppPath = contextAppOption.Value();
 
@@ -581,7 +577,7 @@ namespace elm_fullstack
             DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
         }
 
-        static (string compositionId, SourceSummaryStructure summary) compileSourceSummary(Composition.TreeComponent sourceTree)
+        static (string compositionId, SourceSummaryStructure summary) compileSourceSummary(Composition.TreeWithStringPath sourceTree)
         {
             var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceTree));
 
@@ -678,7 +674,7 @@ namespace elm_fullstack
 
             var filteredSourceCompositionId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
-                    Composition.GetHash(Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         Kalmit.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
@@ -752,7 +748,7 @@ namespace elm_fullstack
                         Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
-                    var appConfigComponent = Composition.FromTree(appConfigTree);
+                    var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
                     processStoreWriter.StoreComponent(appConfigComponent);
 
@@ -1063,10 +1059,7 @@ namespace elm_fullstack
             return
                 ElmApp.ToFlatDictionaryWithPathComparer(
                     Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
-                    .EnumerateBlobsTransitive()
-                    .Select(blobPathAndContent => (
-                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                        fileContent: blobPathAndContent.blobContent)));
+                    .EnumerateBlobsTransitive());
         }
 
         static public void replicateProcessAndLogToConsole(
@@ -1081,7 +1074,7 @@ namespace elm_fullstack
             var processHistoryTree =
                 Composition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
 
-            var processHistoryComponentHash = Composition.GetHash(Composition.FromTree(processHistoryTree));
+            var processHistoryComponentHash = Composition.GetHash(Composition.FromTreeWithStringPath(processHistoryTree));
             var processHistoryComponentHashBase16 = CommonConversion.StringBase16FromByteArray(processHistoryComponentHash);
 
             var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
@@ -1167,7 +1160,7 @@ namespace elm_fullstack
 
             var webAppConfigFileId =
                 Kalmit.CommonConversion.StringBase16FromByteArray(
-                    Composition.GetHash(Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         Kalmit.ZipArchive.EntriesFromZipArchive(configZipArchive)))));
 
             Console.WriteLine(

@@ -19,6 +19,9 @@ namespace Kalmit
             static public Component Blob(IReadOnlyList<byte> blobContent) =>
                 Blob(blobContent.ToImmutableList());
 
+            static public Component List(ImmutableList<Component> listContent) =>
+                new Component { ListContent = listContent };
+
             public bool Equals(Component other)
             {
                 if (BlobContent != null || other.BlobContent != null)
@@ -48,19 +51,144 @@ namespace Kalmit
             }
         }
 
-        public class TreeComponent : IEquatable<TreeComponent>
+        static public Component ComponentFromString(string str) =>
+            str == null
+            ?
+            null
+            :
+            Component.List(ListValueFromString(str).ToImmutableList());
+
+        static public IImmutableList<Component> ListValueFromString(string str) =>
+            str == null
+            ?
+            null
+            :
+            ToCodePoints(str)
+            .Select(charAsInteger => new System.Numerics.BigInteger(charAsInteger))
+            .Select(ComponentFromUnsignedInteger)
+            .Select(charValue => charValue.Ok).ToImmutableList();
+
+
+        // https://stackoverflow.com/questions/687359/how-would-you-get-an-array-of-unicode-code-points-from-a-net-string/28155130#28155130
+        static public int[] ToCodePoints(string str)
+        {
+            if (str == null)
+                return null;
+
+            var codePoints = new List<int>(str.Length);
+            for (int i = 0; i < str.Length; i++)
+            {
+                codePoints.Add(Char.ConvertToUtf32(str, i));
+                if (Char.IsHighSurrogate(str[i]))
+                    i += 1;
+            }
+
+            return codePoints.ToArray();
+        }
+
+        static public Result<string, string> StringFromComponent(Component component)
+        {
+            if (component.ListContent == null)
+                return Result<string, string>.err("Only a ListValue can represent a string.");
+
+            var charsIntegersResults =
+                component.ListContent
+                .Select(charValue => UnsignedIntegerFromComponent(charValue))
+                .ToImmutableList();
+
+            if (charsIntegersResults.Any(toIntResult => toIntResult.Ok == null))
+                return Result<string, string>.err("Failed to map list elements to unsigned integers.");
+
+            return Result<string, string>.ok(
+                string.Join("", charsIntegersResults.Select(toIntResult => Char.ConvertFromUtf32((int)toIntResult.Ok))));
+        }
+
+        static public Result<string, Component> ComponentFromUnsignedInteger(System.Numerics.BigInteger integer) =>
+            BlobValueFromUnsignedInteger(integer)
+            .map(Component.Blob);
+
+        static public Result<string, IImmutableList<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
+        {
+            var signedBlobValue = BlobValueFromSignedInteger(integer);
+
+            if (signedBlobValue[0] != 0)
+                return Result<string, IImmutableList<byte>>.err("Argument is a negative integer.");
+
+            return Result<string, IImmutableList<byte>>.ok(signedBlobValue.RemoveAt(0));
+        }
+
+        static public Component ComponentFromSignedInteger(System.Numerics.BigInteger integer) =>
+            Component.Blob(BlobValueFromSignedInteger(integer));
+
+        static public IImmutableList<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
+        {
+            var integerValue = System.Numerics.BigInteger.Abs(integer);
+
+            var signByte =
+                (byte)(integerValue == integer ? 0 : 0x80);
+
+            return
+                ImmutableList.Create(signByte)
+                .AddRange(integerValue.ToByteArray(isUnsigned: true, isBigEndian: true));
+        }
+
+        static public Result<string, System.Numerics.BigInteger> SignedIntegerFromComponent(Component component)
+        {
+            if (component.BlobContent == null)
+                return Result<string, System.Numerics.BigInteger>.err(
+                    "Only a BlobValue can represent an integer.");
+
+            return SignedIntegerFromBlobValue(component.BlobContent);
+        }
+
+        static public Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(IImmutableList<byte> blobValue)
+        {
+            if (blobValue.Count < 1)
+                return Result<string, System.Numerics.BigInteger>.err(
+                    "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?");
+
+            var signByte = blobValue[0];
+
+            if (signByte != 0 && signByte != 0x80)
+                return Result<string, System.Numerics.BigInteger>.err(
+                    "Unexpected value for sign byte of integer: " + signByte);
+
+            var isNegative = signByte != 0;
+
+            var integerValue =
+                UnsignedIntegerFromBlobValue(blobValue.RemoveAt(0));
+
+            return
+                Result<string, System.Numerics.BigInteger>.ok(
+                    integerValue * new System.Numerics.BigInteger(isNegative ? -1 : 1));
+        }
+
+        static public Result<string, System.Numerics.BigInteger> UnsignedIntegerFromComponent(Component component)
+        {
+            if (component.BlobContent == null)
+                return Result<string, System.Numerics.BigInteger>.err(
+                    "Only a BlobValue can represent an integer.");
+
+            return Result<string, System.Numerics.BigInteger>.ok(
+                UnsignedIntegerFromBlobValue(component.BlobContent));
+        }
+
+        static public System.Numerics.BigInteger UnsignedIntegerFromBlobValue(IImmutableList<byte> blobValue) =>
+            new System.Numerics.BigInteger(blobValue.ToArray(), isUnsigned: true, isBigEndian: true);
+
+        public class TreeWithStringPath : IEquatable<TreeWithStringPath>
         {
             public IImmutableList<byte> BlobContent;
 
-            public IImmutableList<(IImmutableList<byte> name, TreeComponent component)> TreeContent;
+            public IImmutableList<(string name, TreeWithStringPath component)> TreeContent;
 
-            public IImmutableList<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> EnumerateBlobsTransitive() =>
+            public IImmutableList<(IImmutableList<string> path, IImmutableList<byte> blobContent)> EnumerateBlobsTransitive() =>
                 TreeContent == null ? null :
                 EnumerateBlobsRecursive(TreeContent)
                 .ToImmutableList();
 
-            static IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> content)> EnumerateBlobsRecursive(
-                IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> tree)
+            static IEnumerable<(IImmutableList<string> path, IImmutableList<byte> content)> EnumerateBlobsRecursive(
+                IImmutableList<(string name, TreeWithStringPath obj)> tree)
             {
                 foreach (var treeEntry in tree)
                 {
@@ -77,7 +205,7 @@ namespace Kalmit
                 }
             }
 
-            public bool Equals(TreeComponent other)
+            public bool Equals(TreeWithStringPath other)
             {
                 if (BlobContent != null || other.BlobContent != null)
                 {
@@ -105,7 +233,7 @@ namespace Kalmit
                     });
             }
 
-            override public bool Equals(object obj) => Equals(obj as TreeComponent);
+            override public bool Equals(object obj) => Equals(obj as TreeWithStringPath);
 
             public override int GetHashCode()
             {
@@ -113,7 +241,7 @@ namespace Kalmit
             }
         }
 
-        static public ParseAsTreeResult ParseAsTree(
+        static public ParseAsTreeWithStringPathResult ParseAsTreeWithStringPath(
             Component composition)
         {
             if (composition == null)
@@ -121,9 +249,9 @@ namespace Kalmit
 
             if (composition.BlobContent != null)
             {
-                return new ParseAsTreeResult
+                return new ParseAsTreeWithStringPathResult
                 {
-                    Ok = new TreeComponent { BlobContent = composition.BlobContent }
+                    Ok = new TreeWithStringPath { BlobContent = composition.BlobContent }
                 };
             }
 
@@ -131,30 +259,34 @@ namespace Kalmit
                 composition.ListContent
                 .Select((component, componentIndex) =>
                 {
-                    if (!(component.ListContent?.Count == 2) || component.ListContent.ElementAt(0).BlobContent == null)
+                    if (!(component.ListContent?.Count == 2))
                     {
-                        return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
-                        {
-                            Err = ImmutableList<(int index, IImmutableList<byte> name)>.Empty
-                        };
+                        return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.err(
+                            ImmutableList<(int index, string name)>.Empty);
                     }
 
-                    var currentIndexAndName = (index: componentIndex, name: component.ListContent.ElementAt(0).BlobContent);
+                    var nameResult =
+                        StringFromComponent(component.ListContent.ElementAt(0));
 
-                    var parseResult = ParseAsTree(component.ListContent.ElementAt(1));
+                    if (nameResult.Ok == null)
+                    {
+                        return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.err(
+                            ImmutableList<(int index, string name)>.Empty);
+                    }
+
+                    var currentIndexAndName =
+                        (index: componentIndex, name: nameResult.Ok);
+
+                    var parseResult = ParseAsTreeWithStringPath(component.ListContent.ElementAt(1));
 
                     if (parseResult.Ok == null)
                     {
-                        return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
-                        {
-                            Err = ImmutableList.Create(currentIndexAndName).AddRange(parseResult.Err)
-                        };
+                        return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.err(
+                            ImmutableList.Create(currentIndexAndName).AddRange(parseResult.Err));
                     }
 
-                    return new Result<IImmutableList<(int index, IImmutableList<byte> name)>, (IImmutableList<byte> name, TreeComponent component)>
-                    {
-                        Ok = (name: currentIndexAndName.name, parseResult.Ok)
-                    };
+                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.ok(
+                        (name: currentIndexAndName.name, parseResult.Ok));
                 })
                 .ToImmutableList();
 
@@ -165,17 +297,17 @@ namespace Kalmit
                 .FirstOrDefault();
 
             if (firstError != null)
-                return new ParseAsTreeResult { Err = firstError };
+                return new ParseAsTreeWithStringPathResult { Err = firstError };
 
             return
-                new ParseAsTreeResult
+                new ParseAsTreeWithStringPathResult
                 {
-                    Ok = new TreeComponent
+                    Ok = new TreeWithStringPath
                     { TreeContent = compositionResults.Select(compositionResult => compositionResult.Ok).ToImmutableList() }
                 };
         }
 
-        static public Component FromTree(TreeComponent tree)
+        static public Component FromTreeWithStringPath(TreeWithStringPath tree)
         {
             if (tree == null)
                 return null;
@@ -189,8 +321,8 @@ namespace Kalmit
                     new Component
                     {
                         ListContent = ImmutableList.Create(
-                            new Component { BlobContent = treeComponent.name },
-                            FromTree(treeComponent.component))
+                            ComponentFromString(treeComponent.name),
+                            FromTreeWithStringPath(treeComponent.component))
                     })
                 .ToImmutableList();
 
@@ -200,61 +332,60 @@ namespace Kalmit
             };
         }
 
-        static public TreeComponent SortedTreeFromSetOfBlobsWithCommonFilePath(
+        static public TreeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
             IEnumerable<(string path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             SortedTreeFromSetOfBlobs(
                 blobsWithPath.Select(blobWithPath =>
                 {
                     var pathComponents =
                         blobWithPath.path.Split("/").SelectMany(pathComponent => pathComponent.Split(@"\"))
-                        .Select(pathComponent => (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(pathComponent).ToImmutableList())
                         .ToImmutableList();
 
-                    return (path: (IImmutableList<IImmutableList<byte>>)pathComponents, blobContent: blobWithPath.blobContent);
+                    return (path: (IImmutableList<string>)pathComponents, blobContent: blobWithPath.blobContent);
                 })
             );
 
-        static public TreeComponent SortedTreeFromSetOfBlobsWithCommonFilePath(
+        static public TreeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
             IEnumerable<(string path, byte[] blobContent)> blobsWithPath) =>
             SortedTreeFromSetOfBlobsWithCommonFilePath(
                 blobsWithPath.Select(blobWithPath => (blobWithPath.path, (IImmutableList<byte>)blobWithPath.blobContent.ToImmutableList())));
 
-        static public TreeComponent SortedTreeFromSetOfBlobs<PathT>(
+        static public TreeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
             IEnumerable<(IImmutableList<PathT> path, IImmutableList<byte> blobContent)> blobsWithPath,
-            Func<PathT, IImmutableList<byte>> mapPathComponent) =>
+            Func<PathT, string> mapPathComponent) =>
             SortedTreeFromSetOfBlobs(
                 blobsWithPath.Select(blobWithPath =>
-                    (path: (IImmutableList<IImmutableList<byte>>)blobWithPath.path.Select(mapPathComponent).ToImmutableList(),
+                    (path: (IImmutableList<string>)blobWithPath.path.Select(mapPathComponent).ToImmutableList(),
                     blobContent: blobWithPath.blobContent)));
 
-        static public TreeComponent SortedTreeFromSetOfBlobsWithStringPath(
+        static public TreeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
             IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             SortedTreeFromSetOfBlobs(
-                blobsWithPath, pathComponent => System.Text.Encoding.UTF8.GetBytes(pathComponent).ToImmutableList());
+                blobsWithPath, pathComponent => pathComponent);
 
-        static public TreeComponent SortedTreeFromSetOfBlobsWithStringPath(
+        static public TreeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
             IReadOnlyDictionary<IImmutableList<string>, IImmutableList<byte>> blobsWithPath) =>
             SortedTreeFromSetOfBlobsWithStringPath(
                 blobsWithPath.Select(pathAndBlobContent => (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
-        static public TreeComponent SortedTreeFromSetOfBlobs(
-            IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
-            new TreeComponent
+        static public TreeWithStringPath SortedTreeFromSetOfBlobs(
+            IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
+            new TreeWithStringPath
             {
                 TreeContent = SortedTreeContentFromSetOfBlobs(blobsWithPath)
             };
 
-        static public IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> SortedTreeContentFromSetOfBlobs(
-            IEnumerable<(IImmutableList<IImmutableList<byte>> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
+        static public IImmutableList<(string name, TreeWithStringPath obj)> SortedTreeContentFromSetOfBlobs(
+            IEnumerable<(IImmutableList<string> path, IImmutableList<byte> blobContent)> blobsWithPath) =>
             blobsWithPath
             .Aggregate(
-                (IImmutableList<(IImmutableList<byte> name, TreeComponent obj)>)
-                ImmutableList<(IImmutableList<byte> name, TreeComponent obj)>.Empty,
+                (IImmutableList<(string name, TreeWithStringPath obj)>)
+                ImmutableList<(string name, TreeWithStringPath obj)>.Empty,
                 (intermediateResult, nextBlob) => SetBlobAtPathSorted(intermediateResult, nextBlob.path, nextBlob.blobContent));
 
-        static public IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> SetBlobAtPathSorted(
-            IImmutableList<(IImmutableList<byte> name, TreeComponent obj)> treeContentBefore,
-            IImmutableList<IImmutableList<byte>> path,
+        static public IImmutableList<(string name, TreeWithStringPath obj)> SetBlobAtPathSorted(
+            IImmutableList<(string name, TreeWithStringPath obj)> treeContentBefore,
+            IImmutableList<string> path,
             IImmutableList<byte> blobContent)
         {
             var pathFirstElement = path.First();
@@ -265,22 +396,22 @@ namespace Kalmit
             var component =
                 path.Count < 2
                 ?
-                new TreeComponent { BlobContent = blobContent }
+                new TreeWithStringPath { BlobContent = blobContent }
                 :
-                new TreeComponent
+                new TreeWithStringPath
                 {
                     TreeContent =
                         SetBlobAtPathSorted(
-                            componentBefore?.TreeContent ?? ImmutableList<(IImmutableList<byte> name, TreeComponent obj)>.Empty,
+                            componentBefore?.TreeContent ?? ImmutableList<(string name, TreeWithStringPath obj)>.Empty,
                             path.RemoveAt(0),
                             blobContent)
                 };
 
             return
                 treeContentBefore
-                .RemoveAll(c => ByteListComparer.CompareStatic(c.name, pathFirstElement) == 0)
+                .RemoveAll(c => c.name == pathFirstElement)
                 .Add((pathFirstElement, component))
-                .OrderBy(c => c.name, new ByteListComparer())
+                .OrderBy(c => c.name)
                 .ToImmutableList();
         }
 
@@ -410,8 +541,8 @@ namespace Kalmit
             return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies: dependencies);
         }
 
-        static public byte[] GetHash(TreeComponent component) =>
-            CommonConversion.HashSHA256(GetSerialRepresentation(FromTree(component)));
+        static public byte[] GetHash(TreeWithStringPath component) =>
+            CommonConversion.HashSHA256(GetSerialRepresentation(FromTreeWithStringPath(component)));
 
         public class Result<ErrT, OkT> : IEquatable<Result<ErrT, OkT>>
         {
@@ -447,9 +578,17 @@ namespace Kalmit
             {
                 return HashCode.Combine(Err, Ok);
             }
+
+            public Result<ErrT, MappedOkT> map<MappedOkT>(Func<OkT, MappedOkT> okMap)
+            {
+                if (Ok == null)
+                    return Result<ErrT, MappedOkT>.err(Err);
+
+                return Result<ErrT, MappedOkT>.ok(okMap(Ok));
+            }
         }
 
-        public class ParseAsTreeResult : Result<IImmutableList<(int index, IImmutableList<byte> name)>, TreeComponent>
+        public class ParseAsTreeWithStringPathResult : Result<IImmutableList<(int index, string name)>, TreeWithStringPath>
         {
         }
 

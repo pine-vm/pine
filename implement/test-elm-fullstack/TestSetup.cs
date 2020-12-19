@@ -15,7 +15,7 @@ namespace test_elm_fullstack
 
         static public Composition.Component AppConfigComponentFromFiles(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> appFiles) =>
-            Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles));
+            Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles));
 
         static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
             IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>

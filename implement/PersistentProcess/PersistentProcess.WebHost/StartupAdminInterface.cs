@@ -172,20 +172,16 @@ namespace Kalmit.PersistentProcess.WebHost
 
                     IWebHost buildWebHost()
                     {
-                        var appConfigTree = Composition.ParseAsTree(
+                        var appConfigTree = Composition.ParseAsTreeWithStringPath(
                             processVolatileRepresentation.lastAppConfig.Value.appConfigComponent).Ok;
 
                         var appConfigFilesNamesAndContents =
-                            appConfigTree.EnumerateBlobsTransitive()
-                            .Select(blobPathAndContent => (
-                                fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => System.Text.Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                                fileContent: blobPathAndContent.blobContent))
-                                .ToImmutableList();
+                            appConfigTree.EnumerateBlobsTransitive();
 
                         var webAppConfigurationFile =
                             appConfigFilesNamesAndContents
-                            .FirstOrDefault(filePathAndContent => filePathAndContent.fileName.SequenceEqual(JsonFilePath))
-                            .fileContent;
+                            .FirstOrDefault(filePathAndContent => filePathAndContent.path.SequenceEqual(JsonFilePath))
+                            .blobContent;
 
                         var webAppConfiguration =
                             webAppConfigurationFile == null
@@ -321,14 +317,10 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
 
-                        var appConfigTree = Composition.ParseAsTree(appConfig).Ok;
+                        var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
 
                         var appConfigFilesNamesAndContents =
-                            appConfigTree.EnumerateBlobsTransitive()
-                            .Select(blobPathAndContent => (
-                                fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                                fileContent: blobPathAndContent.blobContent))
-                            .ToImmutableList();
+                            appConfigTree.EnumerateBlobsTransitive();
 
                         var appConfigZipArchive =
                             ZipArchive.ZipArchiveFromEntries(
@@ -378,7 +370,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                                 ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive));
 
-                        var appConfigComponent = Composition.FromTree(appConfigTree);
+                        var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
                         processStoreWriter.StoreComponent(appConfigComponent);
 

@@ -108,7 +108,7 @@ namespace Kalmit
             //  https://github.com/libgit2/libgit2sharp/wiki/git-clone
             Repository.Clone(parsedUrl.repository, gitRepositoryLocalDirectory, new CloneOptions { Checkout = false });
 
-            Composition.TreeComponent literalNodeObject = null;
+            Composition.TreeWithStringPath literalNodeObject = null;
             string urlInCommit = null;
             string urlInFirstParentCommitWithSameValueAtThisPath = null;
             (string hash, CommitContent content)? rootCommit = null;
@@ -167,15 +167,15 @@ namespace Kalmit
                 urlInFirstParentCommitWithSameValueAtThisPath =
                     BackToUrl(parsedUrl.WithRef(firstParentCommitWithSameTree.Value.hash));
 
-                static Composition.TreeComponent convertToLiteralNodeObjectRecursive(GitObject gitObject)
+                static Composition.TreeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
                 {
                     if (gitObject is Tree gitTree)
                     {
-                        return new Composition.TreeComponent
+                        return new Composition.TreeWithStringPath
                         {
                             TreeContent =
                                 gitTree.Select(treeEntry =>
-                                    ((IImmutableList<byte>)Encoding.UTF8.GetBytes(treeEntry.Name).ToImmutableList(),
+                                    (treeEntry.Name,
                                     convertToLiteralNodeObjectRecursive(treeEntry.Target)))
                                 .ToImmutableList(),
                         };
@@ -202,7 +202,7 @@ namespace Kalmit
                         if (loadedBlobSHA1Base16Lower != expectedSHA)
                             throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                        return new Composition.TreeComponent
+                        return new Composition.TreeWithStringPath
                         {
                             BlobContent = memoryStream.ToArray().ToImmutableList(),
                         };
@@ -328,7 +328,7 @@ namespace Kalmit
 
         public class LoadFromUrlSuccess
         {
-            public Composition.TreeComponent tree;
+            public Composition.TreeWithStringPath tree;
 
             public string urlInCommit;
 

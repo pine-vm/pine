@@ -4,7 +4,7 @@ namespace Kalmit
 {
     static public class LoadFromPath
     {
-        static public Result<string, (TreeComponent tree, bool comesFromLocalFilesystem)> LoadTreeFromPath(string path)
+        static public Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)> LoadTreeFromPath(string path)
         {
             if (path.ToLowerInvariant().StartsWith("https://github.com"))
             {
@@ -13,16 +13,16 @@ namespace Kalmit
 
                 if (loadFromGithubResult?.Success == null)
                 {
-                    return Result<string, (TreeComponent tree, bool comesFromLocalFilesystem)>.err(
+                    return Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)>.err(
                         "Failed to load from Github: " + loadFromGithubResult?.Error?.ToString());
                 }
 
-                return Result<string, (TreeComponent tree, bool comesFromLocalFilesystem)>.ok(
+                return Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)>.ok(
                     (tree: loadFromGithubResult.Success.tree, comesFromLocalFilesystem: false));
             }
             else
             {
-                return Result<string, (TreeComponent tree, bool comesFromLocalFilesystem)>.ok(
+                return Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)>.ok(
                     (tree: LoadFromLocalFilesystem.LoadSortedTreeFromPath(path), comesFromLocalFilesystem: true));
             }
         }

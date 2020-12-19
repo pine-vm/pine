@@ -114,7 +114,7 @@ namespace test_elm_fullstack
                 defaultAppSourceFiles.SetItem(demoSourceFilePath, staticContent);
 
             var webAppSource =
-                Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
+                Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource))
             {
@@ -165,7 +165,7 @@ namespace test_elm_fullstack
                     });
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                deployAppConfigAndInitElmState: Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
+                deployAppConfigAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
                 persistentProcessHostDateTime: () => persistentProcessHostDateTime))
             {
                 IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
@@ -263,7 +263,7 @@ namespace test_elm_fullstack
                     });
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-                deployAppConfigAndInitElmState: Composition.FromTree(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig))))
+                deployAppConfigAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig))))
             {
                 IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
                     testSetup.EnumerateStoredUpdateElmAppStateForEvents()

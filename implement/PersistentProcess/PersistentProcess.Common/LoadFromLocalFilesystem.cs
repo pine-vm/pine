@@ -6,10 +6,10 @@ namespace Kalmit
 {
     static public class LoadFromLocalFilesystem
     {
-        static public Composition.TreeComponent LoadSortedTreeFromPath(string path)
+        static public Composition.TreeWithStringPath LoadSortedTreeFromPath(string path)
         {
             if (File.Exists(path))
-                return new Composition.TreeComponent { BlobContent = File.ReadAllBytes(path).ToImmutableList() };
+                return new Composition.TreeWithStringPath { BlobContent = File.ReadAllBytes(path).ToImmutableList() };
 
             if (!Directory.Exists(path))
                 return null;

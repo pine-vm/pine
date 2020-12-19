@@ -9,14 +9,14 @@ namespace elm_fullstack
 
     public class InteractiveSession : IDisposable
     {
-        readonly Composition.TreeComponent appCodeTree;
+        readonly Composition.TreeWithStringPath appCodeTree;
 
         readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
             new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(ElmEngine.EvaluateElm.PrepareJsEngineToEvaluateElm);
 
         readonly IList<string> previousSubmissions = new List<string>();
 
-        public InteractiveSession(Composition.TreeComponent appCodeTree)
+        public InteractiveSession(Composition.TreeWithStringPath appCodeTree)
         {
             this.appCodeTree = appCodeTree;
         }

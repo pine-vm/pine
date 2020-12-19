@@ -41,14 +41,14 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             public Composition.Component appConfig;
 
-            public Composition.TreeComponent appConfigAsTree;
+            public Composition.TreeWithStringPath appConfigAsTree;
         }
 
         static public (IDisposableProcessWithStringInterface process,
             (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts,
             IReadOnlyList<string> log)
             ProcessFromWebAppConfig(
-            Composition.TreeComponent appConfig,
+            Composition.TreeWithStringPath appConfig,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
             var log = new List<string>();
@@ -69,14 +69,10 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
         }
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> TreeToFlatDictionaryWithPathComparer(
-            Composition.TreeComponent tree)
+            Composition.TreeWithStringPath tree)
         {
             return
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    tree.EnumerateBlobsTransitive()
-                    .Select(blobPathAndContent => (
-                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                        fileContent: blobPathAndContent.blobContent)));
+                ElmApp.ToFlatDictionaryWithPathComparer(tree.EnumerateBlobsTransitive());
         }
 
         PersistentProcessVolatileRepresentation(
@@ -149,7 +145,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
                         if (appConfigComponent != null && elmAppStateComponent != null)
                         {
-                            var parseAppConfigAsTree = Composition.ParseAsTree(appConfigComponent);
+                            var parseAppConfigAsTree = Composition.ParseAsTreeWithStringPath(appConfigComponent);
 
                             if (parseAppConfigAsTree.Ok == null)
                             {
@@ -326,14 +322,14 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 return component.BlobContent;
             }
 
-            Composition.TreeComponent loadComponentFromStoreAndAssertIsTree(string componentHash)
+            Composition.TreeWithStringPath loadComponentFromStoreAndAssertIsTree(string componentHash)
             {
                 var component = storeReader.LoadComponent(componentHash);
 
                 if (component == null)
                     throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
 
-                var parseAsTreeResult = Composition.ParseAsTree(component);
+                var parseAsTreeResult = Composition.ParseAsTreeWithStringPath(component);
 
                 if (parseAsTreeResult.Ok == null)
                     throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree.");
@@ -435,7 +431,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 processBefore.lastElmAppVolatileProcess?.Dispose();
 
                 return new PersistentProcessVolatileRepresentationDuringRestore(
-                    lastAppConfig: (Composition.FromTree(appConfig), buildArtifacts),
+                    lastAppConfig: (Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
                     lastElmAppVolatileProcess: newElmAppProcess,
                     lastSetElmAppStateResult: setElmAppStateResult);
             }
@@ -453,7 +449,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 processBefore.lastElmAppVolatileProcess?.Dispose();
 
                 return new PersistentProcessVolatileRepresentationDuringRestore(
-                    lastAppConfig: (Composition.FromTree(appConfig), buildArtifacts),
+                    lastAppConfig: (Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
                     lastElmAppVolatileProcess: newElmAppProcess,
                     lastSetElmAppStateResult: null);
             }
@@ -498,15 +494,10 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
         }
 
         static Result<string, Func<string, Result<string, string>>> PrepareMigrateSerializedValue(
-            Composition.TreeComponent destinationAppConfigTree)
+            Composition.TreeWithStringPath destinationAppConfigTree)
         {
             var appConfigFiles =
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    destinationAppConfigTree.EnumerateBlobsTransitive()
-                    .Select(blobPathAndContent => (
-                        fileName: (IImmutableList<string>)blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray())).ToImmutableList(),
-                        fileContent: blobPathAndContent.blobContent))
-                    .ToImmutableList());
+                ElmApp.ToFlatDictionaryWithPathComparer(destinationAppConfigTree.EnumerateBlobsTransitive());
 
             var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
             var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);

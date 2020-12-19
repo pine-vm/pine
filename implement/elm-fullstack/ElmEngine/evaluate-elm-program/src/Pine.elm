@@ -112,10 +112,10 @@ namedValueFromValue value =
     case value of
         ListValue [ elementLabelCandidate, elementValue ] ->
             case stringFromValue elementLabelCandidate of
-                Just elementLabel ->
+                Ok elementLabel ->
                     Just ( elementLabel, elementValue )
 
-                Nothing ->
+                Err _ ->
                     Nothing
 
         _ ->
@@ -575,18 +575,23 @@ valueFromChar =
     Char.toCode >> BigInt.fromInt >> unsignedBlobValueFromBigInt >> Maybe.withDefault [] >> BlobValue
 
 
-stringFromValue : Value -> Maybe String
+stringFromValue : Value -> Result String String
 stringFromValue value =
     case value of
-        ListValue chars ->
-            chars
-                |> List.map bigIntFromUnsignedValue
-                |> List.map (Maybe.andThen (BigInt.toString >> String.toInt >> Maybe.map Char.fromCode))
-                |> Maybe.Extra.combine
-                |> Maybe.map String.fromList
+        ListValue charsValues ->
+            case charsValues |> List.map bigIntFromUnsignedValue |> Maybe.Extra.combine of
+                Nothing ->
+                    Err "Failed to map list elements to unsigned integers."
+
+                Just chars ->
+                    chars
+                        |> List.map (BigInt.toString >> String.toInt >> Maybe.map Char.fromCode)
+                        |> Maybe.Extra.combine
+                        |> Maybe.map String.fromList
+                        |> Result.fromMaybe "Programming error: Failed to map from integers to chars."
 
         _ ->
-            Nothing
+            Err "Only a ListValue can represent a string."
 
 
 valueFromBigInt : BigInt.BigInt -> Value
@@ -663,15 +668,19 @@ bigIntFromBlobValue blobValue =
             Err "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?"
 
         sign :: intValueBytes ->
-            intValueBytes
-                |> bigIntFromUnsignedBlobValue
-                |> (if sign == 0 then
-                        identity
+            if sign /= 0 && sign /= 0x80 then
+                Err ("Unexpected value for sign byte of integer: " ++ String.fromInt sign)
 
-                    else
-                        BigInt.negate
-                   )
-                |> Ok
+            else
+                intValueBytes
+                    |> bigIntFromUnsignedBlobValue
+                    |> (if sign == 0 then
+                            identity
+
+                        else
+                            BigInt.negate
+                       )
+                    |> Ok
 
 
 bigIntFromUnsignedValue : Value -> Maybe BigInt.BigInt

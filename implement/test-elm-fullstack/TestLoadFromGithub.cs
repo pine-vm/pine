@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 using System.Collections.Immutable;
-using System.Text;
 
 namespace test_elm_fullstack
 {
@@ -32,7 +31,7 @@ namespace test_elm_fullstack
             var loadedFilesNamesAndContents =
                 loadFromGithubResult.Success.tree.EnumerateBlobsTransitive()
                 .Select(blobPathAndContent => (
-                    fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray()))),
+                    fileName: string.Join("/", blobPathAndContent.path),
                     fileContent: blobPathAndContent.blobContent))
                 .ToImmutableList();
 
@@ -67,7 +66,7 @@ namespace test_elm_fullstack
             var loadedFilesNamesAndContents =
                 loadFromGithubResult.Success.tree.EnumerateBlobsTransitive()
                 .Select(blobPathAndContent => (
-                    fileName: string.Join("/", blobPathAndContent.path.Select(name => Encoding.UTF8.GetString(name.ToArray()))),
+                    fileName: string.Join("/", blobPathAndContent.path),
                     fileContent: blobPathAndContent.blobContent))
                 .ToImmutableList();
 
