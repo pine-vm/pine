@@ -1,1 +1,1 @@
-List.repeat 3 "text"
+List.singleton "alpha"

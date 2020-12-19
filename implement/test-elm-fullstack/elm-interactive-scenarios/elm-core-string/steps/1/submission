@@ -1,0 +1,1 @@
+[ String.length "", String.length "test", String.length "😀" ]

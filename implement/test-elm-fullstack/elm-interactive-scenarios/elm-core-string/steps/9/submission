@@ -1,0 +1,5 @@
+[ String.slice  7  9 "snakes on a plane!"
+, String.slice  0  6 "snakes on a plane!"
+, String.slice  0 -7 "snakes on a plane!"
+, String.slice -6 -1 "snakes on a plane!"
+]

@@ -653,6 +653,20 @@ tail list =
             Nothing
 
 
+take : Int -> List a -> List a
+take n list =
+    if n < 1 then
+        []
+
+    else
+        case list of
+        [] ->
+            []
+
+        nextElement :: remainingElements ->
+            [ nextElement ] ++ (take (n - 1) remainingElements)
+
+
 drop : Int -> List a -> List a
 drop n list =
     if n <= 0 then
@@ -714,6 +728,119 @@ andThen callback maybeValue =
 
         Nothing ->
             Nothing
+
+"""
+    , """
+module String exposing (..)
+
+import Basics exposing (..)
+import Char
+import List exposing ((::))
+import Maybe exposing (Maybe)
+
+
+type alias String =
+    List Char.Char
+
+
+isEmpty : String -> Bool
+isEmpty string =
+    string == ""
+
+
+length : String -> Int
+length =
+    List.length
+
+
+reverse : String -> String
+reverse =
+    List.reverse
+
+
+repeat : Int -> String -> String
+repeat n chunk =
+    if n < 1 then
+        ""
+
+    else
+        chunk ++ repeat (n - 1) chunk
+
+
+replace : String -> String -> String -> String
+replace before after string =
+    join after (split before string)
+
+
+append : String -> String -> String
+append a b =
+    a ++ b
+
+
+concat : List String -> String
+concat strings =
+    join "" strings
+
+
+split : String -> String -> List String
+split =
+    splitHelper []
+
+
+splitHelper : String -> String -> String -> List String
+splitHelper current sep string =
+    if string == [] then
+        [ current ]
+
+    else if left (length sep) string == sep then
+        [ current ] ++ splitHelper [] sep (dropLeft (length sep) string)
+
+    else
+        splitHelper (current ++ left 1 string) sep (dropLeft 1 string)
+
+
+join : String -> List String -> String
+join sep chunks =
+    case chunks of
+        [] ->
+            ""
+
+        next :: remaining ->
+            next ++ sep ++ join sep remaining
+
+
+slice : Int -> Int -> String -> String
+slice start end string =
+    let
+        absoluteIndex relativeIndex =
+            if relativeIndex < 0 then
+                relativeIndex + length string
+
+            else
+                relativeIndex
+
+        absoluteStart =
+            absoluteIndex start
+    in
+    left (absoluteIndex end - absoluteStart) (List.drop absoluteStart string)
+
+
+left : Int -> String -> String
+left n string =
+    if n < 1 then
+        ""
+
+    else
+        List.take n string
+
+
+dropLeft : Int -> String -> String
+dropLeft n string =
+    if n < 1 then
+        string
+
+    else
+        List.drop n string
 
 """
     ]
