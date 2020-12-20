@@ -339,28 +339,34 @@ pineExpressionContextForElmInteractive context =
                     modulesTexts
     in
     (elmCoreModulesTexts ++ contextModulesTexts)
-        |> List.map (\moduleText -> parsedElmFileFromOnlyFileText moduleText)
+        |> List.map parsedElmFileFromOnlyFileText
         |> Result.Extra.combine
         |> Result.andThen
             (\parsedElmFiles ->
-                case
-                    parsedElmFiles
-                        |> List.map (parseElmModuleTextIntoPineValue parsedElmFiles)
-                        |> Result.Extra.combine
-                of
-                    Err error ->
-                        Err ("Failed to compile elm module from context: " ++ error)
-
-                    Ok contextModules ->
-                        let
-                            modulesValues =
-                                contextModules
-                                    |> List.map (Tuple.mapFirst (String.join "."))
-                                    |> List.map Pine.valueFromContextExpansionWithName
-                        in
-                        elmValuesToExposeToGlobal
-                            |> List.foldl exposeFromElmModuleToGlobal { commonModel = modulesValues }
-                            |> Ok
+                parsedElmFiles
+                    |> List.map
+                        (\moduleToTranslate ->
+                            parseElmModuleTextIntoPineValue parsedElmFiles moduleToTranslate
+                                |> Result.mapError
+                                    ((++)
+                                        ("Failed to translate elm module '"
+                                            ++ String.join "." moduleToTranslate.projectedModuleName
+                                            ++ "': "
+                                        )
+                                    )
+                        )
+                    |> Result.Extra.combine
+            )
+        |> Result.map
+            (\contextModules ->
+                let
+                    modulesValues =
+                        contextModules
+                            |> List.map (Tuple.mapFirst (String.join "."))
+                            |> List.map Pine.valueFromContextExpansionWithName
+                in
+                elmValuesToExposeToGlobal
+                    |> List.foldl exposeFromElmModuleToGlobal { commonModel = modulesValues }
             )
 
 
