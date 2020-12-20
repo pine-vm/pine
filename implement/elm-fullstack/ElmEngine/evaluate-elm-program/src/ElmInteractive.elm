@@ -788,7 +788,7 @@ reverse =
 repeat : Int -> String -> String
 repeat n chunk =
     if n < 1 then
-        ""
+        []
 
     else
         chunk ++ repeat (n - 1) chunk
@@ -806,7 +806,7 @@ append a b =
 
 concat : List String -> String
 concat strings =
-    join "" strings
+    join [] strings
 
 
 split : String -> String -> List String
@@ -830,7 +830,7 @@ join : String -> List String -> String
 join sep chunks =
     case chunks of
         [] ->
-            ""
+            []
 
         nextChunk :: remaining ->
             if remaining == []
@@ -859,7 +859,7 @@ slice start end string =
 left : Int -> String -> String
 left n string =
     if n < 1 then
-        ""
+        []
 
     else
         List.take n string
