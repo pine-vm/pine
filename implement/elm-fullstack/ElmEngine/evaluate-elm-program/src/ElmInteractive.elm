@@ -826,8 +826,12 @@ join sep chunks =
         [] ->
             ""
 
-        next :: remaining ->
-            next ++ sep ++ join sep remaining
+        nextChunk :: remaining ->
+            if remaining == []
+            then
+                nextChunk
+            else
+                nextChunk ++ sep ++ join sep remaining
 
 
 slice : Int -> Int -> String -> String
