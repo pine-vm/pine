@@ -475,6 +475,13 @@ namespace elm_fullstack
                         description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
                         optionType: CommandOptionType.SingleValue);
 
+                var enableInspectionOption =
+                    enterInteractiveCmd
+                    .Option(
+                        template: "--enable-inspection",
+                        description: "Display additional information to inspect the implementation.",
+                        optionType: CommandOptionType.NoValue);
+
                 enterInteractiveCmd.OnExecute(() =>
                 {
                     ReadLine.HistoryEnabled = true;
@@ -510,13 +517,24 @@ namespace elm_fullstack
                             if (!(0 < submission?.Trim()?.Length))
                                 continue;
 
+                            var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                             var evalResult =
                                 interactiveSession.SubmitAndGetResultingValue(submission);
+
+                            evalStopwatch.Stop();
 
                             if (evalResult.Ok == null)
                             {
                                 Console.WriteLine("Failed to evaluate: " + evalResult.Err);
                                 continue;
+                            }
+
+                            if (enableInspectionOption.HasValue())
+                            {
+                                Console.WriteLine(
+                                    "Evaluation took " +
+                                    evalStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms.");
                             }
 
                             Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
