@@ -260,6 +260,22 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                 }
                 application.arguments
 
+        functionEqualsNot =
+            evaluateFunctionApplicationExpectingExactlyTwoArguments
+                { mapArg0 = Ok
+                , mapArg1 = Ok
+                , apply =
+                    \leftValue rightValue ->
+                        Ok
+                            (if leftValue == rightValue then
+                                falseValue
+
+                             else
+                                trueValue
+                            )
+                }
+                application.arguments
+
         continueIgnoringAtomBindings _ =
             evaluateFunctionApplicationIgnoringAtomBindings
                 context
@@ -320,6 +336,9 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                 "(==)" ->
                     functionEquals
 
+                "(/=)" ->
+                    functionEqualsNot
+
                 "(++)" ->
                     evaluateFunctionApplicationExpectingExactlyTwoArguments
                         { mapArg0 = Ok
@@ -343,6 +362,30 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                                                     ++ ")."
                                                 )
                                             )
+                        }
+                        application.arguments
+
+                "(&&)" ->
+                    evaluateFunctionApplicationExpectingExactlyTwoArguments
+                        { mapArg0 = Ok
+                        , mapArg1 = Ok
+                        , apply =
+                            \leftValue rightValue ->
+                                if leftValue == falseValue then
+                                    Ok falseValue
+
+                                else if leftValue == trueValue then
+                                    if rightValue == falseValue then
+                                        Ok falseValue
+
+                                    else if rightValue == trueValue then
+                                        Ok trueValue
+
+                                    else
+                                        Err (DescribePathEnd "Value right of && is not a 'Bool'")
+
+                                else
+                                    Err (DescribePathEnd "Value left of && is not a 'Bool'")
                         }
                         application.arguments
 

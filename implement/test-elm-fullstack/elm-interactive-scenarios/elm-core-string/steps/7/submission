@@ -1,1 +1,4 @@
-String.split "," "cat,dog,cow"
+[ String.split "" ""
+, String.split "" "abc"
+, String.split "," "cat,dog,cow"
+]

@@ -816,9 +816,12 @@ split =
 splitHelper : String -> String -> String -> List String
 splitHelper current sep string =
     if string == [] then
-        [ current ]
+        if current == [] then
+            []
+        else
+            [ current ]
 
-    else if left (length sep) string == sep then
+    else if left (length sep) string == sep && (current /= []) then
         [ current ] ++ splitHelper [] sep (dropLeft (length sep) string)
 
     else
