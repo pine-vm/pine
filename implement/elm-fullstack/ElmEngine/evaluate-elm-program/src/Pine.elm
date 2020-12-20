@@ -138,24 +138,24 @@ lookUpNameAsValueInContext path context =
                 getPathFirstElementAsString _ =
                     Result.withDefault "Failed to map value to string" (stringFromValue pathFirstElement)
 
-                maybeMatchingValue =
-                    context.commonModel
-                        |> List.filterMap
-                            (\candidate ->
-                                case candidate of
-                                    ListValue [ labelValue, namedValue ] ->
-                                        if labelValue == pathFirstElement then
-                                            Just namedValue
+                getMatchFromList contextList =
+                    case contextList of
+                        [] ->
+                            Nothing
 
-                                        else
-                                            Nothing
+                        nextElement :: remainingElements ->
+                            case nextElement of
+                                ListValue [ labelValue, namedValue ] ->
+                                    if labelValue == pathFirstElement then
+                                        Just namedValue
 
-                                    _ ->
-                                        Nothing
-                            )
-                        |> List.head
+                                    else
+                                        getMatchFromList remainingElements
+
+                                _ ->
+                                    getMatchFromList remainingElements
             in
-            case maybeMatchingValue of
+            case getMatchFromList context.commonModel of
                 Nothing ->
                     let
                         availableNames =
