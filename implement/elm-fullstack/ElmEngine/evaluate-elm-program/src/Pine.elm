@@ -260,7 +260,7 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                 }
                 application.arguments
 
-        resultIgnoringAtomBindings =
+        continueIgnoringAtomBindings _ =
             evaluateFunctionApplicationIgnoringAtomBindings
                 context
                 application
@@ -384,10 +384,10 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                         application.arguments
 
                 _ ->
-                    resultIgnoringAtomBindings
+                    continueIgnoringAtomBindings ()
 
         _ ->
-            resultIgnoringAtomBindings
+            continueIgnoringAtomBindings ()
 
 
 evaluateFunctionApplicationIgnoringAtomBindings : ExpressionContext -> { function : Expression, arguments : List Value } -> Result (PathDescription String) Value
