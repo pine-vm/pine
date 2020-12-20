@@ -858,20 +858,12 @@ slice start end string =
 
 left : Int -> String -> String
 left n string =
-    if n < 1 then
-        []
-
-    else
-        List.take n string
+    List.take n string
 
 
 dropLeft : Int -> String -> String
 dropLeft n string =
-    if n < 1 then
-        string
-
-    else
-        List.drop n string
+    List.drop n string
 
 """
     ]
