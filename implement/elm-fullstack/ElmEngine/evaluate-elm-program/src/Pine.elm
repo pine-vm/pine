@@ -73,7 +73,7 @@ evaluateExpression context expression =
                     in
                     case beforeCheckForExpression of
                         Ok ( ExpressionValue expressionFromLookup, contextFromLookup ) ->
-                            evaluateExpression (addToContext contextFromLookup context) expressionFromLookup
+                            evaluateExpression { commonModel = contextFromLookup } expressionFromLookup
                                 |> Result.mapError (DescribePathNode "Failed to evaluate expression from name")
 
                         _ ->
