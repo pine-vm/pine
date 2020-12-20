@@ -28,7 +28,6 @@ import Parser
 import Pine
 import Result.Extra
 import SHA256
-import Set
 
 
 type InteractiveSubmission
@@ -403,8 +402,8 @@ parseElmModuleTextIntoPineValue allModules moduleToTranslate =
 parseElmModuleTextIntoNamedExports : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
 parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
     case moduleToTranslate.parseResult of
-        Err parseError ->
-            Err ("Failed to parse module text: " ++ moduleToTranslate.fileText)
+        Err _ ->
+            Err ("Failed to parse module '" ++ String.join "." moduleToTranslate.projectedModuleName ++ "'")
 
         Ok file ->
             let
