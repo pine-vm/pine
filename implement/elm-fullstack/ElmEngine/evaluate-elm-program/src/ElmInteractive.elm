@@ -55,6 +55,13 @@ type ElmValue
     | ElmRecord (List ( String, ElmValue ))
 
 
+type alias ProjectParsedElmFile =
+    { projectedModuleName : List String
+    , fileText : String
+    , parseResult : Result (List Parser.DeadEnd) Elm.Syntax.File.File
+    }
+
+
 evaluateExpressionText : InteractiveContext -> String -> Result String Json.Encode.Value
 evaluateExpressionText context elmExpressionText =
     submissionInInteractive context [] elmExpressionText
@@ -322,38 +329,53 @@ elmValueAsElmRecord elmValue =
 
 pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.ExpressionContext
 pineExpressionContextForElmInteractive context =
-    case elmCoreModulesTexts |> List.map (parseElmModuleTextIntoPineValue elmCoreModulesTexts) |> Result.Extra.combine of
-        Err error ->
-            Err ("Failed to compile elm core module: " ++ error)
+    let
+        contextModulesTexts =
+            case context of
+                DefaultContext ->
+                    []
 
-        Ok elmCoreModules ->
-            let
-                contextModulesTexts =
-                    case context of
-                        DefaultContext ->
-                            []
+                InitContextFromApp { modulesTexts } ->
+                    modulesTexts
+    in
+    (elmCoreModulesTexts ++ contextModulesTexts)
+        |> List.map (\moduleText -> parsedElmFileFromOnlyFileText moduleText)
+        |> Result.Extra.combine
+        |> Result.andThen
+            (\parsedElmFiles ->
+                case
+                    parsedElmFiles
+                        |> List.map (parseElmModuleTextIntoPineValue parsedElmFiles)
+                        |> Result.Extra.combine
+                of
+                    Err error ->
+                        Err ("Failed to compile elm module from context: " ++ error)
 
-                        InitContextFromApp { modulesTexts } ->
-                            modulesTexts
-            in
-            case
-                contextModulesTexts
-                    |> List.map (parseElmModuleTextIntoPineValue (elmCoreModulesTexts ++ contextModulesTexts))
-                    |> Result.Extra.combine
-            of
-                Err error ->
-                    Err ("Failed to compile elm module from context: " ++ error)
+                    Ok contextModules ->
+                        let
+                            modulesValues =
+                                contextModules
+                                    |> List.map (Tuple.mapFirst (String.join "."))
+                                    |> List.map Pine.valueFromContextExpansionWithName
+                        in
+                        elmValuesToExposeToGlobal
+                            |> List.foldl exposeFromElmModuleToGlobal { commonModel = modulesValues }
+                            |> Ok
+            )
 
-                Ok contextModules ->
-                    let
-                        modulesValues =
-                            (contextModules ++ elmCoreModules)
-                                |> List.map (Tuple.mapFirst (String.join "."))
-                                |> List.map Pine.valueFromContextExpansionWithName
-                    in
-                    elmValuesToExposeToGlobal
-                        |> List.foldl exposeFromElmModuleToGlobal { commonModel = modulesValues }
-                        |> Ok
+
+parsedElmFileFromOnlyFileText : String -> Result String ProjectParsedElmFile
+parsedElmFileFromOnlyFileText fileText =
+    case parseElmModuleText fileText of
+        Err _ ->
+            Err ("Failed to parse the module text: " ++ fileText)
+
+        Ok parsedModule ->
+            Ok
+                { fileText = fileText
+                , parseResult = Ok parsedModule
+                , projectedModuleName = Elm.Syntax.Node.value (moduleNameFromSyntaxFile parsedModule)
+                }
 
 
 exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.ExpressionContext -> Pine.ExpressionContext
@@ -366,37 +388,36 @@ exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
             { context | commonModel = Pine.valueFromContextExpansionWithName ( nameInModule, valueFromName ) :: context.commonModel }
 
 
-parseElmModuleTextIntoPineValue : List String -> String -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
-parseElmModuleTextIntoPineValue allModulesTexts moduleText =
-    parseElmModuleTextIntoNamedExports allModulesTexts moduleText
+parseElmModuleTextIntoPineValue : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
+parseElmModuleTextIntoPineValue allModules moduleToTranslate =
+    parseElmModuleTextIntoNamedExports allModules moduleToTranslate
         |> Result.map (Tuple.mapSecond (List.map Pine.valueFromContextExpansionWithName >> Pine.ListValue))
 
 
-parseElmModuleTextIntoNamedExports : List String -> String -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
-parseElmModuleTextIntoNamedExports allModulesTexts moduleText =
-    case parseElmModuleText moduleText of
-        Err _ ->
-            Err ("Failed to parse module text: " ++ (moduleText |> String.left 100))
+parseElmModuleTextIntoNamedExports : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
+parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
+    case moduleToTranslate.parseResult of
+        Err parseError ->
+            Err ("Failed to parse module text: " ++ moduleToTranslate.fileText)
 
         Ok file ->
             let
-                otherModulesTexts =
-                    allModulesTexts |> Set.fromList |> Set.remove moduleText
+                otherModules =
+                    allModules |> List.filter ((/=) moduleToTranslate)
 
                 moduleName =
                     Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)
 
                 valueForImportedModule : Elm.Syntax.ModuleName.ModuleName -> Result String Pine.Value
                 valueForImportedModule importedModuleName =
-                    otherModulesTexts
-                        |> Set.toList
+                    otherModules
                         |> List.foldl
                             (\otherModuleText intermediateResult ->
                                 if intermediateResult /= Nothing then
                                     intermediateResult
 
                                 else
-                                    case parseElmModuleTextIntoPineValue allModulesTexts otherModuleText of
+                                    case parseElmModuleTextIntoPineValue allModules otherModuleText of
                                         Err parseOtherModuleError ->
                                             Just (Err ("Failed to parse candidate for imported module: " ++ parseOtherModuleError))
 
