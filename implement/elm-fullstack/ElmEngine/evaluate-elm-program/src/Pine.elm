@@ -68,7 +68,7 @@ evaluateExpression context expression =
                 _ ->
                     let
                         beforeCheckForExpression =
-                            lookUpNameInContext name context
+                            lookUpNameAsStringInContext (String.split "." name) context
                                 |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
                     in
                     case beforeCheckForExpression of
@@ -122,29 +122,49 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameInContext : String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
-lookUpNameInContext name context =
-    case name |> String.split "." of
-        [] ->
-            Err (DescribePathEnd "nameElements is empty")
+lookUpNameAsStringInContext : List String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
+lookUpNameAsStringInContext path =
+    lookUpNameAsValueInContext (List.map valueFromString path)
 
-        nameFirstElement :: nameRemainingElements ->
+
+lookUpNameAsValueInContext : List Value -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
+lookUpNameAsValueInContext path context =
+    case path of
+        [] ->
+            Err (DescribePathEnd "path is empty")
+
+        pathFirstElement :: pathRemainingElements ->
             let
-                availableNames =
-                    context.commonModel |> List.filterMap namedValueFromValue
+                getPathFirstElementAsString _ =
+                    Result.withDefault "Failed to map value to string" (stringFromValue pathFirstElement)
 
                 maybeMatchingValue =
-                    availableNames
-                        |> List.filter (Tuple.first >> (==) nameFirstElement)
+                    context.commonModel
+                        |> List.filterMap
+                            (\candidate ->
+                                case candidate of
+                                    ListValue [ labelValue, namedValue ] ->
+                                        if labelValue == pathFirstElement then
+                                            Just namedValue
+
+                                        else
+                                            Nothing
+
+                                    _ ->
+                                        Nothing
+                            )
                         |> List.head
-                        |> Maybe.map Tuple.second
             in
             case maybeMatchingValue of
                 Nothing ->
+                    let
+                        availableNames =
+                            context.commonModel |> List.filterMap namedValueFromValue
+                    in
                     Err
                         (DescribePathEnd
                             ("Did not find '"
-                                ++ nameFirstElement
+                                ++ getPathFirstElementAsString ()
                                 ++ "'. "
                                 ++ (availableNames |> List.length |> String.fromInt)
                                 ++ " names available: "
@@ -153,17 +173,17 @@ lookUpNameInContext name context =
                         )
 
                 Just firstNameValue ->
-                    if nameRemainingElements == [] then
+                    if pathRemainingElements == [] then
                         Ok ( firstNameValue, context.commonModel )
 
                     else
                         case firstNameValue of
                             ListValue firstNameList ->
-                                lookUpNameInContext (String.join "." nameRemainingElements)
+                                lookUpNameAsValueInContext pathRemainingElements
                                     { commonModel = firstNameList }
 
                             _ ->
-                                Err (DescribePathEnd ("'" ++ nameFirstElement ++ "' has unexpected type: Not a list."))
+                                Err (DescribePathEnd ("'" ++ getPathFirstElementAsString () ++ "' has unexpected type: Not a list."))
 
 
 evaluateFunctionApplication : ExpressionContext -> { function : Expression, arguments : List Expression } -> Result (PathDescription String) Value

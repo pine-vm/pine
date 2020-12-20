@@ -386,7 +386,7 @@ parsedElmFileFromOnlyFileText fileText =
 
 exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.ExpressionContext -> Pine.ExpressionContext
 exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
-    case Pine.lookUpNameInContext (moduleName ++ [ nameInModule ] |> String.join ".") context of
+    case Pine.lookUpNameAsStringInContext (moduleName ++ [ nameInModule ]) context of
         Err _ ->
             context
 
