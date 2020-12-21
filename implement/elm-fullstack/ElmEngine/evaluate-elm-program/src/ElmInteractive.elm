@@ -768,10 +768,16 @@ import Basics exposing (..)
 import Char
 import List exposing ((::))
 import Maybe exposing (Maybe)
+import Tuple
 
 
 type alias String =
     List Char.Char
+
+
+toList : String -> List Char
+toList string =
+    string
 
 
 isEmpty : String -> Bool
@@ -871,6 +877,79 @@ left n string =
 dropLeft : Int -> String -> String
 dropLeft n string =
     List.drop n string
+
+
+
+toInt : String -> Maybe Int
+toInt =
+    toIntDecimal
+
+
+toIntDecimal : String -> Maybe Int
+toIntDecimal =
+    toIntFromDigitsChars
+        [ ( '0', 0 )
+        , ( '1', 1 )
+        , ( '2', 2 )
+        , ( '3', 3 )
+        , ( '4', 4 )
+        , ( '5', 5 )
+        , ( '6', 6 )
+        , ( '7', 7 )
+        , ( '8', 8 )
+        , ( '9', 9 )
+        ]
+
+
+toIntFromDigitsChars : List ( Char, Int ) -> String -> Maybe Int
+toIntFromDigitsChars digitsCharacters string =
+    case toList string of
+        [] ->
+            Nothing
+
+        firstChar :: lessFirstChar ->
+            let
+                ( valueString, signMultiplier ) =
+                    case firstChar of
+                        '-' ->
+                            ( lessFirstChar, -1 )
+
+                        '+' ->
+                            ( toList lessFirstChar, 1 )
+
+                        _ ->
+                            ( toList string, 1 )
+            in
+            Maybe.map (\\value -> value * signMultiplier)
+                (toUnsignedIntFromDigitsChars digitsCharacters valueString)
+
+
+toUnsignedIntFromDigitsChars : List ( Char, Int ) -> List Char -> Maybe Int
+toUnsignedIntFromDigitsChars digitsCharacters string =
+    let
+        digitValueFromCharacter char =
+            Maybe.map Tuple.second (List.head (List.filter (\\(c, _) -> c == char) digitsCharacters))
+    in
+    case string of
+        [] ->
+            Nothing
+
+        digits ->
+            List.foldl
+                (\\maybeDigitValue ->
+                    Maybe.andThen
+                        (\\aggregate ->
+                            case maybeDigitValue of
+                                Nothing ->
+                                    Nothing
+
+                                Just digitValue ->
+                                    Just (aggregate * List.length digitsCharacters + digitValue)
+                        )
+                )
+                (Just 0)
+                (List.map digitValueFromCharacter digits)
+
 
 """
     ]
@@ -1025,15 +1104,15 @@ pineExpressionFromElmLetBlock letBlock =
     in
     case declarationsResults |> Result.Extra.combine of
         Err error ->
-            Err ("Failed to map declaration in let block: " ++ error)
+            Err ("Failed to translate declaration in let block: " ++ error)
 
         Ok declarations ->
             case pineExpressionFromElm (Elm.Syntax.Node.value letBlock.expression) of
                 Err error ->
-                    Err ("Failed to map expression in let block: " ++ error)
+                    Err ("Failed to translate expression in let block: " ++ error)
 
                 Ok expressionInExpandedContext ->
-                    Ok (pineExpressionFromLetBlockDeclarationsAndExpression declarations expressionInExpandedContext)
+                    Ok (pineExpressionFromLetBlockDeclarationsAndExpression (List.concat declarations) expressionInExpandedContext)
 
 
 pineExpressionFromLetBlockDeclarationsAndExpression : List ( String, Pine.Expression ) -> Pine.Expression -> Pine.Expression
@@ -1048,14 +1127,27 @@ pineExpressionFromLetBlockDeclarationsAndExpression declarations expression =
             expression
 
 
-pineExpressionFromElmLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> Result String ( String, Pine.Expression )
+pineExpressionFromElmLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> Result String (List ( String, Pine.Expression ))
 pineExpressionFromElmLetDeclaration declaration =
     case declaration of
         Elm.Syntax.Expression.LetFunction letFunction ->
             pineExpressionFromElmFunction letFunction
+                |> Result.map List.singleton
 
-        Elm.Syntax.Expression.LetDestructuring _ _ ->
-            Err "Destructuring in let block not implemented yet."
+        Elm.Syntax.Expression.LetDestructuring patternNode expressionNode ->
+            (case declarationsFromPattern (Elm.Syntax.Node.value patternNode) of
+                Err error ->
+                    Err ("Failed to translate pattern: " ++ error)
+
+                Ok deconstruct ->
+                    case pineExpressionFromElm (Elm.Syntax.Node.value expressionNode) of
+                        Err error ->
+                            Err ("Failed to translate expression: " ++ error)
+
+                        Ok pineExpression ->
+                            Ok (deconstruct pineExpression)
+            )
+                |> Result.mapError ((++) "Failed destructuring in let block: ")
 
 
 pineExpressionFromElmFunction : Elm.Syntax.Expression.Function -> Result String ( String, Pine.Expression )
@@ -1078,7 +1170,7 @@ pineExpressionFromElmFunctionWithoutName :
 pineExpressionFromElmFunctionWithoutName function =
     case pineExpressionFromElm function.expression of
         Err error ->
-            Err ("Failed to map expression in let function: " ++ error)
+            Err ("Failed to translate expression in let function: " ++ error)
 
         Ok functionBodyExpression ->
             case
@@ -1091,7 +1183,7 @@ pineExpressionFromElmFunctionWithoutName function =
                     |> Result.Extra.combine
             of
                 Err error ->
-                    Err ("Failed to map function argument pattern: " ++ error)
+                    Err ("Failed to translate function argument pattern: " ++ error)
 
                 Ok argumentsDeconstructDeclarationsBuilders ->
                     let
@@ -1248,6 +1340,24 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
             Err ("Failed to map case expression: " ++ error)
 
         Ok expressionAfterDeconstruction ->
+            let
+                continueWithOnlyEqualsCondition valueToCompare =
+                    let
+                        conditionExpression =
+                            Pine.ApplicationExpression
+                                { function = Pine.FunctionOrValueExpression "(==)"
+                                , arguments =
+                                    [ caseBlockValueExpression
+                                    , valueToCompare
+                                    ]
+                                }
+                    in
+                    Ok
+                        { conditionExpression = conditionExpression
+                        , declarations = []
+                        , thenExpression = expressionAfterDeconstruction
+                        }
+            in
             case Elm.Syntax.Node.value elmPattern of
                 Elm.Syntax.Pattern.AllPattern ->
                     Ok
@@ -1257,21 +1367,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                         }
 
                 Elm.Syntax.Pattern.ListPattern [] ->
-                    let
-                        conditionExpression =
-                            Pine.ApplicationExpression
-                                { function = Pine.FunctionOrValueExpression "(==)"
-                                , arguments =
-                                    [ caseBlockValueExpression
-                                    , Pine.ListExpression []
-                                    ]
-                                }
-                    in
-                    Ok
-                        { conditionExpression = conditionExpression
-                        , declarations = []
-                        , thenExpression = expressionAfterDeconstruction
-                        }
+                    continueWithOnlyEqualsCondition (Pine.ListExpression [])
 
                 Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight ->
                     case ( Elm.Syntax.Node.value unconsLeft, Elm.Syntax.Node.value unconsRight ) of
@@ -1385,6 +1481,20 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                                 , declarations = declarations
                                 , thenExpression = expressionAfterDeconstruction
                                 }
+
+                Elm.Syntax.Pattern.CharPattern char ->
+                    continueWithOnlyEqualsCondition (Pine.LiteralExpression (Pine.valueFromChar char))
+
+                Elm.Syntax.Pattern.VarPattern name ->
+                    Ok
+                        { conditionExpression = Pine.LiteralExpression Pine.trueValue
+                        , declarations =
+                            [ ( name
+                              , caseBlockValueExpression
+                              )
+                            ]
+                        , thenExpression = expressionAfterDeconstruction
+                        }
 
                 _ ->
                     Err
