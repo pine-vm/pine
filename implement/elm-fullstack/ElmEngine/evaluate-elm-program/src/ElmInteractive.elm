@@ -160,12 +160,7 @@ elmValueAsExpression elmValue =
             "[" ++ (list |> List.map elmValueAsExpression |> String.join ",") ++ "]"
 
         ElmInteger integer ->
-            integer
-                |> BigInt.toString
-                |> String.toInt
-                |> Maybe.map Json.Encode.int
-                |> Maybe.withDefault (Json.Encode.string "Failed to encode integer")
-                |> Json.Encode.encode 0
+            integer |> BigInt.toString
 
         ElmChar char ->
             "'" ++ (char |> String.fromChar) ++ "'"
