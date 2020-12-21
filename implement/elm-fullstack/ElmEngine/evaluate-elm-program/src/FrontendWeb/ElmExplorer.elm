@@ -7,10 +7,13 @@ import ElmInteractive
 import Html
 import Html.Attributes as HA
 import Html.Events
+import Pine
 
 
 type alias State =
-    { expression : String }
+    { expression : String
+    , evaluationContext : Result String Pine.ExpressionContext
+    }
 
 
 type Event
@@ -19,7 +22,9 @@ type Event
 
 init : ( State, Cmd Event )
 init =
-    ( { expression = "" }
+    ( { expression = ""
+      , evaluationContext = ElmInteractive.pineExpressionContextForElmInteractive ElmInteractive.DefaultContext
+      }
     , Cmd.none
     )
 
@@ -45,7 +50,13 @@ view : State -> Html.Html Event
 view state =
     let
         evalResult =
-            ElmInteractive.submissionInInteractive ElmInteractive.DefaultContext [] state.expression
+            case state.evaluationContext of
+                Err error ->
+                    Err ("Failed to initialize the evaluation context: " ++ error)
+
+                Ok evaluationContext ->
+                    ElmInteractive.submissionInInteractiveInPineContext evaluationContext state.expression
+                        |> Result.map Tuple.second
 
         expressionTextareaHeight =
             (((state.expression
