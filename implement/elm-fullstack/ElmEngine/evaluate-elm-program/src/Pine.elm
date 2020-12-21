@@ -165,9 +165,9 @@ lookUpNameAsValueInContext path context =
                         (DescribePathEnd
                             ("Did not find '"
                                 ++ getPathFirstElementAsString ()
-                                ++ "'. "
+                                ++ "'. There are "
                                 ++ (availableNames |> List.length |> String.fromInt)
-                                ++ " names available: "
+                                ++ " names available in that scope: "
                                 ++ (availableNames |> List.map Tuple.first |> String.join ", ")
                             )
                         )
