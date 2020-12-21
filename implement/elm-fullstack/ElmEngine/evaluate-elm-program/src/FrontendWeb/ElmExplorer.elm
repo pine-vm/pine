@@ -8,6 +8,7 @@ import Html
 import Html.Attributes as HA
 import Html.Events
 import Pine
+import Url
 
 
 type alias State =
@@ -18,6 +19,8 @@ type alias State =
 
 type Event
     = UserInputExpression String
+    | UrlRequest Browser.UrlRequest
+    | UrlChange Url.Url
 
 
 init : ( State, Cmd Event )
@@ -31,11 +34,13 @@ init =
 
 main : Program () State Event
 main =
-    Browser.element
-        { init = \_ -> init
-        , view = view
+    Browser.application
+        { init = \_ _ _ -> init
         , update = update
         , subscriptions = always Sub.none
+        , view = view
+        , onUrlRequest = UrlRequest
+        , onUrlChange = UrlChange
         }
 
 
@@ -45,8 +50,14 @@ update event stateBefore =
         UserInputExpression expression ->
             ( { stateBefore | expression = expression }, Cmd.none )
 
+        UrlRequest _ ->
+            ( stateBefore, Cmd.none )
 
-view : State -> Html.Html Event
+        UrlChange _ ->
+            ( stateBefore, Cmd.none )
+
+
+view : State -> Browser.Document Event
 view state =
     let
         evalResult =
@@ -110,20 +121,24 @@ view state =
                                     |> Html.div [ HA.style "white-space" "pre-wrap" ]
                                     |> Element.html
     in
-    [ Element.text "Expression to evaluate"
-    , indentOneLevel inputExpressionElement
-    , Element.text "Evaluation result"
-    , indentOneLevel
-        (Element.paragraph [ Element.htmlAttribute attributeMonospaceFont ]
-            [ evalResultElement ]
-        )
-    ]
-        |> Element.column
-            [ Element.spacing defaultFontSize
-            , Element.padding 10
-            , Element.width Element.fill
-            ]
-        |> Element.layout [ Element.Font.size defaultFontSize ]
+    { body =
+        [ [ Element.text "Expression to evaluate"
+          , indentOneLevel inputExpressionElement
+          , Element.text "Evaluation result"
+          , indentOneLevel
+                (Element.paragraph [ Element.htmlAttribute attributeMonospaceFont ]
+                    [ evalResultElement ]
+                )
+          ]
+            |> Element.column
+                [ Element.spacing defaultFontSize
+                , Element.padding 10
+                , Element.width Element.fill
+                ]
+            |> Element.layout [ Element.Font.size defaultFontSize ]
+        ]
+    , title = "Elm Explorer"
+    }
 
 
 indentOneLevel : Element.Element a -> Element.Element a
