@@ -390,12 +390,12 @@ parsedElmFileFromOnlyFileText fileText =
 
 exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.ExpressionContext -> Pine.ExpressionContext
 exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
-    case Pine.lookUpNameAsStringInContext (moduleName ++ [ nameInModule ]) context of
-        Err _ ->
-            context
-
-        Ok ( valueFromName, _ ) ->
-            { context | commonModel = Pine.valueFromContextExpansionWithName ( nameInModule, valueFromName ) :: context.commonModel }
+    let
+        redirectValue =
+            Pine.ExpressionValue
+                (Pine.FunctionOrValueExpression (String.join "." (moduleName ++ [ nameInModule ])))
+    in
+    { context | commonModel = Pine.valueFromContextExpansionWithName ( nameInModule, redirectValue ) :: context.commonModel }
 
 
 parseElmModuleTextIntoPineValue : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
@@ -485,6 +485,14 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                                                 Just
                                                     (customTypeDeclaration.constructors |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmValueConstructor))
 
+                                            Elm.Syntax.Declaration.InfixDeclaration infixDeclaration ->
+                                                Just
+                                                    [ Ok
+                                                        ( "(" ++ Elm.Syntax.Node.value infixDeclaration.operator ++ ")"
+                                                        , Pine.FunctionOrValueExpression (Elm.Syntax.Node.value infixDeclaration.function)
+                                                        )
+                                                    ]
+
                                             _ ->
                                                 Nothing
                                     )
@@ -506,6 +514,32 @@ elmCoreModulesTexts : List String
 elmCoreModulesTexts =
     [ """
 module Basics exposing (..)
+
+
+infix right 0 (<|) = apL
+infix left  0 (|>) = apR
+infix left  9 (<<) = composeL
+infix right 9 (>>) = composeR
+
+
+apR : a -> (a -> b) -> b
+apR x f =
+    f x
+
+
+apL : (a -> b) -> a -> b
+apL f x =
+    f x
+
+
+composeL : (b -> c) -> (a -> b) -> (a -> c)
+composeL g f x =
+    g (f x)
+
+
+composeR : (a -> b) -> (b -> c) -> (a -> c)
+composeR f g x =
+    g (f x)
 
 
 identity : a -> a
@@ -1048,6 +1082,10 @@ elmValuesToExposeToGlobal =
     [ ( [ "Basics" ], "identity" )
     , ( [ "Basics" ], "always" )
     , ( [ "Basics" ], "not" )
+    , ( [ "Basics" ], "(|>)" )
+    , ( [ "Basics" ], "(<|)" )
+    , ( [ "Basics" ], "(>>)" )
+    , ( [ "Basics" ], "(<<)" )
     , ( [ "Maybe" ], "Nothing" )
     , ( [ "Maybe" ], "Just" )
     ]
