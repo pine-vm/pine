@@ -4,8 +4,8 @@ In this guide, I use the elm-fullstack command-line interface (CLI) program. You
 
 Here are direct links to the downloads, containing the `elm-fullstack` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-10-17/elm-fullstack-bin-b0d1087e30b0e67ad2dbc3e8b9ab9ec14dbdff16-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-10-17/elm-fullstack-bin-b0d1087e30b0e67ad2dbc3e8b9ab9ec14dbdff16-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-12-21/elm-fullstack-bin-984302436f7c64aef84fb6df7cd6b7e48e556a45-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-12-21/elm-fullstack-bin-984302436f7c64aef84fb6df7cd6b7e48e556a45-linux-x64.zip
 
 To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack  install-command` command.
 
@@ -13,12 +13,12 @@ To register the elm-fullstack executable on your systems PATH environment variab
 
 To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/example-apps/docker-image-default-app
+elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -26,7 +26,7 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition b2b630b8b3c53b2d21f2a726dec395bb2ef78bb16fa4d164db3cfd4e6447ceb2 from 'https://github.com/elm-fullstack/elm-fullstack/tree/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/example-apps/docker-image-default-app'.
+Loaded source composition c96b35cb6fefb163c1f4632d201f58ab0007a36105e71e62fe3e557cff765013 from 'https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -35,11 +35,11 @@ info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
-      Restored the process state in 3 seconds.
-info: Kalmit.PersistentProcess.WebHost.StartupPublicApp[0]
-      I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
+      Restored the process state in 4 seconds.
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Completed building the process volatile representation.
+info: Kalmit.PersistentProcess.WebHost.StartupPublicApp[0]
+      I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
@@ -100,7 +100,7 @@ elm_make__base64____src_FrontendWeb_Main_elm =
     "The Elm-fullstack compiler replaces this value."
 ```
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L48) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L48) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -146,7 +146,7 @@ This module provides access to the app source code files.
 
 By adding a name to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/9c33a38bd57be4b46c56e2acc07f9497ee4e860e/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
 ```Elm
 file____readme_md : Bytes.Bytes
@@ -185,7 +185,7 @@ migrate backendState =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/PersistentProcess/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-fullstack.json`
 
@@ -246,7 +246,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/7f091b1c7aecbd9a1839a8b9b3dd56af2c8e4c3d/implement/example-apps/docker-image-default-app  --init-elm-app-state
+elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app  --init-elm-app-state
 ```
 
 The `--init-elm-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
