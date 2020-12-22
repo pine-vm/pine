@@ -1,0 +1,3 @@
+[ String.startsWith "the" "theory"
+, String.startsWith "ory" "theory"
+]

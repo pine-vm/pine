@@ -1,11 +1,1 @@
-[ String.toInt ""
-, String.toInt " 0"
-, String.toInt "0 "
-, String.toInt "- 0"
-, String.toInt "0"
-, String.toInt "-0"
-, String.toInt "+1"
-, String.toInt "-2"
-, String.toInt "12345"
-, String.toInt "-56789"
-]
+String.left 2 "Mulder"

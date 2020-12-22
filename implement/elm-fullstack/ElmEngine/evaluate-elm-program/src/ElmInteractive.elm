@@ -517,6 +517,14 @@ always : a -> b -> a
 always a _ =
     a
 
+
+not : Bool -> Bool
+not bool =
+    if bool == True then
+        False
+    else
+        True
+
 """
     , """
 module Tuple exposing
@@ -780,6 +788,11 @@ toList string =
     string
 
 
+fromList : List Char -> String
+fromList list =
+    list
+
+
 isEmpty : String -> Bool
 isEmpty string =
     string == ""
@@ -832,7 +845,7 @@ splitHelper current sep string =
         else
             [ current ]
 
-    else if left (length sep) string == sep && (current /= []) then
+    else if startsWith sep string && (current /= []) then
         [ current ] ++ splitHelper [] sep (dropLeft (length sep) string)
 
     else
@@ -874,10 +887,46 @@ left n string =
     List.take n string
 
 
+right : Int -> String -> String
+right n string =
+    if n < 1 then
+        ""
+    else
+        slice -n (length string) string
+
+
 dropLeft : Int -> String -> String
 dropLeft n string =
     List.drop n string
 
+
+dropRight : Int -> String -> String
+dropRight n string =
+    if n < 1 then
+        string
+    else
+        slice 0 -n string
+
+
+contains : String -> String -> Bool
+contains pattern string =
+    if startsWith pattern string then
+        True
+    else
+        if length pattern < length string then
+            contains pattern (dropLeft 1 string)
+        else
+            False
+
+
+startsWith : String -> String -> Bool
+startsWith pattern string =
+    left (length pattern) string == pattern
+
+
+endsWith : String -> String -> Bool
+endsWith pattern string =
+    right (length pattern) string == pattern
 
 
 toInt : String -> Maybe Int
@@ -887,18 +936,32 @@ toInt =
 
 toIntDecimal : String -> Maybe Int
 toIntDecimal =
-    toIntFromDigitsChars
-        [ ( '0', 0 )
-        , ( '1', 1 )
-        , ( '2', 2 )
-        , ( '3', 3 )
-        , ( '4', 4 )
-        , ( '5', 5 )
-        , ( '6', 6 )
-        , ( '7', 7 )
-        , ( '8', 8 )
-        , ( '9', 9 )
-        ]
+    toIntFromDigitsChars digitCharactersDecimal
+
+
+fromInt : Int -> String
+fromInt =
+    fromIntDecimal
+
+
+fromIntDecimal : Int -> String
+fromIntDecimal =
+    fromList (fromIntFromDigitsChars digitCharactersDecimal)
+
+
+digitCharactersDecimal : List ( Char, Int )
+digitCharactersDecimal =
+    [ ( '0', 0 )
+    , ( '1', 1 )
+    , ( '2', 2 )
+    , ( '3', 3 )
+    , ( '4', 4 )
+    , ( '5', 5 )
+    , ( '6', 6 )
+    , ( '7', 7 )
+    , ( '8', 8 )
+    , ( '9', 9 )
+    ]
 
 
 toIntFromDigitsChars : List ( Char, Int ) -> String -> Maybe Int
@@ -951,6 +1014,31 @@ toUnsignedIntFromDigitsChars digitsCharacters string =
                 (List.map digitValueFromCharacter digits)
 
 
+fromIntFromDigitsChars : List ( Char, Int ) -> Int -> List Char
+fromIntFromDigitsChars digitsCharacters int =
+    if int < 0 then
+        [ '-' ] ++ fromIntFromDigitsChars digitsCharacters -int
+
+    else
+        let
+            digitCharacterFromValue digitValue =
+                Maybe.map Tuple.first (List.head (List.filter (\\( _, c ) -> c == digitValue) digitsCharacters))
+
+            upperDigitsValue =
+                int // 10
+
+            lastDigitValue =
+                int - (upperDigitsValue * 10)
+
+            upperDigitsString =
+                if upperDigitsValue < 1 then
+                    []
+
+                else
+                    fromIntFromDigitsChars digitsCharacters upperDigitsValue
+        in
+        upperDigitsString ++ [ Maybe.withDefault 'e' (digitCharacterFromValue lastDigitValue) ]
+
 """
     ]
 
@@ -959,6 +1047,7 @@ elmValuesToExposeToGlobal : List ( List String, String )
 elmValuesToExposeToGlobal =
     [ ( [ "Basics" ], "identity" )
     , ( [ "Basics" ], "always" )
+    , ( [ "Basics" ], "not" )
     , ( [ "Maybe" ], "Nothing" )
     , ( [ "Maybe" ], "Just" )
     ]
@@ -1390,7 +1479,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
 
                                 conditionExpression =
                                     Pine.ApplicationExpression
-                                        { function = Pine.FunctionOrValueExpression "not"
+                                        { function = Pine.FunctionOrValueExpression "PineKernel.booleanNot"
                                         , arguments =
                                             [ Pine.ApplicationExpression
                                                 { function = Pine.FunctionOrValueExpression "PineKernel.equals"

@@ -315,23 +315,18 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                         }
                         application.arguments
 
-                "String.fromInt" ->
-                    case application.arguments of
-                        [ argument ] ->
-                            case bigIntFromValue argument of
-                                Err error ->
-                                    Err (DescribePathEnd ("Failed to map to integer: " ++ error))
+                "PineKernel.booleanNot" ->
+                    evaluateFunctionApplicationExpectingExactlyOneArgument
+                        { mapArg = Ok
+                        , apply =
+                            \argument ->
+                                if argument == trueValue then
+                                    Ok falseValue
 
-                                Ok bigInt ->
-                                    bigInt |> BigInt.toString |> valueFromString |> Ok
-
-                        _ ->
-                            Err
-                                (DescribePathEnd
-                                    ("Unexpected number of arguments for String.fromInt: "
-                                        ++ String.fromInt (List.length application.arguments)
-                                    )
-                                )
+                                else
+                                    Ok trueValue
+                        }
+                        application.arguments
 
                 "(==)" ->
                     functionEquals
@@ -412,19 +407,6 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
 
                 "(>=)" ->
                     functionOnTwoBigIntWithBooleanResult BigInt.gte
-
-                "not" ->
-                    evaluateFunctionApplicationExpectingExactlyOneArgument
-                        { mapArg = Ok
-                        , apply =
-                            \argument ->
-                                if argument == trueValue then
-                                    Ok falseValue
-
-                                else
-                                    Ok trueValue
-                        }
-                        application.arguments
 
                 _ ->
                     continueIgnoringAtomBindings ()
