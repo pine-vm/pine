@@ -107,7 +107,11 @@ view state =
             else
                 case evalResult of
                     Err error ->
-                        Element.text ("Error: " ++ error)
+                        ("Error: " ++ error)
+                            |> Html.text
+                            |> List.singleton
+                            |> Html.div [ HA.style "white-space" "pre-wrap" ]
+                            |> Element.html
 
                     Ok evalSuccess ->
                         case evalSuccess of

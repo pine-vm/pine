@@ -240,7 +240,7 @@ evaluateFunctionApplicationWithEvaluatedArgs context application =
                                 list |> functionOnList |> Ok
 
                             _ ->
-                                Err (DescribePathEnd ("Argument is not a list ('" ++ describeValue argument ++ ")"))
+                                Err (DescribePathEnd ("Argument is not a list ('" ++ describeValue argument ++ "')"))
                 }
                 application.arguments
 
@@ -596,7 +596,7 @@ describeValue : Value -> String
 describeValue value =
     case value of
         BlobValue blob ->
-            "BlobValue 0x" ++ Json.Encode.encode 0 (Json.Encode.string (hexadecimalRepresentationFromBlobValue blob))
+            "BlobValue 0x" ++ hexadecimalRepresentationFromBlobValue blob
 
         ListValue list ->
             "[" ++ String.join ", " (List.map describeValue list) ++ "]"
