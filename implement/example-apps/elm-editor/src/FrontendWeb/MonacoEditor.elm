@@ -8,3 +8,4 @@ type MessageToEditor
 type MessageFromEditor
     = CompletedSetupEvent
     | DidChangeContentEvent String
+    | EditorActionCloseFileEvent

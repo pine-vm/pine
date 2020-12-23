@@ -337,6 +337,11 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         }
     }
 
+    function editorActionCloseFile() {
+        parent?.messageFromMonacoFrame?.({"EditorActionCloseFileEvent":[]});
+    }
+
+
 </script>
 
 <script>
@@ -379,6 +384,23 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             scrollBeyondLastLine: false,
             theme: "dark-plus"
         });
+
+        editor.addAction({
+            id: 'close-file-action',
+            label: 'Close File',
+            keybindings: [],
+            precondition: null,
+            keybindingContext: null,
+
+            contextMenuGroupId: 'z-other',
+            contextMenuOrder: 99,
+
+            run: function(ed) {
+                editorActionCloseFile();
+                return null;
+            }
+        });
+
 
         tryCompleteSetup();
     });

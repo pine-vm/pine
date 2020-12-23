@@ -135,12 +135,9 @@ loadProject project state =
                 |> List.map (\file -> ( file.filePath, file.fileContentText ))
 
         fileInEditor =
-            case projectFiles |> List.filter offerToOpenFileInEditor of
-                [ singleMatch ] ->
-                    Just singleMatch
-
-                _ ->
-                    Nothing
+            projectFiles
+                |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
+                |> List.head
     in
     { state | projectFiles = projectFiles |> Dict.fromList, fileInEditor = fileInEditor }
 
@@ -194,6 +191,11 @@ update event stateBefore =
                             , stateBefore.fileInEditor
                                 |> Maybe.map (Tuple.second >> setTextInMonacoEditorCmd)
                                 |> Maybe.withDefault Cmd.none
+                            )
+
+                        FrontendWeb.MonacoEditor.EditorActionCloseFileEvent ->
+                            ( { stateBefore | fileInEditor = Nothing }
+                            , Cmd.none
                             )
 
         TimeHasArrived time ->
@@ -417,9 +419,35 @@ elmMakeOutputFileName =
     "elm-make-output.html"
 
 
-offerToOpenFileInEditor : ( List String, String ) -> Bool
-offerToOpenFileInEditor =
-    Tuple.first >> List.reverse >> List.head >> Maybe.map (String.endsWith ".elm") >> Maybe.withDefault False
+priorityToOfferToOpenFileInEditor : ( List String, String ) -> Maybe Int
+priorityToOfferToOpenFileInEditor ( filePath, _ ) =
+    if filePath == [ "elm.json" ] then
+        Just 0
+
+    else if filePath |> List.reverse |> List.head |> Maybe.map (String.endsWith ".elm") |> Maybe.withDefault False then
+        {- TODO: If there is only one entry point, it should have highest priority:
+           Derive priority from number dependencies.
+        -}
+        Just 1
+
+    else
+        Nothing
+
+
+sortFilesIntoPrioritiesToOfferToOpenFileInEditor : List ( List String, String ) -> List ( List String, String )
+sortFilesIntoPrioritiesToOfferToOpenFileInEditor projectFiles =
+    projectFiles
+        |> List.filterMap
+            (\file ->
+                case priorityToOfferToOpenFileInEditor file of
+                    Nothing ->
+                        Nothing
+
+                    Just priority ->
+                        Just ( priority, file )
+            )
+        |> List.sortBy (Tuple.first >> negate)
+        |> List.map Tuple.second
 
 
 view : State -> Browser.Document Event
@@ -432,8 +460,13 @@ view state =
                         projectFiles =
                             state.projectFiles |> Dict.toList
 
+                        filesToOfferToOpenInEditor =
+                            projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
+
                         otherFilesList =
-                            case projectFiles |> List.filter (offerToOpenFileInEditor >> not) of
+                            case
+                                projectFiles |> List.filter (List.member >> (|>) filesToOfferToOpenInEditor >> not)
+                            of
                                 [] ->
                                     Element.none
 
@@ -446,13 +479,13 @@ view state =
                                         |> Element.column []
 
                         chooseElmFileElement =
-                            case projectFiles |> List.filter offerToOpenFileInEditor of
+                            case filesToOfferToOpenInEditor of
                                 [] ->
                                     Element.text "Did not find any .elm file in this project."
 
-                                elmFilesInTheProject ->
+                                _ ->
                                     [ Element.text "Choose one of the files in the project to open in the editor:"
-                                    , elmFilesInTheProject
+                                    , filesToOfferToOpenInEditor
                                         |> List.map
                                             (\( filePath, _ ) ->
                                                 Element.Input.button
