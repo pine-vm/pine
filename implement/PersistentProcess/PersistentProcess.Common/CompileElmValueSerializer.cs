@@ -1040,7 +1040,29 @@ namespace Kalmit
             }
         }
 
-        static public IEnumerable<(string elmType, (string encodeExpression, string decodeExpression, IImmutableSet<string> referencedModules) result)>
+        public struct ExpressionsForType
+        {
+            public string encodeExpression;
+
+            public string decodeExpression;
+
+            public IImmutableSet<string> referencedModules;
+
+            public override bool Equals(object obj)
+            {
+                if (obj is ExpressionsForType sameType)
+                    return Equals(sameType);
+
+                return base.Equals(obj);
+            }
+
+            public bool Equals(ExpressionsForType other) =>
+                encodeExpression == other.encodeExpression &&
+                decodeExpression == other.decodeExpression &&
+                referencedModules.SetEquals(other.referencedModules);
+        }
+
+        static public IEnumerable<(string elmType, ExpressionsForType result)>
             EnumerateExpressionsResolvingAllDependencies(
                 Func<string, ResolveTypeResult> getExpressionsAndDependenciesForType,
                 IImmutableSet<string> rootTypes)
@@ -1067,7 +1089,12 @@ namespace Kalmit
 
                 yield return
                     (currentTypeResults.canonicalTypeTextWithParameters ?? currentTypeResults.canonicalTypeText,
-                    (currentTypeExpressions.encodeExpression, currentTypeExpressions.decodeExpression, currentTypeResults.referencedModules));
+                    new ExpressionsForType
+                    {
+                        encodeExpression = currentTypeExpressions.encodeExpression,
+                        decodeExpression = currentTypeExpressions.decodeExpression,
+                        referencedModules = currentTypeResults.referencedModules,
+                    });
             }
         }
 

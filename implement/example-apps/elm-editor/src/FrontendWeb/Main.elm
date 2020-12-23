@@ -50,7 +50,7 @@ type alias State =
     { navigationKey : Navigation.Key
     , url : Url.Url
     , time : Maybe Time.Posix
-    , projectFiles : Dict.Dict (List String) String
+    , projectFiles : Dict.Dict (List String) Bytes.Bytes
     , fileInEditor : Maybe ( List String, String )
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
@@ -131,8 +131,7 @@ loadProject : ProjectState.ProjectState -> State -> State
 loadProject project state =
     let
         projectFiles =
-            project
-                |> List.map (\file -> ( file.filePath, file.fileContentText ))
+            project |> ProjectState.flatListOfBlobsFromFileTreeNode
 
         fileInEditor =
             projectFiles
@@ -151,11 +150,16 @@ update event stateBefore =
                     ( stateBefore, Cmd.none )
 
                 Just fileContent ->
-                    ( { stateBefore | fileInEditor = Just ( filePath, fileContent ) }
-                    , setTextInMonacoEditorCmd fileContent
-                    )
+                    case stringFromFileContent fileContent of
+                        Nothing ->
+                            ( stateBefore, Cmd.none )
 
-        UserInputChangeTextInEditor inputElmCode ->
+                        Just fileContentString ->
+                            ( { stateBefore | fileInEditor = Just ( filePath, fileContentString ) }
+                            , setTextInMonacoEditorCmd fileContentString
+                            )
+
+        UserInputChangeTextInEditor inputText ->
             case stateBefore.fileInEditor of
                 Nothing ->
                     ( stateBefore, Cmd.none )
@@ -163,11 +167,11 @@ update event stateBefore =
                 Just ( filePath, _ ) ->
                     let
                         fileInEditor =
-                            ( filePath, inputElmCode )
+                            ( filePath, inputText )
 
                         projectFiles =
                             stateBefore.projectFiles
-                                |> Dict.insert filePath inputElmCode
+                                |> Dict.insert filePath (fileContentFromString inputText)
                     in
                     ( { stateBefore | projectFiles = projectFiles, fileInEditor = Just fileInEditor }
                     , Cmd.none
@@ -220,7 +224,9 @@ update event stateBefore =
                         let
                             projectFiles =
                                 stateBefore.projectFiles
-                                    |> Dict.insert formatResponseEvent.filePath formattedText
+                                    |> Dict.insert
+                                        formatResponseEvent.filePath
+                                        (fileContentFromString formattedText)
 
                             fileInEditor =
                                 ( formatResponseEvent.filePath, formattedText )
@@ -296,10 +302,7 @@ update event stateBefore =
                             projectState =
                                 stateBefore.projectFiles
                                     |> Dict.toList
-                                    |> List.map
-                                        (\( filePath, fileContentText ) ->
-                                            { filePath = filePath, fileContentText = fileContentText }
-                                        )
+                                    |> List.foldl ProjectState.setBlobAtPathInSortedFileTree (ProjectState.TreeNode [])
 
                             url =
                                 stateBefore.url
@@ -351,11 +354,9 @@ userInputCompile stateBefore =
 
         Just ( filePath, _ ) ->
             let
-                base64FromString : String -> String
-                base64FromString =
-                    Bytes.Encode.string
-                        >> Bytes.Encode.encode
-                        >> Base64.fromBytes
+                base64FromBytes : Bytes.Bytes -> String
+                base64FromBytes =
+                    Base64.fromBytes
                         >> Maybe.withDefault "Error encoding in base64"
 
                 entryPointFilePath =
@@ -369,7 +370,7 @@ userInputCompile stateBefore =
                             |> List.map
                                 (\( path, content ) ->
                                     { path = path
-                                    , contentBase64 = base64FromString content
+                                    , contentBase64 = content |> base64FromBytes
                                     }
                                 )
                     }
@@ -434,17 +435,22 @@ priorityToOfferToOpenFileInEditor ( filePath, _ ) =
         Nothing
 
 
-sortFilesIntoPrioritiesToOfferToOpenFileInEditor : List ( List String, String ) -> List ( List String, String )
+sortFilesIntoPrioritiesToOfferToOpenFileInEditor : List ( List String, Bytes.Bytes ) -> List ( List String, String )
 sortFilesIntoPrioritiesToOfferToOpenFileInEditor projectFiles =
     projectFiles
         |> List.filterMap
-            (\file ->
-                case priorityToOfferToOpenFileInEditor file of
+            (\( filePath, fileContent ) ->
+                case stringFromFileContent fileContent of
                     Nothing ->
                         Nothing
 
-                    Just priority ->
-                        Just ( priority, file )
+                    Just fileContentString ->
+                        case priorityToOfferToOpenFileInEditor ( filePath, fileContentString ) of
+                            Nothing ->
+                                Nothing
+
+                            Just priority ->
+                                Just ( priority, ( filePath, fileContentString ) )
             )
         |> List.sortBy (Tuple.first >> negate)
         |> List.map Tuple.second
@@ -463,9 +469,14 @@ view state =
                         filesToOfferToOpenInEditor =
                             projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
 
+                        filesToOfferToOpenInEditorNames =
+                            filesToOfferToOpenInEditor |> List.map Tuple.first
+
                         otherFilesList =
                             case
-                                projectFiles |> List.filter (List.member >> (|>) filesToOfferToOpenInEditor >> not)
+                                filesToOfferToOpenInEditorNames
+                                    |> List.foldl Dict.remove state.projectFiles
+                                    |> Dict.toList
                             of
                                 [] ->
                                     Element.none
@@ -724,24 +735,28 @@ monacoEditorElement _ =
 
 defaultProject : ProjectState.ProjectState
 defaultProject =
-    [ { filePath = [ "src", "Main.elm" ]
-      , fileContentText =
-            ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
-                |> decodeBytesToString
-                |> Maybe.withDefault "Failed to decode file"
-      }
-    , { filePath = [ "elm.json" ]
-      , fileContentText =
-            ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
-                |> decodeBytesToString
-                |> Maybe.withDefault "Failed to decode file"
-      }
-    ]
+    ProjectState.TreeNode
+        [ ( "src"
+          , ProjectState.TreeNode
+                [ ( "Main.elm"
+                  , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
+                  )
+                ]
+          )
+        , ( "elm.json"
+          , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
+          )
+        ]
 
 
-decodeBytesToString : Bytes.Bytes -> Maybe String
-decodeBytesToString bytes =
-    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
+stringFromFileContent : Bytes.Bytes -> Maybe String
+stringFromFileContent bytes =
+    Bytes.Decode.decode (Bytes.Decode.string (Bytes.width bytes)) bytes
+
+
+fileContentFromString : String -> Bytes.Bytes
+fileContentFromString =
+    Bytes.Encode.string >> Bytes.Encode.encode
 
 
 htmlOfferingTextToCopy : String -> Html.Html event
