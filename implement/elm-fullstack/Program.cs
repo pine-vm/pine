@@ -543,6 +543,52 @@ namespace elm_fullstack
                 });
             });
 
+            app.Command("describe", describeCmd =>
+            {
+                describeCmd.Description = "Describe an artifact.";
+                describeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+                var sourceParameter =
+                    describeCmd
+                    .Argument("source", "Path to the artifact. This can be a local directory or a URL.")
+                    .IsRequired(allowEmptyStrings: false, errorMessage: "The source argument is missing. From where should I load the artifact?");
+
+                describeCmd.OnExecute(() =>
+                {
+                    var sourcePath = sourceParameter.Value;
+
+                    var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
+
+                    if (loadFromPathResult?.Ok == null)
+                    {
+                        throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
+                    }
+
+                    var composition = Composition.FromTreeWithStringPath(loadFromPathResult?.Ok.tree);
+
+                    var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
+
+                    Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
+
+                    var blobs =
+                        loadFromPathResult?.Ok.tree.EnumerateBlobsTransitive()
+                        .ToImmutableList();
+
+                    var compositionDescription =
+                        loadFromPathResult?.Ok.tree.BlobContent == null
+                        ?
+                        ("a tree containing " + blobs.Count + " blobs:\n" +
+                        string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path))))
+                        :
+                        "a blob";
+
+                    Console.WriteLine(
+                        "Composition " + compositionId + " is " + compositionDescription);
+
+                    return 0;
+                });
+            });
+
             app.OnExecute(() =>
             {
                 Console.WriteLine("Please specify a subcommand.");

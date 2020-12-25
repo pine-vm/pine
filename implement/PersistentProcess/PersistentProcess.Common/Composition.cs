@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace Kalmit
@@ -192,27 +191,19 @@ namespace Kalmit
                 blob(blobContent.ToImmutableList());
 
 
-            public IImmutableList<(IImmutableList<string> path, IImmutableList<byte> blobContent)> EnumerateBlobsTransitive() =>
-                TreeContent == null ? null :
-                EnumerateBlobsRecursive(TreeContent)
-                .ToImmutableList();
-
-            static IEnumerable<(IImmutableList<string> path, IImmutableList<byte> content)> EnumerateBlobsRecursive(
-                IImmutableList<(string name, TreeWithStringPath obj)> tree)
+            public IImmutableList<(IImmutableList<string> path, IImmutableList<byte> blobContent)> EnumerateBlobsTransitive()
             {
-                foreach (var treeEntry in tree)
+                if (TreeContent == null)
                 {
-                    if (treeEntry.obj.BlobContent != null)
-                        yield return (ImmutableList.Create(treeEntry.name), treeEntry.obj.BlobContent);
-
-                    if (treeEntry.obj.TreeContent != null)
-                    {
-                        foreach (var subTreeEntry in EnumerateBlobsRecursive(treeEntry.obj.TreeContent))
-                        {
-                            yield return (subTreeEntry.path.Insert(0, treeEntry.name), subTreeEntry.content);
-                        }
-                    }
+                    return ImmutableList.Create<(IImmutableList<string> path, IImmutableList<byte> blobContent)>(
+                        (ImmutableList<string>.Empty, BlobContent));
                 }
+
+                return
+                    TreeContent.SelectMany(treeEntry =>
+                        treeEntry.component.EnumerateBlobsTransitive()
+                        .Select(child => (child.path.Insert(0, treeEntry.name), child.blobContent)))
+                    .ToImmutableList();
             }
 
             public bool Equals(TreeWithStringPath other)
