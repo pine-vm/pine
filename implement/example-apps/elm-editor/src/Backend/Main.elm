@@ -48,15 +48,30 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                 bodyFromString =
                     Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
-                httpResponseOkWithStringContent stringContent =
-                    httpResponseOkWithBodyAsBase64 (bodyFromString stringContent)
+                staticContentHttpHeaders =
+                    { cacheMaxAgeMinutes = Just (60 * 4) }
 
-                httpResponseOkWithBodyAsBase64 bodyAsBase64 =
+                httpResponseOkWithStringContent stringContent httpResponseHeaders =
+                    httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
+
+                httpResponseOkWithBodyAsBase64 bodyAsBase64 { cacheMaxAgeMinutes } =
+                    let
+                        cacheHeaders =
+                            case cacheMaxAgeMinutes of
+                                Nothing ->
+                                    []
+
+                                Just maxAgeMinutes ->
+                                    [ { name = "Cache-Control"
+                                      , values = [ "public, max-age=" ++ String.fromInt (maxAgeMinutes * 60) ]
+                                      }
+                                    ]
+                    in
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
                         , bodyAsBase64 = bodyAsBase64
-                        , headersToAdd = []
+                        , headersToAdd = cacheHeaders
                         }
                     }
             in
@@ -65,7 +80,7 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                     ( stateBefore
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent frontendHtmlDocument
+                            [ httpResponseOkWithStringContent frontendHtmlDocument staticContentHttpHeaders
                             ]
                     )
 
@@ -73,21 +88,27 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                     ( stateBefore
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithBodyAsBase64 (Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm) ]
+                            [ httpResponseOkWithBodyAsBase64
+                                (Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm)
+                                staticContentHttpHeaders
+                            ]
                     )
 
                 Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
                     ( stateBefore
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent monacoHtmlDocument ]
+                            [ httpResponseOkWithStringContent monacoHtmlDocument staticContentHttpHeaders ]
                     )
 
                 Just (Backend.Route.StaticFileRoute Backend.Route.MonarchJavascriptRoute) ->
                     ( stateBefore
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithBodyAsBase64 (ElmFullstackCompilerInterface.SourceFiles.file____src_monarch_js |> Base64.fromBytes) ]
+                            [ httpResponseOkWithBodyAsBase64
+                                (ElmFullstackCompilerInterface.SourceFiles.file____src_monarch_js |> Base64.fromBytes)
+                                staticContentHttpHeaders
+                            ]
                     )
 
                 Just Backend.Route.ApiRoute ->
