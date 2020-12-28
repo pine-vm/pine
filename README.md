@@ -50,6 +50,8 @@ For a detailed description of this app, see the readme file at https://github.co
 
 ### Elm Editor
 
-The [Elm Editor example app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor) is a code editor optimized for the development of Elm apps. It also provides tooling specifically for web frontend-apps to compile and view your app inline.
+The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps. It also provides tooling specifically for web frontend-apps to compile and view your app inline.
 
-The Elm Editor frontend builds on the popular [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide code editing and features like syntax highlighting.
+The Elm Editor frontend integrates the [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide functionality around code editing and features like syntax highlighting.
+
+To read more about the Elm Editor, see https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor/Readme.md
