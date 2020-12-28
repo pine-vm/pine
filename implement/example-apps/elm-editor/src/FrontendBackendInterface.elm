@@ -4,11 +4,14 @@ module FrontendBackendInterface exposing (..)
 type RequestStructure
     = ElmMakeRequest ElmMakeRequestStructure
     | FormatElmModuleTextRequest String
+    | LoadCompositionRequest String
 
 
 type ResponseStructure
     = ElmMakeResponse ElmMakeResponseStructure
     | FormatElmModuleTextResponse FormatElmModuleTextResponseStructure
+    | LoadCompositionResponse LoadCompositionResponseStructure
+    | ErrorResponse String
 
 
 type alias ElmMakeRequestStructure =
@@ -26,6 +29,12 @@ type alias ElmMakeResponseStructure =
 type alias FormatElmModuleTextResponseStructure =
     { processOutput : ProcessOutputStructure
     , formattedText : Maybe String
+    }
+
+
+type alias LoadCompositionResponseStructure =
+    { compositionId : String
+    , filesAsFlatList : List FileWithPath
     }
 
 

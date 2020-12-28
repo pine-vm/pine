@@ -49,27 +49,41 @@ volatileHostScript =
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
 #r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
-// from elm-fullstack-separate-assemblies-24e368044d27f7101ba4e42a0a2f9e8a85f2a170-linux-x64
-#r "sha256:52a3e6e6e01416baafbe00f2cffd8d159c36478aa6e571dac21a317f39f30007"
+// from elm-fullstack-separate-assemblies-52aa3ed298b05c93d37503d601de56211d2163be-linux-x64
+#r "sha256:bf80ff2fb8a61b6b2a0d22c49771aad07fcc07a282bf7768730b3a525c84fd2d"
 
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
+
+int loadCompositionLimitFileCount = 40;
+int loadCompositionLimitAggregateFileSize = 500_000;
+int loadCompositionLimitMaximumPathLength = 200;
+
+
 public class RequestStructure
 {
     public IReadOnlyList<ElmMakeRequestStructure> ElmMakeRequest;
 
     public IReadOnlyList<string> FormatElmModuleTextRequest;
+
+    public IReadOnlyList<string> LoadCompositionRequest;
 }
 
 public class ResponseStructure
 {
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     public IReadOnlyList<ElmMakeResponseStructure> ElmMakeResponse;
 
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     public IReadOnlyList<FormatElmModuleTextResponseStructure> FormatElmModuleTextResponse;
 
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public IReadOnlyList<LoadCompositionResponseStructure> LoadCompositionResponse;
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     public IReadOnlyList<string> ErrorResponse;
 }
 
@@ -110,6 +124,13 @@ public struct ProcessOutput
     public int exitCode;
 }
 
+public class LoadCompositionResponseStructure
+{
+    public string compositionId;
+
+    public IReadOnlyList<FileWithPath> filesAsFlatList;
+}
+
 
 string GetSerialResponseFromSerialRequest(string serializedRequest)
 {
@@ -141,6 +162,100 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
         return new ResponseStructure
         {
             FormatElmModuleTextResponse = ImmutableList.Create(ElmFormat.FormatElmModuleText(formatElmModuleTextRequest))
+        };
+    }
+
+    var loadCompositionRequest =
+        request.LoadCompositionRequest?.FirstOrDefault();
+
+    if(loadCompositionRequest != null)
+    {
+        var sourcePath = loadCompositionRequest;
+
+        if(!(Uri.TryCreate(sourcePath, UriKind.Absolute, out var uriResult)
+            && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps)))
+        {
+            return new ResponseStructure
+            {
+                ErrorResponse = ImmutableList.Create("This string is not a supported URL: '" + sourcePath + "'")
+            };
+        }
+
+        var loadFromPathResult = Kalmit.LoadFromPath.LoadTreeFromPath(sourcePath);
+
+        if (loadFromPathResult?.Ok == null)
+        {
+            return new ResponseStructure
+            {
+                ErrorResponse = ImmutableList.Create(
+                    "Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err)
+            };
+        }
+
+        if (loadFromPathResult?.Ok.tree == null)
+        {
+            return new ResponseStructure
+            {
+                ErrorResponse = ImmutableList.Create("Did not find a tree object at '" + sourcePath + "'")
+            };
+        }
+
+        var composition = Kalmit.Composition.FromTreeWithStringPath(loadFromPathResult?.Ok.tree);
+
+        var compositionId = Kalmit.CommonConversion.StringBase16FromByteArray(Kalmit.Composition.GetHash(composition));
+
+        var blobs =
+            loadFromPathResult?.Ok.tree.EnumerateBlobsTransitive()
+            .ToImmutableList();
+
+        ResponseStructure responseErrorExceedingLimit(string limitName)
+        {
+            return new ResponseStructure
+            {
+                ErrorResponse = ImmutableList.Create("Composition '" + compositionId + "' exceeds supported limits: " + limitName)
+            };
+        }
+
+        var fileCount = blobs.Count();
+
+        if(loadCompositionLimitFileCount < fileCount)
+        {
+            return responseErrorExceedingLimit("File count: " + fileCount);
+        }
+
+        var aggregateFileSize =
+            blobs.Sum(file => file.blobContent.Count);
+
+        if(loadCompositionLimitAggregateFileSize < aggregateFileSize)
+        {
+            return responseErrorExceedingLimit("Aggregate file size: " + aggregateFileSize);
+        }
+
+        var maximumPathLength =
+            blobs.Max(file => file.path.Sum(pathElement => pathElement.Length));
+
+        if(loadCompositionLimitMaximumPathLength < maximumPathLength)
+        {
+            return responseErrorExceedingLimit("Maximum path length: " + maximumPathLength);
+        }
+
+        var filesAsFlatList =
+            blobs
+            .Select(file => new FileWithPath
+            {
+                path = file.path,
+                contentBase64 = Convert.ToBase64String(file.blobContent.ToArray()),
+            })
+            .ToImmutableList();
+
+        return new ResponseStructure
+        {
+            LoadCompositionResponse = ImmutableList.Create(
+                new LoadCompositionResponseStructure
+                {
+                    compositionId = compositionId,
+                    filesAsFlatList = filesAsFlatList,
+                })
         };
     }
 

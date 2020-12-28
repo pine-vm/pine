@@ -56,7 +56,7 @@ type alias State =
     , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
     , elmMakeResult : Maybe (Result Http.Error ElmMakeResultStructure)
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
-    , saveOrShareDialog : Maybe SaveOrShareDialog
+    , modalDialog : Maybe ModalDialogState
     }
 
 
@@ -75,15 +75,37 @@ type Event
     | UserInputFormat
     | UserInputCompile
     | UserInputSave Bool
+    | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputCloseModalDialog
     | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
+    | BackendLoadFromGitResultEvent (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
+    | DiscardEvent
 
 
-type alias SaveOrShareDialog =
+type UserInputLoadFromGitEventStructure
+    = LoadFromGitOpenDialog
+    | LoadFromGitEnterUrlEvent { urlIntoGitRepository : String }
+    | LoadFromGitBeginRequestEvent { urlIntoGitRepository : String }
+    | LoadFromGitTakeResultAsProjectStateEvent
+
+
+type ModalDialogState
+    = SaveOrShareDialog SaveOrShareDialogState
+    | LoadFromGitDialog LoadFromGitDialogState
+
+
+type alias SaveOrShareDialogState =
     { urlToProject : Maybe String }
+
+
+type alias LoadFromGitDialogState =
+    { urlIntoGitRepository : String
+    , requestTime : Maybe Time.Posix
+    , loadCompositionResult : Maybe (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
+    }
 
 
 main : Program () State Event
@@ -119,10 +141,11 @@ init _ url navigationKey =
             , lastElmMakeRequest = Nothing
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
-            , saveOrShareDialog = Nothing
+            , modalDialog = Nothing
             }
                 |> loadProject defaultProject
                 |> update (UrlChange url)
+                |> Tuple.mapFirst openDefaultFileInEditor
     in
     ( model, urlChangeCmd )
 
@@ -132,13 +155,8 @@ loadProject project state =
     let
         projectFiles =
             project |> ProjectState.flatListOfBlobsFromFileTreeNode
-
-        fileInEditor =
-            projectFiles
-                |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
-                |> List.head
     in
-    { state | projectFiles = projectFiles |> Dict.fromList, fileInEditor = fileInEditor }
+    { state | projectFiles = projectFiles |> Dict.fromList }
 
 
 update : Event -> State -> ( State, Cmd Event )
@@ -294,7 +312,14 @@ update event stateBefore =
         UserInputSave generateLink ->
             let
                 dialogBefore =
-                    Maybe.withDefault { urlToProject = Nothing } stateBefore.saveOrShareDialog
+                    (case stateBefore.modalDialog of
+                        Just (SaveOrShareDialog saveOrShareDialog) ->
+                            Just saveOrShareDialog
+
+                        _ ->
+                            Nothing
+                    )
+                        |> Maybe.withDefault { urlToProject = Nothing }
 
                 ( dialog, cmd ) =
                     if generateLink then
@@ -302,7 +327,7 @@ update event stateBefore =
                             projectState =
                                 stateBefore.projectFiles
                                     |> Dict.toList
-                                    |> List.foldl ProjectState.setBlobAtPathInSortedFileTree (ProjectState.TreeNode [])
+                                    |> ProjectState.sortedFileTreeFromListOfBlobs
 
                             url =
                                 stateBefore.url
@@ -316,10 +341,129 @@ update event stateBefore =
                     else
                         ( dialogBefore, Cmd.none )
             in
-            ( { stateBefore | saveOrShareDialog = Just dialog }, cmd )
+            ( { stateBefore | modalDialog = Just (SaveOrShareDialog dialog) }, cmd )
+
+        UserInputLoadFromGit LoadFromGitOpenDialog ->
+            case stateBefore.modalDialog of
+                Nothing ->
+                    ( { stateBefore
+                        | modalDialog =
+                            Just
+                                (LoadFromGitDialog
+                                    { urlIntoGitRepository = ""
+                                    , requestTime = Nothing
+                                    , loadCompositionResult = Nothing
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
+
+        UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository }) ->
+            case stateBefore.modalDialog of
+                Just (LoadFromGitDialog dialogStateBefore) ->
+                    if dialogStateBefore.requestTime /= Nothing || dialogStateBefore.loadCompositionResult /= Nothing then
+                        ( stateBefore, Cmd.none )
+
+                    else
+                        let
+                            dialogState =
+                                { urlIntoGitRepository = urlIntoGitRepository
+                                , requestTime = Nothing
+                                , loadCompositionResult = Nothing
+                                }
+                        in
+                        ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
+                        , Cmd.none
+                        )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
+
+        UserInputLoadFromGit (LoadFromGitBeginRequestEvent { urlIntoGitRepository }) ->
+            case stateBefore.modalDialog of
+                Just (LoadFromGitDialog _) ->
+                    let
+                        dialogState =
+                            { urlIntoGitRepository = urlIntoGitRepository
+                            , requestTime = stateBefore.time
+                            , loadCompositionResult = Nothing
+                            }
+
+                        backendResponseJsonDecoder backendResponse =
+                            case backendResponse of
+                                FrontendBackendInterface.LoadCompositionResponse loadComposition ->
+                                    Json.Decode.succeed loadComposition
+
+                                FrontendBackendInterface.ErrorResponse error ->
+                                    Json.Decode.fail ("The server reported an error: " ++ error)
+
+                                _ ->
+                                    Json.Decode.fail "Unexpected response: Not a LoadCompositionResponse"
+
+                        cmd =
+                            requestToApiCmd
+                                (FrontendBackendInterface.LoadCompositionRequest urlIntoGitRepository)
+                                backendResponseJsonDecoder
+                                BackendLoadFromGitResultEvent
+                    in
+                    ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
+                    , cmd
+                    )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
+
+        UserInputLoadFromGit LoadFromGitTakeResultAsProjectStateEvent ->
+            case stateBefore.modalDialog of
+                Just (LoadFromGitDialog dialogStateBefore) ->
+                    case dialogStateBefore.loadCompositionResult of
+                        Just (Ok loadOk) ->
+                            let
+                                projectState =
+                                    loadOk.filesAsFlatList
+                                        |> List.map
+                                            (\file ->
+                                                ( file.path
+                                                , file.contentBase64
+                                                    |> Base64.toBytes
+                                                    |> Maybe.withDefault ("Failed to decode from Base64" |> Bytes.Encode.string |> Bytes.Encode.encode)
+                                                )
+                                            )
+                                        |> ProjectState.sortedFileTreeFromListOfBlobs
+                            in
+                            ( { stateBefore | modalDialog = Nothing } |> loadProject projectState
+                            , Cmd.none
+                            )
+
+                        _ ->
+                            ( stateBefore, Cmd.none )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
+
+        BackendLoadFromGitResultEvent result ->
+            case stateBefore.modalDialog of
+                Just (LoadFromGitDialog dialogStateBefore) ->
+                    let
+                        dialogState =
+                            { dialogStateBefore | loadCompositionResult = Just result }
+                    in
+                    ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
 
         UserInputCloseModalDialog ->
-            ( { stateBefore | saveOrShareDialog = Nothing }, Cmd.none )
+            ( { stateBefore | modalDialog = Nothing }, Cmd.none )
+
+        DiscardEvent ->
+            ( stateBefore, Cmd.none )
 
 
 elmFormatCmd : State -> Cmd Event
@@ -420,6 +564,18 @@ elmMakeOutputFileName =
     "elm-make-output.html"
 
 
+openDefaultFileInEditor : State -> State
+openDefaultFileInEditor stateBefore =
+    let
+        fileInEditor =
+            stateBefore.projectFiles
+                |> Dict.toList
+                |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
+                |> List.head
+    in
+    { stateBefore | fileInEditor = fileInEditor }
+
+
 priorityToOfferToOpenFileInEditor : ( List String, String ) -> Maybe Int
 priorityToOfferToOpenFileInEditor ( filePath, _ ) =
     if filePath == [ "elm.json" ] then
@@ -510,7 +666,7 @@ view state =
                                     ]
                                         |> Element.column []
                     in
-                    [ [ saveButton ]
+                    [ [ saveButton, loadFromGitOpenDialogButton ]
                         |> Element.row
                             [ Element.spacing defaultFontSize
                             , Element.padding (defaultFontSize // 2)
@@ -532,57 +688,123 @@ view state =
                     viewWhenEditorOpen state
 
         popupAttributes =
-            case state.saveOrShareDialog of
+            case state.modalDialog of
                 Nothing ->
                     []
 
-                Just saveOrShareDialog ->
+                Just (SaveOrShareDialog saveOrShareDialog) ->
                     let
+                        projectSummaryElement =
+                            [ ("This project contains "
+                                ++ (state.projectFiles |> Dict.size |> String.fromInt)
+                                ++ " files with an aggregate size of "
+                                ++ (state.projectFiles |> Dict.toList |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
+                                ++ " bytes."
+                              )
+                                |> Element.text
+                            ]
+                                |> Element.paragraph []
+
                         buttonGenerateUrl =
                             buttonElement { label = "Generate link to project", onPress = Just (UserInputSave True) }
 
                         urlElement =
                             case saveOrShareDialog.urlToProject of
                                 Nothing ->
-                                    Element.el [ Element.transparent True ] (Element.html (htmlOfferingTextToCopy ""))
+                                    Element.el [ elementTransparent True ] (Element.html (htmlOfferingTextToCopy ""))
 
                                 Just urlToProject ->
                                     Element.html (htmlOfferingTextToCopy urlToProject)
-
-                        popup =
-                            [ buttonGenerateUrl |> Element.el [ Element.centerX ]
-                            , urlElement |> Element.el [ Element.width (Element.px 500) ]
+                    in
+                    popupAttributesFromProperties
+                        { title = "Save or Share Project"
+                        , guide = "Get a link that you or others can later use to load the project's current state into the editor again."
+                        , contentElement =
+                            [ projectSummaryElement
+                            , buttonGenerateUrl |> Element.el [ Element.centerX ]
+                            , urlElement |> Element.el [ Element.width Element.fill ]
                             ]
                                 |> Element.column
                                     [ Element.spacing defaultFontSize
-                                    , Element.padding defaultFontSize
+                                    , Element.width Element.fill
                                     ]
-                                |> Element.el
-                                    [ Element.Background.color (Element.rgb 0 0 0)
-                                    , Element.Border.color (Element.rgb 0.8 0.8 0.8)
-                                    , Element.Border.width 2
-                                    , Element.htmlAttribute
-                                        (Html.Events.custom "click"
-                                            (Json.Decode.succeed
-                                                { message = UserInputSave False
-                                                , stopPropagation = True
-                                                , preventDefault = False
-                                                }
-                                            )
+                        }
+
+                Just (LoadFromGitDialog dialogState) ->
+                    let
+                        urlInputElement =
+                            Element.Input.text
+                                [ Element.Background.color backgroundColor ]
+                                { onChange = \url -> UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository = url })
+                                , text = dialogState.urlIntoGitRepository
+                                , placeholder = Just (Element.Input.placeholder [] (Element.text "URL to tree in git repository"))
+                                , label = Element.Input.labelAbove [] (Element.text "URL to tree in git repository")
+                                }
+
+                        offerBeginLoading =
+                            (dialogState.urlIntoGitRepository /= "")
+                                && (dialogState.requestTime == Nothing)
+                                && (dialogState.loadCompositionResult == Nothing)
+
+                        sendRequestButton =
+                            buttonElement
+                                { label = "Begin Loading"
+                                , onPress =
+                                    Just
+                                        (UserInputLoadFromGit
+                                            (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
                                         )
+                                }
+                                |> Element.el [ Element.centerX, elementTransparent (not offerBeginLoading) ]
+
+                        resultElement =
+                            case dialogState.loadCompositionResult of
+                                Nothing ->
+                                    Element.none
+
+                                Just (Err loadError) ->
+                                    [ ("Failed to load contents from git: "
+                                        ++ (describeHttpError loadError |> String.left 400)
+                                      )
+                                        |> Element.text
                                     ]
+                                        |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
+
+                                Just (Ok loadOk) ->
+                                    [ [ ("Loaded composition "
+                                            ++ loadOk.compositionId
+                                            ++ " containing "
+                                            ++ (loadOk.filesAsFlatList |> List.length |> String.fromInt)
+                                            ++ " files:"
+                                        )
+                                            |> Element.text
+                                      ]
+                                        |> Element.paragraph []
+                                    , loadOk.filesAsFlatList
+                                        |> List.sortBy (.path >> List.length)
+                                        |> List.map (.path >> String.join "/" >> Element.text)
+                                        |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                    , buttonElement
+                                        { label = "Set these files as project state"
+                                        , onPress = Just (UserInputLoadFromGit LoadFromGitTakeResultAsProjectStateEvent)
+                                        }
+                                        |> Element.el [ Element.centerX ]
+                                    ]
+                                        |> Element.column [ Element.spacing (defaultFontSize // 2) ]
                     in
-                    [ Element.el
-                        [ Element.Background.color (Element.rgba 0 0 0 0.3)
-                        , Element.width Element.fill
-                        , Element.height Element.fill
-                        , Element.Events.onClick UserInputCloseModalDialog
-                        , Element.htmlAttribute (HA.style "backdrop-filter" "blur(1px)")
-                        , Element.inFront (Element.el [ Element.centerX, Element.centerY ] popup)
-                        ]
-                        Element.none
-                        |> Element.inFront
-                    ]
+                    popupAttributesFromProperties
+                        { title = "Load Project from Tree in Git Repository"
+                        , guide = "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: https://github.com/onlinegamemaker/making-online-games/tree/421a268a10091690a912042382f47ef13c04e6ca/games-program-codes/simple-snake"
+                        , contentElement =
+                            [ urlInputElement
+                            , sendRequestButton
+                            , resultElement
+                            ]
+                                |> Element.column
+                                    [ Element.width Element.fill
+                                    , Element.spacing defaultFontSize
+                                    ]
+                        }
 
         body =
             Element.layout
@@ -597,6 +819,45 @@ view state =
                 mainContent
     in
     { title = "Elm Editor", body = [ body ] }
+
+
+popupAttributesFromProperties : { title : String, guide : String, contentElement : Element.Element Event } -> List (Element.Attribute Event)
+popupAttributesFromProperties { title, guide, contentElement } =
+    [ [ title |> Element.text |> Element.el (headingAttributes 3)
+      , [ guide |> Element.text ] |> Element.paragraph [ elementFontSizePercent 80 ]
+      , contentElement
+      ]
+        |> Element.column
+            [ Element.spacing defaultFontSize
+            , Element.padding defaultFontSize
+            , Element.width Element.fill
+            ]
+        |> Element.el
+            [ Element.Background.color (Element.rgb 0 0 0)
+            , Element.Border.color (Element.rgb 0.8 0.8 0.8)
+            , Element.Border.width 2
+            , Element.width (Element.px 800)
+            , Element.centerX
+            , Element.centerY
+            , Element.htmlAttribute
+                (Html.Events.custom "click"
+                    (Json.Decode.succeed
+                        { message = DiscardEvent
+                        , stopPropagation = True
+                        , preventDefault = False
+                        }
+                    )
+                )
+            ]
+        |> Element.el
+            [ Element.Background.color (Element.rgba 0 0 0 0.3)
+            , Element.height Element.fill
+            , Element.width Element.fill
+            , Element.Events.onClick UserInputCloseModalDialog
+            , Element.htmlAttribute (HA.style "backdrop-filter" "blur(1px)")
+            ]
+        |> Element.inFront
+    ]
 
 
 viewWhenEditorOpen : State -> Element.Element Event
@@ -713,6 +974,14 @@ saveButton =
     buttonElement { label = "💾 Save", onPress = Just (UserInputSave False) }
 
 
+loadFromGitOpenDialogButton : Element.Element Event
+loadFromGitOpenDialogButton =
+    buttonElement
+        { label = "📂 Load From Git"
+        , onPress = Just (UserInputLoadFromGit LoadFromGitOpenDialog)
+        }
+
+
 setTextInMonacoEditorCmd : String -> Cmd Event
 setTextInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetValue
@@ -802,6 +1071,21 @@ headingAttributes rank =
     [ elementFontSizePercent fontSizePercent
     , Element.Region.heading rank
     ]
+
+
+{-| Avoid bug with elm-ui `Element.transparent` as described at <https://github.com/mdgriffith/elm-ui/issues/52#issuecomment-442612549>
+-}
+elementTransparent : Bool -> Element.Attribute msg
+elementTransparent makeTransparent =
+    Element.htmlAttribute
+        (HA.style "visibility"
+            (if makeTransparent then
+                "hidden"
+
+             else
+                "inherit"
+            )
+        )
 
 
 elementFontSizePercent : Int -> Element.Attribute a

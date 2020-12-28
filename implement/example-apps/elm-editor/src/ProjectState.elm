@@ -3,6 +3,7 @@ module ProjectState exposing (..)
 import Bytes
 import Bytes.Encode
 import Dict
+import List
 
 
 type alias ProjectState =
@@ -40,6 +41,11 @@ flatListOfBlobsFromFileTreeNode treeNode =
                             |> flatListOfBlobsFromFileTreeNode
                             |> List.map (Tuple.mapFirst ((::) childName))
                     )
+
+
+sortedFileTreeFromListOfBlobs : List ( List String, Bytes.Bytes ) -> FileTreeNode
+sortedFileTreeFromListOfBlobs =
+    List.foldl setBlobAtPathInSortedFileTree (TreeNode [])
 
 
 getNodeAtPathFromFileTree : List String -> FileTreeNode -> Maybe FileTreeNode
