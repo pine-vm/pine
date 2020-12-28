@@ -2,8 +2,11 @@ module ProjectState exposing (..)
 
 import Bytes
 import Bytes.Encode
+import Bytes.Extra
 import Dict
 import List
+import Pine
+import SHA256
 
 
 type alias ProjectState =
@@ -25,6 +28,26 @@ type alias TreeNodeStructure =
 
 type alias TreeNodeEntryStructure =
     ( String, FileTreeNode )
+
+
+compositionPineValueFromFileTreeNode : FileTreeNode -> Pine.Value
+compositionPineValueFromFileTreeNode treeNode =
+    case treeNode of
+        BlobNode bytes ->
+            Pine.BlobValue (Bytes.Extra.toByteValues bytes)
+
+        TreeNode entries ->
+            entries
+                |> List.map
+                    (\( entryName, entryValue ) ->
+                        Pine.ListValue [ Pine.valueFromString entryName, compositionPineValueFromFileTreeNode entryValue ]
+                    )
+                |> Pine.ListValue
+
+
+compositionHashFromFileTreeNode : FileTreeNode -> SHA256.Digest
+compositionHashFromFileTreeNode =
+    compositionPineValueFromFileTreeNode >> Pine.hashDigestFromValue
 
 
 flatListOfBlobsFromFileTreeNode : FileTreeNode -> List ( List String, Bytes.Bytes )

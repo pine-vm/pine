@@ -5,6 +5,7 @@ import Json.Decode
 import Json.Encode
 import Maybe.Extra
 import ProjectState exposing (ProjectState)
+import SHA256
 import Url
 import Url.Builder
 import Url.Parser exposing ((<?>))
@@ -16,14 +17,21 @@ projectStateQueryParameterName =
     "project-state"
 
 
+projectStateCompositionHashQueryParameterName : String
+projectStateCompositionHashQueryParameterName =
+    "project-state-composition-hash"
+
+
 setProjectStateInUrl : ProjectState -> Url.Url -> Url.Url
 setProjectStateInUrl projectState url =
     Url.Builder.crossOrigin
         (Url.toString { url | path = "", query = Nothing, fragment = Nothing })
         []
-        [ Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (jsonEncodeProjectState projectState)) ]
+        [ Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (jsonEncodeProjectState projectState))
+        , Url.Builder.string projectStateCompositionHashQueryParameterName (projectStateCompositionHash projectState)
+        ]
         |> Url.fromString
-        |> Maybe.withDefault url
+        |> Maybe.withDefault { url | host = "Error: Failed to parse URL from String" }
 
 
 projectStateFromUrl : Url.Url -> Maybe (Result Json.Decode.Error ProjectState)
@@ -33,6 +41,11 @@ projectStateFromUrl url =
             (Url.Parser.top <?> Url.Parser.Query.string projectStateQueryParameterName)
         |> Maybe.Extra.join
         |> Maybe.map (Json.Decode.decodeString jsonDecodeProjectState)
+
+
+projectStateCompositionHash : ProjectState -> String
+projectStateCompositionHash =
+    ProjectState.compositionHashFromFileTreeNode >> SHA256.toHex
 
 
 jsonEncodeProjectState : ProjectState -> Json.Encode.Value
