@@ -7,12 +7,12 @@ using System.Text;
 using Kalmit;
 using static Kalmit.Composition;
 
-namespace elm_fullstack.ElmEngine
+namespace elm_fullstack.ElmInteractive
 {
-    public class EvaluateElm
+    public class ElmInteractive
     {
         static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
-            Composition.TreeWithStringPath appCodeTree,
+            TreeWithStringPath appCodeTree,
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
@@ -28,7 +28,7 @@ namespace elm_fullstack.ElmEngine
 
         static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
             JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-            Composition.TreeWithStringPath appCodeTree,
+            TreeWithStringPath appCodeTree,
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
@@ -63,7 +63,7 @@ namespace elm_fullstack.ElmEngine
             if (responseStructure.DecodedArguments.Evaluated == null)
                 return Result<string, SubmissionResponseValueStructure>.err(responseStructure.DecodedArguments.FailedToEvaluate);
 
-            return Result<string, ElmEngine.EvaluateElm.SubmissionResponseValueStructure>.ok(
+            return Result<string, SubmissionResponseValueStructure>.ok(
                 responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue);
         }
 
@@ -101,14 +101,14 @@ namespace elm_fullstack.ElmEngine
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ParseElmSyntaxAppCodeFiles() =>
             ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
-            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.elm.json").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "Pine.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.Pine.elm").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "ElmInteractive.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.ElmInteractive.elm").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmEngine.evaluate_elm_program.src.Main.elm").ToImmutableList());
+            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.elm.json").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "Pine.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Pine.elm").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "ElmInteractive.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.ElmInteractive.elm").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Main.elm").ToImmutableList());
 
         static byte[] GetManifestResourceStreamContent(string name)
         {
-            using (var stream = typeof(EvaluateElm).Assembly.GetManifestResourceStream(name))
+            using (var stream = typeof(ElmInteractive).Assembly.GetManifestResourceStream(name))
             {
                 using (var memoryStream = new MemoryStream())
                 {

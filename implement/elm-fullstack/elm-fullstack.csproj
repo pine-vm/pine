@@ -5,8 +5,8 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fullstack</AssemblyName>
-    <AssemblyVersion>2020.1225.0.0</AssemblyVersion>
-    <FileVersion>2020.1225.0.0</FileVersion>
+    <AssemblyVersion>2020.1229.0.0</AssemblyVersion>
+    <FileVersion>2020.1229.0.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -24,10 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="ElmEngine\evaluate-elm-program\elm.json" />
-    <EmbeddedResource Include="ElmEngine\evaluate-elm-program\src\Pine.elm" />
-    <EmbeddedResource Include="ElmEngine\evaluate-elm-program\src\ElmInteractive.elm" />
-    <EmbeddedResource Include="ElmEngine\evaluate-elm-program\src\Main.elm" />
+    <EmbeddedResource Include="ElmInteractive\interpret-elm-program\elm.json" />
+    <EmbeddedResource Include="ElmInteractive\interpret-elm-program\src\Pine.elm" />
+    <EmbeddedResource Include="ElmInteractive\interpret-elm-program\src\ElmInteractive.elm" />
+    <EmbeddedResource Include="ElmInteractive\interpret-elm-program\src\Main.elm" />
   </ItemGroup>
 
 </Project>

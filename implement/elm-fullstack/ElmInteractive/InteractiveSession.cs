@@ -1,30 +1,29 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using Kalmit;
 using static Kalmit.Composition;
 
-namespace elm_fullstack
+namespace elm_fullstack.ElmInteractive
 {
 
     public class InteractiveSession : IDisposable
     {
-        readonly Composition.TreeWithStringPath appCodeTree;
+        readonly TreeWithStringPath appCodeTree;
 
         readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
-            new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(ElmEngine.EvaluateElm.PrepareJsEngineToEvaluateElm);
+            new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
         readonly IList<string> previousSubmissions = new List<string>();
 
-        public InteractiveSession(Composition.TreeWithStringPath appCodeTree)
+        public InteractiveSession(TreeWithStringPath appCodeTree)
         {
             this.appCodeTree = appCodeTree;
         }
 
-        public Result<string, ElmEngine.EvaluateElm.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
+        public Result<string, ElmInteractive.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
         {
             var result =
-                ElmEngine.EvaluateElm.EvaluateSubmissionAndGetResultingValue(
+                ElmInteractive.EvaluateSubmissionAndGetResultingValue(
                     evalElmPreparedJsEngine.Value,
                     appCodeTree: appCodeTree,
                     submission: submission,

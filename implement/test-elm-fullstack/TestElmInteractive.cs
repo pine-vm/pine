@@ -54,7 +54,7 @@ namespace test_elm_fullstack
                     if (stepsDirectories.Count < 1)
                         throw new Exception("stepsDirectories.Count < 1");
 
-                    using (var interactiveSession = new elm_fullstack.InteractiveSession(appCodeTree: appCodeTree))
+                    using (var interactiveSession = new elm_fullstack.ElmInteractive.InteractiveSession(appCodeTree: appCodeTree))
                     {
                         foreach (var stepDirectory in stepsDirectories)
                         {

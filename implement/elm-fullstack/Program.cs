@@ -508,7 +508,7 @@ namespace elm_fullstack
                             throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
                     }
 
-                    using (var interactiveSession = new InteractiveSession(appCodeTree: contextAppCodeTree))
+                    using (var interactiveSession = new ElmInteractive.InteractiveSession(appCodeTree: contextAppCodeTree))
                     {
                         while (true)
                         {
