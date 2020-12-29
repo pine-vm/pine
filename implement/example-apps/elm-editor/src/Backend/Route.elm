@@ -1,6 +1,8 @@
 module Backend.Route exposing
     ( Route(..)
     , StaticFile(..)
+    , elmMadeScriptFileNameDebug
+    , elmMadeScriptFileNameDefault
     , fromAuth0LoginRedirectPath
     , routeFromUrl
     )
@@ -15,9 +17,20 @@ type Route
 
 
 type StaticFile
-    = FrontendElmJavascriptRoute
+    = FrontendHtmlDocumentRoute { debug : Bool }
+    | FrontendElmJavascriptRoute { debug : Bool }
     | MonacoFrameDocumentRoute
     | MonarchJavascriptRoute
+
+
+elmMadeScriptFileNameDefault : String
+elmMadeScriptFileNameDefault =
+    "elm-made.js"
+
+
+elmMadeScriptFileNameDebug : String
+elmMadeScriptFileNameDebug =
+    "elm-made-debug.js"
 
 
 fromAuth0LoginRedirectPath : String
@@ -29,9 +42,11 @@ routeFromUrl : Url.Url -> Maybe Route
 routeFromUrl =
     Url.Parser.parse
         (Url.Parser.oneOf
-            [ Url.Parser.map (StaticFileRoute FrontendElmJavascriptRoute) (Url.Parser.s "elm-made.js")
+            [ Url.Parser.map (StaticFileRoute (FrontendElmJavascriptRoute { debug = False })) (Url.Parser.s elmMadeScriptFileNameDefault)
+            , Url.Parser.map (StaticFileRoute (FrontendElmJavascriptRoute { debug = True })) (Url.Parser.s elmMadeScriptFileNameDebug)
             , Url.Parser.map (StaticFileRoute MonacoFrameDocumentRoute) (Url.Parser.s "monaco")
             , Url.Parser.map (StaticFileRoute MonarchJavascriptRoute) (Url.Parser.s "monarch.js")
             , Url.Parser.map ApiRoute (Url.Parser.s "api")
+            , Url.Parser.map (StaticFileRoute (FrontendHtmlDocumentRoute { debug = True })) (Url.Parser.s "enable-elm-debug")
             ]
         )

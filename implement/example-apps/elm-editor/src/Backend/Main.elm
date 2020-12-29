@@ -74,22 +74,37 @@ processEventBeforeDerivingTasks hostEvent stateBefore =
                         , headersToAdd = cacheHeaders
                         }
                     }
+
+                frontendHtmlDocumentResponse frontendConfig =
+                    InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            [ httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig) staticContentHttpHeaders
+                            ]
             in
             case httpRequestEvent.request.uri |> Url.fromString |> Maybe.andThen Backend.Route.routeFromUrl of
                 Nothing ->
                     ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent frontendHtmlDocument staticContentHttpHeaders
-                            ]
+                    , frontendHtmlDocumentResponse { debug = False }
                     )
 
-                Just (Backend.Route.StaticFileRoute Backend.Route.FrontendElmJavascriptRoute) ->
+                Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendHtmlDocumentRoute frontendConfig)) ->
+                    ( stateBefore
+                    , frontendHtmlDocumentResponse frontendConfig
+                    )
+
+                Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
                     ( stateBefore
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
                             [ httpResponseOkWithBodyAsBase64
-                                (Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm)
+                                (Just
+                                    (if debug then
+                                        ElmFullstackCompilerInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm
+
+                                     else
+                                        ElmFullstackCompilerInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
+                                    )
+                                )
                                 staticContentHttpHeaders
                             ]
                     )
@@ -259,8 +274,16 @@ interfaceToHost_processEvent =
     InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
-frontendHtmlDocument : String
-frontendHtmlDocument =
+frontendHtmlDocument : { debug : Bool } -> String
+frontendHtmlDocument { debug } =
+    let
+        elmMadeScriptFileName =
+            if debug then
+                Backend.Route.elmMadeScriptFileNameDebug
+
+            else
+                Backend.Route.elmMadeScriptFileNameDefault
+    in
     """
 <!DOCTYPE HTML>
 <html>
@@ -268,7 +291,7 @@ frontendHtmlDocument =
 <head>
   <meta charset="UTF-8">
   <title>Elm Editor</title>
-  <script type="text/javascript" src="elm-made.js"></script>
+  <script type="text/javascript" src=""" ++ elmMadeScriptFileName ++ """></script>
 </head>
 
 <body>
