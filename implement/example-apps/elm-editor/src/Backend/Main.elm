@@ -362,6 +362,14 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         parent?.messageFromMonacoFrame?.({"EditorActionCloseFileEvent":[]});
     }
 
+    function editorActionFormatDocument() {
+        parent?.messageFromMonacoFrame?.({"EditorActionFormatDocumentEvent":[]});
+    }
+
+    function editorActionCompile() {
+        parent?.messageFromMonacoFrame?.({"EditorActionCompileEvent":[]});
+    }
+
 
 </script>
 
@@ -418,6 +426,36 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
             run: function(ed) {
                 editorActionCloseFile();
+                return null;
+            }
+        });
+
+        editor.addAction({
+            id: 'format-document-action',
+            label: 'Format Document',
+            keybindings: [
+                monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KEY_F
+            ],
+            precondition: null,
+            keybindingContext: null,
+
+            run: function(ed) {
+                editorActionFormatDocument();
+                return null;
+            }
+        });
+
+        editor.addAction({
+            id: 'compile-action',
+            label: 'Compile',
+            keybindings: [
+                monaco.KeyMod.Shift | monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter
+            ],
+            precondition: null,
+            keybindingContext: null,
+
+            run: function(ed) {
+                editorActionCompile();
                 return null;
             }
         });

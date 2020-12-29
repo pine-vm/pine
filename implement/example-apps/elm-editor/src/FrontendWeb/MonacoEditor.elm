@@ -9,3 +9,5 @@ type MessageFromEditor
     = CompletedSetupEvent
     | DidChangeContentEvent String
     | EditorActionCloseFileEvent
+    | EditorActionFormatDocumentEvent
+    | EditorActionCompileEvent

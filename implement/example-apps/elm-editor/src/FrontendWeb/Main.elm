@@ -222,6 +222,12 @@ update event stateBefore =
                             , Cmd.none
                             )
 
+                        FrontendWeb.MonacoEditor.EditorActionFormatDocumentEvent ->
+                            update UserInputFormat stateBefore
+
+                        FrontendWeb.MonacoEditor.EditorActionCompileEvent ->
+                            update UserInputCompile stateBefore
+
         TimeHasArrived time ->
             ( { stateBefore | time = Just time }, Cmd.none )
 
