@@ -1,0 +1,21 @@
+{
+    "singleRateLimitWindowPerClientIPv4Address": {
+        "windowSizeInMs": 60000,
+        "limit": 20
+    },
+    "httpRequestEventSizeLimit": 500000,
+    "disabled____________________letsEncryptOptions": {
+        "Domains": [
+            "editor.elm-fullstack.org"
+        ],
+        "Email": "viir@viir.de",
+        "CertificateSigningRequest": {
+            "CountryName": "Germany",
+            "State": "DE",
+            "Locality": "DE",
+            "Organization": "Elm-Fullstack",
+            "OrganizationUnit": "Elm-Fullstack"
+        },
+        "UseStaging": false
+    }
+}
