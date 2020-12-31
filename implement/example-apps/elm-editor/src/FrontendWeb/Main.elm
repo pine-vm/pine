@@ -211,11 +211,21 @@ update event stateBefore =
                             stateBefore |> update (UserInputChangeTextInEditor content)
 
                         FrontendWeb.MonacoEditor.CompletedSetupEvent ->
-                            ( stateBefore
-                            , stateBefore.fileInEditor
-                                |> Maybe.map (Tuple.second >> setTextInMonacoEditorCmd)
-                                |> Maybe.withDefault Cmd.none
-                            )
+                            case stateBefore.fileInEditor of
+                                Nothing ->
+                                    ( stateBefore, Cmd.none )
+
+                                Just fileInEditor ->
+                                    let
+                                        ( state, compileCmd ) =
+                                            update UserInputCompile stateBefore
+                                    in
+                                    ( state
+                                    , [ fileInEditor |> Tuple.second |> setTextInMonacoEditorCmd
+                                      , compileCmd
+                                      ]
+                                        |> Cmd.batch
+                                    )
 
                         FrontendWeb.MonacoEditor.EditorActionCloseFileEvent ->
                             ( { stateBefore | fileInEditor = Nothing }
