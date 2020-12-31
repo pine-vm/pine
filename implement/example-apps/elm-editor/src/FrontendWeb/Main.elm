@@ -41,7 +41,9 @@ port receiveMessageFromMonacoFrame : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias ElmMakeRequestStructure =
-    FrontendBackendInterface.ElmMakeRequestStructure
+    { requestToBackend : FrontendBackendInterface.ElmMakeRequestStructure
+    , entryPointFilePath : List String
+    }
 
 
 type alias ElmMakeResponseStructure =
@@ -56,15 +58,14 @@ type alias State =
     , fileInEditor : Maybe ( List String, String )
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
-    , elmMakeResult : Maybe (Result Http.Error ElmMakeResultStructure)
+    , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , modalDialog : Maybe ModalDialogState
     }
 
 
 type alias ElmMakeResultStructure =
-    { request : ElmMakeRequestStructure
-    , response : ElmMakeResponseStructure
+    { response : ElmMakeResponseStructure
     , compiledHtmlDocument : Maybe String
     }
 
@@ -218,7 +219,7 @@ update event stateBefore =
                                 Just fileInEditor ->
                                     let
                                         ( state, compileCmd ) =
-                                            update UserInputCompile stateBefore
+                                            userInputCompileFileOpenedInEditor stateBefore
                                     in
                                     ( state
                                     , [ fileInEditor |> Tuple.second |> setTextInMonacoEditorCmd
@@ -236,7 +237,7 @@ update event stateBefore =
                             update UserInputFormat stateBefore
 
                         FrontendWeb.MonacoEditor.EditorActionCompileEvent ->
-                            update UserInputCompile stateBefore
+                            userInputCompileFileOpenedInEditor stateBefore
 
         TimeHasArrived time ->
             ( { stateBefore | time = Just time }, Cmd.none )
@@ -245,7 +246,7 @@ update event stateBefore =
             ( stateBefore, elmFormatCmd stateBefore )
 
         UserInputCompile ->
-            userInputCompile stateBefore
+            userInputCompileFileOpenedInEditor stateBefore
 
         BackendElmFormatResponseEvent formatResponseEvent ->
             if Just formatResponseEvent.filePath /= Maybe.map Tuple.first stateBefore.fileInEditor then
@@ -297,13 +298,14 @@ update event stateBefore =
                                                     |> Maybe.withDefault ("Error decoding base64: " ++ newFile.contentBase64)
                                                     |> Just
                                 in
-                                { request = elmMakeRequest
-                                , response = elmMakeResponse
+                                { response = elmMakeResponse
                                 , compiledHtmlDocument = compiledHtmlDocument
                                 }
                             )
             in
-            ( { stateBefore | elmMakeResult = Just elmMakeResult }, Cmd.none )
+            ( { stateBefore | elmMakeResult = Just ( elmMakeRequest, elmMakeResult ) }
+            , Cmd.none
+            )
 
         UrlChange url ->
             let
@@ -508,38 +510,14 @@ elmFormatCmd state =
                 (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
 
 
-userInputCompile : State -> ( State, Cmd Event )
-userInputCompile stateBefore =
-    case stateBefore.fileInEditor of
+userInputCompileFileOpenedInEditor : State -> ( State, Cmd Event )
+userInputCompileFileOpenedInEditor stateBefore =
+    case elmMakeRequestForFileOpenedInEditor stateBefore of
         Nothing ->
             ( stateBefore, Cmd.none )
 
-        Just ( filePath, _ ) ->
+        Just elmMakeRequest ->
             let
-                base64FromBytes : Bytes.Bytes -> String
-                base64FromBytes =
-                    Base64.fromBytes
-                        >> Maybe.withDefault "Error encoding in base64"
-
-                entryPointFilePath =
-                    filePath
-
-                elmMakeRequest =
-                    { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
-                    , files =
-                        stateBefore.projectFiles
-                            |> Dict.toList
-                            |> List.map
-                                (\( path, content ) ->
-                                    { path = path
-                                    , contentBase64 = content |> base64FromBytes
-                                    }
-                                )
-                    }
-
-                request =
-                    elmMakeRequest |> FrontendBackendInterface.ElmMakeRequest
-
                 jsonDecoder backendResponse =
                     case backendResponse of
                         FrontendBackendInterface.ElmMakeResponse elmMakeResponse ->
@@ -553,8 +531,44 @@ userInputCompile stateBefore =
                     stateBefore.time |> Maybe.map (\time -> { time = time, request = elmMakeRequest })
                 , elmMakeResult = Nothing
               }
-            , requestToApiCmd request jsonDecoder (BackendElmMakeResponseEvent elmMakeRequest)
+            , requestToApiCmd
+                (FrontendBackendInterface.ElmMakeRequest elmMakeRequest.requestToBackend)
+                jsonDecoder
+                (BackendElmMakeResponseEvent elmMakeRequest)
             )
+
+
+elmMakeRequestForFileOpenedInEditor : State -> Maybe ElmMakeRequestStructure
+elmMakeRequestForFileOpenedInEditor state =
+    case state.fileInEditor of
+        Nothing ->
+            Nothing
+
+        Just ( filePath, _ ) ->
+            let
+                base64FromBytes : Bytes.Bytes -> String
+                base64FromBytes =
+                    Base64.fromBytes
+                        >> Maybe.withDefault "Error encoding in base64"
+
+                entryPointFilePath =
+                    filePath
+            in
+            Just
+                { requestToBackend =
+                    { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
+                    , files =
+                        state.projectFiles
+                            |> Dict.toList
+                            |> List.map
+                                (\( path, content ) ->
+                                    { path = path
+                                    , contentBase64 = content |> base64FromBytes
+                                    }
+                                )
+                    }
+                , entryPointFilePath = entryPointFilePath
+                }
 
 
 requestToApiCmd :
@@ -702,8 +716,8 @@ view state =
                             , Element.height Element.fill
                             ]
 
-                Just _ ->
-                    viewWhenEditorOpen state
+                Just fileInEditor ->
+                    viewWhenEditorOpen fileInEditor state
 
         popupAttributes =
             case state.modalDialog of
@@ -989,62 +1003,103 @@ popupAttributesFromProperties { title, guide, contentElement } =
     ]
 
 
-viewWhenEditorOpen : State -> Element.Element Event
-viewWhenEditorOpen state =
+viewWhenEditorOpen : ( List String, String ) -> State -> Element.Element Event
+viewWhenEditorOpen ( fileOpenedInEditorPath, _ ) state =
     let
-        resultElement =
-            case state.lastElmMakeRequest of
-                Nothing ->
-                    [ "No compilation started so far. You can use the 'Compile' button to check program text for errors and see your app in action."
-                        |> Element.text
-                    ]
-                        |> Element.paragraph [ Element.padding defaultFontSize ]
+        elmMakeResultForFileOpenedInEditor =
+            state.elmMakeResult
+                |> Maybe.andThen
+                    (\elmMakeRequestAndResult ->
+                        if (elmMakeRequestAndResult |> Tuple.first |> .entryPointFilePath) == fileOpenedInEditorPath then
+                            Just elmMakeRequestAndResult
 
-                Just lastElmMakeRequest ->
-                    case state.elmMakeResult of
+                        else
+                            Nothing
+                    )
+
+        resultElement =
+            case elmMakeResultForFileOpenedInEditor of
+                Nothing ->
+                    case state.lastElmMakeRequest of
                         Nothing ->
+                            [ "No compilation started so far. You can use the 'Compile' button to check program text for errors and see your app in action."
+                                |> Element.text
+                            ]
+                                |> Element.paragraph [ Element.padding defaultFontSize ]
+
+                        Just _ ->
                             Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
 
-                        Just (Err elmMakeError) ->
+                Just ( elmMakeRequest, elmMakeResult ) ->
+                    case elmMakeResult of
+                        Err elmMakeError ->
                             ("Error: " ++ describeHttpError elmMakeError) |> Element.text
 
-                        Just (Ok elmMakeOk) ->
-                            case elmMakeOk.compiledHtmlDocument of
-                                Nothing ->
-                                    [ ( "standard error", elmMakeOk.response.processOutput.standardError )
-                                    , ( "standard output", elmMakeOk.response.processOutput.standardOutput )
-                                    ]
-                                        |> List.map
-                                            (\( channel, output ) ->
-                                                [ channel |> Element.text |> Element.el (headingAttributes 3)
-                                                , [ Html.text output
-                                                        |> Element.html
-                                                        |> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
-                                                  ]
-                                                    |> Element.paragraph
-                                                        [ Element.htmlAttribute attributeMonospaceFont ]
-                                                    |> indentOneLevel
-                                                ]
-                                                    |> Element.column
-                                                        [ Element.spacing (defaultFontSize // 2)
-                                                        , Element.width Element.fill
-                                                        ]
-                                            )
-                                        |> Element.column
-                                            [ Element.spacing defaultFontSize
-                                            , Element.width Element.fill
-                                            , Element.height Element.fill
-                                            , Element.scrollbarY
+                        Ok elmMakeOk ->
+                            let
+                                elmMakeRequestFromCurrentState =
+                                    elmMakeRequestForFileOpenedInEditor state
+
+                                currentFileContentIsStillSame =
+                                    Just elmMakeRequest.requestToBackend.files
+                                        == (elmMakeRequestFromCurrentState |> Maybe.map (.requestToBackend >> .files))
+
+                                warningFileContentChangedElement =
+                                    "⚠️ The file contents were changed since compiling"
+                                        |> Element.text
+                                        |> Element.el
+                                            [ Element.transparent currentFileContentIsStillSame
                                             , Element.padding (defaultFontSize // 2)
                                             ]
 
-                                Just compiledHtmlDocument ->
-                                    Html.iframe
-                                        [ HA.srcdoc compiledHtmlDocument
-                                        , HA.style "height" "100%"
-                                        ]
-                                        []
-                                        |> Element.html
+                                compileResultElement =
+                                    case elmMakeOk.compiledHtmlDocument of
+                                        Nothing ->
+                                            [ ( "standard error", elmMakeOk.response.processOutput.standardError )
+                                            , ( "standard output", elmMakeOk.response.processOutput.standardOutput )
+                                            ]
+                                                |> List.map
+                                                    (\( channel, output ) ->
+                                                        [ channel |> Element.text |> Element.el (headingAttributes 3)
+                                                        , [ Html.text output
+                                                                |> Element.html
+                                                                |> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
+                                                          ]
+                                                            |> Element.paragraph
+                                                                [ Element.htmlAttribute attributeMonospaceFont ]
+                                                            |> indentOneLevel
+                                                        ]
+                                                            |> Element.column
+                                                                [ Element.spacing (defaultFontSize // 2)
+                                                                , Element.width Element.fill
+                                                                ]
+                                                    )
+                                                |> Element.column
+                                                    [ Element.spacing defaultFontSize
+                                                    , Element.width Element.fill
+                                                    , Element.height Element.fill
+                                                    , Element.scrollbarY
+                                                    , Element.padding (defaultFontSize // 2)
+                                                    ]
+
+                                        Just compiledHtmlDocument ->
+                                            Html.iframe
+                                                [ HA.srcdoc compiledHtmlDocument
+                                                , HA.style "height" "98%"
+                                                ]
+                                                []
+                                                |> Element.html
+                                                |> Element.el
+                                                    [ Element.width Element.fill
+                                                    , Element.height Element.fill
+                                                    ]
+                            in
+                            [ warningFileContentChangedElement, compileResultElement ]
+                                |> Element.column
+                                    [ Element.spacing (defaultFontSize // 2)
+                                    , Element.width Element.fill
+                                    , Element.height Element.fill
+                                    ]
 
         formatButton =
             buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
