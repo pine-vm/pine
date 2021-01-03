@@ -3,7 +3,7 @@
         "windowSizeInMs": 60000,
         "limit": 20
     },
-    "httpRequestEventSizeLimit": 500000,
+    "httpRequestEventSizeLimit": 750000,
     "disabled____________________letsEncryptOptions": {
         "Domains": [
             "editor.elm-fullstack.org"
