@@ -12,6 +12,11 @@ import Url.Parser exposing ((<?>))
 import Url.Parser.Query
 
 
+type ProjectStateDescriptionFromUrl
+    = LiteralProjectState ProjectState
+    | LinkProjectState String
+
+
 projectStateQueryParameterName : String
 projectStateQueryParameterName =
     "project-state"
@@ -34,13 +39,25 @@ setProjectStateInUrl projectState url =
         |> Maybe.withDefault { url | host = "Error: Failed to parse URL from String" }
 
 
-projectStateFromUrl : Url.Url -> Maybe (Result Json.Decode.Error ProjectState)
-projectStateFromUrl url =
+projectStateLiteralOrLinkFromUrl : Url.Url -> Maybe (Result Json.Decode.Error ProjectStateDescriptionFromUrl)
+projectStateLiteralOrLinkFromUrl url =
     { url | path = "" }
         |> Url.Parser.parse
             (Url.Parser.top <?> Url.Parser.Query.string projectStateQueryParameterName)
         |> Maybe.Extra.join
-        |> Maybe.map (Json.Decode.decodeString jsonDecodeProjectState)
+        |> Maybe.map
+            (\projectStateString ->
+                if projectStateStringQualifiesAsLink projectStateString then
+                    Ok (LinkProjectState projectStateString)
+
+                else
+                    Result.map LiteralProjectState (Json.Decode.decodeString jsonDecodeProjectState projectStateString)
+            )
+
+
+projectStateStringQualifiesAsLink : String -> Bool
+projectStateStringQualifiesAsLink projectStateString =
+    String.startsWith "https://" projectStateString
 
 
 projectStateCompositionHash : ProjectState -> String

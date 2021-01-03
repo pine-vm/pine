@@ -61,6 +61,8 @@ type alias State =
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , modalDialog : Maybe ModalDialogState
+    , loadingProjectStateFromLink : Maybe String
+    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure )
     }
 
 
@@ -82,7 +84,7 @@ type Event
     | UserInputCloseModalDialog
     | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
-    | BackendLoadFromGitResultEvent (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
+    | BackendLoadFromGitResultEvent String (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | DiscardEvent
@@ -145,6 +147,8 @@ init _ url navigationKey =
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
             , modalDialog = Nothing
+            , loadingProjectStateFromLink = Nothing
+            , lastBackendLoadFromGitResult = Nothing
             }
                 |> loadProject defaultProject
                 |> update (UrlChange url)
@@ -308,18 +312,20 @@ update event stateBefore =
             )
 
         UrlChange url ->
-            let
-                state =
-                    case FrontendWeb.ProjectStateInUrl.projectStateFromUrl url |> Maybe.andThen Result.toMaybe of
-                        Nothing ->
-                            stateBefore
+            case FrontendWeb.ProjectStateInUrl.projectStateLiteralOrLinkFromUrl url |> Maybe.andThen Result.toMaybe of
+                Nothing ->
+                    ( stateBefore, Cmd.none )
 
-                        Just project ->
-                            stateBefore |> loadProject project
-            in
-            ( state
-            , Cmd.none
-            )
+                Just (FrontendWeb.ProjectStateInUrl.LiteralProjectState project) ->
+                    ( stateBefore |> loadProject project, Cmd.none )
+
+                Just (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState) ->
+                    ( { stateBefore
+                        | loadingProjectStateFromLink = Just linkToProjectState
+                        , projectFiles = Dict.empty
+                      }
+                    , loadFromGitCmd linkToProjectState
+                    )
 
         UrlRequest urlRequest ->
             case urlRequest of
@@ -412,26 +418,9 @@ update event stateBefore =
                             , requestTime = stateBefore.time
                             , loadCompositionResult = Nothing
                             }
-
-                        backendResponseJsonDecoder backendResponse =
-                            case backendResponse of
-                                FrontendBackendInterface.LoadCompositionResponse loadComposition ->
-                                    Json.Decode.succeed loadComposition
-
-                                FrontendBackendInterface.ErrorResponse error ->
-                                    Json.Decode.fail ("The server reported an error: " ++ error)
-
-                                _ ->
-                                    Json.Decode.fail "Unexpected response: Not a LoadCompositionResponse"
-
-                        cmd =
-                            requestToApiCmd
-                                (FrontendBackendInterface.LoadCompositionRequest urlIntoGitRepository)
-                                backendResponseJsonDecoder
-                                BackendLoadFromGitResultEvent
                     in
                     ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
-                    , cmd
+                    , loadFromGitCmd urlIntoGitRepository
                     )
 
                 _ ->
@@ -442,20 +431,8 @@ update event stateBefore =
                 Just (LoadFromGitDialog dialogStateBefore) ->
                     case dialogStateBefore.loadCompositionResult of
                         Just (Ok loadOk) ->
-                            let
-                                projectState =
-                                    loadOk.filesAsFlatList
-                                        |> List.map
-                                            (\file ->
-                                                ( file.path
-                                                , file.contentBase64
-                                                    |> Base64.toBytes
-                                                    |> Maybe.withDefault ("Failed to decode from Base64" |> Bytes.Encode.string |> Bytes.Encode.encode)
-                                                )
-                                            )
-                                        |> ProjectState.sortedFileTreeFromListOfBlobs
-                            in
-                            ( { stateBefore | modalDialog = Nothing } |> loadProject projectState
+                            ( { stateBefore | modalDialog = Nothing }
+                                |> loadProject (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
                             , Cmd.none
                             )
 
@@ -465,25 +442,57 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        BackendLoadFromGitResultEvent result ->
-            case stateBefore.modalDialog of
-                Just (LoadFromGitDialog dialogStateBefore) ->
-                    let
-                        dialogState =
-                            { dialogStateBefore | loadCompositionResult = Just result }
-                    in
-                    ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( stateBefore, Cmd.none )
+        BackendLoadFromGitResultEvent urlIntoGitRepository result ->
+            ( processEventBackendLoadFromGitResult urlIntoGitRepository result stateBefore
+            , Cmd.none
+            )
 
         UserInputCloseModalDialog ->
             ( { stateBefore | modalDialog = Nothing }, Cmd.none )
 
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> State
+processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeRememberingResult =
+    let
+        stateBefore =
+            { stateBeforeRememberingResult | lastBackendLoadFromGitResult = Just ( urlIntoGitRepository, result ) }
+    in
+    case stateBefore.modalDialog of
+        Just (LoadFromGitDialog dialogStateBefore) ->
+            let
+                dialogState =
+                    { dialogStateBefore | loadCompositionResult = Just result }
+            in
+            { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
+
+        _ ->
+            if Just urlIntoGitRepository == stateBefore.loadingProjectStateFromLink then
+                case result of
+                    Ok loadOk ->
+                        { stateBefore | loadingProjectStateFromLink = Nothing }
+                            |> loadProject (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+
+                    _ ->
+                        stateBefore
+
+            else
+                stateBefore
+
+
+fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> ProjectState.FileTreeNode
+fileTreeNodeFromListFileWithPath =
+    List.map
+        (\file ->
+            ( file.path
+            , file.contentBase64
+                |> Base64.toBytes
+                |> Maybe.withDefault ("Failed to decode from Base64" |> Bytes.Encode.string |> Bytes.Encode.encode)
+            )
+        )
+        >> ProjectState.sortedFileTreeFromListOfBlobs
 
 
 elmFormatCmd : State -> Cmd Event
@@ -508,6 +517,26 @@ elmFormatCmd state =
             requestToApiCmd request
                 jsonDecoder
                 (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
+
+
+loadFromGitCmd : String -> Cmd Event
+loadFromGitCmd urlIntoGitRepository =
+    let
+        backendResponseJsonDecoder backendResponse =
+            case backendResponse of
+                FrontendBackendInterface.LoadCompositionResponse loadComposition ->
+                    Json.Decode.succeed loadComposition
+
+                FrontendBackendInterface.ErrorResponse error ->
+                    Json.Decode.fail ("The server reported an error: " ++ error)
+
+                _ ->
+                    Json.Decode.fail "Unexpected response: Not a LoadCompositionResponse"
+    in
+    requestToApiCmd
+        (FrontendBackendInterface.LoadCompositionRequest urlIntoGitRepository)
+        backendResponseJsonDecoder
+        (BackendLoadFromGitResultEvent urlIntoGitRepository)
 
 
 userInputCompileFileOpenedInEditor : State -> ( State, Cmd Event )
@@ -647,77 +676,130 @@ sortFilesIntoPrioritiesToOfferToOpenFileInEditor projectFiles =
 view : State -> Browser.Document Event
 view state =
     let
-        mainContent =
-            case state.fileInEditor of
-                Nothing ->
-                    let
-                        projectFiles =
-                            state.projectFiles |> Dict.toList
+        elementToDisplayLoadFromGitError loadError =
+            [ ("Failed to load contents from git: "
+                ++ (describeHttpError loadError |> String.left 500)
+              )
+                |> Element.text
+            ]
+                |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
 
-                        filesToOfferToOpenInEditor =
-                            projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
-
-                        filesToOfferToOpenInEditorNames =
-                            filesToOfferToOpenInEditor |> List.map Tuple.first
-
-                        otherFilesList =
-                            case
-                                filesToOfferToOpenInEditorNames
-                                    |> List.foldl Dict.remove state.projectFiles
-                                    |> Dict.toList
-                            of
-                                [] ->
-                                    Element.none
-
-                                otherFilesInTheProject ->
-                                    [ Element.text ("There are " ++ (String.fromInt (List.length otherFilesInTheProject) ++ " other files in this project:"))
-                                    , otherFilesInTheProject
-                                        |> List.map (\( filePath, _ ) -> Element.text (String.join "/" filePath))
-                                        |> Element.column [ Element.spacing 4, Element.padding 8 ]
-                                    ]
-                                        |> Element.column []
-
-                        chooseElmFileElement =
-                            case filesToOfferToOpenInEditor of
-                                [] ->
-                                    Element.text "Did not find any .elm file in this project."
-
-                                _ ->
-                                    [ Element.text "Choose one of the files in the project to open in the editor:"
-                                    , filesToOfferToOpenInEditor
-                                        |> List.map
-                                            (\( filePath, _ ) ->
-                                                Element.Input.button
-                                                    [ Element.mouseOver [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
-                                                    ]
-                                                    { label = Element.text (String.join "/" filePath)
-                                                    , onPress = Just (UserInputOpenFileInEditor filePath)
-                                                    }
-                                            )
-                                        |> Element.column [ Element.spacing 4, Element.padding 8 ]
-                                    ]
-                                        |> Element.column []
-                    in
-                    [ [ saveButton, loadFromGitOpenDialogButton ]
-                        |> Element.row
-                            [ Element.spacing defaultFontSize
-                            , Element.padding (defaultFontSize // 2)
-                            ]
-                    , [ chooseElmFileElement, otherFilesList ]
-                        |> Element.column
-                            [ Element.spacing defaultFontSize
-                            , Element.centerX
-                            , Element.centerY
-                            ]
+        mainContentFromLoadingFromLink { linkUrl, progressOrResultElement } =
+            [ Element.text "Loading project from "
+            , linkElementFromUrlAndTextLabel
+                { url = linkUrl
+                , labelText = linkUrl
+                }
+            , progressOrResultElement
+            ]
+                |> List.map (Element.el [ Element.centerX ])
+                |> Element.column
+                    [ Element.spacing (defaultFontSize // 2)
+                    , Element.width Element.fill
                     ]
-                        |> Element.column
-                            [ Element.spacing (defaultFontSize // 2)
-                            , Element.width (Element.fillPortion 4)
-                            , Element.height Element.fill
-                            ]
 
-                Just fileInEditor ->
-                    viewWhenEditorOpen fileInEditor state
+        mainContent =
+            case state.loadingProjectStateFromLink of
+                Just loadingProjectStateFromLink ->
+                    let
+                        loadResult =
+                            state.lastBackendLoadFromGitResult
+                                |> Maybe.andThen
+                                    (\( requestUrl, result ) ->
+                                        if requestUrl == loadingProjectStateFromLink then
+                                            Just result
+
+                                        else
+                                            Nothing
+                                    )
+
+                        progressOrResultElement =
+                            case loadResult of
+                                Nothing ->
+                                    Element.text "Loading in progress ..."
+
+                                Just (Err loadError) ->
+                                    elementToDisplayLoadFromGitError loadError
+
+                                Just (Ok _) ->
+                                    Element.text "Completed"
+                    in
+                    mainContentFromLoadingFromLink
+                        { linkUrl = loadingProjectStateFromLink
+                        , progressOrResultElement = progressOrResultElement
+                        }
+
+                Nothing ->
+                    case state.fileInEditor of
+                        Nothing ->
+                            let
+                                projectFiles =
+                                    state.projectFiles |> Dict.toList
+
+                                filesToOfferToOpenInEditor =
+                                    projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
+
+                                filesToOfferToOpenInEditorNames =
+                                    filesToOfferToOpenInEditor |> List.map Tuple.first
+
+                                otherFilesList =
+                                    case
+                                        filesToOfferToOpenInEditorNames
+                                            |> List.foldl Dict.remove state.projectFiles
+                                            |> Dict.toList
+                                    of
+                                        [] ->
+                                            Element.none
+
+                                        otherFilesInTheProject ->
+                                            [ Element.text ("There are " ++ (String.fromInt (List.length otherFilesInTheProject) ++ " other files in this project:"))
+                                            , otherFilesInTheProject
+                                                |> List.map (\( filePath, _ ) -> Element.text (String.join "/" filePath))
+                                                |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                            ]
+                                                |> Element.column []
+
+                                chooseElmFileElement =
+                                    case filesToOfferToOpenInEditor of
+                                        [] ->
+                                            Element.text "Did not find any .elm file in this project."
+
+                                        _ ->
+                                            [ Element.text "Choose one of the files in the project to open in the editor:"
+                                            , filesToOfferToOpenInEditor
+                                                |> List.map
+                                                    (\( filePath, _ ) ->
+                                                        Element.Input.button
+                                                            [ Element.mouseOver [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
+                                                            ]
+                                                            { label = Element.text (String.join "/" filePath)
+                                                            , onPress = Just (UserInputOpenFileInEditor filePath)
+                                                            }
+                                                    )
+                                                |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                            ]
+                                                |> Element.column []
+                            in
+                            [ [ saveButton, loadFromGitOpenDialogButton ]
+                                |> Element.row
+                                    [ Element.spacing defaultFontSize
+                                    , Element.padding (defaultFontSize // 2)
+                                    ]
+                            , [ chooseElmFileElement, otherFilesList ]
+                                |> Element.column
+                                    [ Element.spacing defaultFontSize
+                                    , Element.centerX
+                                    , Element.centerY
+                                    ]
+                            ]
+                                |> Element.column
+                                    [ Element.spacing (defaultFontSize // 2)
+                                    , Element.width (Element.fillPortion 4)
+                                    , Element.height Element.fill
+                                    ]
+
+                        Just fileInEditor ->
+                            viewWhenEditorOpen fileInEditor state
 
         popupAttributes =
             case state.modalDialog of
@@ -795,12 +877,7 @@ view state =
                                     Element.none
 
                                 Just (Err loadError) ->
-                                    [ ("Failed to load contents from git: "
-                                        ++ (describeHttpError loadError |> String.left 400)
-                                      )
-                                        |> Element.text
-                                    ]
-                                        |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
+                                    elementToDisplayLoadFromGitError loadError
 
                                 Just (Ok loadOk) ->
                                     [ [ ("Loaded composition "
@@ -1300,3 +1377,16 @@ backgroundColor =
 rootFontFamily : List String
 rootFontFamily =
     [ "Segoe UI", "Tahoma", "Geneva", "Verdana", "sans-serif" ]
+
+
+linkElementFromUrlAndTextLabel : { url : String, labelText : String } -> Element.Element event
+linkElementFromUrlAndTextLabel { url, labelText } =
+    Element.link
+        [ -- https://github.com/mdgriffith/elm-ui/issues/158#issuecomment-624231895
+          Element.Border.widthEach { bottom = 1, left = 0, top = 0, right = 0 }
+        , Element.Border.color <| Element.rgba 0 0 0 0
+        , Element.mouseOver [ Element.Border.color <| Element.rgba 0.7 0.7 1 0.5 ]
+        ]
+        { url = url
+        , label = labelText |> Element.text
+        }
