@@ -61,7 +61,7 @@ type alias State =
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , modalDialog : Maybe ModalDialogState
-    , loadingProjectStateFromLink : Maybe String
+    , loadingProjectStateFromLink : Maybe { linkToSource : String, filePathToOpen : Maybe (List String) }
     , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure )
     }
 
@@ -320,8 +320,17 @@ update event stateBefore =
                     ( stateBefore |> loadProject project, Cmd.none )
 
                 Just (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState) ->
+                    let
+                        filePathToOpen =
+                            FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
+                                |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
+                    in
                     ( { stateBefore
-                        | loadingProjectStateFromLink = Just linkToProjectState
+                        | loadingProjectStateFromLink =
+                            Just
+                                { linkToSource = linkToProjectState
+                                , filePathToOpen = filePathToOpen
+                                }
                         , projectFiles = Dict.empty
                       }
                     , loadFromGitCmd linkToProjectState
@@ -443,9 +452,7 @@ update event stateBefore =
                     ( stateBefore, Cmd.none )
 
         BackendLoadFromGitResultEvent urlIntoGitRepository result ->
-            ( processEventBackendLoadFromGitResult urlIntoGitRepository result stateBefore
-            , Cmd.none
-            )
+            processEventBackendLoadFromGitResult urlIntoGitRepository result stateBefore
 
         UserInputCloseModalDialog ->
             ( { stateBefore | modalDialog = Nothing }, Cmd.none )
@@ -454,7 +461,7 @@ update event stateBefore =
             ( stateBefore, Cmd.none )
 
 
-processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> State
+processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> ( State, Cmd Event )
 processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeRememberingResult =
     let
         stateBefore =
@@ -466,20 +473,35 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
                 dialogState =
                     { dialogStateBefore | loadCompositionResult = Just result }
             in
-            { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }
+            ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }, Cmd.none )
 
         _ ->
-            if Just urlIntoGitRepository == stateBefore.loadingProjectStateFromLink then
-                case result of
-                    Ok loadOk ->
-                        { stateBefore | loadingProjectStateFromLink = Nothing }
-                            |> loadProject (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+            case stateBefore.loadingProjectStateFromLink of
+                Just loadingProjectStateFromLink ->
+                    if urlIntoGitRepository == loadingProjectStateFromLink.linkToSource then
+                        case result of
+                            Ok loadOk ->
+                                let
+                                    updateFunction =
+                                        case loadingProjectStateFromLink.filePathToOpen of
+                                            Just filePathToOpen ->
+                                                update (UserInputOpenFileInEditor filePathToOpen)
 
-                    _ ->
-                        stateBefore
+                                            Nothing ->
+                                                \state -> ( state, Cmd.none )
+                                in
+                                { stateBefore | loadingProjectStateFromLink = Nothing }
+                                    |> loadProject (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                                    |> updateFunction
 
-            else
-                stateBefore
+                            _ ->
+                                ( stateBefore, Cmd.none )
+
+                    else
+                        ( stateBefore, Cmd.none )
+
+                Nothing ->
+                    ( stateBefore, Cmd.none )
 
 
 fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> ProjectState.FileTreeNode
@@ -706,7 +728,7 @@ view state =
                             state.lastBackendLoadFromGitResult
                                 |> Maybe.andThen
                                     (\( requestUrl, result ) ->
-                                        if requestUrl == loadingProjectStateFromLink then
+                                        if requestUrl == loadingProjectStateFromLink.linkToSource then
                                             Just result
 
                                         else
@@ -725,7 +747,7 @@ view state =
                                     Element.text "Completed"
                     in
                     mainContentFromLoadingFromLink
-                        { linkUrl = loadingProjectStateFromLink
+                        { linkUrl = loadingProjectStateFromLink.linkToSource
                         , progressOrResultElement = progressOrResultElement
                         }
 

@@ -27,6 +27,11 @@ projectStateCompositionHashQueryParameterName =
     "project-state-composition-hash"
 
 
+filePathToOpenQueryParameterName : String
+filePathToOpenQueryParameterName =
+    "file-path-to-open"
+
+
 setProjectStateInUrl : ProjectState -> Url.Url -> Url.Url
 setProjectStateInUrl projectState url =
     Url.Builder.crossOrigin
@@ -58,6 +63,13 @@ projectStateLiteralOrLinkFromUrl url =
 projectStateStringQualifiesAsLink : String -> Bool
 projectStateStringQualifiesAsLink projectStateString =
     String.startsWith "https://" projectStateString
+
+
+filePathToOpenFromUrl : Url.Url -> Maybe String
+filePathToOpenFromUrl url =
+    { url | path = "" }
+        |> Url.Parser.parse (Url.Parser.top <?> Url.Parser.Query.string filePathToOpenQueryParameterName)
+        |> Maybe.Extra.join
 
 
 projectStateCompositionHash : ProjectState -> String
