@@ -6,7 +6,8 @@
     "httpRequestEventSizeLimit": 750000,
     "disabled____________________letsEncryptOptions": {
         "Domains": [
-            "editor.elm-fullstack.org"
+            "editor.elm-fullstack.org",
+            "elm-editor.com"
         ],
         "Email": "viir@viir.de",
         "CertificateSigningRequest": {
