@@ -26,7 +26,9 @@ import Html.Events
 import Http
 import Json.Decode
 import Json.Encode
+import Maybe.Extra
 import ProjectState
+import SHA256
 import Svg
 import Svg.Attributes
 import Time
@@ -54,16 +56,21 @@ type alias State =
     { navigationKey : Navigation.Key
     , url : Url.Url
     , time : Maybe Time.Posix
-    , projectFiles : Dict.Dict (List String) Bytes.Bytes
+    , projectState : ProjectStateStructure
     , fileInEditor : Maybe ( List String, String )
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , modalDialog : Maybe ModalDialogState
-    , loadingProjectStateFromLink : Maybe { linkToSource : String, filePathToOpen : Maybe (List String) }
     , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure )
     }
+
+
+type ProjectStateStructure
+    = ProjectStateOk ProjectState.ProjectState
+    | ProjectStateLoadingFromLink { linkToSource : String, filePathToOpen : Maybe (List String), expectedCompositionHash : Maybe String }
+    | ProjectStateErr String
 
 
 type alias ElmMakeResultStructure =
@@ -140,49 +147,26 @@ init _ url navigationKey =
             { navigationKey = navigationKey
             , url = url
             , time = Nothing
-            , projectFiles = Dict.empty
+            , projectState = ProjectStateOk defaultProject
             , fileInEditor = Nothing
             , decodeMessageFromMonacoEditorError = Nothing
             , lastElmMakeRequest = Nothing
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
             , modalDialog = Nothing
-            , loadingProjectStateFromLink = Nothing
             , lastBackendLoadFromGitResult = Nothing
             }
-                |> loadProject defaultProject
                 |> update (UrlChange url)
-                |> Tuple.mapFirst openDefaultFileInEditor
+                |> Tuple.mapFirst (processEventUserInputOpenFileInEditor defaultProjectFileToOpenInEditor >> Tuple.first)
     in
     ( model, urlChangeCmd )
-
-
-loadProject : ProjectState.ProjectState -> State -> State
-loadProject project state =
-    let
-        projectFiles =
-            project |> ProjectState.flatListOfBlobsFromFileTreeNode
-    in
-    { state | projectFiles = projectFiles |> Dict.fromList }
 
 
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
-            case stateBefore.projectFiles |> Dict.get filePath of
-                Nothing ->
-                    ( stateBefore, Cmd.none )
-
-                Just fileContent ->
-                    case stringFromFileContent fileContent of
-                        Nothing ->
-                            ( stateBefore, Cmd.none )
-
-                        Just fileContentString ->
-                            ( { stateBefore | fileInEditor = Just ( filePath, fileContentString ) }
-                            , setTextInMonacoEditorCmd fileContentString
-                            )
+            processEventUserInputOpenFileInEditor filePath stateBefore
 
         UserInputChangeTextInEditor inputText ->
             case stateBefore.fileInEditor of
@@ -194,11 +178,12 @@ update event stateBefore =
                         fileInEditor =
                             ( filePath, inputText )
 
-                        projectFiles =
-                            stateBefore.projectFiles
-                                |> Dict.insert filePath (fileContentFromString inputText)
+                        projectState =
+                            stateBefore.projectState
+                                |> updateProjectStateIfOk
+                                    (ProjectState.setBlobAtPathInSortedFileTree ( filePath, fileContentFromString inputText ))
                     in
-                    ( { stateBefore | projectFiles = projectFiles, fileInEditor = Just fileInEditor }
+                    ( { stateBefore | projectState = projectState, fileInEditor = Just fileInEditor }
                     , Cmd.none
                     )
 
@@ -263,18 +248,21 @@ update event stateBefore =
 
                     Just formattedText ->
                         let
-                            projectFiles =
-                                stateBefore.projectFiles
-                                    |> Dict.insert
-                                        formatResponseEvent.filePath
-                                        (fileContentFromString formattedText)
+                            projectState =
+                                stateBefore.projectState
+                                    |> updateProjectStateIfOk
+                                        (ProjectState.setBlobAtPathInSortedFileTree
+                                            ( formatResponseEvent.filePath
+                                            , fileContentFromString formattedText
+                                            )
+                                        )
 
                             fileInEditor =
                                 ( formatResponseEvent.filePath, formattedText )
                         in
                         ( { stateBefore
                             | elmFormatResult = Just formatResponseEvent.result
-                            , projectFiles = projectFiles
+                            , projectState = projectState
                             , fileInEditor = Just fileInEditor
                           }
                         , setTextInMonacoEditorCmd (Tuple.second fileInEditor)
@@ -312,26 +300,41 @@ update event stateBefore =
             )
 
         UrlChange url ->
-            case FrontendWeb.ProjectStateInUrl.projectStateLiteralOrLinkFromUrl url |> Maybe.andThen Result.toMaybe of
+            let
+                projectStateExpectedCompositionHash =
+                    FrontendWeb.ProjectStateInUrl.projectStateCompositionHashFromUrl url
+
+                filePathToOpen =
+                    FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
+                        |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
+            in
+            case FrontendWeb.ProjectStateInUrl.projectStateLiteralOrLinkFromUrl url of
                 Nothing ->
                     ( stateBefore, Cmd.none )
 
-                Just (FrontendWeb.ProjectStateInUrl.LiteralProjectState project) ->
-                    ( stateBefore |> loadProject project, Cmd.none )
-
-                Just (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState) ->
-                    let
-                        filePathToOpen =
-                            FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
-                                |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
-                    in
+                Just (Err fromUrlError) ->
                     ( { stateBefore
-                        | loadingProjectStateFromLink =
-                            Just
+                        | projectState = ProjectStateErr ("Failed to decode project state from URL: " ++ Json.Decode.errorToString fromUrlError)
+                      }
+                    , Cmd.none
+                    )
+
+                Just (Ok (FrontendWeb.ProjectStateInUrl.LiteralProjectState projectState)) ->
+                    updateForLoadedProjectState
+                        { expectedCompositionHash = projectStateExpectedCompositionHash
+                        , filePathToOpen = filePathToOpen
+                        }
+                        projectState
+                        stateBefore
+
+                Just (Ok (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState)) ->
+                    ( { stateBefore
+                        | projectState =
+                            ProjectStateLoadingFromLink
                                 { linkToSource = linkToProjectState
                                 , filePathToOpen = filePathToOpen
+                                , expectedCompositionHash = projectStateExpectedCompositionHash
                                 }
-                        , projectFiles = Dict.empty
                       }
                     , loadFromGitCmd linkToProjectState
                     )
@@ -345,38 +348,38 @@ update event stateBefore =
                     ( stateBefore, Navigation.load url )
 
         UserInputSave generateLink ->
-            let
-                dialogBefore =
-                    (case stateBefore.modalDialog of
-                        Just (SaveOrShareDialog saveOrShareDialog) ->
-                            Just saveOrShareDialog
+            case stateBefore.projectState of
+                ProjectStateOk projectStateOk ->
+                    let
+                        dialogBefore =
+                            (case stateBefore.modalDialog of
+                                Just (SaveOrShareDialog saveOrShareDialog) ->
+                                    Just saveOrShareDialog
 
-                        _ ->
-                            Nothing
-                    )
-                        |> Maybe.withDefault { urlToProject = Nothing }
+                                _ ->
+                                    Nothing
+                            )
+                                |> Maybe.withDefault { urlToProject = Nothing }
 
-                ( dialog, cmd ) =
-                    if generateLink then
-                        let
-                            projectState =
-                                stateBefore.projectFiles
-                                    |> Dict.toList
-                                    |> ProjectState.sortedFileTreeFromListOfBlobs
+                        ( dialog, cmd ) =
+                            if generateLink then
+                                let
+                                    url =
+                                        stateBefore.url
+                                            |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl projectStateOk
+                                            |> Url.toString
+                                in
+                                ( { dialogBefore | urlToProject = Just url }
+                                , Navigation.replaceUrl stateBefore.navigationKey url
+                                )
 
-                            url =
-                                stateBefore.url
-                                    |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl projectState
-                                    |> Url.toString
-                        in
-                        ( { dialogBefore | urlToProject = Just url }
-                        , Navigation.replaceUrl stateBefore.navigationKey url
-                        )
+                            else
+                                ( dialogBefore, Cmd.none )
+                    in
+                    ( { stateBefore | modalDialog = Just (SaveOrShareDialog dialog) }, cmd )
 
-                    else
-                        ( dialogBefore, Cmd.none )
-            in
-            ( { stateBefore | modalDialog = Just (SaveOrShareDialog dialog) }, cmd )
+                _ ->
+                    ( stateBefore, Cmd.none )
 
         UserInputLoadFromGit LoadFromGitOpenDialog ->
             case stateBefore.modalDialog of
@@ -440,8 +443,10 @@ update event stateBefore =
                 Just (LoadFromGitDialog dialogStateBefore) ->
                     case dialogStateBefore.loadCompositionResult of
                         Just (Ok loadOk) ->
-                            ( { stateBefore | modalDialog = Nothing }
-                                |> loadProject (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                            ( { stateBefore
+                                | modalDialog = Nothing
+                                , projectState = ProjectStateOk (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                              }
                             , Cmd.none
                             )
 
@@ -461,6 +466,23 @@ update event stateBefore =
             ( stateBefore, Cmd.none )
 
 
+processEventUserInputOpenFileInEditor : List String -> State -> ( State, Cmd Event )
+processEventUserInputOpenFileInEditor filePath stateBefore =
+    case
+        stateBefore.projectState
+            |> mapProjectStateIfOk (ProjectState.getBlobAtPathFromFileTree filePath)
+            |> Maybe.Extra.join
+            |> Maybe.andThen stringFromFileContent
+    of
+        Nothing ->
+            ( stateBefore, Cmd.none )
+
+        Just fileContentString ->
+            ( { stateBefore | fileInEditor = Just ( filePath, fileContentString ) }
+            , setTextInMonacoEditorCmd fileContentString
+            )
+
+
 processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> ( State, Cmd Event )
 processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeRememberingResult =
     let
@@ -476,32 +498,77 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
             ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }, Cmd.none )
 
         _ ->
-            case stateBefore.loadingProjectStateFromLink of
-                Just loadingProjectStateFromLink ->
-                    if urlIntoGitRepository == loadingProjectStateFromLink.linkToSource then
+            case stateBefore.projectState of
+                ProjectStateLoadingFromLink projectStateLoadingFromLink ->
+                    if urlIntoGitRepository == projectStateLoadingFromLink.linkToSource then
                         case result of
                             Ok loadOk ->
-                                let
-                                    updateFunction =
-                                        case loadingProjectStateFromLink.filePathToOpen of
-                                            Just filePathToOpen ->
-                                                update (UserInputOpenFileInEditor filePathToOpen)
+                                updateForLoadedProjectState
+                                    { expectedCompositionHash = projectStateLoadingFromLink.expectedCompositionHash
+                                    , filePathToOpen = projectStateLoadingFromLink.filePathToOpen
+                                    }
+                                    (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                                    stateBefore
 
-                                            Nothing ->
-                                                \state -> ( state, Cmd.none )
-                                in
-                                { stateBefore | loadingProjectStateFromLink = Nothing }
-                                    |> loadProject (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
-                                    |> updateFunction
-
-                            _ ->
-                                ( stateBefore, Cmd.none )
+                            Err loadingError ->
+                                ( { stateBefore
+                                    | projectState = ProjectStateErr (describeErrorLoadingContentsFromGit loadingError)
+                                  }
+                                , Cmd.none
+                                )
 
                     else
                         ( stateBefore, Cmd.none )
 
-                Nothing ->
+                _ ->
                     ( stateBefore, Cmd.none )
+
+
+updateForLoadedProjectState :
+    { expectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
+    -> ProjectState.ProjectState
+    -> State
+    -> ( State, Cmd Event )
+updateForLoadedProjectState config loadedProjectState stateBefore =
+    let
+        loadedProjectStateHashBase16 =
+            SHA256.toHex (ProjectState.compositionHashFromFileTreeNode loadedProjectState)
+
+        continueIfHashOk =
+            let
+                updateFunction =
+                    case config.filePathToOpen of
+                        Just filePathToOpen ->
+                            update (UserInputOpenFileInEditor filePathToOpen)
+
+                        Nothing ->
+                            \state -> ( state, Cmd.none )
+            in
+            { stateBefore
+                | projectState = ProjectStateOk loadedProjectState
+            }
+                |> updateFunction
+    in
+    case config.expectedCompositionHash of
+        Nothing ->
+            continueIfHashOk
+
+        Just expectedCompositionHash ->
+            if loadedProjectStateHashBase16 == expectedCompositionHash then
+                continueIfHashOk
+
+            else
+                ( { stateBefore
+                    | projectState =
+                        ProjectStateErr
+                            ("Loaded composition has hash "
+                                ++ loadedProjectStateHashBase16
+                                ++ " instead of the expected hash "
+                                ++ expectedCompositionHash
+                            )
+                  }
+                , Cmd.none
+                )
 
 
 fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> ProjectState.FileTreeNode
@@ -596,30 +663,33 @@ elmMakeRequestForFileOpenedInEditor state =
             Nothing
 
         Just ( filePath, _ ) ->
-            let
-                base64FromBytes : Bytes.Bytes -> String
-                base64FromBytes =
-                    Base64.fromBytes
-                        >> Maybe.withDefault "Error encoding in base64"
+            state.projectState
+                |> mapProjectStateIfOk
+                    (\projectState ->
+                        let
+                            base64FromBytes : Bytes.Bytes -> String
+                            base64FromBytes =
+                                Base64.fromBytes
+                                    >> Maybe.withDefault "Error encoding in base64"
 
-                entryPointFilePath =
-                    filePath
-            in
-            Just
-                { requestToBackend =
-                    { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
-                    , files =
-                        state.projectFiles
-                            |> Dict.toList
-                            |> List.map
-                                (\( path, content ) ->
-                                    { path = path
-                                    , contentBase64 = content |> base64FromBytes
-                                    }
-                                )
-                    }
-                , entryPointFilePath = entryPointFilePath
-                }
+                            entryPointFilePath =
+                                filePath
+                        in
+                        { requestToBackend =
+                            { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
+                            , files =
+                                projectState
+                                    |> ProjectState.flatListOfBlobsFromFileTreeNode
+                                    |> List.map
+                                        (\( path, content ) ->
+                                            { path = path
+                                            , contentBase64 = content |> base64FromBytes
+                                            }
+                                        )
+                            }
+                        , entryPointFilePath = entryPointFilePath
+                        }
+                    )
 
 
 requestToApiCmd :
@@ -645,18 +715,6 @@ requestToApiCmd request jsonDecoderSpecialization eventConstructor =
 elmMakeOutputFileName : String
 elmMakeOutputFileName =
     "elm-make-output.html"
-
-
-openDefaultFileInEditor : State -> State
-openDefaultFileInEditor stateBefore =
-    let
-        fileInEditor =
-            stateBefore.projectFiles
-                |> Dict.toList
-                |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
-                |> List.head
-    in
-    { stateBefore | fileInEditor = fileInEditor }
 
 
 priorityToOfferToOpenFileInEditor : ( List String, String ) -> Maybe Int
@@ -696,19 +754,19 @@ view : State -> Browser.Document Event
 view state =
     let
         elementToDisplayLoadFromGitError loadError =
-            [ ("Failed to load contents from git: "
-                ++ (describeHttpError loadError |> String.left 500)
-              )
+            [ describeErrorLoadingContentsFromGit loadError
+                |> String.left 500
                 |> Element.text
             ]
                 |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
 
-        mainContentFromLoadingFromLink { linkUrl, progressOrResultElement } =
+        mainContentFromLoadingFromLink { linkUrl, progressOrResultElement, expectedCompositionHash } =
             [ Element.text "Loading project from "
             , linkElementFromUrlAndTextLabel
                 { url = linkUrl
                 , labelText = linkUrl
                 }
+            , Element.text (expectedCompositionHash |> Maybe.map ((++) "Expecting composition with hash ") |> Maybe.withDefault "")
             , progressOrResultElement
             ]
                 |> List.map (Element.el [ Element.centerX ])
@@ -717,9 +775,23 @@ view state =
                     , Element.width Element.fill
                     ]
 
+        mainContentFromNavigationButtonElementsAndContent config =
+            [ config.buttonElements
+                |> Element.row
+                    [ Element.spacing defaultFontSize
+                    , Element.padding (defaultFontSize // 2)
+                    ]
+            , config.contentElement
+            ]
+                |> Element.column
+                    [ Element.spacing (defaultFontSize // 2)
+                    , Element.width (Element.fillPortion 4)
+                    , Element.height Element.fill
+                    ]
+
         mainContent =
-            case state.loadingProjectStateFromLink of
-                Just loadingProjectStateFromLink ->
+            case state.projectState of
+                ProjectStateLoadingFromLink loadingProjectStateFromLink ->
                     let
                         loadResult =
                             state.lastBackendLoadFromGitResult
@@ -746,14 +818,15 @@ view state =
                     mainContentFromLoadingFromLink
                         { linkUrl = loadingProjectStateFromLink.linkToSource
                         , progressOrResultElement = progressOrResultElement
+                        , expectedCompositionHash = loadingProjectStateFromLink.expectedCompositionHash
                         }
 
-                Nothing ->
+                ProjectStateOk projectState ->
                     case state.fileInEditor of
                         Nothing ->
                             let
                                 projectFiles =
-                                    state.projectFiles |> Dict.toList
+                                    projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
 
                                 filesToOfferToOpenInEditor =
                                     projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
@@ -764,7 +837,7 @@ view state =
                                 otherFilesList =
                                     case
                                         filesToOfferToOpenInEditorNames
-                                            |> List.foldl Dict.remove state.projectFiles
+                                            |> List.foldl Dict.remove (Dict.fromList projectFiles)
                                             |> Dict.toList
                                     of
                                         [] ->
@@ -799,26 +872,35 @@ view state =
                                             ]
                                                 |> Element.column []
                             in
-                            [ [ saveButton, loadFromGitOpenDialogButton ]
-                                |> Element.row
-                                    [ Element.spacing defaultFontSize
-                                    , Element.padding (defaultFontSize // 2)
-                                    ]
-                            , [ chooseElmFileElement, otherFilesList ]
-                                |> Element.column
-                                    [ Element.spacing defaultFontSize
-                                    , Element.centerX
-                                    , Element.centerY
-                                    ]
-                            ]
-                                |> Element.column
-                                    [ Element.spacing (defaultFontSize // 2)
-                                    , Element.width (Element.fillPortion 4)
-                                    , Element.height Element.fill
-                                    ]
+                            mainContentFromNavigationButtonElementsAndContent
+                                { buttonElements = [ saveButton, loadFromGitOpenDialogButton ]
+                                , contentElement =
+                                    [ chooseElmFileElement, otherFilesList ]
+                                        |> Element.column
+                                            [ Element.spacing defaultFontSize
+                                            , Element.centerX
+                                            , Element.centerY
+                                            ]
+                                }
 
                         Just fileInEditor ->
                             viewWhenEditorOpen fileInEditor state
+
+                ProjectStateErr projectStateError ->
+                    mainContentFromNavigationButtonElementsAndContent
+                        { buttonElements = [ loadFromGitOpenDialogButton ]
+                        , contentElement =
+                            [ ("Failed to load project state: "
+                                ++ (projectStateError |> String.left 500)
+                              )
+                                |> Element.text
+                            ]
+                                |> Element.paragraph
+                                    [ Element.Font.color (Element.rgb 1 0.64 0)
+                                    , Element.padding defaultFontSize
+                                    , Element.width Element.fill
+                                    ]
+                        }
 
         popupAttributes =
             case state.modalDialog of
@@ -826,42 +908,50 @@ view state =
                     []
 
                 Just (SaveOrShareDialog saveOrShareDialog) ->
-                    let
-                        projectSummaryElement =
-                            [ ("This project contains "
-                                ++ (state.projectFiles |> Dict.size |> String.fromInt)
-                                ++ " files with an aggregate size of "
-                                ++ (state.projectFiles |> Dict.toList |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
-                                ++ " bytes."
-                              )
-                                |> Element.text
-                            ]
-                                |> Element.paragraph []
+                    case state.projectState of
+                        ProjectStateOk projectState ->
+                            let
+                                projectFiles =
+                                    projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
 
-                        buttonGenerateUrl =
-                            buttonElement { label = "Generate link to project", onPress = Just (UserInputSave True) }
-
-                        urlElement =
-                            case saveOrShareDialog.urlToProject of
-                                Nothing ->
-                                    Element.el [ elementTransparent True ] (Element.html (htmlOfferingTextToCopy ""))
-
-                                Just urlToProject ->
-                                    Element.html (htmlOfferingTextToCopy urlToProject)
-                    in
-                    popupAttributesFromProperties
-                        { title = "Save or Share Project"
-                        , guide = "Get a link that you or others can later use to load the project's current state into the editor again."
-                        , contentElement =
-                            [ projectSummaryElement
-                            , buttonGenerateUrl |> Element.el [ Element.centerX ]
-                            , urlElement |> Element.el [ Element.width Element.fill ]
-                            ]
-                                |> Element.column
-                                    [ Element.spacing defaultFontSize
-                                    , Element.width Element.fill
+                                projectSummaryElement =
+                                    [ ("This project contains "
+                                        ++ (projectFiles |> List.length |> String.fromInt)
+                                        ++ " files with an aggregate size of "
+                                        ++ (projectFiles |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
+                                        ++ " bytes."
+                                      )
+                                        |> Element.text
                                     ]
-                        }
+                                        |> Element.paragraph []
+
+                                buttonGenerateUrl =
+                                    buttonElement { label = "Generate link to project", onPress = Just (UserInputSave True) }
+
+                                urlElement =
+                                    case saveOrShareDialog.urlToProject of
+                                        Nothing ->
+                                            Element.el [ elementTransparent True ] (Element.html (htmlOfferingTextToCopy ""))
+
+                                        Just urlToProject ->
+                                            Element.html (htmlOfferingTextToCopy urlToProject)
+                            in
+                            popupAttributesFromProperties
+                                { title = "Save or Share Project"
+                                , guide = "Get a link that you or others can later use to load the project's current state into the editor again."
+                                , contentElement =
+                                    [ projectSummaryElement
+                                    , buttonGenerateUrl |> Element.el [ Element.centerX ]
+                                    , urlElement |> Element.el [ Element.width Element.fill ]
+                                    ]
+                                        |> Element.column
+                                            [ Element.spacing defaultFontSize
+                                            , Element.width Element.fill
+                                            ]
+                                }
+
+                        _ ->
+                            []
 
                 Just (LoadFromGitDialog dialogState) ->
                     let
@@ -951,6 +1041,28 @@ view state =
                     )
     in
     { title = "Elm Editor", body = [ body ] }
+
+
+updateProjectStateIfOk : (ProjectState.ProjectState -> ProjectState.ProjectState) -> ProjectStateStructure -> ProjectStateStructure
+updateProjectStateIfOk map projectState =
+    mapProjectStateIfOk map projectState
+        |> Maybe.map ProjectStateOk
+        |> Maybe.withDefault projectState
+
+
+mapProjectStateIfOk : (ProjectState.ProjectState -> a) -> ProjectStateStructure -> Maybe a
+mapProjectStateIfOk map projectState =
+    case projectState of
+        ProjectStateOk okState ->
+            Just (map okState)
+
+        _ ->
+            Nothing
+
+
+describeErrorLoadingContentsFromGit : Http.Error -> String
+describeErrorLoadingContentsFromGit loadError =
+    "Failed to load contents from git: " ++ describeHttpError loadError
 
 
 activityBarWidth : Int
@@ -1282,18 +1394,23 @@ monacoEditorElement _ =
         |> Element.html
 
 
+defaultProjectFileToOpenInEditor : List String
+defaultProjectFileToOpenInEditor =
+    [ "src", "Main.elm" ]
+
+
 defaultProject : ProjectState.ProjectState
 defaultProject =
     ProjectState.TreeNode
-        [ ( "src"
+        [ ( "elm.json"
+          , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
+          )
+        , ( "src"
           , ProjectState.TreeNode
                 [ ( "Main.elm"
                   , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
                   )
                 ]
-          )
-        , ( "elm.json"
-          , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
           )
         ]
 

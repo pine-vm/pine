@@ -71,6 +71,16 @@ sortedFileTreeFromListOfBlobs =
     List.foldl setBlobAtPathInSortedFileTree (TreeNode [])
 
 
+getBlobAtPathFromFileTree : List String -> FileTreeNode -> Maybe Bytes.Bytes
+getBlobAtPathFromFileTree path treeNode =
+    case getNodeAtPathFromFileTree path treeNode of
+        Just (BlobNode blob) ->
+            Just blob
+
+        _ ->
+            Nothing
+
+
 getNodeAtPathFromFileTree : List String -> FileTreeNode -> Maybe FileTreeNode
 getNodeAtPathFromFileTree path treeNode =
     case path of

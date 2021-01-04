@@ -72,6 +72,13 @@ filePathToOpenFromUrl url =
         |> Maybe.Extra.join
 
 
+projectStateCompositionHashFromUrl : Url.Url -> Maybe String
+projectStateCompositionHashFromUrl url =
+    { url | path = "" }
+        |> Url.Parser.parse (Url.Parser.top <?> Url.Parser.Query.string projectStateCompositionHashQueryParameterName)
+        |> Maybe.Extra.join
+
+
 projectStateCompositionHash : ProjectState -> String
 projectStateCompositionHash =
     ProjectState.compositionHashFromFileTreeNode >> SHA256.toHex
