@@ -126,7 +126,7 @@ main =
 
 
 subscriptions : State -> Sub Event
-subscriptions state =
+subscriptions _ =
     [ receiveMessageFromMonacoFrame MonacoEditorEvent
     , Time.every 500 TimeHasArrived
     ]
