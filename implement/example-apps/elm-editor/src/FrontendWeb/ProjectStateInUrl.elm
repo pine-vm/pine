@@ -32,14 +32,24 @@ filePathToOpenQueryParameterName =
     "file-path-to-open"
 
 
-setProjectStateInUrl : ProjectState -> Url.Url -> Url.Url
-setProjectStateInUrl projectState url =
+setProjectStateInUrl : ProjectState -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
+setProjectStateInUrl projectState optionalParameters url =
+    let
+        optionalQueryParameters =
+            case optionalParameters.filePathToOpen of
+                Nothing ->
+                    []
+
+                Just filePathToOpen ->
+                    [ Url.Builder.string filePathToOpenQueryParameterName (String.join "/" filePathToOpen) ]
+    in
     Url.Builder.crossOrigin
         (Url.toString { url | path = "", query = Nothing, fragment = Nothing })
         []
-        [ Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (jsonEncodeProjectState projectState))
-        , Url.Builder.string projectStateCompositionHashQueryParameterName (projectStateCompositionHash projectState)
-        ]
+        (Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (jsonEncodeProjectState projectState))
+            :: Url.Builder.string projectStateCompositionHashQueryParameterName (projectStateCompositionHash projectState)
+            :: optionalQueryParameters
+        )
         |> Url.fromString
         |> Maybe.withDefault { url | host = "Error: Failed to parse URL from String" }
 

@@ -156,8 +156,9 @@ init _ url navigationKey =
             , modalDialog = Nothing
             , lastBackendLoadFromGitResult = Nothing
             }
+                |> processEventUserInputOpenFileInEditor defaultProjectFileToOpenInEditor
+                |> Tuple.first
                 |> update (UrlChange url)
-                |> Tuple.mapFirst (processEventUserInputOpenFileInEditor defaultProjectFileToOpenInEditor >> Tuple.first)
     in
     ( model, urlChangeCmd )
 
@@ -366,7 +367,9 @@ update event stateBefore =
                                 let
                                     url =
                                         stateBefore.url
-                                            |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl projectStateOk
+                                            |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl
+                                                projectStateOk
+                                                { filePathToOpen = stateBefore.fileInEditor |> Maybe.map Tuple.first }
                                             |> Url.toString
                                 in
                                 ( { dialogBefore | urlToProject = Just url }
