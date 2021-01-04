@@ -665,9 +665,6 @@ priorityToOfferToOpenFileInEditor ( filePath, _ ) =
         Just 0
 
     else if filePath |> List.reverse |> List.head |> Maybe.map (String.endsWith ".elm") |> Maybe.withDefault False then
-        {- TODO: If there is only one entry point, it should have highest priority:
-           Derive priority from number dependencies.
-        -}
         Just 1
 
     else
