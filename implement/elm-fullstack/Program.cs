@@ -559,7 +559,7 @@ namespace elm_fullstack
 
                     var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
 
-                    if (loadFromPathResult?.Ok == null)
+                    if (loadFromPathResult?.Ok.tree == null)
                     {
                         throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
                     }
