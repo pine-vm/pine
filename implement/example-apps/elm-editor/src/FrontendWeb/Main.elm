@@ -1,4 +1,4 @@
-port module FrontendWeb.Main exposing (Event(..), State, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
+port module FrontendWeb.Main exposing (Event(..), State, defaultProject, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
 
 import Base64
 import Browser
@@ -28,7 +28,8 @@ import Json.Decode
 import Json.Encode
 import Maybe.Extra
 import ProjectState
-import SHA256
+import ProjectState_2021_01
+import Result.Extra
 import Svg
 import Svg.Attributes
 import Time
@@ -68,8 +69,12 @@ type alias State =
 
 
 type ProjectStateStructure
-    = ProjectStateOk ProjectState.ProjectState
-    | ProjectStateLoadingFromLink { linkToSource : String, filePathToOpen : Maybe (List String), expectedCompositionHash : Maybe String }
+    = ProjectStateOk ProjectState.FileTreeNode
+    | ProjectStateLoadingFromLink
+        { projectStateDescription : ProjectState_2021_01.ProjectState
+        , filePathToOpen : Maybe (List String)
+        , expectedCompositionHash : Maybe String
+        }
     | ProjectStateErr String
 
 
@@ -86,7 +91,7 @@ type Event
     | UserInputOpenFileInEditor (List String)
     | UserInputFormat
     | UserInputCompile
-    | UserInputSave Bool
+    | UserInputSave (Maybe { createDiffIfBaseAvailable : Bool })
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputCloseModalDialog
     | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
@@ -308,8 +313,33 @@ update event stateBefore =
                 filePathToOpen =
                     FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
                         |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
+
+                projectWithMatchingStateHashAlreadyLoaded =
+                    case stateBefore.projectState of
+                        ProjectStateOk projectState ->
+                            Just (FrontendWeb.ProjectStateInUrl.projectStateCompositionHash projectState)
+                                == projectStateExpectedCompositionHash
+
+                        _ ->
+                            False
+
+                continueWithDiffProjectState projectStateDescription =
+                    if projectWithMatchingStateHashAlreadyLoaded then
+                        ( stateBefore, Cmd.none )
+
+                    else
+                        ( { stateBefore
+                            | projectState =
+                                ProjectStateLoadingFromLink
+                                    { projectStateDescription = projectStateDescription
+                                    , filePathToOpen = filePathToOpen
+                                    , expectedCompositionHash = projectStateExpectedCompositionHash
+                                    }
+                          }
+                        , loadFromGitCmd projectStateDescription.base
+                        )
             in
-            case FrontendWeb.ProjectStateInUrl.projectStateLiteralOrLinkFromUrl url of
+            case FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl url of
                 Nothing ->
                     ( stateBefore, Cmd.none )
 
@@ -326,19 +356,17 @@ update event stateBefore =
                         , filePathToOpen = filePathToOpen
                         }
                         projectState
+                        ProjectState_2021_01.noDifference
                         stateBefore
 
                 Just (Ok (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState)) ->
-                    ( { stateBefore
-                        | projectState =
-                            ProjectStateLoadingFromLink
-                                { linkToSource = linkToProjectState
-                                , filePathToOpen = filePathToOpen
-                                , expectedCompositionHash = projectStateExpectedCompositionHash
-                                }
-                      }
-                    , loadFromGitCmd linkToProjectState
-                    )
+                    continueWithDiffProjectState
+                        { base = linkToProjectState
+                        , differenceFromBase = ProjectState_2021_01.noDifference
+                        }
+
+                Just (Ok (FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState)) ->
+                    continueWithDiffProjectState diffProjectState
 
         UrlRequest urlRequest ->
             case urlRequest of
@@ -348,7 +376,7 @@ update event stateBefore =
                 Browser.External url ->
                     ( stateBefore, Navigation.load url )
 
-        UserInputSave generateLink ->
+        UserInputSave maybeGenerateLink ->
             case stateBefore.projectState of
                 ProjectStateOk projectStateOk ->
                     let
@@ -363,21 +391,43 @@ update event stateBefore =
                                 |> Maybe.withDefault { urlToProject = Nothing }
 
                         ( dialog, cmd ) =
-                            if generateLink then
-                                let
-                                    url =
-                                        stateBefore.url
-                                            |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl
-                                                projectStateOk
-                                                { filePathToOpen = stateBefore.fileInEditor |> Maybe.map Tuple.first }
-                                            |> Url.toString
-                                in
-                                ( { dialogBefore | urlToProject = Just url }
-                                , Navigation.replaceUrl stateBefore.navigationKey url
-                                )
+                            case maybeGenerateLink of
+                                Nothing ->
+                                    ( dialogBefore, Cmd.none )
 
-                            else
-                                ( dialogBefore, Cmd.none )
+                                Just generateLink ->
+                                    let
+                                        baseToUse =
+                                            if not generateLink.createDiffIfBaseAvailable then
+                                                Nothing
+
+                                            else
+                                                case stateBefore.lastBackendLoadFromGitResult of
+                                                    Nothing ->
+                                                        Nothing
+
+                                                    Just ( loadFromGitUrl, loadFromGitResult ) ->
+                                                        case loadFromGitResult of
+                                                            Err _ ->
+                                                                Nothing
+
+                                                            Ok loadFromGitOk ->
+                                                                Just
+                                                                    ( loadFromGitUrl
+                                                                    , fileTreeNodeFromListFileWithPath loadFromGitOk.filesAsFlatList
+                                                                    )
+
+                                        url =
+                                            stateBefore.url
+                                                |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl
+                                                    projectStateOk
+                                                    baseToUse
+                                                    { filePathToOpen = stateBefore.fileInEditor |> Maybe.map Tuple.first }
+                                                |> Url.toString
+                                    in
+                                    ( { dialogBefore | urlToProject = Just url }
+                                    , Navigation.replaceUrl stateBefore.navigationKey url
+                                    )
                     in
                     ( { stateBefore | modalDialog = Just (SaveOrShareDialog dialog) }, cmd )
 
@@ -503,7 +553,7 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
         _ ->
             case stateBefore.projectState of
                 ProjectStateLoadingFromLink projectStateLoadingFromLink ->
-                    if urlIntoGitRepository == projectStateLoadingFromLink.linkToSource then
+                    if urlIntoGitRepository == projectStateLoadingFromLink.projectStateDescription.base then
                         case result of
                             Ok loadOk ->
                                 updateForLoadedProjectState
@@ -511,6 +561,7 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
                                     , filePathToOpen = projectStateLoadingFromLink.filePathToOpen
                                     }
                                     (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                                    projectStateLoadingFromLink.projectStateDescription.differenceFromBase
                                     stateBefore
 
                             Err loadingError ->
@@ -529,49 +580,52 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
 
 updateForLoadedProjectState :
     { expectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
-    -> ProjectState.ProjectState
+    -> ProjectState.FileTreeNode
+    -> ProjectState_2021_01.ProjectStateDifference
     -> State
     -> ( State, Cmd Event )
-updateForLoadedProjectState config loadedProjectState stateBefore =
-    let
-        loadedProjectStateHashBase16 =
-            SHA256.toHex (ProjectState.compositionHashFromFileTreeNode loadedProjectState)
+updateForLoadedProjectState config loadedBaseProjectState projectStateDiff stateBefore =
+    (case ProjectState.applyProjectStateDifference_2021_01 projectStateDiff loadedBaseProjectState of
+        Err error ->
+            Err ("Failed to apply difference model to compute project state: " ++ error)
 
-        continueIfHashOk =
+        Ok composedProjectState ->
             let
-                updateFunction =
-                    case config.filePathToOpen of
-                        Just filePathToOpen ->
-                            update (UserInputOpenFileInEditor filePathToOpen)
+                composedProjectStateHashBase16 =
+                    FrontendWeb.ProjectStateInUrl.projectStateCompositionHash composedProjectState
 
-                        Nothing ->
-                            \state -> ( state, Cmd.none )
+                continueIfHashOk =
+                    let
+                        updateFunction =
+                            case config.filePathToOpen of
+                                Just filePathToOpen ->
+                                    update (UserInputOpenFileInEditor filePathToOpen)
+
+                                Nothing ->
+                                    \state -> ( state, Cmd.none )
+                    in
+                    { stateBefore | projectState = ProjectStateOk composedProjectState }
+                        |> updateFunction
+                        |> Ok
             in
-            { stateBefore
-                | projectState = ProjectStateOk loadedProjectState
-            }
-                |> updateFunction
-    in
-    case config.expectedCompositionHash of
-        Nothing ->
-            continueIfHashOk
+            case config.expectedCompositionHash of
+                Nothing ->
+                    continueIfHashOk
 
-        Just expectedCompositionHash ->
-            if loadedProjectStateHashBase16 == expectedCompositionHash then
-                continueIfHashOk
+                Just expectedCompositionHash ->
+                    if composedProjectStateHashBase16 == expectedCompositionHash then
+                        continueIfHashOk
 
-            else
-                ( { stateBefore
-                    | projectState =
-                        ProjectStateErr
-                            ("Loaded composition has hash "
-                                ++ loadedProjectStateHashBase16
+                    else
+                        Err
+                            ("Composed project state has hash "
+                                ++ composedProjectStateHashBase16
                                 ++ " instead of the expected hash "
                                 ++ expectedCompositionHash
                             )
-                  }
-                , Cmd.none
-                )
+    )
+        |> Result.Extra.extract
+            (\error -> ( { stateBefore | projectState = ProjectStateErr error }, Cmd.none ))
 
 
 fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> ProjectState.FileTreeNode
@@ -800,7 +854,7 @@ view state =
                             state.lastBackendLoadFromGitResult
                                 |> Maybe.andThen
                                     (\( requestUrl, result ) ->
-                                        if requestUrl == loadingProjectStateFromLink.linkToSource then
+                                        if requestUrl == loadingProjectStateFromLink.projectStateDescription.base then
                                             Just result
 
                                         else
@@ -817,11 +871,18 @@ view state =
 
                                 Just (Ok _) ->
                                     Element.text "Completed"
+
+                        expectedCompositionHash =
+                            if loadingProjectStateFromLink.projectStateDescription.differenceFromBase == ProjectState_2021_01.noDifference then
+                                loadingProjectStateFromLink.expectedCompositionHash
+
+                            else
+                                Nothing
                     in
                     mainContentFromLoadingFromLink
-                        { linkUrl = loadingProjectStateFromLink.linkToSource
+                        { linkUrl = loadingProjectStateFromLink.projectStateDescription.base
                         , progressOrResultElement = progressOrResultElement
-                        , expectedCompositionHash = loadingProjectStateFromLink.expectedCompositionHash
+                        , expectedCompositionHash = expectedCompositionHash
                         }
 
                 ProjectStateOk projectState ->
@@ -913,45 +974,8 @@ view state =
                 Just (SaveOrShareDialog saveOrShareDialog) ->
                     case state.projectState of
                         ProjectStateOk projectState ->
-                            let
-                                projectFiles =
-                                    projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
-
-                                projectSummaryElement =
-                                    [ ("This project contains "
-                                        ++ (projectFiles |> List.length |> String.fromInt)
-                                        ++ " files with an aggregate size of "
-                                        ++ (projectFiles |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
-                                        ++ " bytes."
-                                      )
-                                        |> Element.text
-                                    ]
-                                        |> Element.paragraph []
-
-                                buttonGenerateUrl =
-                                    buttonElement { label = "Generate link to project", onPress = Just (UserInputSave True) }
-
-                                urlElement =
-                                    case saveOrShareDialog.urlToProject of
-                                        Nothing ->
-                                            Element.el [ elementTransparent True ] (Element.html (htmlOfferingTextToCopy ""))
-
-                                        Just urlToProject ->
-                                            Element.html (htmlOfferingTextToCopy urlToProject)
-                            in
-                            popupAttributesFromProperties
-                                { title = "Save or Share Project"
-                                , guide = "Get a link that you or others can later use to load the project's current state into the editor again."
-                                , contentElement =
-                                    [ projectSummaryElement
-                                    , buttonGenerateUrl |> Element.el [ Element.centerX ]
-                                    , urlElement |> Element.el [ Element.width Element.fill ]
-                                    ]
-                                        |> Element.column
-                                            [ Element.spacing defaultFontSize
-                                            , Element.width Element.fill
-                                            ]
-                                }
+                            viewSaveOrShareDialog saveOrShareDialog projectState
+                                |> popupAttributesFromProperties
 
                         _ ->
                             []
@@ -1015,7 +1039,7 @@ view state =
                     in
                     popupAttributesFromProperties
                         { title = "Load Project from Tree in Git Repository"
-                        , guide = "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: https://github.com/onlinegamemaker/making-online-games/tree/421a268a10091690a912042382f47ef13c04e6ca/games-program-codes/simple-snake"
+                        , guide = "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: https://github.com/onlinegamemaker/making-online-games/tree/7b0fe6018e6f464bbee193f063d26c80cc6e6653/games-program-codes/simple-snake"
                         , contentElement =
                             [ urlInputElement
                             , sendRequestButton
@@ -1046,14 +1070,117 @@ view state =
     { title = "Elm Editor", body = [ body ] }
 
 
-updateProjectStateIfOk : (ProjectState.ProjectState -> ProjectState.ProjectState) -> ProjectStateStructure -> ProjectStateStructure
+type alias PopupAttributes =
+    { title : String
+    , guide : String
+    , contentElement : Element.Element Event
+    }
+
+
+viewSaveOrShareDialog : SaveOrShareDialogState -> ProjectState.FileTreeNode -> PopupAttributes
+viewSaveOrShareDialog saveOrShareDialog projectState =
+    let
+        projectFiles =
+            projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
+
+        projectSummaryElement =
+            [ ("This project contains "
+                ++ (projectFiles |> List.length |> String.fromInt)
+                ++ " files with an aggregate size of "
+                ++ (projectFiles |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
+                ++ " bytes."
+              )
+                |> Element.text
+            ]
+                |> Element.paragraph []
+
+        buttonGenerateUrl =
+            buttonElement
+                { label = "Generate link to project"
+                , onPress = Just (UserInputSave (Just { createDiffIfBaseAvailable = True }))
+                }
+
+        linkElementFromUrl urlToProject =
+            let
+                maybeDependencyUrl =
+                    case
+                        urlToProject
+                            |> Url.fromString
+                            |> Maybe.andThen FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl
+                    of
+                        Nothing ->
+                            Nothing
+
+                        Just (Err _) ->
+                            Nothing
+
+                        Just (Ok projectDescription) ->
+                            case projectDescription of
+                                FrontendWeb.ProjectStateInUrl.LiteralProjectState _ ->
+                                    Nothing
+
+                                FrontendWeb.ProjectStateInUrl.LinkProjectState link ->
+                                    Just link
+
+                                FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState ->
+                                    Just diffProjectState.base
+
+                dependenciesDescriptionLines =
+                    maybeDependencyUrl
+                        |> Maybe.map
+                            (\dependencyUrl ->
+                                [ [ Element.text "The project state model in this link depends on loading related data from the following URL: "
+                                  , linkElementFromUrlAndTextLabel { url = dependencyUrl, labelText = dependencyUrl }
+                                  ]
+                                    |> Element.paragraph []
+                                ]
+                            )
+                        |> Maybe.withDefault []
+
+                linkDescriptionLines =
+                    Element.paragraph [] [ Element.text ("Length of this link URL: " ++ String.fromInt (String.length urlToProject)) ]
+                        :: dependenciesDescriptionLines
+            in
+            [ Element.html (htmlOfferingTextToCopy urlToProject)
+            , linkDescriptionLines
+                |> Element.textColumn [ Element.Font.size ((defaultFontSize * 4) // 5), Element.padding defaultFontSize ]
+            ]
+                |> Element.column
+                    [ Element.spacing defaultFontSize
+                    , Element.width Element.fill
+                    ]
+
+        urlElement =
+            case saveOrShareDialog.urlToProject of
+                Nothing ->
+                    linkElementFromUrl ""
+                        |> Element.el [ elementTransparent True ]
+
+                Just urlToProject ->
+                    linkElementFromUrl urlToProject
+    in
+    { title = "Save or Share Project"
+    , guide = "Get a link that you or others can later use to load the project's current state into the editor again."
+    , contentElement =
+        [ projectSummaryElement
+        , buttonGenerateUrl |> Element.el [ Element.centerX ]
+        , urlElement |> Element.el [ Element.width Element.fill ]
+        ]
+            |> Element.column
+                [ Element.spacing defaultFontSize
+                , Element.width Element.fill
+                ]
+    }
+
+
+updateProjectStateIfOk : (ProjectState.FileTreeNode -> ProjectState.FileTreeNode) -> ProjectStateStructure -> ProjectStateStructure
 updateProjectStateIfOk map projectState =
     mapProjectStateIfOk map projectState
         |> Maybe.map ProjectStateOk
         |> Maybe.withDefault projectState
 
 
-mapProjectStateIfOk : (ProjectState.ProjectState -> a) -> ProjectStateStructure -> Maybe a
+mapProjectStateIfOk : (ProjectState.FileTreeNode -> a) -> ProjectStateStructure -> Maybe a
 mapProjectStateIfOk map projectState =
     case projectState of
         ProjectStateOk okState ->
@@ -1366,7 +1493,7 @@ buttonElement buttonConfig =
 
 saveButton : Element.Element Event
 saveButton =
-    buttonElement { label = "💾 Save", onPress = Just (UserInputSave False) }
+    buttonElement { label = "💾 Save", onPress = Just (UserInputSave Nothing) }
 
 
 loadFromGitOpenDialogButton : Element.Element Event
@@ -1402,7 +1529,7 @@ defaultProjectFileToOpenInEditor =
     [ "src", "Main.elm" ]
 
 
-defaultProject : ProjectState.ProjectState
+defaultProject : ProjectState.FileTreeNode
 defaultProject =
     ProjectState.TreeNode
         [ ( "elm.json"

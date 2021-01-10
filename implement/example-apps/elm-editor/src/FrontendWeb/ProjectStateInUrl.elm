@@ -4,7 +4,8 @@ import ElmFullstackCompilerInterface.GenerateJsonCoders
 import Json.Decode
 import Json.Encode
 import Maybe.Extra
-import ProjectState exposing (ProjectState)
+import ProjectState
+import ProjectState_2021_01
 import SHA256
 import Url
 import Url.Builder
@@ -12,9 +13,10 @@ import Url.Parser exposing ((<?>))
 import Url.Parser.Query
 
 
-type ProjectStateDescriptionFromUrl
-    = LiteralProjectState ProjectState
+type ProjectStateDescriptionInUrl
+    = LiteralProjectState ProjectState.FileTreeNode
     | LinkProjectState String
+    | DiffProjectState ProjectState_2021_01.ProjectState
 
 
 projectStateQueryParameterName : String
@@ -32,9 +34,38 @@ filePathToOpenQueryParameterName =
     "file-path-to-open"
 
 
-setProjectStateInUrl : ProjectState -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
-setProjectStateInUrl projectState optionalParameters url =
+setProjectStateInUrl : ProjectState.FileTreeNode -> Maybe ( String, ProjectState.FileTreeNode ) -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
+setProjectStateInUrl projectState maybeProjectStateBase optionalParameters url =
     let
+        projectStateDescription =
+            case maybeProjectStateBase of
+                Nothing ->
+                    LiteralProjectState projectState
+
+                Just ( projectStateBaseLink, projectStateBaseFileTree ) ->
+                    if projectStateCompositionHash projectState == projectStateCompositionHash projectStateBaseFileTree then
+                        LinkProjectState projectStateBaseLink
+
+                    else
+                        case
+                            ProjectState.searchProjectStateDifference_2021_01
+                                projectState
+                                { baseComposition = projectStateBaseFileTree }
+                        of
+                            Err _ ->
+                                LiteralProjectState projectState
+
+                            Ok diffModel ->
+                                DiffProjectState { base = projectStateBaseLink, differenceFromBase = diffModel }
+
+        projectStateQueryParameter =
+            case projectStateDescription of
+                LinkProjectState link ->
+                    link
+
+                _ ->
+                    Json.Encode.encode 0 (jsonEncodeProjectStateDescription projectStateDescription)
+
         optionalQueryParameters =
             case optionalParameters.filePathToOpen of
                 Nothing ->
@@ -46,7 +77,7 @@ setProjectStateInUrl projectState optionalParameters url =
     Url.Builder.crossOrigin
         (Url.toString { url | path = "", query = Nothing, fragment = Nothing })
         []
-        (Url.Builder.string projectStateQueryParameterName (Json.Encode.encode 0 (jsonEncodeProjectState projectState))
+        (Url.Builder.string projectStateQueryParameterName projectStateQueryParameter
             :: Url.Builder.string projectStateCompositionHashQueryParameterName (projectStateCompositionHash projectState)
             :: optionalQueryParameters
         )
@@ -54,8 +85,8 @@ setProjectStateInUrl projectState optionalParameters url =
         |> Maybe.withDefault { url | host = "Error: Failed to parse URL from String" }
 
 
-projectStateLiteralOrLinkFromUrl : Url.Url -> Maybe (Result Json.Decode.Error ProjectStateDescriptionFromUrl)
-projectStateLiteralOrLinkFromUrl url =
+projectStateDescriptionFromUrl : Url.Url -> Maybe (Result Json.Decode.Error ProjectStateDescriptionInUrl)
+projectStateDescriptionFromUrl url =
     { url | path = "" }
         |> Url.Parser.parse
             (Url.Parser.top <?> Url.Parser.Query.string projectStateQueryParameterName)
@@ -66,7 +97,7 @@ projectStateLiteralOrLinkFromUrl url =
                     Ok (LinkProjectState projectStateString)
 
                 else
-                    Result.map LiteralProjectState (Json.Decode.decodeString jsonDecodeProjectState projectStateString)
+                    Json.Decode.decodeString jsonDecodeProjectStateDescription projectStateString
             )
 
 
@@ -89,22 +120,41 @@ projectStateCompositionHashFromUrl url =
         |> Maybe.Extra.join
 
 
-projectStateCompositionHash : ProjectState -> String
+projectStateCompositionHash : ProjectState.FileTreeNode -> String
 projectStateCompositionHash =
     ProjectState.compositionHashFromFileTreeNode >> SHA256.toHex
 
 
-jsonEncodeProjectState : ProjectState -> Json.Encode.Value
-jsonEncodeProjectState project =
-    Json.Encode.object
-        [ ( "version_2020_12", ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12 project )
-        ]
+jsonEncodeProjectStateDescription : ProjectStateDescriptionInUrl -> Json.Encode.Value
+jsonEncodeProjectStateDescription projectStateDescription =
+    case projectStateDescription of
+        LiteralProjectState literalProjectState ->
+            Json.Encode.object
+                [ ( "version_2020_12"
+                  , ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12 literalProjectState
+                  )
+                ]
+
+        LinkProjectState link ->
+            Json.Encode.string link
+
+        DiffProjectState diffProjectState ->
+            Json.Encode.object
+                [ ( "version_2021_01"
+                  , ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2021_01 diffProjectState
+                  )
+                ]
 
 
-jsonDecodeProjectState : Json.Decode.Decoder ProjectState
-jsonDecodeProjectState =
+jsonDecodeProjectStateDescription : Json.Decode.Decoder ProjectStateDescriptionInUrl
+jsonDecodeProjectStateDescription =
     Json.Decode.oneOf
-        [ Json.Decode.field "version_2020_12" ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
+        [ Json.Decode.field "version_2020_12"
+            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
+            |> Json.Decode.map LiteralProjectState
+        , Json.Decode.field "version_2021_01"
+            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2021_01
+            |> Json.Decode.map DiffProjectState
         ]
 
 
