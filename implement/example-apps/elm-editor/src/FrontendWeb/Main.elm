@@ -57,9 +57,9 @@ type alias State =
     { navigationKey : Navigation.Key
     , url : Url.Url
     , time : Maybe Time.Posix
-    , projectState : ProjectStateStructure
-    , fileInEditor : Maybe ( List String, String )
+    , workspace : WorkspaceStateStructure
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
+    , lastTextReceivedFromEditor : Maybe String
     , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
@@ -68,14 +68,20 @@ type alias State =
     }
 
 
-type ProjectStateStructure
-    = ProjectStateOk ProjectState.FileTreeNode
-    | ProjectStateLoadingFromLink
+type WorkspaceStateStructure
+    = WorkspaceOk WorkingProjectStateStructure
+    | WorkspaceLoadingFromLink
         { projectStateDescription : ProjectState_2021_01.ProjectState
         , filePathToOpen : Maybe (List String)
         , expectedCompositionHash : Maybe String
         }
-    | ProjectStateErr String
+    | WorkspaceErr String
+
+
+type alias WorkingProjectStateStructure =
+    { fileTree : ProjectState.FileTreeNode
+    , editing : { filePathOpenedInEditor : Maybe (List String) }
+    }
 
 
 type alias ElmMakeResultStructure =
@@ -152,17 +158,15 @@ init _ url navigationKey =
             { navigationKey = navigationKey
             , url = url
             , time = Nothing
-            , projectState = ProjectStateOk defaultProject
-            , fileInEditor = Nothing
+            , workspace = WorkspaceOk defaultProject
             , decodeMessageFromMonacoEditorError = Nothing
+            , lastTextReceivedFromEditor = Nothing
             , lastElmMakeRequest = Nothing
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
             , modalDialog = Nothing
             , lastBackendLoadFromGitResult = Nothing
             }
-                |> processEventUserInputOpenFileInEditor defaultProjectFileToOpenInEditor
-                |> Tuple.first
                 |> update (UrlChange url)
     in
     ( model, urlChangeCmd )
@@ -170,28 +174,93 @@ init _ url navigationKey =
 
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
+    let
+        ( stateBeforeConsiderCompile, cmd ) =
+            updateWithoutCmdToUpdateEditor event stateBefore
+
+        textForEditor =
+            stateBeforeConsiderCompile.workspace
+                |> mapWorkspaceIfOk
+                    (\workspace ->
+                        case workspace.editing.filePathOpenedInEditor of
+                            Nothing ->
+                                Nothing
+
+                            Just filePath ->
+                                workspace.fileTree |> ProjectState.getBlobAtPathFromFileTree filePath
+                    )
+                |> Maybe.Extra.join
+                |> Maybe.andThen stringFromFileContent
+                |> Maybe.withDefault "Failed to map file content to string."
+
+        setTextToEditorCmd =
+            if Just textForEditor == state.lastTextReceivedFromEditor then
+                Cmd.none
+
+            else
+                setTextInMonacoEditorCmd textForEditor
+
+        triggerCompile =
+            case filePathOpenedInEditorFromState stateBeforeConsiderCompile of
+                Nothing ->
+                    False
+
+                Just filePathOpenedInEditor ->
+                    Just filePathOpenedInEditor /= filePathOpenedInEditorFromState stateBefore
+
+        ( state, compileCmd ) =
+            if triggerCompile then
+                userInputCompileFileOpenedInEditor stateBeforeConsiderCompile
+
+            else
+                ( stateBeforeConsiderCompile, Cmd.none )
+    in
+    ( state, Cmd.batch [ cmd, setTextToEditorCmd, compileCmd ] )
+
+
+filePathOpenedInEditorFromState : State -> Maybe (List String)
+filePathOpenedInEditorFromState state =
+    case state.workspace of
+        WorkspaceOk workingState ->
+            workingState.editing.filePathOpenedInEditor
+
+        _ ->
+            Nothing
+
+
+updateWithoutCmdToUpdateEditor : Event -> State -> ( State, Cmd Event )
+updateWithoutCmdToUpdateEditor event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
-            processEventUserInputOpenFileInEditor filePath stateBefore
+            ( stateBefore
+                |> updateWorkspaceIfOk
+                    (\workspace ->
+                        let
+                            editing =
+                                workspace.editing
+                        in
+                        { workspace | editing = { editing | filePathOpenedInEditor = Just filePath } }
+                    )
+            , Cmd.none
+            )
 
         UserInputChangeTextInEditor inputText ->
-            case stateBefore.fileInEditor of
-                Nothing ->
-                    ( stateBefore, Cmd.none )
+            ( { stateBefore | lastTextReceivedFromEditor = Just inputText }
+                |> updateWorkspaceIfOk
+                    (\workspace ->
+                        case workspace.editing.filePathOpenedInEditor of
+                            Nothing ->
+                                workspace
 
-                Just ( filePath, _ ) ->
-                    let
-                        fileInEditor =
-                            ( filePath, inputText )
-
-                        projectState =
-                            stateBefore.projectState
-                                |> updateProjectStateIfOk
-                                    (ProjectState.setBlobAtPathInSortedFileTree ( filePath, fileContentFromString inputText ))
-                    in
-                    ( { stateBefore | projectState = projectState, fileInEditor = Just fileInEditor }
-                    , Cmd.none
+                            Just filePath ->
+                                { workspace
+                                    | fileTree =
+                                        workspace.fileTree
+                                            |> ProjectState.setBlobAtPathInSortedFileTree ( filePath, fileContentFromString inputText )
+                                }
                     )
+            , Cmd.none
+            )
 
         MonacoEditorEvent monacoEditorEvent ->
             case
@@ -207,24 +276,18 @@ update event stateBefore =
                             stateBefore |> update (UserInputChangeTextInEditor content)
 
                         FrontendWeb.MonacoEditor.CompletedSetupEvent ->
-                            case stateBefore.fileInEditor of
-                                Nothing ->
-                                    ( stateBefore, Cmd.none )
-
-                                Just fileInEditor ->
-                                    let
-                                        ( state, compileCmd ) =
-                                            userInputCompileFileOpenedInEditor stateBefore
-                                    in
-                                    ( state
-                                    , [ fileInEditor |> Tuple.second |> setTextInMonacoEditorCmd
-                                      , compileCmd
-                                      ]
-                                        |> Cmd.batch
-                                    )
+                            ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
 
                         FrontendWeb.MonacoEditor.EditorActionCloseFileEvent ->
-                            ( { stateBefore | fileInEditor = Nothing }
+                            ( stateBefore
+                                |> updateWorkspaceIfOk
+                                    (\workspace ->
+                                        let
+                                            editing =
+                                                workspace.editing
+                                        in
+                                        { workspace | editing = { editing | filePathOpenedInEditor = Nothing } }
+                                    )
                             , Cmd.none
                             )
 
@@ -244,35 +307,29 @@ update event stateBefore =
             userInputCompileFileOpenedInEditor stateBefore
 
         BackendElmFormatResponseEvent formatResponseEvent ->
-            if Just formatResponseEvent.filePath /= Maybe.map Tuple.first stateBefore.fileInEditor then
-                ( stateBefore, Cmd.none )
+            ( { stateBefore | elmFormatResult = Just formatResponseEvent.result }
+                |> updateWorkspaceIfOk
+                    (\workspace ->
+                        if Just formatResponseEvent.filePath /= workspace.editing.filePathOpenedInEditor then
+                            workspace
 
-            else
-                case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
-                    Nothing ->
-                        ( stateBefore, Cmd.none )
+                        else
+                            case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
+                                Nothing ->
+                                    workspace
 
-                    Just formattedText ->
-                        let
-                            projectState =
-                                stateBefore.projectState
-                                    |> updateProjectStateIfOk
-                                        (ProjectState.setBlobAtPathInSortedFileTree
-                                            ( formatResponseEvent.filePath
-                                            , fileContentFromString formattedText
-                                            )
-                                        )
-
-                            fileInEditor =
-                                ( formatResponseEvent.filePath, formattedText )
-                        in
-                        ( { stateBefore
-                            | elmFormatResult = Just formatResponseEvent.result
-                            , projectState = projectState
-                            , fileInEditor = Just fileInEditor
-                          }
-                        , setTextInMonacoEditorCmd (Tuple.second fileInEditor)
-                        )
+                                Just formattedText ->
+                                    { workspace
+                                        | fileTree =
+                                            workspace.fileTree
+                                                |> ProjectState.setBlobAtPathInSortedFileTree
+                                                    ( formatResponseEvent.filePath
+                                                    , fileContentFromString formattedText
+                                                    )
+                                    }
+                    )
+            , Cmd.none
+            )
 
         BackendElmMakeResponseEvent elmMakeRequest httpResponse ->
             let
@@ -306,67 +363,7 @@ update event stateBefore =
             )
 
         UrlChange url ->
-            let
-                projectStateExpectedCompositionHash =
-                    FrontendWeb.ProjectStateInUrl.projectStateCompositionHashFromUrl url
-
-                filePathToOpen =
-                    FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
-                        |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
-
-                projectWithMatchingStateHashAlreadyLoaded =
-                    case stateBefore.projectState of
-                        ProjectStateOk projectState ->
-                            Just (FrontendWeb.ProjectStateInUrl.projectStateCompositionHash projectState)
-                                == projectStateExpectedCompositionHash
-
-                        _ ->
-                            False
-
-                continueWithDiffProjectState projectStateDescription =
-                    if projectWithMatchingStateHashAlreadyLoaded then
-                        ( stateBefore, Cmd.none )
-
-                    else
-                        ( { stateBefore
-                            | projectState =
-                                ProjectStateLoadingFromLink
-                                    { projectStateDescription = projectStateDescription
-                                    , filePathToOpen = filePathToOpen
-                                    , expectedCompositionHash = projectStateExpectedCompositionHash
-                                    }
-                          }
-                        , loadFromGitCmd projectStateDescription.base
-                        )
-            in
-            case FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl url of
-                Nothing ->
-                    ( stateBefore, Cmd.none )
-
-                Just (Err fromUrlError) ->
-                    ( { stateBefore
-                        | projectState = ProjectStateErr ("Failed to decode project state from URL: " ++ Json.Decode.errorToString fromUrlError)
-                      }
-                    , Cmd.none
-                    )
-
-                Just (Ok (FrontendWeb.ProjectStateInUrl.LiteralProjectState projectState)) ->
-                    updateForLoadedProjectState
-                        { expectedCompositionHash = projectStateExpectedCompositionHash
-                        , filePathToOpen = filePathToOpen
-                        }
-                        projectState
-                        ProjectState_2021_01.noDifference
-                        stateBefore
-
-                Just (Ok (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState)) ->
-                    continueWithDiffProjectState
-                        { base = linkToProjectState
-                        , differenceFromBase = ProjectState_2021_01.noDifference
-                        }
-
-                Just (Ok (FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState)) ->
-                    continueWithDiffProjectState diffProjectState
+            processEventUrlChanged url stateBefore
 
         UrlRequest urlRequest ->
             case urlRequest of
@@ -377,8 +374,8 @@ update event stateBefore =
                     ( stateBefore, Navigation.load url )
 
         UserInputSave maybeGenerateLink ->
-            case stateBefore.projectState of
-                ProjectStateOk projectStateOk ->
+            case stateBefore.workspace of
+                WorkspaceOk workingState ->
                     let
                         dialogBefore =
                             (case stateBefore.modalDialog of
@@ -420,9 +417,9 @@ update event stateBefore =
                                         url =
                                             stateBefore.url
                                                 |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl
-                                                    projectStateOk
+                                                    workingState.fileTree
                                                     baseToUse
-                                                    { filePathToOpen = stateBefore.fileInEditor |> Maybe.map Tuple.first }
+                                                    { filePathToOpen = workingState.editing.filePathOpenedInEditor }
                                                 |> Url.toString
                                     in
                                     ( { dialogBefore | urlToProject = Just url }
@@ -498,7 +495,11 @@ update event stateBefore =
                         Just (Ok loadOk) ->
                             ( { stateBefore
                                 | modalDialog = Nothing
-                                , projectState = ProjectStateOk (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                                , workspace =
+                                    WorkspaceOk
+                                        { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
+                                        , editing = { filePathOpenedInEditor = Nothing }
+                                        }
                               }
                             , Cmd.none
                             )
@@ -519,21 +520,69 @@ update event stateBefore =
             ( stateBefore, Cmd.none )
 
 
-processEventUserInputOpenFileInEditor : List String -> State -> ( State, Cmd Event )
-processEventUserInputOpenFileInEditor filePath stateBefore =
-    case
-        stateBefore.projectState
-            |> mapProjectStateIfOk (ProjectState.getBlobAtPathFromFileTree filePath)
-            |> Maybe.Extra.join
-            |> Maybe.andThen stringFromFileContent
-    of
+processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
+processEventUrlChanged url stateBefore =
+    let
+        projectStateExpectedCompositionHash =
+            FrontendWeb.ProjectStateInUrl.projectStateCompositionHashFromUrl url
+
+        filePathToOpen =
+            FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
+                |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
+
+        projectWithMatchingStateHashAlreadyLoaded =
+            case stateBefore.workspace of
+                WorkspaceOk workingState ->
+                    Just (FrontendWeb.ProjectStateInUrl.projectStateCompositionHash workingState.fileTree)
+                        == projectStateExpectedCompositionHash
+
+                _ ->
+                    False
+
+        continueWithDiffProjectState projectStateDescription =
+            if projectWithMatchingStateHashAlreadyLoaded then
+                ( stateBefore, Cmd.none )
+
+            else
+                ( { stateBefore
+                    | workspace =
+                        WorkspaceLoadingFromLink
+                            { projectStateDescription = projectStateDescription
+                            , filePathToOpen = filePathToOpen
+                            , expectedCompositionHash = projectStateExpectedCompositionHash
+                            }
+                  }
+                , loadFromGitCmd projectStateDescription.base
+                )
+    in
+    case FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl url of
         Nothing ->
             ( stateBefore, Cmd.none )
 
-        Just fileContentString ->
-            ( { stateBefore | fileInEditor = Just ( filePath, fileContentString ) }
-            , setTextInMonacoEditorCmd fileContentString
+        Just (Err fromUrlError) ->
+            ( { stateBefore
+                | workspace = WorkspaceErr ("Failed to decode project state from URL: " ++ Json.Decode.errorToString fromUrlError)
+              }
+            , Cmd.none
             )
+
+        Just (Ok (FrontendWeb.ProjectStateInUrl.LiteralProjectState projectState)) ->
+            updateForLoadedProjectState
+                { expectedCompositionHash = projectStateExpectedCompositionHash
+                , filePathToOpen = filePathToOpen
+                }
+                projectState
+                ProjectState_2021_01.noDifference
+                stateBefore
+
+        Just (Ok (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState)) ->
+            continueWithDiffProjectState
+                { base = linkToProjectState
+                , differenceFromBase = ProjectState_2021_01.noDifference
+                }
+
+        Just (Ok (FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState)) ->
+            continueWithDiffProjectState diffProjectState
 
 
 processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> ( State, Cmd Event )
@@ -551,8 +600,8 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
             ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }, Cmd.none )
 
         _ ->
-            case stateBefore.projectState of
-                ProjectStateLoadingFromLink projectStateLoadingFromLink ->
+            case stateBefore.workspace of
+                WorkspaceLoadingFromLink projectStateLoadingFromLink ->
                     if urlIntoGitRepository == projectStateLoadingFromLink.projectStateDescription.base then
                         case result of
                             Ok loadOk ->
@@ -566,7 +615,7 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
 
                             Err loadingError ->
                                 ( { stateBefore
-                                    | projectState = ProjectStateErr (describeErrorLoadingContentsFromGit loadingError)
+                                    | workspace = WorkspaceErr (describeErrorLoadingContentsFromGit loadingError)
                                   }
                                 , Cmd.none
                                 )
@@ -585,7 +634,7 @@ updateForLoadedProjectState :
     -> State
     -> ( State, Cmd Event )
 updateForLoadedProjectState config loadedBaseProjectState projectStateDiff stateBefore =
-    (case ProjectState.applyProjectStateDifference_2021_01 projectStateDiff loadedBaseProjectState of
+    ( (case ProjectState.applyProjectStateDifference_2021_01 projectStateDiff loadedBaseProjectState of
         Err error ->
             Err ("Failed to apply difference model to compute project state: " ++ error)
 
@@ -595,17 +644,11 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
                     FrontendWeb.ProjectStateInUrl.projectStateCompositionHash composedProjectState
 
                 continueIfHashOk =
-                    let
-                        updateFunction =
-                            case config.filePathToOpen of
-                                Just filePathToOpen ->
-                                    update (UserInputOpenFileInEditor filePathToOpen)
-
-                                Nothing ->
-                                    \state -> ( state, Cmd.none )
-                    in
-                    { stateBefore | projectState = ProjectStateOk composedProjectState }
-                        |> updateFunction
+                    { stateBefore
+                        | workspace =
+                            WorkspaceOk
+                                { fileTree = composedProjectState, editing = { filePathOpenedInEditor = config.filePathToOpen } }
+                    }
                         |> Ok
             in
             case config.expectedCompositionHash of
@@ -623,9 +666,11 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
                                 ++ " instead of the expected hash "
                                 ++ expectedCompositionHash
                             )
-    )
+      )
         |> Result.Extra.extract
-            (\error -> ( { stateBefore | projectState = ProjectStateErr error }, Cmd.none ))
+            (\error -> { stateBefore | workspace = WorkspaceErr error })
+    , Cmd.none
+    )
 
 
 fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> ProjectState.FileTreeNode
@@ -643,26 +688,40 @@ fileTreeNodeFromListFileWithPath =
 
 elmFormatCmd : State -> Cmd Event
 elmFormatCmd state =
-    case state.fileInEditor of
-        Nothing ->
-            Cmd.none
+    state.workspace
+        |> mapWorkspaceIfOk
+            (\workspace ->
+                case workspace.editing.filePathOpenedInEditor of
+                    Nothing ->
+                        Cmd.none
 
-        Just ( filePath, fileContent ) ->
-            let
-                request =
-                    fileContent |> FrontendBackendInterface.FormatElmModuleTextRequest
+                    Just filePath ->
+                        case
+                            workspace.fileTree
+                                |> ProjectState.getBlobAtPathFromFileTree filePath
+                                |> Maybe.andThen stringFromFileContent
+                        of
+                            Nothing ->
+                                Cmd.none
 
-                jsonDecoder backendResponse =
-                    case backendResponse of
-                        FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
-                            Json.Decode.succeed formatResponse
+                            Just fileContent ->
+                                let
+                                    request =
+                                        fileContent |> FrontendBackendInterface.FormatElmModuleTextRequest
 
-                        _ ->
-                            Json.Decode.fail "Unexpected response"
-            in
-            requestToApiCmd request
-                jsonDecoder
-                (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
+                                    jsonDecoder backendResponse =
+                                        case backendResponse of
+                                            FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
+                                                Json.Decode.succeed formatResponse
+
+                                            _ ->
+                                                Json.Decode.fail "Unexpected response"
+                                in
+                                requestToApiCmd request
+                                    jsonDecoder
+                                    (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
+            )
+        |> Maybe.withDefault Cmd.none
 
 
 loadFromGitCmd : String -> Cmd Event
@@ -715,14 +774,14 @@ userInputCompileFileOpenedInEditor stateBefore =
 
 elmMakeRequestForFileOpenedInEditor : State -> Maybe ElmMakeRequestStructure
 elmMakeRequestForFileOpenedInEditor state =
-    case state.fileInEditor of
-        Nothing ->
-            Nothing
+    state.workspace
+        |> mapWorkspaceIfOk
+            (\workspace ->
+                case workspace.editing.filePathOpenedInEditor of
+                    Nothing ->
+                        Nothing
 
-        Just ( filePath, _ ) ->
-            state.projectState
-                |> mapProjectStateIfOk
-                    (\projectState ->
+                    Just filePath ->
                         let
                             base64FromBytes : Bytes.Bytes -> String
                             base64FromBytes =
@@ -732,21 +791,23 @@ elmMakeRequestForFileOpenedInEditor state =
                             entryPointFilePath =
                                 filePath
                         in
-                        { requestToBackend =
-                            { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
-                            , files =
-                                projectState
-                                    |> ProjectState.flatListOfBlobsFromFileTreeNode
-                                    |> List.map
-                                        (\( path, content ) ->
-                                            { path = path
-                                            , contentBase64 = content |> base64FromBytes
-                                            }
-                                        )
+                        Just
+                            { requestToBackend =
+                                { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
+                                , files =
+                                    workspace.fileTree
+                                        |> ProjectState.flatListOfBlobsFromFileTreeNode
+                                        |> List.map
+                                            (\( path, content ) ->
+                                                { path = path
+                                                , contentBase64 = content |> base64FromBytes
+                                                }
+                                            )
+                                }
+                            , entryPointFilePath = entryPointFilePath
                             }
-                        , entryPointFilePath = entryPointFilePath
-                        }
-                    )
+            )
+        >> Maybe.Extra.join
 
 
 requestToApiCmd :
@@ -847,8 +908,8 @@ view state =
                     ]
 
         mainContent =
-            case state.projectState of
-                ProjectStateLoadingFromLink loadingProjectStateFromLink ->
+            case state.workspace of
+                WorkspaceLoadingFromLink loadingProjectStateFromLink ->
                     let
                         loadResult =
                             state.lastBackendLoadFromGitResult
@@ -885,12 +946,12 @@ view state =
                         , expectedCompositionHash = expectedCompositionHash
                         }
 
-                ProjectStateOk projectState ->
-                    case state.fileInEditor of
+                WorkspaceOk workingState ->
+                    case workingState.editing.filePathOpenedInEditor of
                         Nothing ->
                             let
                                 projectFiles =
-                                    projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
+                                    workingState.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode
 
                                 filesToOfferToOpenInEditor =
                                     projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
@@ -947,10 +1008,10 @@ view state =
                                             ]
                                 }
 
-                        Just fileInEditor ->
-                            viewWhenEditorOpen fileInEditor state
+                        Just filePathOpenedInEditor ->
+                            viewWhenEditorOpen filePathOpenedInEditor state
 
-                ProjectStateErr projectStateError ->
+                WorkspaceErr projectStateError ->
                     mainContentFromNavigationButtonElementsAndContent
                         { buttonElements = [ loadFromGitOpenDialogButton ]
                         , contentElement =
@@ -972,9 +1033,9 @@ view state =
                     []
 
                 Just (SaveOrShareDialog saveOrShareDialog) ->
-                    case state.projectState of
-                        ProjectStateOk projectState ->
-                            viewSaveOrShareDialog saveOrShareDialog projectState
+                    case state.workspace of
+                        WorkspaceOk workingState ->
+                            viewSaveOrShareDialog saveOrShareDialog workingState.fileTree
                                 |> popupAttributesFromProperties
 
                         _ ->
@@ -1173,18 +1234,19 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
     }
 
 
-updateProjectStateIfOk : (ProjectState.FileTreeNode -> ProjectState.FileTreeNode) -> ProjectStateStructure -> ProjectStateStructure
-updateProjectStateIfOk map projectState =
-    mapProjectStateIfOk map projectState
-        |> Maybe.map ProjectStateOk
-        |> Maybe.withDefault projectState
+updateWorkspaceIfOk : (WorkingProjectStateStructure -> WorkingProjectStateStructure) -> State -> State
+updateWorkspaceIfOk map stateBefore =
+    stateBefore.workspace
+        |> mapWorkspaceIfOk map
+        |> Maybe.map (\workspace -> { stateBefore | workspace = WorkspaceOk workspace })
+        |> Maybe.withDefault stateBefore
 
 
-mapProjectStateIfOk : (ProjectState.FileTreeNode -> a) -> ProjectStateStructure -> Maybe a
-mapProjectStateIfOk map projectState =
+mapWorkspaceIfOk : (WorkingProjectStateStructure -> a) -> WorkspaceStateStructure -> Maybe a
+mapWorkspaceIfOk map projectState =
     case projectState of
-        ProjectStateOk okState ->
-            Just (map okState)
+        WorkspaceOk workspace ->
+            Just (map workspace)
 
         _ ->
             Nothing
@@ -1341,14 +1403,14 @@ popupAttributesFromProperties { title, guide, contentElement } =
     ]
 
 
-viewWhenEditorOpen : ( List String, String ) -> State -> Element.Element Event
-viewWhenEditorOpen ( fileOpenedInEditorPath, _ ) state =
+viewWhenEditorOpen : List String -> State -> Element.Element Event
+viewWhenEditorOpen filePathOpenedInEditor state =
     let
         elmMakeResultForFileOpenedInEditor =
             state.elmMakeResult
                 |> Maybe.andThen
                     (\elmMakeRequestAndResult ->
-                        if (elmMakeRequestAndResult |> Tuple.first |> .entryPointFilePath) == fileOpenedInEditorPath then
+                        if (elmMakeRequestAndResult |> Tuple.first |> .entryPointFilePath) == filePathOpenedInEditor then
                             Just elmMakeRequestAndResult
 
                         else
@@ -1524,25 +1586,23 @@ monacoEditorElement _ =
         |> Element.html
 
 
-defaultProjectFileToOpenInEditor : List String
-defaultProjectFileToOpenInEditor =
-    [ "src", "Main.elm" ]
-
-
-defaultProject : ProjectState.FileTreeNode
+defaultProject : WorkingProjectStateStructure
 defaultProject =
-    ProjectState.TreeNode
-        [ ( "elm.json"
-          , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
-          )
-        , ( "src"
-          , ProjectState.TreeNode
-                [ ( "Main.elm"
-                  , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
-                  )
-                ]
-          )
-        ]
+    { fileTree =
+        ProjectState.TreeNode
+            [ ( "elm.json"
+              , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
+              )
+            , ( "src"
+              , ProjectState.TreeNode
+                    [ ( "Main.elm"
+                      , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
+                      )
+                    ]
+              )
+            ]
+    , editing = { filePathOpenedInEditor = Just [ "src", "Main.elm" ] }
+    }
 
 
 stringFromFileContent : Bytes.Bytes -> Maybe String

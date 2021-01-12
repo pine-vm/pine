@@ -13,7 +13,7 @@ import Test
 
 demoProject : String -> ProjectState.FileTreeNode
 demoProject elmModuleText =
-    FrontendWeb.Main.defaultProject
+    FrontendWeb.Main.defaultProject.fileTree
         |> ProjectState.setBlobAtPathInSortedFileTree
             ( [ "src", "TestModule.elm" ]
             , elmModuleText |> Bytes.Encode.string |> Bytes.Encode.encode
