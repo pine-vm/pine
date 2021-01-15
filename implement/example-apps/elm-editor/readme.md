@@ -1,6 +1,6 @@
 # Elm Editor
 
-The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps.
+The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps.
 
 ![working on a game using the Elm Editor](./../../../guide/image/2020-12-31-elm-editor-with-project-freemake.png)
 

@@ -45,14 +45,14 @@ As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), 
 
 ### Rich Chat Room
 
-The [rich chat room example app](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
-For a detailed description of this app, see the readme file at https://github.com/elm-fullstack/elm-fullstack/blob/master/implement/example-apps/rich-chat-room/readme.md
+The [rich chat room example app](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
+For a detailed description of this app, see the readme file at https://github.com/elm-fullstack/elm-fullstack/blob/main/implement/example-apps/rich-chat-room/readme.md
 
 ### Elm Editor
 
-The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps. It also provides tooling specifically for web frontend-apps to compile and view your app inline.
+The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps. It also provides tooling specifically for web frontend-apps to compile and view your app inline.
 
-<a href="https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor/readme.md">
+<a href="https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/readme.md">
 <img src="./guide/image/2020-12-31-elm-editor-with-project-freemake.png" width="500" />
 </a>
 
@@ -60,4 +60,4 @@ The Elm Editor frontend integrates the [Monaco Editor](https://microsoft.github.
 
 To see the editor in action, you can test the public instance at https://editor.elm-fullstack.org
 
-To read more about the Elm Editor, see https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps/elm-editor/readme.md
+To learn more about the Elm Editor, see https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/readme.md

@@ -49,7 +49,7 @@ When this server has completed starting, we can see the deployed app at http://l
 
 ## App Code Structure Conventions
 
-This section covers the conventions for structuring the app code so that we can deploy it to an Elm-fullstack process. The [example apps](https://github.com/elm-fullstack/elm-fullstack/tree/master/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
+This section covers the conventions for structuring the app code so that we can deploy it to an Elm-fullstack process. The [example apps](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
 
 ### `Backend.Main` Elm Module
 
