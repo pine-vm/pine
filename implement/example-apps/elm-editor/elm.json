@@ -21,6 +21,7 @@
             "elm-community/list-extra": "8.2.4",
             "elm-community/maybe-extra": "5.2.0",
             "elm-community/result-extra": "2.4.0",
+            "folkertdev/elm-flate": "2.0.4",
             "folkertdev/elm-sha2": "1.0.0",
             "jinjor/elm-diff": "1.0.6",
             "mdgriffith/elm-ui": "1.1.8"

@@ -561,7 +561,7 @@ processEventUrlChanged url stateBefore =
 
         Just (Err fromUrlError) ->
             ( { stateBefore
-                | workspace = WorkspaceErr ("Failed to decode project state from URL: " ++ Json.Decode.errorToString fromUrlError)
+                | workspace = WorkspaceErr ("Failed to decode project state from URL: " ++ fromUrlError)
               }
             , Cmd.none
             )
