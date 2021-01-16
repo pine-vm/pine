@@ -41,3 +41,5 @@ The corresponding URL into the editor looks like this:
 https://elm-editor.com/?project-state=https%3A%2F%2Fgithub.com%2Fonlinegamemaker%2Fmaking-online-games%2Ftree%2F7b0fe6018e6f464bbee193f063d26c80cc6e6653%2Fgames-program-codes%2Fsimple-snake
 
 When a user started with a state from a git tree and made some changes, generating a link will encode the project state as the difference relative to that git tree. This encoding often leads to much smaller URLs. Like in the case of a pure git URL, the editor loads the base from the third-party service. When the loading from git is complete, the app applies the changes encoded with the URL on top to compute the final file tree.
+
+![Saving a project state based on difference to git tree](./../../../guide/image/2021-01-16-elm-editor-save-project-diff-based.png)
