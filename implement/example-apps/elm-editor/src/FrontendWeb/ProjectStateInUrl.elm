@@ -24,9 +24,9 @@ projectStateQueryParameterName =
     "project-state"
 
 
-projectStateCompositionHashQueryParameterName : String
-projectStateCompositionHashQueryParameterName =
-    "project-state-composition-hash"
+projectStateHashQueryParameterName : String
+projectStateHashQueryParameterName =
+    "project-state-hash"
 
 
 filePathToOpenQueryParameterName : String
@@ -78,7 +78,7 @@ setProjectStateInUrl projectState maybeProjectStateBase optionalParameters url =
         (Url.toString { url | path = "", query = Nothing, fragment = Nothing })
         []
         (Url.Builder.string projectStateQueryParameterName projectStateQueryParameter
-            :: Url.Builder.string projectStateCompositionHashQueryParameterName (projectStateCompositionHash projectState)
+            :: Url.Builder.string projectStateHashQueryParameterName (projectStateCompositionHash projectState)
             :: optionalQueryParameters
         )
         |> Url.fromString
@@ -113,10 +113,10 @@ filePathToOpenFromUrl url =
         |> Maybe.Extra.join
 
 
-projectStateCompositionHashFromUrl : Url.Url -> Maybe String
-projectStateCompositionHashFromUrl url =
+projectStateHashFromUrl : Url.Url -> Maybe String
+projectStateHashFromUrl url =
     { url | path = "" }
-        |> Url.Parser.parse (Url.Parser.top <?> Url.Parser.Query.string projectStateCompositionHashQueryParameterName)
+        |> Url.Parser.parse (Url.Parser.top <?> Url.Parser.Query.string projectStateHashQueryParameterName)
         |> Maybe.Extra.join
 
 

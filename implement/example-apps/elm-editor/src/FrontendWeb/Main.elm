@@ -524,7 +524,7 @@ processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
 processEventUrlChanged url stateBefore =
     let
         projectStateExpectedCompositionHash =
-            FrontendWeb.ProjectStateInUrl.projectStateCompositionHashFromUrl url
+            FrontendWeb.ProjectStateInUrl.projectStateHashFromUrl url
 
         filePathToOpen =
             FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
