@@ -4,8 +4,8 @@ In this guide, I use the elm-fullstack command-line interface (CLI) program. You
 
 Here are direct links to the downloads, containing the `elm-fullstack` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-12-21/elm-fullstack-bin-984302436f7c64aef84fb6df7cd6b7e48e556a45-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2020-12-21/elm-fullstack-bin-984302436f7c64aef84fb6df7cd6b7e48e556a45-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-01-16/elm-fullstack-bin-c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-01-16/elm-fullstack-bin-c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33-linux-x64.zip
 
 To register the elm-fullstack executable on your systems PATH environment variable, run the `elm-fullstack  install-command` command.
 
@@ -13,12 +13,12 @@ To register the elm-fullstack executable on your systems PATH environment variab
 
 To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app
+elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -26,7 +26,7 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition c96b35cb6fefb163c1f4632d201f58ab0007a36105e71e62fe3e557cff765013 from 'https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app'.
+Loaded source composition 0a748dfed56d1f88c51e604d35dd8fdde95bc4accfb9557e11359c60316f9413 from 'https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -61,7 +61,7 @@ The [main Elm module of the backend](/implement/example-apps/docker-image-defaul
 As we can see in the examples, the `interfaceToHost_processEvent` takes care of deserializing the event coming from the host (the `String` parameter) and serializing the response for this specific event to the host (the `String` in the returned tuple). It delegates the rest of the processing to a function working with the types resulting from this (de)serialization:
 
 ```Elm
-processEvent : InterfaceToHost.ProcessEvent -> State -> ( State, List InterfaceToHost.ProcessRequest )
+processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
 ```
 
 Analogous to the update function in a front-end Elm app, this function returns the new state of the back-end app as the first element in the tuple.
@@ -100,7 +100,7 @@ elm_make__base64____src_FrontendWeb_Main_elm =
     "The Elm-fullstack compiler replaces this value."
 ```
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L48) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L50) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -146,7 +146,7 @@ This module provides access to the app source code files.
 
 By adding a name to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
 ```Elm
 file____readme_md : Bytes.Bytes
@@ -185,7 +185,7 @@ migrate backendState =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-fullstack.json`
 
@@ -246,7 +246,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/450b351de8d68c798ca6062cc6f1f01ad587af9b/implement/example-apps/docker-image-default-app  --init-elm-app-state
+elm-fullstack  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app  --init-elm-app-state
 ```
 
 The `--init-elm-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
