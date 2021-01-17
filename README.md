@@ -56,8 +56,6 @@ The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/main/implem
 <img src="./guide/image/2020-12-31-elm-editor-with-project-freemake.png" width="500" />
 </a>
 
-The Elm Editor frontend integrates the [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide functionality around code editing and features like syntax highlighting.
+To see the Elm Editor in action, test the public instance at https://elm-editor.com
 
-To see the editor in action, you can test the public instance at https://elm-editor.com
-
-To learn more about the Elm Editor, see https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/readme.md
+To learn more about how it works, see https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/readme.md
