@@ -339,18 +339,14 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                             (\elmMakeResponse ->
                                 let
                                     compiledHtmlDocument =
-                                        case
-                                            elmMakeResponse.files
-                                                |> List.filter (.path >> List.reverse >> List.head >> (==) (Just elmMakeOutputFileName))
-                                                |> List.head
-                                        of
+                                        case elmMakeResponse.outputFileContentBase64 of
                                             Nothing ->
                                                 Nothing
 
-                                            Just newFile ->
-                                                newFile.contentBase64
+                                            Just outputFileContentBase64 ->
+                                                outputFileContentBase64
                                                     |> Common.decodeBase64ToString
-                                                    |> Maybe.withDefault ("Error decoding base64: " ++ newFile.contentBase64)
+                                                    |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
                                                     |> Just
                                 in
                                 { response = elmMakeResponse
@@ -793,7 +789,7 @@ elmMakeRequestForFileOpenedInEditor state =
                         in
                         Just
                             { requestToBackend =
-                                { commandLineArguments = "make " ++ (entryPointFilePath |> String.join "/") ++ " --output=" ++ elmMakeOutputFileName
+                                { entryPointFilePath = entryPointFilePath
                                 , files =
                                     workspace.fileTree
                                         |> ProjectState.flatListOfBlobsFromFileTreeNode
@@ -828,11 +824,6 @@ requestToApiCmd request jsonDecoderSpecialization eventConstructor =
                 (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
         , expect = Http.expectJson (\response -> eventConstructor response) jsonDecoder
         }
-
-
-elmMakeOutputFileName : String
-elmMakeOutputFileName =
-    "elm-make-output.html"
 
 
 priorityToOfferToOpenFileInEditor : ( List String, String ) -> Maybe Int

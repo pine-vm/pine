@@ -13,6 +13,7 @@ import Common
 import Dict
 import ElmFullstackCompilerInterface.ElmMake
 import ElmFullstackCompilerInterface.SourceFiles
+import Flate
 import Url
 
 
@@ -255,15 +256,25 @@ processEventTaskComplete taskComplete stateBefore =
 
                                         Nothing ->
                                             let
-                                                headersToAdd =
-                                                    []
+                                                ( headersToAdd, bodyAsBase64 ) =
+                                                    case requestToVolatileHostComplete.returnValueToString of
+                                                        Nothing ->
+                                                            ( [], Nothing )
+
+                                                        Just returnValueToString ->
+                                                            let
+                                                                deflateEncodedBody =
+                                                                    returnValueToString
+                                                                        |> Bytes.Encode.string
+                                                                        |> Bytes.Encode.encode
+                                                                        |> Flate.deflateZlib
+                                                            in
+                                                            ( [ { name = "Content-Encoding", values = [ "deflate" ] } ]
+                                                            , deflateEncodedBody |> Base64.fromBytes
+                                                            )
                                             in
                                             { statusCode = 200
-                                            , bodyAsBase64 =
-                                                bodyFromString
-                                                    (requestToVolatileHostComplete.returnValueToString
-                                                        |> Maybe.withDefault ""
-                                                    )
+                                            , bodyAsBase64 = bodyAsBase64
                                             , headersToAdd = headersToAdd
                                             }
                     in

@@ -91,7 +91,7 @@ public class ElmMakeRequestStructure
 {
     public IReadOnlyList<FileWithPath> files;
 
-    public string commandLineArguments;
+    public IReadOnlyList<string> entryPointFilePath;
 }
 
 public class FormatElmModuleTextResponseStructure
@@ -112,7 +112,7 @@ public class ElmMakeResponseStructure
 {
     public ProcessOutput processOutput;
 
-    public IReadOnlyList<FileWithPath> files;
+    public Maybe<string> outputFileContentBase64;
 }
 
 public struct ProcessOutput
@@ -278,10 +278,16 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
         .Select(elmCodeFile => (MakePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value))
         .ToImmutableList();
 
+    var entryPointFilePath = MakePlatformSpecificPath(elmMakeRequest.entryPointFilePath);
+
+    var elmMakeOutputFileName = "elm-make-output.html";
+
+    var commandLineArguments = "make " + entryPointFilePath + " --output=" + elmMakeOutputFileName;
+
     var commandResults = Kalmit.ExecutableFile.ExecuteFileWithArguments(
         platformSpecificFiles,
         GetElmExecutableFile,
-        elmMakeRequest.commandLineArguments,
+        commandLineArguments,
         new Dictionary<string, string>()
         {
         //  Avoid elm make failing on `getAppUserDataDirectory`.
@@ -325,6 +331,13 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
         })
         .ToImmutableList();
 
+    var outputFile =
+        newFiles
+        .Where(file => file.path.LastOrDefault() == elmMakeOutputFileName)
+        .FirstOrDefault();
+
+    var outputFileContentBase64 = outputFile?.contentBase64;
+
     var processOutput = new ProcessOutput
     {
         standardOutput = commandResults.processOutput.StandardOutput,
@@ -335,13 +348,13 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var responseStructure = new ElmMakeResponseStructure
     {
         processOutput = processOutput,
-        files = newFiles,
+        outputFileContentBase64 = Maybe<string>.NothingFromNull(outputFileContentBase64),
     };
 
     return responseStructure;
 }
 
-string MakePlatformSpecificPath(IImmutableList<string> path) =>
+string MakePlatformSpecificPath(IReadOnlyList<string> path) =>
     string.Join(System.IO.Path.DirectorySeparatorChar.ToString(), path);
 
 static public byte[] GetElmExecutableFile =>

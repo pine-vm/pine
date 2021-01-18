@@ -15,14 +15,14 @@ type ResponseStructure
 
 
 type alias ElmMakeRequestStructure =
-    { commandLineArguments : String
-    , files : List FileWithPath
+    { files : List FileWithPath
+    , entryPointFilePath : List String
     }
 
 
 type alias ElmMakeResponseStructure =
     { processOutput : ProcessOutputStructure
-    , files : List FileWithPath
+    , outputFileContentBase64 : Maybe String
     }
 
 
