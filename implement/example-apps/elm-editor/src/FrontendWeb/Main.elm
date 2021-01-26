@@ -735,7 +735,7 @@ loadFromGitCmd urlIntoGitRepository =
                     Json.Decode.fail "Unexpected response: Not a LoadCompositionResponse"
     in
     requestToApiCmd
-        (FrontendBackendInterface.LoadCompositionRequest urlIntoGitRepository)
+        (FrontendBackendInterface.LoadCompositionRequest (String.trim urlIntoGitRepository))
         backendResponseJsonDecoder
         (BackendLoadFromGitResultEvent urlIntoGitRepository)
 
