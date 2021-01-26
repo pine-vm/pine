@@ -30,7 +30,7 @@ The `elm-fullstack` executable file contains all the functionality to build apps
 If you prefer deploying using docker, use the `elmfullstack/elm-fullstack` image from [docker hub](https://hub.docker.com/r/elmfullstack/elm-fullstack/tags). The tags are aligned with the version IDs in the CLI executable file.
 
 ```cmd
-docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=secret" elmfullstack/elm-fullstack
+docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test" elmfullstack/elm-fullstack
 ```
 
 To learn more about these artifacts' interfaces, see [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).

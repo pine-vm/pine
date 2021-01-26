@@ -202,7 +202,7 @@ On startup, the server restores the state of the process from the given store lo
 Here is a complete command to run a server that maintains the persistence of the Elm-fullstack process:
 
 ```cmd
-elm-fullstack  run-server  --process-store-directory-path=./process-store  --admin-password=secret  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
+elm-fullstack  run-server  --process-store-directory-path=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
 When running this command, you will get an output like this:
@@ -228,7 +228,7 @@ Started the public app at 'http://*:5000'
 
 This server continues running until you shut it down. It will output additional log messages for various events, for example, HTTP requests.
 
-When you navigate to http://localhost:4000/ using a web browser, you find a prompt to authenticate. You can use the username `root` and the password `secret` that we specified in the command above.
+When you navigate to http://localhost:4000/ using a web browser, you find a prompt to authenticate. You can use the password `test` that we specified in the command above. You don't need a username in that prompt.
 
 When you log in at http://localhost:4000/, you will get this message:
 
@@ -272,7 +272,7 @@ If you do not use the `--admin-password` option with the `run-server` command, t
 Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
 
 ```cmd
-docker run -p 80:80 -p 4000:4000 --env "APPSETTING_adminPassword=secret" elmfullstack/elm-fullstack
+docker run -p 80:80 -p 4000:4000 --env "APPSETTING_adminPassword=test" elmfullstack/elm-fullstack
 ```
 
 ## Manage the Process Store
