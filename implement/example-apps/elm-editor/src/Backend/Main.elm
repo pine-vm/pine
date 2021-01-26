@@ -267,9 +267,9 @@ processEventTaskComplete taskComplete stateBefore =
                                                                     returnValueToString
                                                                         |> Bytes.Encode.string
                                                                         |> Bytes.Encode.encode
-                                                                        |> Flate.deflateZlib
+                                                                        |> Flate.deflateGZip
                                                             in
-                                                            ( [ { name = "Content-Encoding", values = [ "deflate" ] } ]
+                                                            ( [ { name = "Content-Encoding", values = [ "gzip" ] } ]
                                                             , deflateEncodedBody |> Base64.fromBytes
                                                             )
                                             in

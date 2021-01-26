@@ -84,7 +84,12 @@ namespace test_elm_fullstack
 
         public System.Net.Http.HttpClient BuildPublicAppHttpClient()
         {
-            return new System.Net.Http.HttpClient
+            var handler = new System.Net.Http.HttpClientHandler()
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            };
+
+            return new System.Net.Http.HttpClient(handler)
             {
                 BaseAddress = new Uri(PublicWebHostUrl),
             };
