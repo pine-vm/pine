@@ -17,14 +17,23 @@ namespace Kalmit
 
         static public byte[] GetBlobWithSHA256(byte[] sha256)
         {
-            var getter = OverrideGetBlobWithSHA256?.Invoke(DefaultGetBlobWithSHA256) ?? DefaultGetBlobWithSHA256;
+            try
+            {
+                var getter = OverrideGetBlobWithSHA256?.Invoke(DefaultGetBlobWithSHA256) ?? DefaultGetBlobWithSHA256;
 
-            var blobCandidate = getter(sha256);
+                var blobCandidate = getter(sha256);
 
-            if (!Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate), sha256))
-                return null;
+                if (!Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate), sha256))
+                    return null;
 
-            return blobCandidate;
+                return blobCandidate;
+            }
+            catch (Exception e)
+            {
+                throw new Exception(
+                    "Did not find blob with hash " + CommonConversion.StringBase16FromByteArray(sha256),
+                    innerException: e);
+            }
         }
 
         static public byte[] DefaultGetBlobWithSHA256(byte[] sha256)
