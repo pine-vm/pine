@@ -71,7 +71,8 @@ namespace Kalmit
                 if (!httpResponse.IsSuccessStatusCode)
                 {
                     throw new Exception(
-                        "unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" +
+                        "unexpected HTTP response status code in response from " + httpResponse.RequestMessage.RequestUri.ToString() +
+                        ": " + (int)httpResponse.StatusCode + " (" +
                         httpResponse.StatusCode + ") ('" + httpResponse.Content.ReadAsStringAsync().Result + "')");
                 }
 
