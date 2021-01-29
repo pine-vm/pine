@@ -375,13 +375,13 @@ namespace Kalmit.PersistentProcess.WebHost
                         processStoreWriter.StoreComponent(appConfigComponent);
 
                         var appConfigValueInFile =
-                            new ProcessStoreSupportingMigrations.ValueInFileStructure
+                            new ValueInFileStructure
                             {
                                 HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
                             };
 
                         var compositionLogEvent =
-                            ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                            CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                                 appConfigValueInFile: appConfigValueInFile,
                                 initElmAppState: requestPathIsDeployAppConfigAndInitElmAppState);
 
@@ -472,7 +472,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                 var elmAppStateComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
 
                                 var appConfigValueInFile =
-                                    new ProcessStoreSupportingMigrations.ValueInFileStructure
+                                    new ValueInFileStructure
                                     {
                                         HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
                                     };
@@ -480,7 +480,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                 processStoreWriter.StoreComponent(elmAppStateComponent);
 
                                 await attemptContinueWithCompositionEventAndSendHttpResponse(
-                                    new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                                    new CompositionLogRecordInFile.CompositionEvent
                                     {
                                         SetElmAppState = appConfigValueInFile
                                     });
@@ -622,7 +622,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     }
 
                     (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
-                        ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
+                        CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
                         lock (avoidConcurrencyLock)
                         {
@@ -646,7 +646,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     }
 
                     async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
-                        ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
+                        CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
                     {
                         var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
 
@@ -673,7 +673,7 @@ namespace Kalmit.PersistentProcess.WebHost
         }
 
         static public (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
-            ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+            CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
             IFileStore processStoreFileStore)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);

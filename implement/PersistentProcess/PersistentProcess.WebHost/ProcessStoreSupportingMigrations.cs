@@ -1,9 +1,9 @@
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Newtonsoft.Json;
 
 namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 {
@@ -144,19 +144,19 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         public class CompositionEvent
         {
-            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public ValueInFileStructure UpdateElmAppStateForEvent;
 
-            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public ValueInFileStructure SetElmAppState;
 
-            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public ValueInFileStructure DeployAppConfigAndInitElmAppState;
 
-            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public ValueInFileStructure DeployAppConfigAndMigrateElmAppState;
 
-            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public ValueInFileStructure RevertProcessTo;
 
             static public CompositionEvent EventForDeployAppConfig(
@@ -164,12 +164,12 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
                 bool initElmAppState) =>
                 initElmAppState
                 ?
-                new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                new CompositionEvent
                 {
                     DeployAppConfigAndInitElmAppState = appConfigValueInFile,
                 }
                 :
-                new ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                new CompositionEvent
                 {
                     DeployAppConfigAndMigrateElmAppState = appConfigValueInFile,
                 };

@@ -105,7 +105,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
         {
             var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IImmutableList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
-            var recordingReader = new Kalmit.DelegatingFileStoreReader
+            var recordingReader = new DelegatingFileStoreReader
             {
                 GetFileContentDelegate = filePath =>
                 {
@@ -143,7 +143,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         CompositionLogRecordInFile.HashBase16FromCompositionRecord(serializedCompositionLogRecord);
 
                     var compositionRecord = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(
-                        System.Text.Encoding.UTF8.GetString(serializedCompositionLogRecord));
+                        Encoding.UTF8.GetString(serializedCompositionLogRecord));
 
                     var reductionRecord = storeReader.LoadProvisionalReduction(compositionRecordHashBase16);
 
@@ -478,7 +478,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
         static public Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, byte[] fileContent)> projectedFiles, IFileStoreReader projectedReader)>
             TestContinueWithCompositionEvent(
-                ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+                CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
                 IFileStoreReader fileStoreReader)
         {
             var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
@@ -486,9 +486,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 compositionLogEvent: compositionLogEvent);
 
             using (var projectedProcess =
-                PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
-                    new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
-                    _ => { }))
+                Restore(new ProcessStoreReaderInFileStore(projectionResult.projectedReader), _ => { }))
             {
                 if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
                     compositionLogEvent.SetElmAppState != null)
@@ -669,7 +667,7 @@ main =
                     }
 
                     var migrateResultStructure =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.ElmValueCommonJson.Result<string, string>>(
+                        JsonConvert.DeserializeObject<Kalmit.ElmValueCommonJson.Result<string, string>>(
                             migrateResultString);
 
                     var elmAppStateMigratedSerialized = migrateResultStructure?.Ok?.FirstOrDefault();
@@ -756,7 +754,7 @@ main =
         {
             try
             {
-                return Newtonsoft.Json.JsonConvert.SerializeObject(Newtonsoft.Json.JsonConvert.DeserializeObject(originalJson));
+                return JsonConvert.SerializeObject(JsonConvert.DeserializeObject(originalJson));
             }
             catch
             {
