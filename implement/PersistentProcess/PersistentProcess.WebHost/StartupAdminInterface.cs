@@ -126,7 +126,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     logger.LogInformation("Begin to build the process volatile representation.");
 
                     var processVolatileRepresentation =
-                        PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                        PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
                             new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore),
                             logger: logEntry => logger.LogInformation(logEntry));
 

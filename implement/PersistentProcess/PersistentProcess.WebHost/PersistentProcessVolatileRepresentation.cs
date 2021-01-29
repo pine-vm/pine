@@ -47,13 +47,35 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
         public readonly Result<string, string> lastSetElmAppStateResult;
 
-        class LoadedReduction
+        public struct CompositionLogRecordWithLoadedDependencies
+        {
+            public CompositionLogRecordInFile compositionRecord;
+
+            public string compositionRecordHashBase16;
+
+            public ReductionWithLoadedDependencies? reduction;
+
+            public CompositionEventWithLoadedDependencies? composition;
+        }
+
+        public struct ReductionWithLoadedDependencies
         {
             public byte[] elmAppState;
 
             public Composition.Component appConfig;
 
             public Composition.TreeWithStringPath appConfigAsTree;
+        }
+
+        public struct CompositionEventWithLoadedDependencies
+        {
+            public byte[] UpdateElmAppStateForEvent;
+
+            public byte[] SetElmAppState;
+
+            public Composition.TreeWithStringPath DeployAppConfigAndInitElmAppState;
+
+            public Composition.TreeWithStringPath DeployAppConfigAndMigrateElmAppState;
         }
 
         static public (IDisposableProcessWithStringInterface process,
@@ -120,21 +142,17 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 }
             };
 
-            /*
-            Following part can be made less expensive when we have an implementation that evaluates all readings but skips the
-            rest of the restoring. Something like an extension of `EnumerateCompositionLogRecordsForRestoreProcess` resolving all
-            dependencies on the store.
-            */
-            using (var restoredProcess = Restore(new ProcessStoreReaderInFileStore(recordingReader), _ => { }))
-            {
-                return (
-                    files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<string>()),
-                    lastCompositionLogRecordHashBase16: restoredProcess.lastCompositionLogRecordHashBase16);
-            }
+            var compositionLogRecords =
+                EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(new ProcessStoreReaderInFileStore(recordingReader))
+                .ToImmutableList();
+
+            return (
+                files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<string>()),
+                lastCompositionLogRecordHashBase16: compositionLogRecords.LastOrDefault().compositionRecordHashBase16);
         }
 
-        static IEnumerable<(CompositionLogRecordInFile compositionRecord, string compositionRecordHashBase16, LoadedReduction reduction)>
-            EnumerateCompositionLogRecordsForRestoreProcess(IProcessStoreReader storeReader) =>
+        static IEnumerable<CompositionLogRecordWithLoadedDependencies>
+            EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(IProcessStoreReader storeReader) =>
                 storeReader
                 .EnumerateSerializedCompositionLogRecordsReverse()
                 .Select(serializedCompositionLogRecord =>
@@ -147,7 +165,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
                     var reductionRecord = storeReader.LoadProvisionalReduction(compositionRecordHashBase16);
 
-                    LoadedReduction loadedReduction = null;
+                    ReductionWithLoadedDependencies? reduction = null;
 
                     if (reductionRecord?.appConfig?.HashBase16 != null && reductionRecord?.elmAppState?.HashBase16 != null)
                     {
@@ -169,7 +187,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                                 throw new Exception("Unexpected content of elmAppStateComponent " + reductionRecord.elmAppState?.HashBase16 + ": This is not a blob.");
                             }
 
-                            loadedReduction = new LoadedReduction
+                            reduction = new ReductionWithLoadedDependencies
                             {
                                 appConfig = appConfigComponent,
                                 appConfigAsTree = parseAppConfigAsTree.Ok,
@@ -178,14 +196,18 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                         }
                     }
 
-                    return (
-                        compositionRecord: compositionRecord,
-                        compositionRecordHashBase16: compositionRecordHashBase16,
-                        reduction: loadedReduction);
+                    return new CompositionLogRecordWithLoadedDependencies
+                    {
+                        compositionRecord = compositionRecord,
+                        compositionRecordHashBase16 = compositionRecordHashBase16,
+                        composition = LoadCompositionEventDependencies(compositionRecord.compositionEvent, storeReader),
+                        reduction = reduction,
+                    };
                 })
-                .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null);
+                .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null)
+                .Reverse();
 
-        static public PersistentProcessVolatileRepresentation Restore(
+        static public PersistentProcessVolatileRepresentation LoadFromStoreAndRestoreProcess(
             IProcessStoreReader storeReader,
             Action<string> logger,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
@@ -194,11 +216,11 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             logger?.Invoke("Begin to restore the process state.");
 
-            var compositionEventsToLatestReductionReversed =
-                EnumerateCompositionLogRecordsForRestoreProcess(storeReader)
+            var compositionEventsFromLatestReduction =
+                EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(storeReader)
                 .ToImmutableList();
 
-            if (!compositionEventsToLatestReductionReversed.Any())
+            if (!compositionEventsFromLatestReduction.Any())
             {
                 logger?.Invoke("Found no composition record, default to initial state.");
 
@@ -209,15 +231,28 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                     lastSetElmAppStateResult: null);
             }
 
-            logger?.Invoke("Found " + compositionEventsToLatestReductionReversed.Count + " composition log records to use for restore.");
+            logger?.Invoke("Found " + compositionEventsFromLatestReduction.Count + " composition log records to use for restore.");
 
-            var firstCompositionEventRecord =
-                compositionEventsToLatestReductionReversed.LastOrDefault();
+            var processVolatileRepresentation = RestoreFromCompositionEventSequence(
+                compositionEventsFromLatestReduction,
+                overrideElmAppInterfaceConfig);
 
-            if (firstCompositionEventRecord.reduction == null &&
-                firstCompositionEventRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+            logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
+
+            return processVolatileRepresentation;
+        }
+
+        static public PersistentProcessVolatileRepresentation RestoreFromCompositionEventSequence(
+            IEnumerable<CompositionLogRecordWithLoadedDependencies> compositionLogRecords,
+            ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        {
+            var firstCompositionLogRecord =
+                compositionLogRecords.FirstOrDefault();
+
+            if (firstCompositionLogRecord.reduction == null &&
+                firstCompositionLogRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
             {
-                throw new Exception("Failed to get sufficient history: Composition log record points to parent " + firstCompositionEventRecord.compositionRecord.parentHashBase16);
+                throw new Exception("Failed to get sufficient history: Composition log record points to parent " + firstCompositionLogRecord.compositionRecord.parentHashBase16);
             }
 
             string lastCompositionLogRecordHashBase16 = null;
@@ -227,7 +262,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 lastElmAppVolatileProcess: null,
                 lastSetElmAppStateResult: null);
 
-            foreach (var compositionLogRecord in compositionEventsToLatestReductionReversed.Reverse())
+            foreach (var compositionLogRecord in compositionLogRecords)
             {
                 try
                 {
@@ -237,17 +272,17 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                     {
                         var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun), _) =
                             ProcessFromWebAppConfig(
-                                compositionLogRecord.reduction.appConfigAsTree,
+                                compositionLogRecord.reduction.Value.appConfigAsTree,
                                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
-                        var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.elmAppState);
+                        var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState);
 
                         newElmAppProcess.SetSerializedState(elmAppStateAsString);
 
                         processRepresentationDuringRestore?.lastElmAppVolatileProcess?.Dispose();
 
                         processRepresentationDuringRestore = new PersistentProcessVolatileRepresentationDuringRestore(
-                            lastAppConfig: (compositionLogRecord.reduction.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
+                            lastAppConfig: (compositionLogRecord.reduction.Value.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
                             lastElmAppVolatileProcess: newElmAppProcess,
                             lastSetElmAppStateResult: null);
 
@@ -269,9 +304,8 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
                     processRepresentationDuringRestore =
                         ApplyCompositionEvent(
-                            compositionEvent,
+                            compositionLogRecord.composition.Value,
                             processRepresentationDuringRestore,
-                            storeReader,
                             overrideElmAppInterfaceConfig);
                 }
                 finally
@@ -279,8 +313,6 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                     lastCompositionLogRecordHashBase16 = compositionLogRecord.compositionRecordHashBase16;
                 }
             }
-
-            logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
 
             return new PersistentProcessVolatileRepresentation(
                 lastCompositionLogRecordHashBase16: lastCompositionLogRecordHashBase16,
@@ -316,47 +348,17 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
         }
 
         static PersistentProcessVolatileRepresentationDuringRestore ApplyCompositionEvent(
-            CompositionLogRecordInFile.CompositionEvent compositionEvent,
+            CompositionEventWithLoadedDependencies compositionEvent,
             PersistentProcessVolatileRepresentationDuringRestore processBefore,
-            IProcessStoreReader storeReader,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
         {
-            IImmutableList<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
-            {
-                var component = storeReader.LoadComponent(componentHash);
-
-                if (component == null)
-                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
-
-                if (component.BlobContent == null)
-                    throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
-
-                return component.BlobContent;
-            }
-
-            Composition.TreeWithStringPath loadComponentFromStoreAndAssertIsTree(string componentHash)
-            {
-                var component = storeReader.LoadComponent(componentHash);
-
-                if (component == null)
-                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
-
-                var parseAsTreeResult = Composition.ParseAsTreeWithStringPath(component);
-
-                if (parseAsTreeResult.Ok == null)
-                    throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree.");
-
-                return parseAsTreeResult.Ok;
-            }
-
             if (compositionEvent.UpdateElmAppStateForEvent != null)
             {
                 if (processBefore.lastElmAppVolatileProcess == null)
                     return processBefore;
 
                 processBefore.lastElmAppVolatileProcess.ProcessEvent(
-                    Encoding.UTF8.GetString(loadComponentFromStoreAndAssertIsBlob(
-                        compositionEvent.UpdateElmAppStateForEvent.HashBase16).ToArray()));
+                    Encoding.UTF8.GetString(compositionEvent.UpdateElmAppStateForEvent));
 
                 return processBefore;
             }
@@ -374,8 +376,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 }
 
                 var projectedElmAppState =
-                    Encoding.UTF8.GetString(loadComponentFromStoreAndAssertIsBlob(
-                        compositionEvent.SetElmAppState.HashBase16).ToArray());
+                    Encoding.UTF8.GetString(compositionEvent.SetElmAppState);
 
                 processBefore.lastElmAppVolatileProcess.SetSerializedState(projectedElmAppState);
 
@@ -403,8 +404,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
             {
                 var elmAppStateBefore = processBefore.lastElmAppVolatileProcess?.GetSerializedState();
 
-                var appConfig = loadComponentFromStoreAndAssertIsTree(
-                    compositionEvent.DeployAppConfigAndMigrateElmAppState.HashBase16);
+                var appConfig = compositionEvent.DeployAppConfigAndMigrateElmAppState;
 
                 var prepareMigrateResult =
                     PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig);
@@ -450,8 +450,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
 
             if (compositionEvent.DeployAppConfigAndInitElmAppState != null)
             {
-                var appConfig = loadComponentFromStoreAndAssertIsTree(
-                    compositionEvent.DeployAppConfigAndInitElmAppState.HashBase16);
+                var appConfig = compositionEvent.DeployAppConfigAndInitElmAppState;
 
                 var (newElmAppProcess, buildArtifacts, _) =
                     ProcessFromWebAppConfig(
@@ -465,6 +464,80 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                     lastElmAppVolatileProcess: newElmAppProcess,
                     lastSetElmAppStateResult: null);
             }
+
+            throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
+        }
+
+        static CompositionEventWithLoadedDependencies? LoadCompositionEventDependencies(
+            CompositionLogRecordInFile.CompositionEvent compositionEvent,
+            IProcessStoreReader storeReader)
+        {
+            IImmutableList<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
+            {
+                var component = storeReader.LoadComponent(componentHash);
+
+                if (component == null)
+                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
+
+                if (component.BlobContent == null)
+                    throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
+
+                return component.BlobContent;
+            }
+
+            Composition.TreeWithStringPath loadComponentFromStoreAndAssertIsTree(string componentHash)
+            {
+                var component = storeReader.LoadComponent(componentHash);
+
+                if (component == null)
+                    throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
+
+                var parseAsTreeResult = Composition.ParseAsTreeWithStringPath(component);
+
+                if (parseAsTreeResult.Ok == null)
+                    throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree.");
+
+                return parseAsTreeResult.Ok;
+            }
+
+            if (compositionEvent.UpdateElmAppStateForEvent != null)
+            {
+                return new CompositionEventWithLoadedDependencies
+                {
+                    UpdateElmAppStateForEvent = loadComponentFromStoreAndAssertIsBlob(
+                        compositionEvent.UpdateElmAppStateForEvent.HashBase16).ToArray(),
+                };
+            }
+
+            if (compositionEvent.SetElmAppState != null)
+            {
+                return new CompositionEventWithLoadedDependencies
+                {
+                    SetElmAppState = loadComponentFromStoreAndAssertIsBlob(
+                        compositionEvent.SetElmAppState.HashBase16).ToArray(),
+                };
+            }
+
+            if (compositionEvent.DeployAppConfigAndMigrateElmAppState != null)
+            {
+                return new CompositionEventWithLoadedDependencies
+                {
+                    DeployAppConfigAndMigrateElmAppState = loadComponentFromStoreAndAssertIsTree(
+                        compositionEvent.DeployAppConfigAndMigrateElmAppState.HashBase16),
+                };
+            }
+
+            if (compositionEvent.DeployAppConfigAndInitElmAppState != null)
+            {
+                return new CompositionEventWithLoadedDependencies
+                {
+                    DeployAppConfigAndInitElmAppState = loadComponentFromStoreAndAssertIsTree(
+                        compositionEvent.DeployAppConfigAndInitElmAppState.HashBase16),
+                };
+            }
+
+            if (compositionEvent.RevertProcessTo != null)
+                return null;
 
             throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
         }
@@ -486,7 +559,7 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
                 compositionLogEvent: compositionLogEvent);
 
             using (var projectedProcess =
-                Restore(new ProcessStoreReaderInFileStore(projectionResult.projectedReader), _ => { }))
+                LoadFromStoreAndRestoreProcess(new ProcessStoreReaderInFileStore(projectionResult.projectedReader), _ => { }))
             {
                 if (compositionLogEvent.DeployAppConfigAndMigrateElmAppState != null ||
                     compositionLogEvent.SetElmAppState != null)

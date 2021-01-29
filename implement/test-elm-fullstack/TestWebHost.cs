@@ -1166,7 +1166,7 @@ namespace test_elm_fullstack
                 promptForPasswordOnConsole: false);
 
             using (var restoredProcess =
-                Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.Restore(
+                Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
                     new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                         new FileStoreFromSystemIOFile(testDirectory)),
                         _ => { }))
