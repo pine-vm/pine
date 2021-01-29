@@ -156,7 +156,7 @@ namespace Kalmit.PersistentProcess.WebHost
 
                                     lock (avoidConcurrencyLock)
                                     {
-                                        var reductionRecord = processVolatileRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
+                                        var (reductionRecord, _) = processVolatileRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
                                     }
 
                                     cyclicReductionStoreLastTime = currentDateTime;
@@ -441,7 +441,7 @@ namespace Kalmit.PersistentProcess.WebHost
                             };
 
                             var reductionRecord =
-                                processVolatileRepresentation?.StoreReductionRecordForCurrentState(storeWriter);
+                                processVolatileRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
 
                             if (reductionRecord == null)
                             {
@@ -537,7 +537,8 @@ namespace Kalmit.PersistentProcess.WebHost
                         {
                             var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                            publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
+                            var storeReductionReport =
+                                publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                             storeReductionStopwatch.Stop();
 
@@ -574,6 +575,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                 beginTime = beginTime,
                                 deletedFilesCount = deletedFilesCount,
                                 storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
+                                storeReductionReport = storeReductionReport,
                                 getFilesForRestoreTimeSpentMilli = (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
                                 deleteFilesTimeSpentMilli = (int)deleteFilesStopwatch.ElapsedMilliseconds,
                                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
@@ -624,14 +626,22 @@ namespace Kalmit.PersistentProcess.WebHost
                     {
                         lock (avoidConcurrencyLock)
                         {
-                            publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter);
+                            var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                            var response =
+                            var storeReductionReport =
+                                publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+
+                            storeReductionStopwatch.Stop();
+
+                            var (statusCode, report) =
                                 AttemptContinueWithCompositionEventAndCommit(compositionLogEvent, processStoreFileStore);
+
+                            report.storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds;
+                            report.storeReductionReport = storeReductionReport;
 
                             startPublicApp();
 
-                            return response;
+                            return (statusCode, report);
                         }
                     }
 
@@ -713,6 +723,10 @@ namespace Kalmit.PersistentProcess.WebHost
 
         public CompositionLogRecordInFile.CompositionEvent compositionEvent;
 
+        public int storeReductionTimeSpentMilli;
+
+        public PersistentProcess.StoreProvisionalReductionReport? storeReductionReport;
+
         public int totalTimeSpentMilli;
 
         public Composition.Result<string, string> result;
@@ -727,6 +741,8 @@ namespace Kalmit.PersistentProcess.WebHost
         public int totalTimeSpentMilli;
 
         public int storeReductionTimeSpentMilli;
+
+        public PersistentProcess.StoreProvisionalReductionReport? storeReductionReport;
 
         public int getFilesForRestoreTimeSpentMilli;
 

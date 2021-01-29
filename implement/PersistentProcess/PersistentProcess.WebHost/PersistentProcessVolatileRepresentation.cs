@@ -14,8 +14,20 @@ namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
     {
         string ProcessElmAppEvent(IProcessStoreWriter storeWriter, string serializedEvent);
 
-        ProvisionalReductionRecordInFile StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter);
+        (ProvisionalReductionRecordInFile reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter);
     }
+
+    public struct StoreProvisionalReductionReport
+    {
+        public int lockTimeSpentMilli;
+
+        public int? serializeElmAppStateTimeSpentMilli;
+
+        public int? serializeElmAppStateLength;
+
+        public int? storeDependenciesTimeSpentMilli;
+    }
+
 
     public class PersistentProcessVolatileRepresentation : IPersistentProcess, IDisposable
     {
@@ -754,16 +766,30 @@ main =
 
         public void Dispose() => lastElmAppVolatileProcess?.Dispose();
 
-        public ProvisionalReductionRecordInFile StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter)
+        public (ProvisionalReductionRecordInFile reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(
+            IProcessStoreWriter storeWriter)
         {
+            var report = new StoreProvisionalReductionReport();
+
             string elmAppState = null;
+
+            var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             lock (processLock)
             {
+                lockStopwatch.Stop();
+
+                report.lockTimeSpentMilli = (int)lockStopwatch.ElapsedMilliseconds;
+
                 if (lastCompositionLogRecordHashBase16 == CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
-                    return null;
+                    return (null, report);
+
+                var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 elmAppState = lastElmAppVolatileProcess?.GetSerializedState();
+
+                report.serializeElmAppStateTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds;
+                report.serializeElmAppStateLength = elmAppState?.Length;
             }
 
             var elmAppStateBlob =
@@ -801,6 +827,8 @@ main =
                         },
                 };
 
+            var storeDependenciesStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             var dependencies =
                 new[] { elmAppStateComponent, lastAppConfig?.appConfigComponent }
                 .Where(c => null != c).ToImmutableList();
@@ -808,9 +836,13 @@ main =
             foreach (var dependency in dependencies)
                 storeWriter.StoreComponent(dependency);
 
+            storeDependenciesStopwatch.Stop();
+
+            report.storeDependenciesTimeSpentMilli = (int)storeDependenciesStopwatch.ElapsedMilliseconds;
+
             storeWriter.StoreProvisionalReduction(reductionRecord);
 
-            return reductionRecord;
+            return (reductionRecord, report);
         }
     }
 }
