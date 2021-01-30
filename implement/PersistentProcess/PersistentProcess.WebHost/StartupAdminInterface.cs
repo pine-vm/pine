@@ -533,8 +533,12 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+                        var filePathsInProcessStore = processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty);
+
                         lock (avoidConcurrencyLock)
                         {
+                            var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                             var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                             var storeReductionReport =
@@ -556,12 +560,12 @@ namespace Kalmit.PersistentProcess.WebHost
 
                             int deletedFilesCount = 0;
 
-                            foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty))
+                            foreach (var filePath in filePathsInProcessStore)
                             {
                                 if (filesForRestore.Contains(filePath))
                                     continue;
 
-                                if (productionBlockDurationLimit < totalStopwatch.Elapsed)
+                                if (productionBlockDurationLimit < lockStopwatch.Elapsed)
                                     break;
 
                                 processStoreFileStore.DeleteFile(filePath);
@@ -578,6 +582,7 @@ namespace Kalmit.PersistentProcess.WebHost
                                 storeReductionReport = storeReductionReport,
                                 getFilesForRestoreTimeSpentMilli = (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
                                 deleteFilesTimeSpentMilli = (int)deleteFilesStopwatch.ElapsedMilliseconds,
+                                lockedTimeSpentMilli = (int)lockStopwatch.ElapsedMilliseconds,
                                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
                             };
                         }
@@ -737,6 +742,8 @@ namespace Kalmit.PersistentProcess.WebHost
         public string beginTime;
 
         public int deletedFilesCount;
+
+        public int lockedTimeSpentMilli;
 
         public int totalTimeSpentMilli;
 
