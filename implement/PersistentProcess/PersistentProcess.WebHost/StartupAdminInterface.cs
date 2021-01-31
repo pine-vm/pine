@@ -533,7 +533,14 @@ namespace Kalmit.PersistentProcess.WebHost
 
                         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                        var filePathsInProcessStore = processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty);
+                        var numbersOfThreadsToDeleteFiles = 4;
+
+                        var filePathsInProcessStorePartitions =
+                            processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
+                            .Select((s, i) => (s, i))
+                            .GroupBy(x => x.i % numbersOfThreadsToDeleteFiles)
+                            .Select(g => g.Select(x => x.s).ToImmutableList())
+                            .ToImmutableList();
 
                         lock (avoidConcurrencyLock)
                         {
@@ -558,26 +565,36 @@ namespace Kalmit.PersistentProcess.WebHost
 
                             var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                            int deletedFilesCount = 0;
+                            var totalDeletedFilesCount =
+                                filePathsInProcessStorePartitions
+                                .AsParallel()
+                                .WithDegreeOfParallelism(numbersOfThreadsToDeleteFiles)
+                                .Select(partitionFilePaths =>
+                                {
+                                    int partitionDeletedFilesCount = 0;
 
-                            foreach (var filePath in filePathsInProcessStore)
-                            {
-                                if (filesForRestore.Contains(filePath))
-                                    continue;
+                                    foreach (var filePath in partitionFilePaths)
+                                    {
+                                        if (filesForRestore.Contains(filePath))
+                                            continue;
 
-                                if (productionBlockDurationLimit < lockStopwatch.Elapsed)
-                                    break;
+                                        if (productionBlockDurationLimit < lockStopwatch.Elapsed)
+                                            break;
 
-                                processStoreFileStore.DeleteFile(filePath);
-                                ++deletedFilesCount;
-                            }
+                                        processStoreFileStore.DeleteFile(filePath);
+                                        ++partitionDeletedFilesCount;
+                                    }
+
+                                    return partitionDeletedFilesCount;
+                                })
+                                .Sum();
 
                             deleteFilesStopwatch.Stop();
 
                             return new TruncateProcessHistoryReport
                             {
                                 beginTime = beginTime,
-                                deletedFilesCount = deletedFilesCount,
+                                deletedFilesCount = totalDeletedFilesCount,
                                 storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
                                 storeReductionReport = storeReductionReport,
                                 getFilesForRestoreTimeSpentMilli = (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
