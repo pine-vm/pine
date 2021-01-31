@@ -291,7 +291,7 @@ pineValueAsElmValue pineValue =
         Pine.ExpressionValue _ ->
             Err "ExpressionValue"
 
-        Pine.ClosureValue _ _ _ ->
+        Pine.ClosureValue _ _ ->
             Err "ClosureValue"
 
 

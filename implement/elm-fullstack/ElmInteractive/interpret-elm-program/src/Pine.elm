@@ -1,7 +1,6 @@
 module Pine exposing (..)
 
 import BigInt
-import Json.Encode
 import Maybe.Extra
 import Result.Extra
 
@@ -21,7 +20,7 @@ type Value
     | ListValue (List Value)
       -- TODO: Replace ExpressionValue with convention for mapping value to expression.
     | ExpressionValue Expression
-    | ClosureValue ExpressionContext String Expression
+    | ClosureValue ExpressionContext Expression
 
 
 type alias ExpressionContext =
@@ -98,8 +97,8 @@ evaluateExpression context expression =
                 { context | commonModel = valueFromContextExpansionWithName expansion :: context.commonModel }
                 expressionInExpandedContext
 
-        FunctionExpression argumentName expressionInExpandedContext ->
-            Ok (ClosureValue context argumentName expressionInExpandedContext)
+        FunctionExpression _ _ ->
+            Ok (ClosureValue context expression)
 
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
@@ -427,37 +426,37 @@ evaluateFunctionApplicationIgnoringAtomBindings context application =
 
                     firstArgument :: remainingArguments ->
                         let
-                            continueWithClosure closureContext argumentName functionExpression =
-                                evaluateFunctionApplicationIgnoringAtomBindings
-                                    (addToContext
-                                        [ valueFromContextExpansionWithName ( argumentName, firstArgument ) ]
-                                        closureContext
-                                    )
-                                    { function = functionExpression, arguments = remainingArguments }
-                                    |> Result.mapError
-                                        (DescribePathNode
-                                            ("Failed application of '"
-                                                ++ describeExpression application.function
-                                                ++ "' with argument '"
-                                                ++ argumentName
+                            continueWithClosure closureContext functionValue =
+                                case functionValue of
+                                    ClosureValue nextClosureContext closureExpression ->
+                                        continueWithClosure nextClosureContext (ExpressionValue closureExpression)
+
+                                    ExpressionValue (FunctionExpression argumentName functionBodyExpression) ->
+                                        evaluateFunctionApplicationIgnoringAtomBindings
+                                            (addToContext
+                                                [ valueFromContextExpansionWithName ( argumentName, firstArgument ) ]
+                                                closureContext
                                             )
-                                        )
+                                            { function = functionBodyExpression, arguments = remainingArguments }
+                                            |> Result.mapError
+                                                (DescribePathNode
+                                                    ("Failed application of '"
+                                                        ++ describeExpression application.function
+                                                        ++ "' with argument '"
+                                                        ++ argumentName
+                                                    )
+                                                )
+
+                                    _ ->
+                                        Err
+                                            (DescribePathEnd
+                                                ("Failed to apply: Value "
+                                                    ++ describeValue functionOrValue
+                                                    ++ " is not a function (Too many arguments)."
+                                                )
+                                            )
                         in
-                        case functionOrValue of
-                            ExpressionValue (FunctionExpression argumentName functionExpression) ->
-                                continueWithClosure context argumentName functionExpression
-
-                            ClosureValue closureContext argumentName functionExpression ->
-                                continueWithClosure closureContext argumentName functionExpression
-
-                            _ ->
-                                Err
-                                    (DescribePathEnd
-                                        ("Failed to apply: Value "
-                                            ++ describeValue functionOrValue
-                                            ++ " is not a function (Too many arguments)."
-                                        )
-                                    )
+                        continueWithClosure context functionOrValue
             )
 
 
@@ -588,7 +587,7 @@ describeValueSuperficial value =
         ExpressionValue _ ->
             "ExpressionValue"
 
-        ClosureValue _ _ _ ->
+        ClosureValue _ _ ->
             "ClosureValue"
 
 
@@ -604,8 +603,8 @@ describeValue value =
         ExpressionValue expression ->
             "expression(" ++ describeExpression expression ++ ")"
 
-        ClosureValue _ argumentName expression ->
-            "closure(" ++ argumentName ++ "," ++ describeExpression expression ++ ")"
+        ClosureValue _ expression ->
+            "closure(" ++ describeExpression expression ++ ")"
 
 
 valueFromString : String -> Value
