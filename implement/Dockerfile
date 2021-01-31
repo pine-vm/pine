@@ -17,10 +17,10 @@ FROM binaries AS build-default-config
 
 COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
-RUN dotnet "/elm-fullstack/dotnet/elm-fullstack.dll"  deploy-app --from=/docker-image-default-app/  --site=/elm-fullstack/process-store  --init-elm-app-state
+RUN dotnet "/elm-fullstack/dotnet/elm-fs.dll"  deploy-app --from=/docker-image-default-app/  --site=/elm-fullstack/process-store  --init-elm-app-state
 
 WORKDIR /elm-fullstack
 
-ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fullstack.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store"]
+ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fs.dll", "run-server", "--process-store-directory-path=/elm-fullstack/process-store"]
 
 # ENV APPSETTING_adminPassword="password-for-admin-interface"

@@ -20,8 +20,8 @@ namespace elm_fullstack
 
             var app = new CommandLineApplication
             {
-                Name = "elm-fullstack",
-                Description = "Welcome to Elm fullstack! This tool helps you build and run full stack web applications using the Elm programming language.\nTo get help or report an issue, see the project website at http://elm-fullstack.org/",
+                Name = "elm-fs",
+                Description = "Welcome to Elm Fullstack! This tool helps you build and run full stack web applications using the Elm programming language.\nTo get help or report an issue, see the project website at http://elm-fullstack.org/",
             };
 
             app.HelpOption(inherited: true);
