@@ -57,9 +57,6 @@ namespace Kalmit
                 ProcessFromElm019Code.appStateJsVarName + " = " + ProcessFromElm019Code.initStateJsFunctionPublishedSymbol + ";");
         }
 
-        static string AsJavascriptExpression(string originalString) =>
-            JsonConvert.SerializeObject(originalString);
-
         public void Dispose()
         {
             javascriptEngine?.Dispose();
@@ -78,31 +75,39 @@ namespace Kalmit
             return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
             */
 
-            var evalResult = javascriptEngine.CallFunction(
+            var jsReturnValue = javascriptEngine.CallFunction(
                 ProcessFromElm019Code.processEventSyncronousJsFunctionName, serializedEvent);
 
-            return evalResult?.ToString();
+            return jsReturnValue?.ToString();
         }
 
         public string GetSerializedState()
         {
-            var expressionJavascript =
-                ProcessFromElm019Code.serializeStateJsFunctionPublishedSymbol +
-                "(" + ProcessFromElm019Code.appStateJsVarName + ")";
+            /*
+            Avoid high memory usage as described in exploration 2020-02-02:
+            Use specialized implementation based on `CallFunction` instead of `Evaluate`.
 
-            return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
+            return EvaluateInJsEngineAndReturnResultAsString(getSerializedStateJsExpression);
+            */
+
+            var jsReturnValue = javascriptEngine.CallFunction(ProcessFromElm019Code.getSerializedStateJsFunctionName);
+
+            return jsReturnValue?.ToString();
         }
 
         public string SetSerializedState(string serializedState)
         {
-            var serializedStateExpression = AsJavascriptExpression(serializedState);
+            /*
+            Avoid high memory usage as described in exploration 2020-02-02:
+            Use specialized implementation based on `CallFunction` instead of `Evaluate`.
 
-            var expressionJavascript =
-                ProcessFromElm019Code.appStateJsVarName +
-                " = " + ProcessFromElm019Code.deserializeStateJsFunctionPublishedSymbol +
-                "(" + serializedStateExpression + ");";
+            return EvaluateInJsEngineAndReturnResultAsString(ProcessFromElm019Code.setSerializedStateJsStatement(serializedState));
+            */
 
-            return EvaluateInJsEngineAndReturnResultAsString(expressionJavascript);
+            var jsReturnValue = javascriptEngine.CallFunction(
+                ProcessFromElm019Code.setSerializedStateJsFunctionName, serializedState);
+
+            return jsReturnValue?.ToString();
         }
 
         string EvaluateInJsEngineAndReturnResultAsString(string expressionJavascript)
@@ -300,6 +305,27 @@ namespace Kalmit
 
         public const string deserializeStateJsFunctionPublishedSymbol = "deserializeState";
 
+        public const string processEventSyncronousJsFunctionName = "processEventAndUpdateState";
+
+        public const string getSerializedStateJsFunctionName = "getSerializedState";
+
+        public const string setSerializedStateJsFunctionName = "setSerializedState";
+
+        public const string getSerializedStateJsExpression = serializeStateJsFunctionPublishedSymbol + "(" + appStateJsVarName + ")";
+
+        static public string setSerializedStateJsStatement(string serializedState) =>
+            appStateJsVarName +
+            " = " + deserializeStateJsFunctionPublishedSymbol +
+            "(" + AsJavascriptExpression(serializedState) + ");";
+
+        static public string setSerializedStateJsStatementFromSerializedStateParameterName(string serializedStateParamName) =>
+            appStateJsVarName +
+            " = " + deserializeStateJsFunctionPublishedSymbol +
+            "(" + serializedStateParamName + ");";
+
+        static public string AsJavascriptExpression(string originalString) =>
+            JsonConvert.SerializeObject(originalString);
+
         /*
         Takes the javascript as emitted from Elm make 0.19 and inserts additional statements to
         prepare the script for usage in our application.
@@ -336,17 +362,23 @@ namespace Kalmit
                     arity: 1),
                 };
 
-            var processEventAndUpdateStateFunctionJavascriptLines = new[]
+            var JavaScriptFunctionsLines = new[]
             {
                 "var " + processEventSyncronousJsFunctionName + " = function(eventSerial){",
                 "var newStateAndResponse = " + serializedEventFunctionPublishedSymbol + "(eventSerial," + appStateJsVarName + ");",
                 appStateJsVarName + " = newStateAndResponse.a;",
                 "return newStateAndResponse.b;",
                 "}",
+                "var " + getSerializedStateJsFunctionName + " = function(){",
+                "return " + getSerializedStateJsExpression + ";",
+                "}",
+                "var " + setSerializedStateJsFunctionName + " = function(serializedState){",
+                setSerializedStateJsStatementFromSerializedStateParameterName("serializedState"),
+                "}",
             };
 
             var processEventAndUpdateStateFunctionJavascript =
-                String.Join(Environment.NewLine, processEventAndUpdateStateFunctionJavascriptLines);
+                String.Join(Environment.NewLine, JavaScriptFunctionsLines);
 
             return
                 PublishFunctionsFromJavascriptFromElmMake(
@@ -407,8 +439,6 @@ namespace Kalmit
                 javascriptFromElmMake,
                 "^\\s*console\\.\\w+\\(.+$", "",
                 RegexOptions.Multiline);
-
-        public const string processEventSyncronousJsFunctionName = "processEventAndUpdateState";
 
         static string BuildElmFunctionPublicationExpression(string functionToCallName, int arity)
         {
