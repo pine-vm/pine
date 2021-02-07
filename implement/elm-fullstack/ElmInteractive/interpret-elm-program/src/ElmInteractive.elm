@@ -54,6 +54,7 @@ type ElmValue
     | ElmString String
     | ElmTag String (List ElmValue)
     | ElmRecord (List ( String, ElmValue ))
+    | ElmInternal String
 
 
 type alias ProjectParsedElmFile =
@@ -191,6 +192,9 @@ elmValueAsExpression elmValue =
         ElmTag tagName tagArguments ->
             tagName :: (tagArguments |> List.map elmValueAsExpression) |> String.join " "
 
+        ElmInternal desc ->
+            "<" ++ desc ++ ">"
+
 
 elmValueAsJson : ElmValue -> Json.Encode.Value
 elmValueAsJson elmValue =
@@ -217,6 +221,9 @@ elmValueAsJson elmValue =
         ElmTag tagName tagArguments ->
             Json.Encode.list identity [ Json.Encode.string tagName, Json.Encode.list elmValueAsJson tagArguments ]
 
+        ElmInternal _ ->
+            Json.Encode.string (elmValueAsExpression elmValue)
+
 
 pineValueAsElmValue : Pine.Value -> Result String ElmValue
 pineValueAsElmValue pineValue =
@@ -231,6 +238,19 @@ pineValueAsElmValue pineValue =
                         blobValue
                             |> Pine.bigIntFromBlobValue
                             |> Result.map ElmInteger
+
+                    else if 4 < List.length blobValue then
+                        case Pine.decodeExpressionFromValue pineValue of
+                            Ok expression ->
+                                case expression of
+                                    Pine.FunctionExpression _ ->
+                                        Ok (ElmInternal "function")
+
+                                    _ ->
+                                        Ok (ElmInternal "expression")
+
+                            Err _ ->
+                                Ok (ElmInternal "___error_skipped_large_blob___")
 
                     else
                         blobValue
