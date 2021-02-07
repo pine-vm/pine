@@ -239,7 +239,7 @@ pineValueAsElmValue pineValue =
                             |> Pine.bigIntFromBlobValue
                             |> Result.map ElmInteger
 
-                    else if 4 < List.length blobValue then
+                    else if 10 < List.length blobValue then
                         case Pine.decodeExpressionFromValue pineValue of
                             Ok expression ->
                                 case expression of
@@ -311,8 +311,17 @@ pineValueAsElmValue pineValue =
                                     _ ->
                                         resultAsList
 
-        Pine.ClosureValue _ _ ->
-            Err "ClosureValue"
+        Pine.ClosureValue _ expression ->
+            let
+                detail =
+                    case expression of
+                        Pine.FunctionExpression _ ->
+                            "function"
+
+                        _ ->
+                            "expression"
+            in
+            Ok (ElmInternal ("closure<" ++ detail ++ ">"))
 
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
@@ -526,8 +535,18 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                             let
                                 declarationsValues =
                                     declarations |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
+
+                                declarationsContext =
+                                    { commonModel =
+                                        (declarationsValues ++ importsValues ++ globalExposingValues)
+                                            |> List.map Pine.valueFromContextExpansionWithName
+                                    }
+
+                                declarationsValuesInContext =
+                                    declarations
+                                        |> List.map (Tuple.mapSecond (Pine.ClosureValue declarationsContext))
                             in
-                            Ok ( moduleName, declarationsValues ++ importsValues ++ globalExposingValues )
+                            Ok ( moduleName, declarationsValuesInContext )
 
 
 elmCoreModulesTexts : List String
