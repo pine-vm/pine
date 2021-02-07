@@ -6,8 +6,8 @@ import Json.Encode
 import Test
 
 
-suite : Test.Test
-suite =
+interactiveScenarios : Test.Test
+interactiveScenarios =
     Test.describe "Elm interactive scenarios"
         [ Test.test "Just a literal String" <|
             \_ ->

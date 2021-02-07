@@ -1,25 +1,55 @@
 module Pine exposing (..)
 
 import BigInt
+import Json.Decode
+import Json.Encode
 import Maybe.Extra
 import Result.Extra
 
 
 type Expression
     = LiteralExpression Value
-    | ListExpression (List Expression)
-    | ApplicationExpression { function : Expression, arguments : List Expression }
+    | ListExpression ListExpressionStructure
+    | ApplicationExpression ApplicationExpressionStructure
     | FunctionOrValueExpression String
-    | ContextExpansionWithNameExpression ( String, Value ) Expression
-    | IfBlockExpression Expression Expression Expression
-    | FunctionExpression String Expression
+    | ContextExpansionWithNameExpression ContextExpansionWithNameExpressionStructure
+    | IfBlockExpression IfBlockExpressionStructure
+    | FunctionExpression FunctionExpressionStructure
+
+
+type alias ListExpressionStructure =
+    List Expression
+
+
+type alias ApplicationExpressionStructure =
+    { function : Expression
+    , arguments : List Expression
+    }
+
+
+type alias IfBlockExpressionStructure =
+    { condition : Expression
+    , ifTrue : Expression
+    , ifFalse : Expression
+    }
+
+
+type alias FunctionExpressionStructure =
+    { argumentName : String
+    , body : Expression
+    }
+
+
+type alias ContextExpansionWithNameExpressionStructure =
+    { name : String
+    , namedValue : Value
+    , expression : Expression
+    }
 
 
 type Value
     = BlobValue (List Int)
     | ListValue (List Value)
-      -- TODO: Replace ExpressionValue with convention for mapping value to expression.
-    | ExpressionValue Expression
     | ClosureValue ExpressionContext Expression
 
 
@@ -41,6 +71,25 @@ addToContext names context =
 
 evaluateExpression : ExpressionContext -> Expression -> Result (PathDescription String) Value
 evaluateExpression context expression =
+    evaluateExpressionExceptClosure context expression
+        |> Result.andThen
+            (\value ->
+                case value of
+                    ClosureValue closureContext closureExpression ->
+                        case closureExpression of
+                            FunctionExpression _ ->
+                                Ok value
+
+                            _ ->
+                                evaluateExpression closureContext closureExpression
+
+                    _ ->
+                        Ok value
+            )
+
+
+evaluateExpressionExceptClosure : ExpressionContext -> Expression -> Result (PathDescription String) Value
+evaluateExpressionExceptClosure context expression =
     case expression of
         LiteralExpression value ->
             Ok value
@@ -71,33 +120,39 @@ evaluateExpression context expression =
                                 |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
                     in
                     case beforeCheckForExpression of
-                        Ok ( ExpressionValue expressionFromLookup, contextFromLookup ) ->
-                            evaluateExpression { commonModel = contextFromLookup } expressionFromLookup
-                                |> Result.mapError (DescribePathNode "Failed to evaluate expression from name")
+                        Ok ( valueFromLookup, contextFromLookup ) ->
+                            case decodeExpressionFromValue valueFromLookup of
+                                Ok expressionFromLookup ->
+                                    Ok (ClosureValue { commonModel = contextFromLookup } expressionFromLookup)
+
+                                _ ->
+                                    Result.map Tuple.first beforeCheckForExpression
 
                         _ ->
                             Result.map Tuple.first beforeCheckForExpression
 
-        IfBlockExpression condition expressionIfTrue expressionIfFalse ->
-            case evaluateExpression context condition of
+        IfBlockExpression ifBlock ->
+            case evaluateExpression context ifBlock.condition of
                 Err error ->
                     Err (DescribePathNode "Failed to evaluate condition" error)
 
                 Ok conditionValue ->
                     evaluateExpression context
                         (if conditionValue == trueValue then
-                            expressionIfTrue
+                            ifBlock.ifTrue
 
                          else
-                            expressionIfFalse
+                            ifBlock.ifFalse
                         )
 
-        ContextExpansionWithNameExpression expansion expressionInExpandedContext ->
+        ContextExpansionWithNameExpression expansion ->
             evaluateExpression
-                { context | commonModel = valueFromContextExpansionWithName expansion :: context.commonModel }
-                expressionInExpandedContext
+                { context
+                    | commonModel = valueFromContextExpansionWithName ( expansion.name, expansion.namedValue ) :: context.commonModel
+                }
+                expansion.expression
 
-        FunctionExpression _ _ ->
+        FunctionExpression _ ->
             Ok (ClosureValue context expression)
 
 
@@ -429,32 +484,42 @@ evaluateFunctionApplicationIgnoringAtomBindings context application =
                             continueWithClosure closureContext functionValue =
                                 case functionValue of
                                     ClosureValue nextClosureContext closureExpression ->
-                                        continueWithClosure nextClosureContext (ExpressionValue closureExpression)
-
-                                    ExpressionValue (FunctionExpression argumentName functionBodyExpression) ->
-                                        evaluateFunctionApplicationIgnoringAtomBindings
-                                            (addToContext
-                                                [ valueFromContextExpansionWithName ( argumentName, firstArgument ) ]
-                                                closureContext
-                                            )
-                                            { function = functionBodyExpression, arguments = remainingArguments }
-                                            |> Result.mapError
-                                                (DescribePathNode
-                                                    ("Failed application of '"
-                                                        ++ describeExpression application.function
-                                                        ++ "' with argument '"
-                                                        ++ argumentName
+                                        case closureExpression of
+                                            FunctionExpression functionExpression ->
+                                                evaluateFunctionApplicationIgnoringAtomBindings
+                                                    (addToContext
+                                                        [ valueFromContextExpansionWithName ( functionExpression.argumentName, firstArgument ) ]
+                                                        nextClosureContext
                                                     )
-                                                )
+                                                    { function = functionExpression.body, arguments = remainingArguments }
+                                                    |> Result.mapError
+                                                        (DescribePathNode
+                                                            ("Failed application of '"
+                                                                ++ describeExpression application.function
+                                                                ++ "' with argument '"
+                                                                ++ functionExpression.argumentName
+                                                            )
+                                                        )
+
+                                            _ ->
+                                                Err
+                                                    (DescribePathEnd
+                                                        ("Failed to apply: Expression "
+                                                            ++ describeExpression closureExpression
+                                                            ++ " is not a function (Too many arguments)."
+                                                        )
+                                                    )
 
                                     _ ->
-                                        Err
-                                            (DescribePathEnd
-                                                ("Failed to apply: Value "
-                                                    ++ describeValue functionOrValue
-                                                    ++ " is not a function (Too many arguments)."
-                                                )
-                                            )
+                                        case decodeExpressionFromValue functionValue of
+                                            Ok expressionFromValue ->
+                                                continueWithClosure closureContext (ClosureValue closureContext expressionFromValue)
+
+                                            Err decodeError ->
+                                                Err
+                                                    (DescribePathEnd
+                                                        ("Failed to decode expression from value: " ++ decodeError)
+                                                    )
                         in
                         continueWithClosure context functionOrValue
             )
@@ -565,14 +630,14 @@ describeExpression expression =
         ApplicationExpression application ->
             "application(" ++ describeExpression application.function ++ ")"
 
-        FunctionExpression argumentName functionExpression ->
-            "function(" ++ argumentName ++ ", " ++ describeExpression functionExpression ++ ")"
+        FunctionExpression functionExpression ->
+            "function(" ++ functionExpression.argumentName ++ ", " ++ describeExpression functionExpression.body ++ ")"
 
-        IfBlockExpression _ _ _ ->
+        IfBlockExpression _ ->
             "if-block"
 
-        ContextExpansionWithNameExpression ( newName, _ ) _ ->
-            "context-expansion(" ++ newName ++ ")"
+        ContextExpansionWithNameExpression expansion ->
+            "context-expansion(" ++ expansion.name ++ ")"
 
 
 describeValueSuperficial : Value -> String
@@ -583,9 +648,6 @@ describeValueSuperficial value =
 
         ListValue _ ->
             "ListValue"
-
-        ExpressionValue _ ->
-            "ExpressionValue"
 
         ClosureValue _ _ ->
             "ClosureValue"
@@ -599,9 +661,6 @@ describeValue value =
 
         ListValue list ->
             "[" ++ String.join ", " (List.map describeValue list) ++ "]"
-
-        ExpressionValue expression ->
-            "expression(" ++ describeExpression expression ++ ")"
 
         ClosureValue _ expression ->
             "closure(" ++ describeExpression expression ++ ")"
@@ -752,3 +811,175 @@ hexadecimalRepresentationFromBlobValue =
     List.map BigInt.fromInt
         >> List.map (BigInt.toHexString >> String.padLeft 2 '0')
         >> String.join ""
+
+
+encodeExpressionAsValue : Expression -> Value
+encodeExpressionAsValue expression =
+    [ ( "pine_expression", jsonEncodeExpression expression ) ]
+        |> Json.Encode.object
+        |> Json.Encode.encode 0
+        |> valueFromAsciiString
+
+
+decodeExpressionFromValue : Value -> Result String Expression
+decodeExpressionFromValue value =
+    case asciiStringFromValue value of
+        Err error ->
+            Err ("Failed to decode as string: " ++ error)
+
+        Ok string ->
+            Json.Decode.decodeString (Json.Decode.field "pine_expression" jsonDecodeExpression) string
+                |> Result.mapError Json.Decode.errorToString
+
+
+jsonEncodeExpression : Expression -> Json.Encode.Value
+jsonEncodeExpression expression =
+    case expression of
+        LiteralExpression literal ->
+            Json.Encode.object [ ( "LiteralExpression", jsonEncodeValue literal ) ]
+
+        ListExpression list ->
+            Json.Encode.object [ ( "ListExpression", Json.Encode.list jsonEncodeExpression list ) ]
+
+        ApplicationExpression applicationExpression ->
+            Json.Encode.object
+                [ ( "ApplicationExpression"
+                  , Json.Encode.object
+                        [ ( "function", jsonEncodeExpression applicationExpression.function )
+                        , ( "arguments", Json.Encode.list jsonEncodeExpression applicationExpression.arguments )
+                        ]
+                  )
+                ]
+
+        FunctionOrValueExpression functionOrValueExpression ->
+            Json.Encode.object [ ( "FunctionOrValueExpression", Json.Encode.string functionOrValueExpression ) ]
+
+        ContextExpansionWithNameExpression contextExpansionWithNameExpression ->
+            Json.Encode.object
+                [ ( "ContextExpansionWithNameExpression"
+                  , jsonEncodeContextExpansionWithNameExpression contextExpansionWithNameExpression
+                  )
+                ]
+
+        IfBlockExpression ifBlock ->
+            Json.Encode.object
+                [ ( "IfBlockExpression"
+                  , Json.Encode.object
+                        [ ( "condition", jsonEncodeExpression ifBlock.condition )
+                        , ( "ifTrue", jsonEncodeExpression ifBlock.ifTrue )
+                        , ( "ifFalse", jsonEncodeExpression ifBlock.ifFalse )
+                        ]
+                  )
+                ]
+
+        FunctionExpression functionExpression ->
+            Json.Encode.object
+                [ ( "FunctionExpression"
+                  , Json.Encode.object
+                        [ ( "argumentName", Json.Encode.string functionExpression.argumentName )
+                        , ( "body", jsonEncodeExpression functionExpression.body )
+                        ]
+                  )
+                ]
+
+
+jsonDecodeExpression : Json.Decode.Decoder Expression
+jsonDecodeExpression =
+    Json.Decode.oneOf
+        [ Json.Decode.field "LiteralExpression"
+            (Json.Decode.map LiteralExpression jsonDecodeValue)
+        , Json.Decode.field "ListExpression"
+            (Json.Decode.map ListExpression (Json.Decode.list (Json.Decode.lazy (\() -> jsonDecodeExpression))))
+        , Json.Decode.field "ApplicationExpression"
+            (Json.Decode.map ApplicationExpression
+                (Json.Decode.map2 ApplicationExpressionStructure
+                    (Json.Decode.field "function" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+                    (Json.Decode.field "arguments" (Json.Decode.lazy (\() -> Json.Decode.list jsonDecodeExpression)))
+                )
+            )
+        , Json.Decode.field "FunctionOrValueExpression"
+            (Json.Decode.map FunctionOrValueExpression Json.Decode.string)
+        , Json.Decode.field "ContextExpansionWithNameExpression"
+            (Json.Decode.map ContextExpansionWithNameExpression jsonDecodeContextExpansionWithNameExpression)
+        , Json.Decode.field "IfBlockExpression"
+            (Json.Decode.lazy
+                (\() ->
+                    Json.Decode.map IfBlockExpression
+                        (Json.Decode.map3 IfBlockExpressionStructure
+                            (Json.Decode.field "condition" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+                            (Json.Decode.field "ifTrue" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+                            (Json.Decode.field "ifFalse" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+                        )
+                )
+            )
+        , Json.Decode.field "FunctionExpression"
+            (Json.Decode.lazy
+                (\() ->
+                    Json.Decode.map FunctionExpression
+                        (Json.Decode.map2 FunctionExpressionStructure
+                            (Json.Decode.field "argumentName" Json.Decode.string)
+                            (Json.Decode.field "body" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+                        )
+                )
+            )
+        ]
+
+
+jsonEncodeContextExpansionWithNameExpression : ContextExpansionWithNameExpressionStructure -> Json.Encode.Value
+jsonEncodeContextExpansionWithNameExpression contextExpansionWithNameExpression =
+    Json.Encode.object
+        [ ( "name", Json.Encode.string contextExpansionWithNameExpression.name )
+        , ( "namedValue", jsonEncodeValue contextExpansionWithNameExpression.namedValue )
+        , ( "expression", jsonEncodeExpression contextExpansionWithNameExpression.expression )
+        ]
+
+
+jsonDecodeContextExpansionWithNameExpression : Json.Decode.Decoder ContextExpansionWithNameExpressionStructure
+jsonDecodeContextExpansionWithNameExpression =
+    Json.Decode.map3 ContextExpansionWithNameExpressionStructure
+        (Json.Decode.field "name" Json.Decode.string)
+        (Json.Decode.field "namedValue" jsonDecodeValue)
+        (Json.Decode.field "expression" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+
+
+jsonEncodeValue : Value -> Json.Encode.Value
+jsonEncodeValue value =
+    case value of
+        BlobValue blob ->
+            Json.Encode.object [ ( "BlobValue", Json.Encode.list Json.Encode.int blob ) ]
+
+        ListValue list ->
+            Json.Encode.object [ ( "ListValue", Json.Encode.list jsonEncodeValue list ) ]
+
+        ClosureValue _ _ ->
+            Json.Encode.object [ ( "ClosureValue", Json.Encode.string "not_implemented" ) ]
+
+
+jsonDecodeValue : Json.Decode.Decoder Value
+jsonDecodeValue =
+    Json.Decode.oneOf
+        [ Json.Decode.field "BlobValue"
+            (Json.Decode.map BlobValue (Json.Decode.list Json.Decode.int))
+        , Json.Decode.field "ListValue"
+            (Json.Decode.map ListValue (Json.Decode.list (Json.Decode.lazy (\() -> jsonDecodeValue))))
+        , Json.Decode.field "ClosureValue"
+            (Json.Decode.fail "Decoding of ClosureValue not implemented")
+        ]
+
+
+asciiStringFromValue : Value -> Result String String
+asciiStringFromValue value =
+    case value of
+        BlobValue charsValues ->
+            charsValues
+                |> List.map Char.fromCode
+                |> String.fromList
+                |> Ok
+
+        _ ->
+            Err "Only a BlobValue can represent an ASCII string."
+
+
+valueFromAsciiString : String -> Value
+valueFromAsciiString =
+    String.toList >> List.map Char.toCode >> BlobValue

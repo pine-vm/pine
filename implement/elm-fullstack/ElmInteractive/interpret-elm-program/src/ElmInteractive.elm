@@ -156,7 +156,10 @@ expandContextWithElmDeclaration elmDeclaration contextBefore =
 
                 Ok ( declaredName, declaredFunctionExpression ) ->
                     contextBefore
-                        |> Pine.addToContext [ Pine.valueFromContextExpansionWithName ( declaredName, Pine.ExpressionValue declaredFunctionExpression ) ]
+                        |> Pine.addToContext
+                            [ Pine.valueFromContextExpansionWithName
+                                ( declaredName, Pine.encodeExpressionAsValue declaredFunctionExpression )
+                            ]
                         |> Ok
 
         _ ->
@@ -288,9 +291,6 @@ pineValueAsElmValue pineValue =
                                     _ ->
                                         resultAsList
 
-        Pine.ExpressionValue _ ->
-            Err "ExpressionValue"
-
         Pine.ClosureValue _ _ ->
             Err "ClosureValue"
 
@@ -392,7 +392,7 @@ exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.ExpressionContext 
 exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
     let
         redirectValue =
-            Pine.ExpressionValue
+            Pine.encodeExpressionAsValue
                 (Pine.FunctionOrValueExpression (String.join "." (moduleName ++ [ nameInModule ])))
     in
     { context | commonModel = Pine.valueFromContextExpansionWithName ( nameInModule, redirectValue ) :: context.commonModel }
@@ -465,7 +465,7 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                                 |> List.map
                                     (\( sourceModuleName, exposedNameInModule ) ->
                                         ( exposedNameInModule
-                                        , Pine.ExpressionValue
+                                        , Pine.encodeExpressionAsValue
                                             (Pine.FunctionOrValueExpression
                                                 (String.join "." (sourceModuleName ++ [ exposedNameInModule ]))
                                             )
@@ -505,7 +505,7 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                         Ok declarations ->
                             let
                                 declarationsValues =
-                                    declarations |> List.map (Tuple.mapSecond Pine.ExpressionValue)
+                                    declarations |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
                             in
                             Ok ( moduleName, declarationsValues ++ importsValues ++ globalExposingValues )
 
@@ -1172,7 +1172,10 @@ pineExpressionFromElm elmExpression =
                                     Err ("Failed to map Elm expressionIfFalse: " ++ error)
 
                                 Ok expressionIfFalse ->
-                                    Ok (Pine.IfBlockExpression condition expressionIfTrue expressionIfFalse)
+                                    Ok
+                                        (Pine.IfBlockExpression
+                                            { condition = condition, ifTrue = expressionIfTrue, ifFalse = expressionIfFalse }
+                                        )
 
         Elm.Syntax.Expression.LetExpression letBlock ->
             pineExpressionFromElmLetBlock letBlock
@@ -1246,10 +1249,12 @@ pineExpressionFromLetBlockDeclarationsAndExpression : List ( String, Pine.Expres
 pineExpressionFromLetBlockDeclarationsAndExpression declarations expression =
     declarations
         |> List.foldl
-            (\declaration combinedExpr ->
+            (\( declarationName, declarationExpression ) combinedExpr ->
                 Pine.ContextExpansionWithNameExpression
-                    (Tuple.mapSecond Pine.ExpressionValue declaration)
-                    combinedExpr
+                    { name = declarationName
+                    , namedValue = Pine.encodeExpressionAsValue declarationExpression
+                    , expression = combinedExpr
+                    }
             )
             expression
 
@@ -1405,7 +1410,9 @@ functionExpressionFromArgumentsNamesAndExpression : List String -> Pine.Expressi
 functionExpressionFromArgumentsNamesAndExpression argumentsNames expression =
     argumentsNames
         |> List.foldr
-            (\argumentName prevExpression -> Pine.FunctionExpression argumentName prevExpression)
+            (\argumentName prevExpression ->
+                Pine.FunctionExpression { argumentName = argumentName, body = prevExpression }
+            )
             expression
 
 
@@ -1422,7 +1429,9 @@ pineExpressionFromElmValueConstructor valueConstructor =
         ( constructorName
         , argumentsNames
             |> List.foldl
-                (\argumentName prevExpression -> Pine.FunctionExpression argumentName prevExpression)
+                (\argumentName prevExpression ->
+                    Pine.FunctionExpression { argumentName = argumentName, body = prevExpression }
+                )
                 (Pine.tagValueExpression constructorName (argumentsNames |> List.map Pine.FunctionOrValueExpression))
         )
 
@@ -1442,12 +1451,13 @@ pineExpressionFromElmCaseBlock caseBlock =
                     let
                         ifBlockFromCase deconstructedCase nextBlockExpression =
                             Pine.IfBlockExpression
-                                deconstructedCase.conditionExpression
-                                (pineExpressionFromLetBlockDeclarationsAndExpression
-                                    deconstructedCase.declarations
-                                    deconstructedCase.thenExpression
-                                )
-                                nextBlockExpression
+                                { condition = deconstructedCase.conditionExpression
+                                , ifTrue =
+                                    pineExpressionFromLetBlockDeclarationsAndExpression
+                                        deconstructedCase.declarations
+                                        deconstructedCase.thenExpression
+                                , ifFalse = nextBlockExpression
+                                }
                     in
                     Ok
                         (List.foldr
