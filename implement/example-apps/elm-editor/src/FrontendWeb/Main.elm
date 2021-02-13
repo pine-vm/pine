@@ -1436,7 +1436,7 @@ viewWhenEditorOpen filePathOpenedInEditor state =
                                         == (elmMakeRequestFromCurrentState |> Maybe.map (.requestToBackend >> .files))
 
                                 warningFileContentChangedElement =
-                                    "⚠️ The file contents were changed since compiling"
+                                    "⚠️ The file contents changed since compiling"
                                         |> Element.text
                                         |> Element.el
                                             [ Element.transparent currentFileContentIsStillSame
