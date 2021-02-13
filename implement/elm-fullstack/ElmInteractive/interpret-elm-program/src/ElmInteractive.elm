@@ -1243,6 +1243,9 @@ pineExpressionFromElm elmExpression =
                 |> Result.Extra.combine
                 |> Result.map Pine.ListExpression
 
+        Elm.Syntax.Expression.RecordAccess expressionNode nameNode ->
+            pineExpressionFromElmRecordAccess (Elm.Syntax.Node.value nameNode) (Elm.Syntax.Node.value expressionNode)
+
         _ ->
             Err
                 ("Unsupported type of expression: "
@@ -1415,11 +1418,8 @@ declarationsFromPattern pattern =
 
         Elm.Syntax.Pattern.TuplePattern tupleElements ->
             let
-                getTupleElementExpression tupleElementIndex tupleExpression =
-                    Pine.ApplicationExpression
-                        { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
-                        , arguments = [ listDropExpression tupleElementIndex tupleExpression ]
-                        }
+                getTupleElementExpression =
+                    listItemFromIndexExpression
             in
             case
                 tupleElements
@@ -1629,16 +1629,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                                 argumentFromIndexExpression argumentIndex =
                                     listDropExpression
                                         argumentIndex
-                                        (Pine.ApplicationExpression
-                                            { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
-                                            , arguments =
-                                                [ Pine.ApplicationExpression
-                                                    { function = Pine.FunctionOrValueExpression "PineKernel.listTail"
-                                                    , arguments = [ caseBlockValueExpression ]
-                                                    }
-                                                ]
-                                            }
-                                        )
+                                        (listItemFromIndexExpression 1 caseBlockValueExpression)
 
                                 declarations =
                                     declarationsNames
@@ -1677,6 +1668,14 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                         ("Unsupported type of pattern in case-of block case: "
                             ++ Json.Encode.encode 0 (Elm.Syntax.Pattern.encode (Elm.Syntax.Node.value elmPattern))
                         )
+
+
+listItemFromIndexExpression : Int -> Pine.Expression -> Pine.Expression
+listItemFromIndexExpression itemIndex listExpression =
+    Pine.ApplicationExpression
+        { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
+        , arguments = [ listDropExpression itemIndex listExpression ]
+        }
 
 
 listDropExpression : Int -> Pine.Expression -> Pine.Expression
@@ -1723,6 +1722,109 @@ pineExpressionFromElmRecord recordSetters =
             )
         |> Result.Extra.combine
         |> Result.map (Pine.ListExpression >> List.singleton >> Pine.tagValueExpression elmRecordTypeTagName)
+
+
+pineExpressionFromElmRecordAccess : String -> Elm.Syntax.Expression.Expression -> Result String Pine.Expression
+pineExpressionFromElmRecordAccess fieldName recordElmExpression =
+    case pineExpressionFromElm recordElmExpression of
+        Err error ->
+            Err ("Failed to map record expression: " ++ error)
+
+        Ok recordExpression ->
+            let
+                recordFieldNameValueExpression =
+                    Pine.LiteralExpression (Pine.valueFromString fieldName)
+
+                matchingFieldPredicateExpression listElementExpression =
+                    Pine.ApplicationExpression
+                        { function = Pine.FunctionOrValueExpression "PineKernel.equals"
+                        , arguments =
+                            [ recordFieldNameValueExpression
+                            , Pine.ApplicationExpression
+                                { function = Pine.FunctionOrValueExpression "PineKernel.listHead"
+                                , arguments = [ listElementExpression ]
+                                }
+                            ]
+                        }
+
+                recordFieldsExpression =
+                    listItemFromIndexExpression 0 (listItemFromIndexExpression 1 recordExpression)
+            in
+            Ok
+                (Pine.IfBlockExpression
+                    { condition =
+                        Pine.ApplicationExpression
+                            { function = Pine.FunctionOrValueExpression "PineKernel.equals"
+                            , arguments =
+                                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                                , listItemFromIndexExpression 0 recordExpression
+                                ]
+                            }
+                    , ifTrue =
+                        expressionToPickFirstMatchingElementFromList
+                            matchingFieldPredicateExpression
+                            (listItemFromIndexExpression 1)
+                            (Pine.LiteralExpression
+                                (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
+                            )
+                            recordFieldsExpression
+                    , ifFalse =
+                        Pine.LiteralExpression
+                            (Pine.valueFromString "Error: Used record access on value which is not a record")
+                    }
+                )
+
+
+expressionToPickFirstMatchingElementFromList : (Pine.Expression -> Pine.Expression) -> (Pine.Expression -> Pine.Expression) -> Pine.Expression -> Pine.Expression -> Pine.Expression
+expressionToPickFirstMatchingElementFromList elementPredicateFromElementExpression postProcessIfFound defaultExpression listExpression =
+    let
+        functionName =
+            "internal_recursive_pick_from_list"
+
+        recursionInstanceRemainingListName =
+            "internal_remaining_list"
+
+        firstElementExpression =
+            listItemFromIndexExpression 0 (Pine.FunctionOrValueExpression recursionInstanceRemainingListName)
+
+        functionExpression =
+            Pine.FunctionExpression
+                { argumentName = recursionInstanceRemainingListName
+                , body =
+                    Pine.IfBlockExpression
+                        { condition =
+                            Pine.ApplicationExpression
+                                { function = Pine.FunctionOrValueExpression "(==)"
+                                , arguments =
+                                    [ Pine.FunctionOrValueExpression recursionInstanceRemainingListName
+                                    , Pine.LiteralExpression (Pine.ListValue [])
+                                    ]
+                                }
+                        , ifTrue = defaultExpression
+                        , ifFalse =
+                            Pine.IfBlockExpression
+                                { condition = elementPredicateFromElementExpression firstElementExpression
+                                , ifTrue = postProcessIfFound firstElementExpression
+                                , ifFalse =
+                                    Pine.ApplicationExpression
+                                        { function = Pine.FunctionOrValueExpression functionName
+                                        , arguments =
+                                            [ listDropExpression
+                                                1
+                                                (Pine.FunctionOrValueExpression recursionInstanceRemainingListName)
+                                            ]
+                                        }
+                                }
+                        }
+                }
+    in
+    pineExpressionFromLetBlockDeclarationsAndExpression
+        [ ( functionName, functionExpression ) ]
+        (Pine.ApplicationExpression
+            { function = Pine.FunctionOrValueExpression functionName
+            , arguments = [ listExpression ]
+            }
+        )
 
 
 moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)
