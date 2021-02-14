@@ -30,7 +30,7 @@ namespace elm_fullstack
 
             app.VersionOption(template: "-v|--version", shortFormVersion: "version " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId);
 
-            app.Command("install-command", installCmd =>
+            app.Command("install", installCmd =>
             {
                 var (commandName, _, registerExecutableDirectoryOnPath) = CheckIfExecutableIsRegisteredOnPath();
 
