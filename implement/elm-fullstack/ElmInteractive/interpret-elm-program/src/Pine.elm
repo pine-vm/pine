@@ -51,6 +51,7 @@ type Value
     = BlobValue (List Int)
     | ListValue (List Value)
     | ClosureValue ExpressionContext Expression
+    | KernelFunction (Value -> Result (PathDescription String) Value)
 
 
 type alias ExpressionContext =
@@ -106,30 +107,22 @@ evaluateExpressionExceptClosure context expression =
                 |> Result.mapError (DescribePathNode ("Failed application of '" ++ describeExpression application.function ++ "'"))
 
         FunctionOrValueExpression name ->
-            case name of
-                "True" ->
-                    Ok trueValue
-
-                "False" ->
-                    Ok falseValue
-
-                _ ->
-                    let
-                        beforeCheckForExpression =
-                            lookUpNameAsStringInContext (String.split "." name) context
-                                |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
-                    in
-                    case beforeCheckForExpression of
-                        Ok ( valueFromLookup, contextFromLookup ) ->
-                            case decodeExpressionFromValue valueFromLookup of
-                                Ok expressionFromLookup ->
-                                    Ok (ClosureValue { commonModel = contextFromLookup } expressionFromLookup)
-
-                                _ ->
-                                    Result.map Tuple.first beforeCheckForExpression
+            let
+                beforeCheckForExpression =
+                    lookUpNameAsStringInContext (String.split "." name) context
+                        |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
+            in
+            case beforeCheckForExpression of
+                Ok ( valueFromLookup, contextFromLookup ) ->
+                    case decodeExpressionFromValue valueFromLookup of
+                        Ok expressionFromLookup ->
+                            Ok (ClosureValue { commonModel = contextFromLookup } expressionFromLookup)
 
                         _ ->
                             Result.map Tuple.first beforeCheckForExpression
+
+                _ ->
+                    Result.map Tuple.first beforeCheckForExpression
 
         IfBlockExpression ifBlock ->
             case evaluateExpression context ifBlock.condition of
@@ -178,7 +171,133 @@ namedValueFromValue value =
 
 lookUpNameAsStringInContext : List String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
 lookUpNameAsStringInContext path =
-    lookUpNameAsValueInContext (List.map valueFromString path)
+    case path of
+        [ "PineKernel", kernelFunctionName ] ->
+            case lookUpKernelFunction kernelFunctionName of
+                Nothing ->
+                    always (Err (DescribePathEnd ("Did not pine kernel function with this name: " ++ kernelFunctionName)))
+
+                Just kernelFunction ->
+                    always (Ok ( kernelFunction, [] ))
+
+        _ ->
+            lookUpNameAsValueInContext (List.map valueFromString path)
+
+
+lookUpKernelFunction : String -> Maybe Value
+lookUpKernelFunction kernelFunctionName =
+    case kernelFunctionName of
+        "equals" ->
+            Just
+                (kernelFunctionExpectingExactlyTwoArguments
+                    { mapArg0 = Ok
+                    , mapArg1 = Ok
+                    , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue == rightValue))
+                    }
+                )
+
+        "equalsNot" ->
+            Just
+                (kernelFunctionExpectingExactlyTwoArguments
+                    { mapArg0 = Ok
+                    , mapArg1 = Ok
+                    , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue /= rightValue))
+                    }
+                )
+
+        "notBool" ->
+            Just
+                (kernelFunctionExpectingExactlyOneArgument
+                    { mapArg0 = Ok
+                    , apply = \argument -> Ok (valueFromBool (argument /= trueValue))
+                    }
+                )
+
+        "and" ->
+            Just (kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&))
+
+        "or" ->
+            Just (kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||))
+
+        "listHead" ->
+            Just (kernelFunctionExpectingExactlyOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []) >> Ok))
+
+        "listTail" ->
+            Just (kernelFunctionExpectingExactlyOneArgumentOfTypeList ((List.tail >> Maybe.withDefault [] >> ListValue) >> Ok))
+
+        "negate" ->
+            Just
+                (kernelFunctionExpectingExactlyOneArgument
+                    { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+                    , apply = BigInt.negate >> valueFromBigInt >> Ok
+                    }
+                )
+
+        "addInt" ->
+            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.add)
+
+        "subInt" ->
+            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.sub)
+
+        "mulInt" ->
+            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.mul)
+
+        "divInt" ->
+            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.div)
+
+        "lessThanInt" ->
+            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.lt)
+
+        "greaterThanInt" ->
+            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.gt)
+
+        "append" ->
+            Just
+                (kernelFunctionExpectingExactlyTwoArguments
+                    { mapArg0 = Ok
+                    , mapArg1 = Ok
+                    , apply =
+                        \leftValue rightValue ->
+                            case leftValue of
+                                ListValue leftList ->
+                                    case rightValue of
+                                        ListValue rightList ->
+                                            Ok (ListValue (leftList ++ rightList))
+
+                                        _ ->
+                                            Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a list.")
+
+                                BlobValue leftBlob ->
+                                    case rightValue of
+                                        BlobValue rightBlob ->
+                                            Ok (BlobValue (leftBlob ++ rightBlob))
+
+                                        _ ->
+                                            Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a blob.")
+
+                                _ ->
+                                    Err (DescribePathEnd "Left operand for append is not a list and not a blob.")
+                    }
+                )
+
+        "listCons" ->
+            Just
+                (kernelFunctionExpectingExactlyTwoArguments
+                    { mapArg0 = Ok
+                    , mapArg1 = Ok
+                    , apply =
+                        \leftValue rightValue ->
+                            case rightValue of
+                                ListValue rightList ->
+                                    Ok (ListValue (leftValue :: rightList))
+
+                                _ ->
+                                    Err (DescribePathEnd "Right operand for listCons is not a list.")
+                    }
+                )
+
+        _ ->
+            Nothing
 
 
 lookUpNameAsValueInContext : List Value -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
@@ -257,220 +376,6 @@ evaluateFunctionApplication context application =
 
 evaluateFunctionApplicationWithEvaluatedArgs : ExpressionContext -> { function : Expression, arguments : List Value } -> Result (PathDescription String) Value
 evaluateFunctionApplicationWithEvaluatedArgs context application =
-    let
-        functionOnTwoBigIntWithBooleanResult functionOnBigInt =
-            evaluateFunctionApplicationExpectingExactlyTwoArguments
-                { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-                , mapArg1 = bigIntFromValue >> Result.mapError DescribePathEnd
-                , apply =
-                    \leftInt rightInt ->
-                        Ok
-                            (if functionOnBigInt leftInt rightInt then
-                                trueValue
-
-                             else
-                                falseValue
-                            )
-                }
-                application.arguments
-
-        functionOnTwoBigIntWithBigIntResult functionOnBigInt =
-            evaluateFunctionApplicationExpectingExactlyTwoArguments
-                { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-                , mapArg1 = bigIntFromValue >> Result.mapError DescribePathEnd
-                , apply =
-                    \leftInt rightInt ->
-                        Ok (valueFromBigInt (functionOnBigInt leftInt rightInt))
-                }
-                application.arguments
-
-        functionExpectingOneArgumentOfTypeList functionOnList =
-            evaluateFunctionApplicationExpectingExactlyOneArgument
-                { mapArg = Ok
-                , apply =
-                    \argument ->
-                        case argument of
-                            ListValue list ->
-                                list |> functionOnList |> Ok
-
-                            _ ->
-                                Err (DescribePathEnd ("Argument is not a list ('" ++ describeValue argument ++ "')"))
-                }
-                application.arguments
-
-        functionEquals =
-            evaluateFunctionApplicationExpectingExactlyTwoArguments
-                { mapArg0 = Ok
-                , mapArg1 = Ok
-                , apply =
-                    \leftValue rightValue ->
-                        Ok
-                            (if leftValue == rightValue then
-                                trueValue
-
-                             else
-                                falseValue
-                            )
-                }
-                application.arguments
-
-        functionEqualsNot =
-            evaluateFunctionApplicationExpectingExactlyTwoArguments
-                { mapArg0 = Ok
-                , mapArg1 = Ok
-                , apply =
-                    \leftValue rightValue ->
-                        Ok
-                            (if leftValue == rightValue then
-                                falseValue
-
-                             else
-                                trueValue
-                            )
-                }
-                application.arguments
-
-        continueIgnoringAtomBindings _ =
-            evaluateFunctionApplicationIgnoringAtomBindings
-                context
-                application
-    in
-    case application.function of
-        FunctionOrValueExpression functionName ->
-            case functionName of
-                "PineKernel.equals" ->
-                    functionEquals
-
-                "PineKernel.negate" ->
-                    evaluateFunctionApplicationExpectingExactlyOneArgument
-                        { mapArg = bigIntFromValue >> Result.mapError DescribePathEnd
-                        , apply = BigInt.negate >> valueFromBigInt >> Ok
-                        }
-                        application.arguments
-
-                "PineKernel.listHead" ->
-                    functionExpectingOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []))
-
-                "PineKernel.listTail" ->
-                    functionExpectingOneArgumentOfTypeList (List.tail >> Maybe.withDefault [] >> ListValue)
-
-                "PineKernel.listCons" ->
-                    evaluateFunctionApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = Ok
-                        , mapArg1 = Ok
-                        , apply =
-                            \leftValue rightValue ->
-                                case rightValue of
-                                    ListValue rightList ->
-                                        Ok (ListValue (leftValue :: rightList))
-
-                                    _ ->
-                                        Err (DescribePathEnd "Right operand for listCons is not a list.")
-                        }
-                        application.arguments
-
-                "PineKernel.booleanNot" ->
-                    evaluateFunctionApplicationExpectingExactlyOneArgument
-                        { mapArg = Ok
-                        , apply =
-                            \argument ->
-                                if argument == trueValue then
-                                    Ok falseValue
-
-                                else
-                                    Ok trueValue
-                        }
-                        application.arguments
-
-                "(==)" ->
-                    functionEquals
-
-                "(/=)" ->
-                    functionEqualsNot
-
-                "(++)" ->
-                    evaluateFunctionApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = Ok
-                        , mapArg1 = Ok
-                        , apply =
-                            \leftValue rightValue ->
-                                case ( leftValue, rightValue ) of
-                                    ( BlobValue leftLiteral, BlobValue rightLiteral ) ->
-                                        Ok (BlobValue (leftLiteral ++ rightLiteral))
-
-                                    ( ListValue leftList, ListValue rightList ) ->
-                                        Ok (ListValue (leftList ++ rightList))
-
-                                    _ ->
-                                        Err
-                                            (DescribePathEnd
-                                                ("Unexpected combination of operands for '++' ("
-                                                    ++ describeValueSuperficial leftValue
-                                                    ++ ", "
-                                                    ++ describeValueSuperficial rightValue
-                                                    ++ ")."
-                                                )
-                                            )
-                        }
-                        application.arguments
-
-                "(&&)" ->
-                    evaluateFunctionApplicationExpectingExactlyTwoArguments
-                        { mapArg0 = Ok
-                        , mapArg1 = Ok
-                        , apply =
-                            \leftValue rightValue ->
-                                if leftValue == falseValue then
-                                    Ok falseValue
-
-                                else if leftValue == trueValue then
-                                    if rightValue == falseValue then
-                                        Ok falseValue
-
-                                    else if rightValue == trueValue then
-                                        Ok trueValue
-
-                                    else
-                                        Err (DescribePathEnd "Value right of && is not a 'Bool'")
-
-                                else
-                                    Err (DescribePathEnd "Value left of && is not a 'Bool'")
-                        }
-                        application.arguments
-
-                "(+)" ->
-                    functionOnTwoBigIntWithBigIntResult BigInt.add
-
-                "(-)" ->
-                    functionOnTwoBigIntWithBigIntResult BigInt.sub
-
-                "(*)" ->
-                    functionOnTwoBigIntWithBigIntResult BigInt.mul
-
-                "(//)" ->
-                    functionOnTwoBigIntWithBigIntResult BigInt.div
-
-                "(<)" ->
-                    functionOnTwoBigIntWithBooleanResult BigInt.lt
-
-                "(<=)" ->
-                    functionOnTwoBigIntWithBooleanResult BigInt.lte
-
-                "(>)" ->
-                    functionOnTwoBigIntWithBooleanResult BigInt.gt
-
-                "(>=)" ->
-                    functionOnTwoBigIntWithBooleanResult BigInt.gte
-
-                _ ->
-                    continueIgnoringAtomBindings ()
-
-        _ ->
-            continueIgnoringAtomBindings ()
-
-
-evaluateFunctionApplicationIgnoringAtomBindings : ExpressionContext -> { function : Expression, arguments : List Value } -> Result (PathDescription String) Value
-evaluateFunctionApplicationIgnoringAtomBindings context application =
     evaluateExpression context application.function
         |> Result.mapError (DescribePathNode ("Failed to evaluate function expression '" ++ describeExpression application.function ++ "'"))
         |> Result.andThen
@@ -486,7 +391,7 @@ evaluateFunctionApplicationIgnoringAtomBindings context application =
                                     ClosureValue nextClosureContext closureExpression ->
                                         case closureExpression of
                                             FunctionExpression functionExpression ->
-                                                evaluateFunctionApplicationIgnoringAtomBindings
+                                                evaluateFunctionApplicationWithEvaluatedArgs
                                                     (addToContext
                                                         [ valueFromContextExpansionWithName ( functionExpression.argumentName, firstArgument ) ]
                                                         nextClosureContext
@@ -510,6 +415,18 @@ evaluateFunctionApplicationIgnoringAtomBindings context application =
                                                         )
                                                     )
 
+                                    KernelFunction kernelFunction ->
+                                        kernelFunction firstArgument
+                                            |> Result.mapError (DescribePathNode "Failed to apply kernel function")
+                                            |> Result.andThen
+                                                (\kernelFunctionResult ->
+                                                    evaluateFunctionApplicationWithEvaluatedArgs
+                                                        context
+                                                        { function = LiteralExpression kernelFunctionResult
+                                                        , arguments = remainingArguments
+                                                        }
+                                                )
+
                                     _ ->
                                         case decodeExpressionFromValue functionValue of
                                             Ok expressionFromValue ->
@@ -518,7 +435,7 @@ evaluateFunctionApplicationIgnoringAtomBindings context application =
                                             Err decodeError ->
                                                 Err
                                                     (DescribePathEnd
-                                                        ("Failed to decode expression from value: " ++ decodeError)
+                                                        ("Too many arguments: Failed to decode expression from value: " ++ decodeError)
                                                     )
                         in
                         continueWithClosure context functionOrValue
@@ -539,60 +456,110 @@ intFromBigInt bigInt =
                 Ok int
 
 
-evaluateFunctionApplicationExpectingExactlyTwoArguments :
+kernelFunctionOnTwoBigIntWithBooleanResult : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> Value
+kernelFunctionOnTwoBigIntWithBooleanResult apply =
+    kernelFunctionExpectingExactlyTwoBigInt
+        (\leftInt rightInt -> Ok (valueFromBool (apply leftInt rightInt)))
+
+
+kernelFunctionExpectingExactlyTwoBigIntAndProducingBool : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> Value
+kernelFunctionExpectingExactlyTwoBigIntAndProducingBool apply =
+    kernelFunctionExpectingExactlyTwoBigInt
+        (\a0 a1 -> Ok (valueFromBool (apply a0 a1)))
+
+
+kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt : (BigInt.BigInt -> BigInt.BigInt -> BigInt.BigInt) -> Value
+kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt apply =
+    kernelFunctionExpectingExactlyTwoBigInt
+        (\a0 a1 -> Ok (valueFromBigInt (apply a0 a1)))
+
+
+kernelFunctionExpectingExactlyTwoBigInt : (BigInt.BigInt -> BigInt.BigInt -> Result (PathDescription String) Value) -> Value
+kernelFunctionExpectingExactlyTwoBigInt apply =
+    kernelFunctionExpectingExactlyTwoArguments
+        { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+        , mapArg1 = bigIntFromValue >> Result.mapError DescribePathEnd
+        , apply = apply
+        }
+
+
+kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool : (Bool -> Bool -> Bool) -> Value
+kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool apply =
+    kernelFunctionExpectingExactlyTwoArguments
+        { mapArg0 = boolFromValue >> Result.fromMaybe (DescribePathEnd "Is not trueValue or falseValue")
+        , mapArg1 = boolFromValue >> Result.fromMaybe (DescribePathEnd "Is not trueValue or falseValue")
+        , apply = \a b -> Ok (valueFromBool (apply a b))
+        }
+
+
+kernelFunctionExpectingExactlyTwoArguments :
     { mapArg0 : Value -> Result (PathDescription String) arg0
     , mapArg1 : Value -> Result (PathDescription String) arg1
     , apply : arg0 -> arg1 -> Result (PathDescription String) Value
     }
-    -> List Value
-    -> Result (PathDescription String) Value
-evaluateFunctionApplicationExpectingExactlyTwoArguments configuration arguments =
-    case arguments of
-        [ arg0, arg1 ] ->
-            case configuration.mapArg0 arg0 of
-                Err error ->
-                    Err (DescribePathNode "Failed to map argument 0" error)
-
-                Ok mappedArg0 ->
-                    case configuration.mapArg1 arg1 of
-                        Err error ->
-                            Err (DescribePathNode "Failed to map argument 1" error)
-
-                        Ok mappedArg1 ->
-                            configuration.apply mappedArg0 mappedArg1
-
-        _ ->
-            Err
-                (DescribePathEnd
-                    ("Unexpected number of arguments for: "
-                        ++ String.fromInt (List.length arguments)
-                    )
+    -> Value
+kernelFunctionExpectingExactlyTwoArguments configuration =
+    KernelFunction
+        (configuration.mapArg0
+            >> Result.mapError (DescribePathNode "Failed to map argument 0")
+            >> Result.map
+                (\mappedArg0 ->
+                    KernelFunction
+                        (configuration.mapArg1
+                            >> Result.mapError (DescribePathNode "Failed to map argument 1")
+                            >> Result.andThen (configuration.apply mappedArg0)
+                        )
                 )
+        )
 
 
-evaluateFunctionApplicationExpectingExactlyOneArgument :
-    { mapArg : Value -> Result (PathDescription String) arg
-    , apply : arg -> Result (PathDescription String) Value
+kernelFunctionExpectingExactlyOneArgumentOfTypeList : (List Value -> Result (PathDescription String) Value) -> Value
+kernelFunctionExpectingExactlyOneArgumentOfTypeList apply =
+    kernelFunctionExpectingExactlyOneArgument
+        { mapArg0 =
+            \argument ->
+                case argument of
+                    ListValue list ->
+                        Ok list
+
+                    _ ->
+                        Err (DescribePathEnd ("Argument is not a list ('" ++ describeValue argument ++ "')"))
+        , apply = apply
+        }
+
+
+kernelFunctionExpectingExactlyOneArgument :
+    { mapArg0 : Value -> Result (PathDescription String) arg0
+    , apply : arg0 -> Result (PathDescription String) Value
     }
-    -> List Value
-    -> Result (PathDescription String) Value
-evaluateFunctionApplicationExpectingExactlyOneArgument configuration arguments =
-    case arguments of
-        [ arg ] ->
-            case configuration.mapArg arg of
-                Err error ->
-                    Err (DescribePathNode "Failed to map argument" error)
+    -> Value
+kernelFunctionExpectingExactlyOneArgument configuration =
+    KernelFunction
+        (configuration.mapArg0
+            >> Result.mapError (DescribePathNode "Failed to map argument 0")
+            >> Result.andThen configuration.apply
+        )
 
-                Ok mappedArg ->
-                    configuration.apply mappedArg
 
-        _ ->
-            Err
-                (DescribePathEnd
-                    ("Unexpected number of arguments for: "
-                        ++ String.fromInt (List.length arguments)
-                    )
-                )
+boolFromValue : Value -> Maybe Bool
+boolFromValue value =
+    if value == trueValue then
+        Just True
+
+    else if value == falseValue then
+        Just False
+
+    else
+        Nothing
+
+
+valueFromBool : Bool -> Value
+valueFromBool bool =
+    if bool then
+        trueValue
+
+    else
+        falseValue
 
 
 trueValue : Value
@@ -652,6 +619,9 @@ describeValueSuperficial value =
         ClosureValue _ _ ->
             "ClosureValue"
 
+        KernelFunction _ ->
+            "KernelFunction"
+
 
 describeValue : Value -> String
 describeValue value =
@@ -664,6 +634,9 @@ describeValue value =
 
         ClosureValue _ expression ->
             "closure(" ++ describeExpression expression ++ ")"
+
+        KernelFunction _ ->
+            "KernelFunction"
 
 
 valueFromString : String -> Value
@@ -953,6 +926,9 @@ jsonEncodeValue value =
 
         ClosureValue _ _ ->
             Json.Encode.object [ ( "ClosureValue", Json.Encode.string "not_implemented" ) ]
+
+        KernelFunction _ ->
+            Json.Encode.object [ ( "KernelFunction", Json.Encode.string "not_implemented" ) ]
 
 
 jsonDecodeValue : Json.Decode.Decoder Value

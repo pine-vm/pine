@@ -323,6 +323,9 @@ pineValueAsElmValue pineValue =
             in
             Ok (ElmInternal ("closure<" ++ detail ++ ">"))
 
+        Pine.KernelFunction _ ->
+            Ok (ElmInternal "PineKernelFunction")
+
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
 elmValueAsElmRecord elmValue =
@@ -450,34 +453,59 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                 valueForImportedModule : Elm.Syntax.ModuleName.ModuleName -> Result String Pine.Value
                 valueForImportedModule importedModuleName =
                     otherModules
-                        |> List.foldl
-                            (\otherModuleText intermediateResult ->
-                                if intermediateResult /= Nothing then
-                                    intermediateResult
+                        |> List.filter (.projectedModuleName >> (==) importedModuleName)
+                        |> List.head
+                        |> Maybe.map
+                            (\matchingModule ->
+                                case parseElmModuleTextIntoPineValue allModules matchingModule of
+                                    Err parseOtherModuleError ->
+                                        Err ("Failed to parse imported module: " ++ parseOtherModuleError)
 
-                                else
-                                    case parseElmModuleTextIntoPineValue allModules otherModuleText of
-                                        Err parseOtherModuleError ->
-                                            Just (Err ("Failed to parse candidate for imported module: " ++ parseOtherModuleError))
-
-                                        Ok ( otherModuleName, otherModuleExports ) ->
-                                            if otherModuleName /= importedModuleName then
-                                                Nothing
-
-                                            else
-                                                Just (Ok otherModuleExports)
+                                    Ok ( _, importedModuleExports ) ->
+                                        Ok importedModuleExports
                             )
-                            Nothing
                         |> Maybe.withDefault (Err ("Did not find the module with name " ++ String.join "." importedModuleName))
 
-                valuesFromImportsResults : List (Result String ( String, Pine.Value ))
-                valuesFromImportsResults =
+                explicitImports =
                     file.imports
                         |> List.map
                             (\importSyntax ->
+                                { moduleName = Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).moduleName
+                                , moduleAlias = Maybe.map Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).moduleAlias
+                                , exposingList = Maybe.map Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).exposingList
+                                }
+                            )
+
+                implicitImports =
+                    if autoImportedModules |> List.map .moduleName >> List.member moduleName then
+                        []
+
+                    else
+                        autoImportedModules
+                            |> List.concatMap
+                                (\autoImportedModule ->
+                                    if List.any (.moduleName >> (==) autoImportedModule.moduleName) explicitImports then
+                                        []
+
+                                    else
+                                        [ { moduleName = autoImportedModule.moduleName
+                                          , moduleAlias = Nothing
+                                          , exposingList = Nothing
+                                          }
+                                        ]
+                                )
+
+                allModuleImports =
+                    explicitImports ++ implicitImports
+
+                valuesFromImportsResults : List (Result String ( String, Pine.Value ))
+                valuesFromImportsResults =
+                    allModuleImports
+                        |> List.map
+                            (\moduleImport ->
                                 let
                                     importedModuleName =
-                                        Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).moduleName
+                                        moduleImport.moduleName
                                 in
                                 valueForImportedModule importedModuleName
                                     |> Result.map (\importValue -> ( String.join "." importedModuleName, importValue ))
@@ -557,8 +585,89 @@ module Basics exposing (..)
 
 infix right 0 (<|) = apL
 infix left  0 (|>) = apR
+infix right 2 (||) = or
+infix right 3 (&&) = and
+infix non   4 (==) = eq
+infix non   4 (/=) = neq
+infix non   4 (<)  = lt
+infix non   4 (>)  = gt
+infix non   4 (<=) = le
+infix non   4 (>=) = ge
+infix right 5 (++) = append
+infix left  6 (+)  = add
+infix left  6 (-)  = sub
+infix left  7 (*)  = mul
+infix left  7 (//) = idiv
 infix left  9 (<<) = composeL
 infix right 9 (>>) = composeR
+
+
+type Bool = True | False
+
+
+eq : a -> a -> Bool
+eq =
+    PineKernel.equals
+
+
+neq : a -> a -> Bool
+neq =
+    PineKernel.equalsNot
+
+
+add : number -> number -> number
+add =
+    PineKernel.addInt
+
+
+sub : number -> number -> number
+sub =
+    PineKernel.subInt
+
+
+mul : number -> number -> number
+mul =
+    PineKernel.mulInt
+
+
+idiv : number -> number -> number
+idiv =
+    PineKernel.divInt
+
+
+and : Bool -> Bool -> Bool
+and =
+    PineKernel.and
+
+
+or : Bool -> Bool -> Bool
+or =
+    PineKernel.or
+
+
+append : appendable -> appendable -> appendable
+append =
+    PineKernel.append
+
+
+lt : comparable -> comparable -> Bool
+lt =
+    PineKernel.lessThanInt
+
+
+gt : comparable -> comparable -> Bool
+gt =
+    PineKernel.greaterThanInt
+
+
+le : comparable -> comparable -> Bool
+le a b =
+    or (PineKernel.equals a b) (lt a b)
+
+
+ge : comparable -> comparable -> Bool
+ge a b =
+    or (PineKernel.equals a b) (gt a b)
 
 
 apR : a -> (a -> b) -> b
@@ -642,7 +751,11 @@ mapBoth funcA funcB (x,y) =
 module List exposing (..)
 
 
+import Basics exposing (..)
 import Maybe exposing (Maybe(..))
+
+
+infix right 5 (::) = cons
 
 
 singleton : a -> List a
@@ -795,6 +908,9 @@ drop n list =
 """
     , """
 module Char exposing (..)
+
+
+import Basics exposing (Bool, Int, (&&), (||), (>=), (<=))
 
 
 type alias Char = Int
@@ -1116,15 +1232,39 @@ fromIntFromDigitsChars digitsCharacters int =
     ]
 
 
+autoImportedModules : List { moduleName : List String }
+autoImportedModules =
+    [ { moduleName = [ "Basics" ] }
+    , { moduleName = [ "Maybe" ] }
+    , { moduleName = [ "List" ] }
+    ]
+
+
 elmValuesToExposeToGlobal : List ( List String, String )
 elmValuesToExposeToGlobal =
     [ ( [ "Basics" ], "identity" )
     , ( [ "Basics" ], "always" )
     , ( [ "Basics" ], "not" )
+    , ( [ "Basics" ], "(==)" )
+    , ( [ "Basics" ], "(/=)" )
+    , ( [ "Basics" ], "(&&)" )
+    , ( [ "Basics" ], "(||)" )
+    , ( [ "Basics" ], "(<)" )
+    , ( [ "Basics" ], "(>)" )
+    , ( [ "Basics" ], "(<=)" )
+    , ( [ "Basics" ], "(>=)" )
+    , ( [ "Basics" ], "(++)" )
+    , ( [ "Basics" ], "(+)" )
+    , ( [ "Basics" ], "(-)" )
+    , ( [ "Basics" ], "(*)" )
+    , ( [ "Basics" ], "(//)" )
     , ( [ "Basics" ], "(|>)" )
     , ( [ "Basics" ], "(<|)" )
     , ( [ "Basics" ], "(>>)" )
     , ( [ "Basics" ], "(<<)" )
+    , ( [ "Basics" ], "True" )
+    , ( [ "Basics" ], "False" )
+    , ( [ "List" ], "(::)" )
     , ( [ "Maybe" ], "Nothing" )
     , ( [ "Maybe" ], "Just" )
     ]
@@ -1194,6 +1334,9 @@ pineExpressionFromElm elmExpression =
 
                     _ ->
                         Err "Failed to map OperatorApplication left or right expression. TODO: Expand error details."
+
+        Elm.Syntax.Expression.PrefixOperator operator ->
+            Ok (Pine.FunctionOrValueExpression ("(" ++ operator ++ ")"))
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case pineExpressionFromElm (Elm.Syntax.Node.value elmCondition) of
@@ -1521,7 +1664,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
                     let
                         conditionExpression =
                             Pine.ApplicationExpression
-                                { function = Pine.FunctionOrValueExpression "(==)"
+                                { function = Pine.FunctionOrValueExpression "PineKernel.equals"
                                 , arguments =
                                     [ caseBlockValueExpression
                                     , valueToCompare
@@ -1566,7 +1709,7 @@ pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExp
 
                                 conditionExpression =
                                     Pine.ApplicationExpression
-                                        { function = Pine.FunctionOrValueExpression "PineKernel.booleanNot"
+                                        { function = Pine.FunctionOrValueExpression "PineKernel.notBool"
                                         , arguments =
                                             [ Pine.ApplicationExpression
                                                 { function = Pine.FunctionOrValueExpression "PineKernel.equals"
@@ -1794,7 +1937,7 @@ expressionToPickFirstMatchingElementFromList elementPredicateFromElementExpressi
                     Pine.IfBlockExpression
                         { condition =
                             Pine.ApplicationExpression
-                                { function = Pine.FunctionOrValueExpression "(==)"
+                                { function = Pine.FunctionOrValueExpression "PineKernel.equals"
                                 , arguments =
                                     [ Pine.FunctionOrValueExpression recursionInstanceRemainingListName
                                     , Pine.LiteralExpression (Pine.ListValue [])
