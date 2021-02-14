@@ -195,8 +195,18 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
         static protected IImmutableList<string> CompositionHeadHashFilePath =>
             ImmutableList.Create("composition-log-head-hash");
 
+        /*
+        Distinguish literals from other kinds of representations. (derivations/recipes)
+        We can also distinguish between representations in the 'literal' class: I see two extremes here: On one end is the same that we currently use for hashing. The opposite end is integrating the transitive hull of dependencies.
+        */
+        static protected string LiteralElementSubdirectory => "literal-element";
+
+        // TODO: Remove 'ComponentSubdirectory' to complete migration.
         static protected string ComponentSubdirectory => "component";
 
+        static protected string DeflatedLiteralElementSubdirectory => "deflated-literal-element";
+
+        // TODO: Remove 'DeflatedComponentSubdirectory' to complete migration.
         static protected string DeflatedComponentSubdirectory => "deflated-component";
 
         static protected string ProvisionalReductionSubdirectory => "provisional-reduction";
@@ -222,8 +232,12 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
     {
         protected IFileStoreReader fileStore;
 
+        protected IFileStoreReader literalElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
+
         //  Plain Kalmit component.
         protected IFileStoreReader componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
+
+        protected IFileStoreReader deflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
         protected IFileStoreReader deflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
 
@@ -239,14 +253,18 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         byte[] LoadComponentSerialRepresentationForHash(string componentHashBase16)
         {
+            var filePath =
+                GetFilePathForComponentInComponentFileStore(componentHashBase16);
+
             var originalFile =
-                componentFileStore.GetFileContent(GetFilePathForComponentInComponentFileStore(componentHashBase16));
+                literalElementFileStore.GetFileContent(filePath) ??
+                componentFileStore.GetFileContent(filePath);
 
             if (originalFile == null)
             {
                 var deflatedFile =
-                    deflatedComponentFileStore.GetFileContent(
-                        GetFilePathForComponentInComponentFileStore(componentHashBase16));
+                    deflatedLiteralElementFileStore.GetFileContent(filePath) ??
+                    deflatedComponentFileStore.GetFileContent(filePath);
 
                 if (deflatedFile != null)
                     return CommonConversion.Inflate(deflatedFile);
@@ -360,8 +378,12 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         protected IFileStoreWriter fileStore;
 
+        protected IFileStoreWriter literalElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
+
         //  Plain Kalmit component.
         protected IFileStoreWriter componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
+
+        protected IFileStoreWriter deflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
         protected IFileStoreWriter deflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
 
@@ -412,7 +434,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
                     if (deflated.Length * 10 < serialRepresentation.Length * 8)
                     {
-                        deflatedComponentFileStore.SetFileContent(
+                        deflatedLiteralElementFileStore.SetFileContent(
                             GetFilePathForComponentInComponentFileStore(hashBase16),
                             deflated);
 
@@ -420,7 +442,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
                     }
                 }
 
-                componentFileStore.SetFileContent(
+                literalElementFileStore.SetFileContent(
                     GetFilePathForComponentInComponentFileStore(hashBase16),
                     serialRepresentation);
             }
