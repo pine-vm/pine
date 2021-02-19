@@ -2,7 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using JavaScriptEngineSwitcher.ChakraCore;
+using JavaScriptEngineSwitcher.V8;
 using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -37,11 +37,9 @@ namespace test_elm_fullstack
                 elmAppFiles,
                 ImmutableList.Create("src", "Main.elm"));
 
-            var javascriptEngine = new ChakraCoreJsEngine(
-                new ChakraCoreSettings
+            var javascriptEngine = new V8JsEngine(
+                new V8Settings
                 {
-                    DisableEval = true,
-                    EnableExperimentalFeatures = true
                 }
             );
 

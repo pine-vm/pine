@@ -6,8 +6,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using JavaScriptEngineSwitcher.ChakraCore;
 using JavaScriptEngineSwitcher.Core;
+using JavaScriptEngineSwitcher.V8;
 using Newtonsoft.Json;
 
 namespace Kalmit
@@ -29,25 +29,23 @@ namespace Kalmit
     {
     }
 
-    public class ProcessHostedWithChakraCore : IDisposableProcessWithStringInterface
+    public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
     {
         readonly IJsEngine javascriptEngine;
 
-        static public int? OverrideChakraCoreSettingsMaxStackSize = null;
+        static public int? OverrideJsEngineSettingsMaxStackSize = null;
 
         static public JsEngineBase ConstructJsEngine()
         {
-            return new ChakraCoreJsEngine(
-                new ChakraCoreSettings
+            return new V8JsEngine(
+                new V8Settings
                 {
-                    DisableEval = true,
-                    EnableExperimentalFeatures = true,
-                    MaxStackSize = OverrideChakraCoreSettingsMaxStackSize ?? 10_000_000,
+                    MaxStackUsage = (UIntPtr)(OverrideJsEngineSettingsMaxStackSize ?? 10_000_000),
                 }
             );
         }
 
-        public ProcessHostedWithChakraCore(string javascriptPreparedToRun)
+        public ProcessHostedWithV8(string javascriptPreparedToRun)
         {
             javascriptEngine = ConstructJsEngine();
 
@@ -150,7 +148,7 @@ namespace Kalmit
                     pathToFunctionCommonStart + ElmAppInterfaceConvention.DeserializeStateFunctionName);
 
             return
-                (new ProcessHostedWithChakraCore(javascriptPreparedToRun),
+                (new ProcessHostedWithV8(javascriptPreparedToRun),
                 (javascriptFromElmMake, javascriptPreparedToRun));
         }
 

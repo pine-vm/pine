@@ -91,7 +91,7 @@ namespace elm_fullstack.ElmInteractive
                     javascriptMinusCrashes,
                     listFunctionToPublish);
 
-            var javascriptEngine = ProcessHostedWithChakraCore.ConstructJsEngine();
+            var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
 
             var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
 

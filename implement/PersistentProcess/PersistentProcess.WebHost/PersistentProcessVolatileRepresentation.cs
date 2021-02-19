@@ -729,7 +729,7 @@ main =
                 {
                     string migrateResultString = null;
 
-                    using (var javascriptEngine = ProcessHostedWithChakraCore.ConstructJsEngine())
+                    using (var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine())
                     {
                         var initAppResult = javascriptEngine.Evaluate(javascriptToRun);
 
