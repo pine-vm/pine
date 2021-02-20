@@ -1022,19 +1022,19 @@ concat strings =
 
 
 split : String -> String -> List String
-split =
-    splitHelper []
+split sep =
+    if sep == [] then
+        List.map List.singleton
+
+    else splitHelper [] sep
 
 
 splitHelper : String -> String -> String -> List String
 splitHelper current sep string =
     if string == [] then
-        if current == [] then
-            []
-        else
-            [ current ]
+        [ current ]
 
-    else if startsWith sep string && (current /= []) then
+    else if startsWith sep string then
         [ current ] ++ splitHelper [] sep (dropLeft (length sep) string)
 
     else
