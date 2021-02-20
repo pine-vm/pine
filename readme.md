@@ -1,12 +1,12 @@
 # Elm Full-Stack
 
-Elm-fullstack simplifies building full-stack web apps using the [Elm programming language](https://elm-lang.org).
+Elm Fullstack simplifies building full-stack web apps using the [Elm programming language](https://elm-lang.org).
 
 The framework supports:
 
-+ Building a web-server around a backend app modeled using the Elm-programming language.
++ Building a web-server around a backend app modeled using the Elm programming language.
 + Sharing Elm modules with common functions and types between frontend and backend implementations.
-+ Using the Elm-architecture on the backend by providing automatic persistence, replication, and migrations.
++ Using the Elm Architecture on the backend by providing automatic persistence, replication, and migrations.
 + Automating the generation of functions to serialize and deserialize Elm values.
 
 ## Getting Started
@@ -14,16 +14,16 @@ The framework supports:
 Use this command to run a server and deploy an example app:
 
 ```cmd
-elm-fullstack  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/557b615e028682f1b45121fe73bf7b4455a6f13b/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/557b615e028682f1b45121fe73bf7b4455a6f13b/implement/example-apps/docker-image-default-app
 ```
 
 For a guide on configuration options, structuring your Elm app code, deploying, migrating, etc., see [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
 
 ## Releases / Artifacts
 
-### Elm-fullstack Executable File
+### elm-fs Executable File
 
-The `elm-fullstack` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-fullstack/elm-fullstack/releases) on Github.
+The `elm-fs` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-fullstack/elm-fullstack/releases) on Github.
 
 ### Docker Image
 
