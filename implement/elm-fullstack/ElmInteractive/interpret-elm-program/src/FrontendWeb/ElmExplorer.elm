@@ -8,12 +8,15 @@ import Html
 import Html.Attributes as HA
 import Html.Events
 import Pine
+import Time
 import Url
 
 
 type alias State =
     { expression : String
     , evaluationContext : Result String Pine.ExpressionContext
+    , lastUserInputExpressionTime : Maybe Time.Posix
+    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
     }
 
 
@@ -21,12 +24,20 @@ type Event
     = UserInputExpression String
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
+    | TimeArrivedEvent Time.Posix
+
+
+evalDelayFromUserInputMilliseconds : Int
+evalDelayFromUserInputMilliseconds =
+    1000
 
 
 init : ( State, Cmd Event )
 init =
     ( { expression = ""
       , evaluationContext = ElmInteractive.pineExpressionContextForElmInteractive ElmInteractive.DefaultContext
+      , lastUserInputExpressionTime = Nothing
+      , lastEvaluatedExpression = Nothing
       }
     , Cmd.none
     )
@@ -37,18 +48,35 @@ main =
     Browser.application
         { init = \_ _ _ -> init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         , view = view
         , onUrlRequest = UrlRequest
         , onUrlChange = UrlChange
         }
 
 
+subscriptions : State -> Sub.Sub Event
+subscriptions state =
+    if
+        (state.lastUserInputExpressionTime == Nothing)
+            || not (lastEvaluatedExpressionIsLastEntered state)
+    then
+        Time.every 100 TimeArrivedEvent
+
+    else
+        Sub.none
+
+
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
     case event of
         UserInputExpression expression ->
-            ( { stateBefore | expression = expression }, Cmd.none )
+            ( { stateBefore
+                | expression = expression
+                , lastUserInputExpressionTime = Nothing
+              }
+            , Cmd.none
+            )
 
         UrlRequest _ ->
             ( stateBefore, Cmd.none )
@@ -56,19 +84,58 @@ update event stateBefore =
         UrlChange _ ->
             ( stateBefore, Cmd.none )
 
+        TimeArrivedEvent time ->
+            let
+                lastUserInputExpressionTime =
+                    stateBefore.lastUserInputExpressionTime |> Maybe.withDefault time
+
+                lastUserInputExpressionAgeMilliseconds =
+                    Time.posixToMillis time - Time.posixToMillis lastUserInputExpressionTime
+            in
+            ( { stateBefore | lastUserInputExpressionTime = Just lastUserInputExpressionTime }
+                |> (if evalDelayFromUserInputMilliseconds < lastUserInputExpressionAgeMilliseconds then
+                        updateLastEvaluatedExpression
+
+                    else
+                        identity
+                   )
+            , Cmd.none
+            )
+
+
+updateLastEvaluatedExpression : State -> State
+updateLastEvaluatedExpression stateBefore =
+    let
+        expression =
+            stateBefore.expression
+    in
+    if Just expression == Maybe.map Tuple.first stateBefore.lastEvaluatedExpression then
+        stateBefore
+
+    else
+        let
+            lastEvaluatedExpression =
+                case stateBefore.evaluationContext of
+                    Err error ->
+                        Just ( expression, Err ("Failed to initialize the evaluation context: " ++ error) )
+
+                    Ok evaluationContext ->
+                        Just
+                            ( expression
+                            , if String.isEmpty (String.trim expression) then
+                                Ok ElmInteractive.SubmissionResponseNoValue
+
+                              else
+                                ElmInteractive.submissionInInteractiveInPineContext evaluationContext expression
+                                    |> Result.map Tuple.second
+                            )
+        in
+        { stateBefore | lastEvaluatedExpression = lastEvaluatedExpression }
+
 
 view : State -> Browser.Document Event
 view state =
     let
-        evalResult =
-            case state.evaluationContext of
-                Err error ->
-                    Err ("Failed to initialize the evaluation context: " ++ error)
-
-                Ok evaluationContext ->
-                    ElmInteractive.submissionInInteractiveInPineContext evaluationContext state.expression
-                        |> Result.map Tuple.second
-
         expressionTextareaHeight =
             (((state.expression
                 |> String.lines
@@ -100,39 +167,63 @@ view state =
             ]
                 |> Element.column []
 
+        evalResultElementFromEvalResult evalResult isUpToDate =
+            let
+                monospaceParagraph inParagraph =
+                    Element.paragraph [ Element.htmlAttribute attributeMonospaceFont ]
+                        [ inParagraph ]
+
+                resultIfCurrentElement =
+                    case evalResult of
+                        Err error ->
+                            ("Error: " ++ error)
+                                |> Html.text
+                                |> List.singleton
+                                |> Html.div [ HA.style "white-space" "pre-wrap" ]
+                                |> Element.html
+                                |> monospaceParagraph
+
+                        Ok evalSuccess ->
+                            case evalSuccess of
+                                ElmInteractive.SubmissionResponseNoValue ->
+                                    Element.text "Got no value in response for this submission."
+
+                                ElmInteractive.SubmissionResponseValue responseValue ->
+                                    (responseValue.value |> ElmInteractive.elmValueAsExpression)
+                                        |> Html.text
+                                        |> List.singleton
+                                        |> Html.div [ HA.style "white-space" "pre-wrap" ]
+                                        |> Element.html
+                                        |> monospaceParagraph
+            in
+            [ Element.text "Updating..."
+                |> Element.el [ Element.Font.size (defaultFontSize * 3 // 2), Element.transparent isUpToDate ]
+            , [ resultIfCurrentElement ]
+                |> Element.column
+                    [ Element.alpha
+                        (if isUpToDate then
+                            1
+
+                         else
+                            0.4
+                        )
+                    ]
+            ]
+                |> Element.column []
+
         evalResultElement =
-            if String.isEmpty (String.trim state.expression) then
-                Element.none
+            case state.lastEvaluatedExpression of
+                Nothing ->
+                    evalResultElementFromEvalResult (Ok ElmInteractive.SubmissionResponseNoValue) False
 
-            else
-                case evalResult of
-                    Err error ->
-                        ("Error: " ++ error)
-                            |> Html.text
-                            |> List.singleton
-                            |> Html.div [ HA.style "white-space" "pre-wrap" ]
-                            |> Element.html
-
-                    Ok evalSuccess ->
-                        case evalSuccess of
-                            ElmInteractive.SubmissionResponseNoValue ->
-                                Element.text "Got no value in response for this submission."
-
-                            ElmInteractive.SubmissionResponseValue responseValue ->
-                                (responseValue.value |> ElmInteractive.elmValueAsExpression)
-                                    |> Html.text
-                                    |> List.singleton
-                                    |> Html.div [ HA.style "white-space" "pre-wrap" ]
-                                    |> Element.html
+                Just ( evaluatedExpression, evaluatedExpressionResult ) ->
+                    evalResultElementFromEvalResult evaluatedExpressionResult (evaluatedExpression == state.expression)
     in
     { body =
         [ [ Element.text "Expression to evaluate"
           , indentOneLevel inputExpressionElement
           , Element.text "Evaluation result"
-          , indentOneLevel
-                (Element.paragraph [ Element.htmlAttribute attributeMonospaceFont ]
-                    [ evalResultElement ]
-                )
+          , indentOneLevel evalResultElement
           ]
             |> Element.column
                 [ Element.spacing defaultFontSize
@@ -143,6 +234,16 @@ view state =
         ]
     , title = "Elm Explorer"
     }
+
+
+lastEvaluatedExpressionIsLastEntered : State -> Bool
+lastEvaluatedExpressionIsLastEntered state =
+    case state.lastEvaluatedExpression of
+        Nothing ->
+            False
+
+        Just ( expression, _ ) ->
+            expression == state.expression
 
 
 indentOneLevel : Element.Element a -> Element.Element a
