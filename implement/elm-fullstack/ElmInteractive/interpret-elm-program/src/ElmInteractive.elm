@@ -231,7 +231,7 @@ pineValueAsElmValue pineValue =
         Pine.BlobValue blobValue ->
             case blobValue of
                 [] ->
-                    Ok (ElmString "")
+                    Ok (ElmInternal "empty-blob")
 
                 firstByte :: _ ->
                     if firstByte == 0 || firstByte == 0x80 then
@@ -284,31 +284,49 @@ pineValueAsElmValue pineValue =
                         resultAsList
 
                     else
-                        case listValues |> List.map tryMapToChar |> Maybe.Extra.combine of
-                            Just chars ->
-                                chars |> String.fromList |> ElmString |> Ok
+                        case listValues of
+                            [ ElmString tagName, ElmList tagArguments ] ->
+                                if stringStartsWithUpper tagName then
+                                    if tagName == elmRecordTypeTagName then
+                                        (case tagArguments of
+                                            [ recordValue ] ->
+                                                elmValueAsElmRecord recordValue
 
-                            Nothing ->
-                                case listValues of
-                                    [ ElmString tagName, ElmList tagArguments ] ->
-                                        if stringStartsWithUpper tagName then
-                                            if tagName == elmRecordTypeTagName then
-                                                (case tagArguments of
-                                                    [ recordValue ] ->
-                                                        elmValueAsElmRecord recordValue
+                                            _ ->
+                                                Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
+                                        )
+                                            |> Result.mapError ((++) "Failed to extract value under record tag: ")
 
-                                                    _ ->
-                                                        Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
-                                                )
-                                                    |> Result.mapError ((++) "Failed to extract value under record tag: ")
+                                    else if tagName == elmStringTypeTagName then
+                                        (case tagArguments of
+                                            [ ElmString string ] ->
+                                                Ok (ElmString string)
 
-                                            else
-                                                Ok (ElmTag tagName tagArguments)
+                                            [ ElmList charsList ] ->
+                                                case charsList |> List.map tryMapToChar |> Maybe.Extra.combine of
+                                                    Just chars ->
+                                                        chars |> String.fromList |> ElmString |> Ok
 
-                                        else
-                                            resultAsList
+                                                    Nothing ->
+                                                        Err "Failed to map chars"
 
-                                    _ ->
+                                            _ ->
+                                                Err "Unexpected shape of tag arguments"
+                                        )
+                                            |> Result.mapError ((++) "Failed to extract value under String tag: ")
+
+                                    else
+                                        Ok (ElmTag tagName tagArguments)
+
+                                else
+                                    resultAsList
+
+                            _ ->
+                                case listValues |> List.map tryMapToChar |> Maybe.Extra.combine of
+                                    Just chars ->
+                                        chars |> String.fromList |> ElmString |> Ok
+
+                                    Nothing ->
                                         resultAsList
 
         Pine.ClosureValue _ expression ->
@@ -605,6 +623,10 @@ infix right 9 (>>) = composeR
 type Bool = True | False
 
 
+type String
+    = String (List Char.Char)
+
+
 eq : a -> a -> Bool
 eq =
     PineKernel.equals
@@ -646,8 +668,14 @@ or =
 
 
 append : appendable -> appendable -> appendable
-append =
-    PineKernel.append
+append a b =
+    case a of
+    String stringA ->
+        case b of
+        String stringB ->
+            String (PineKernel.append stringA stringB)
+        _ -> PineKernel.append a b
+    _ -> PineKernel.append a b
 
 
 lt : comparable -> comparable -> Bool
@@ -848,6 +876,21 @@ any isOkay list =
                 any isOkay xs
 
 
+append : List a -> List a -> List a
+append xs ys =
+    case ys of
+        [] ->
+            xs
+
+        _ ->
+            foldr cons ys xs
+
+
+concat : List (List a) -> List a
+concat lists =
+    foldr append [] lists
+
+
 isEmpty : List a -> Bool
 isEmpty xs =
     case xs of
@@ -919,7 +962,7 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    PineKernel.blobValueOneByteZero ++ char
+    PineKernel.append PineKernel.blobValueOneByteZero char
 
 """
     , """
@@ -968,18 +1011,24 @@ import Maybe exposing (Maybe)
 import Tuple
 
 
-type alias String =
-    List Char.Char
+type String
+    = String (List Char.Char)
 
 
 toList : String -> List Char
 toList string =
-    string
+    case string of
+    String list -> list
 
 
 fromList : List Char -> String
-fromList list =
-    list
+fromList =
+    String
+
+
+fromChar : Char -> String
+fromChar char =
+    String [ char ]
 
 
 isEmpty : String -> Bool
@@ -989,21 +1038,17 @@ isEmpty string =
 
 length : String -> Int
 length =
-    List.length
+    toList >> List.length
 
 
 reverse : String -> String
 reverse =
-    List.reverse
+    toList >> List.reverse >> fromList
 
 
 repeat : Int -> String -> String
-repeat n chunk =
-    if n < 1 then
-        []
-
-    else
-        chunk ++ repeat (n - 1) chunk
+repeat n =
+    toList >> List.repeat n >> List.concat >> fromList
 
 
 replace : String -> String -> String -> String
@@ -1013,36 +1058,41 @@ replace before after string =
 
 append : String -> String -> String
 append a b =
-    a ++ b
+    PineKernel.append (toList a) (toList b)
 
 
 concat : List String -> String
 concat strings =
-    join [] strings
+    join "" strings
 
 
 split : String -> String -> List String
-split sep =
-    if sep == [] then
-        List.map List.singleton
+split sep string =
+    if sep == "" then
+        List.map fromChar (toList string)
 
-    else splitHelper [] sep
+    else splitHelperOnList [] (toList sep) (toList string)
 
 
-splitHelper : String -> String -> String -> List String
-splitHelper current sep string =
+splitHelperOnList : List Char -> List Char -> List Char -> List String
+splitHelperOnList current sep string =
     if string == [] then
-        [ current ]
+        [ fromList current ]
 
-    else if startsWith sep string then
-        [ current ] ++ splitHelper [] sep (dropLeft (length sep) string)
+    else if sep == (List.take (List.length sep) string) then
+        [ fromList current ] ++ splitHelperOnList [] sep (List.drop (List.length sep) string)
 
     else
-        splitHelper (current ++ left 1 string) sep (dropLeft 1 string)
+        splitHelperOnList (current ++ List.take 1 string) sep (List.drop 1 string)
 
 
 join : String -> List String -> String
 join sep chunks =
+    fromList (joinOnList (toList sep) (List.map toList chunks))
+
+
+joinOnList : List Char -> List (List Char) -> List Char
+joinOnList sep chunks =
     case chunks of
         [] ->
             []
@@ -1052,7 +1102,7 @@ join sep chunks =
             then
                 nextChunk
             else
-                nextChunk ++ sep ++ join sep remaining
+                nextChunk ++ sep ++ joinOnList sep remaining
 
 
 slice : Int -> Int -> String -> String
@@ -1068,12 +1118,12 @@ slice start end string =
         absoluteStart =
             absoluteIndex start
     in
-    left (absoluteIndex end - absoluteStart) (List.drop absoluteStart string)
+    fromList (List.take (absoluteIndex end - absoluteStart) (List.drop absoluteStart (toList string)))
 
 
 left : Int -> String -> String
 left n string =
-    List.take n string
+    fromList (List.take n (toList string))
 
 
 right : Int -> String -> String
@@ -1086,7 +1136,7 @@ right n string =
 
 dropLeft : Int -> String -> String
 dropLeft n string =
-    List.drop n string
+    fromList (List.drop n (toList string))
 
 
 dropRight : Int -> String -> String
@@ -1134,8 +1184,8 @@ fromInt =
 
 
 fromIntDecimal : Int -> String
-fromIntDecimal =
-    fromList (fromIntFromDigitsChars digitCharactersDecimal)
+fromIntDecimal int =
+    fromList (fromIntFromDigitsChars digitCharactersDecimal int)
 
 
 digitCharactersDecimal : List ( Char, Int )
@@ -1167,7 +1217,7 @@ toIntFromDigitsChars digitsCharacters string =
                             ( lessFirstChar, -1 )
 
                         '+' ->
-                            ( toList lessFirstChar, 1 )
+                            ( lessFirstChar, 1 )
 
                         _ ->
                             ( toList string, 1 )
@@ -1274,7 +1324,7 @@ pineExpressionFromElm : Elm.Syntax.Expression.Expression -> Result String Pine.E
 pineExpressionFromElm elmExpression =
     case elmExpression of
         Elm.Syntax.Expression.Literal literal ->
-            Ok (Pine.LiteralExpression (Pine.valueFromString literal))
+            Ok (Pine.LiteralExpression (valueFromString literal))
 
         Elm.Syntax.Expression.CharLiteral char ->
             Ok (Pine.LiteralExpression (Pine.valueFromChar char))
@@ -2039,6 +2089,16 @@ compareLocations left right =
 
     else
         compare left.column right.column
+
+
+valueFromString : String -> Pine.Value
+valueFromString =
+    Pine.valueFromString >> List.singleton >> Pine.tagValue elmStringTypeTagName
+
+
+elmStringTypeTagName : String
+elmStringTypeTagName =
+    "String"
 
 
 elmRecordTypeTagName : String

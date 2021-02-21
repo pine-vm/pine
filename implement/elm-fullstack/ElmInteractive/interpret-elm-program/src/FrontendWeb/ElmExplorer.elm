@@ -29,7 +29,7 @@ type Event
 
 evalDelayFromUserInputMilliseconds : Int
 evalDelayFromUserInputMilliseconds =
-    1000
+    500
 
 
 init : ( State, Cmd Event )

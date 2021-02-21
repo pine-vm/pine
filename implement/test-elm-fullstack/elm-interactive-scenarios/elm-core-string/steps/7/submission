@@ -2,9 +2,6 @@
 , String.split "" "a"
 , String.split "" "abc"
 , String.split "," "cat,dog,cow"
-{-
-TODO:
 , String.split "s" "s"
 , String.split "t" "tt"
--}
 ]
