@@ -66,7 +66,7 @@ namespace Kalmit
                 AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip
             };
 
-            byte[] continueForHttpResponse(HttpResponseMessage httpResponse)
+            byte[] tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
             {
                 if (!httpResponse.IsSuccessStatusCode)
                 {
@@ -85,7 +85,14 @@ namespace Kalmit
 
                 Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
 
-                File.WriteAllBytes(cacheFilePath, responseContent);
+                try
+                {
+                    File.WriteAllBytes(cacheFilePath, responseContent);
+                }
+                catch (IOException)
+                {
+                    // This happens sometimes because another process fetched the same blob and is already writing it to the file.
+                }
 
                 return responseContent;
             }
@@ -104,12 +111,12 @@ namespace Kalmit
 
                     try
                     {
-                        return continueForHttpResponse(httpClient.GetAsync(url(true)).Result);
+                        return tryUpdateCacheAndContinueFromHttpResponse(httpClient.GetAsync(url(true)).Result);
                     }
                     catch { }
                 }
 
-                return continueForHttpResponse(httpResponse);
+                return tryUpdateCacheAndContinueFromHttpResponse(httpResponse);
             }
         }
     }
