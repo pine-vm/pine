@@ -17,6 +17,7 @@ import Element.Input
 import Element.Region
 import ElmFullstackCompilerInterface.GenerateJsonCoders
 import ElmFullstackCompilerInterface.SourceFiles
+import ElmMakeExecutableFile
 import FrontendBackendInterface
 import FrontendWeb.MonacoEditor
 import FrontendWeb.ProjectStateInUrl
@@ -30,6 +31,7 @@ import Maybe.Extra
 import ProjectState
 import ProjectState_2021_01
 import Result.Extra
+import String.Extra
 import Svg
 import Svg.Attributes
 import Time
@@ -1443,22 +1445,54 @@ viewWhenEditorOpen filePathOpenedInEditor state =
                                             , Element.padding (defaultFontSize // 2)
                                             ]
 
+                                outputElementFromPlainText outputText =
+                                    [ outputText
+                                        |> Html.text
+                                        |> Element.html
+                                    ]
+                                        |> Element.paragraph
+                                            [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
+                                            , Element.htmlAttribute attributeMonospaceFont
+                                            ]
+
                                 compileResultElement =
                                     case elmMakeOk.compiledHtmlDocument of
                                         Nothing ->
-                                            [ ( "standard error", elmMakeOk.response.processOutput.standardError )
-                                            , ( "standard output", elmMakeOk.response.processOutput.standardOutput )
+                                            let
+                                                standardErrorElement =
+                                                    case
+                                                        elmMakeOk.response.reportJsonProcessOutput.standardError
+                                                            |> Json.Decode.decodeString Json.Decode.value
+                                                    of
+                                                        Err _ ->
+                                                            outputElementFromPlainText elmMakeOk.response.processOutput.standardError
+
+                                                        Ok elmMakeReportJson ->
+                                                            case
+                                                                elmMakeReportJson
+                                                                    |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
+                                                                    |> Result.mapError Json.Decode.errorToString
+                                                                    |> Result.andThen (.errors >> Result.fromMaybe "Missing field 'errors'")
+                                                            of
+                                                                Err decodeError ->
+                                                                    outputElementFromPlainText
+                                                                        ("Failed to decode JSON report: " ++ decodeError)
+
+                                                                Ok elmMakeErrors ->
+                                                                    elmMakeErrors
+                                                                        |> List.map viewElmMakeError
+                                                                        |> Element.column
+                                                                            [ Element.spacing defaultFontSize
+                                                                            , Element.width Element.fill
+                                                                            ]
+                                            in
+                                            [ ( "standard error", standardErrorElement )
+                                            , ( "standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
                                             ]
                                                 |> List.map
-                                                    (\( channel, output ) ->
+                                                    (\( channel, outputElement ) ->
                                                         [ channel |> Element.text |> Element.el (headingAttributes 3)
-                                                        , [ Html.text output
-                                                                |> Element.html
-                                                                |> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
-                                                          ]
-                                                            |> Element.paragraph
-                                                                [ Element.htmlAttribute attributeMonospaceFont ]
-                                                            |> indentOneLevel
+                                                        , outputElement |> indentOneLevel
                                                         ]
                                                             |> Element.column
                                                                 [ Element.spacing (defaultFontSize // 2)
@@ -1527,6 +1561,100 @@ viewWhenEditorOpen filePathOpenedInEditor state =
             ]
     ]
         |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+
+
+viewElmMakeError : ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element msg
+viewElmMakeError elmMakeError =
+    elmMakeError.problems
+        |> List.map
+            (\elmMakeProblem ->
+                let
+                    displayPath =
+                        elmMakeError.path
+                            |> String.split "/"
+                            |> List.concatMap (String.split "\\")
+                            |> List.reverse
+                            |> List.head
+                            |> Maybe.withDefault elmMakeError.path
+
+                    problemHeadingElement =
+                        [ elmMakeProblem.title
+                            |> String.toLower
+                            |> String.Extra.toTitleCase
+                            |> Element.text
+                            |> Element.el [ Element.Font.bold ]
+                        , (displayPath
+                            ++ " Line "
+                            ++ String.fromInt elmMakeProblem.region.start.line
+                            ++ ", Column "
+                            ++ String.fromInt elmMakeProblem.region.start.column
+                          )
+                            |> Element.text
+                        ]
+                            |> Element.column
+                                [ Element.spacing (defaultFontSize // 2)
+                                , Element.width Element.fill
+                                ]
+
+                    styledTextElements =
+                        elmMakeProblem.message
+                            |> List.map styledTextFromElmMakeReportMessageListItem
+
+                    elementFromStyledTextElement styledTextElement =
+                        [ styledTextElement.string |> Html.text ]
+                            |> Html.span
+                                [ HA.style "font-weight"
+                                    (if styledTextElement.bold then
+                                        "bold"
+
+                                     else
+                                        "inherit"
+                                    )
+                                , HA.style "text-decoration"
+                                    (if styledTextElement.underline then
+                                        "underline"
+
+                                     else
+                                        "none"
+                                    )
+                                , HA.style "color" (styledTextElement.color |> Maybe.withDefault "inherit")
+                                ]
+                in
+                [ problemHeadingElement
+                , [ styledTextElements
+                        |> List.map elementFromStyledTextElement
+                        |> Html.span [ HA.style "font-size" "90%" ]
+                        |> Element.html
+                  ]
+                    |> Element.paragraph
+                        [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
+                        , Element.htmlAttribute attributeMonospaceFont
+                        ]
+                    |> indentOneLevel
+                ]
+                    |> Element.column
+                        [ Element.spacing (defaultFontSize // 2)
+                        , Element.width Element.fill
+                        ]
+            )
+        |> Element.column
+            [ Element.spacing defaultFontSize
+            , Element.width Element.fill
+            ]
+
+
+styledTextFromElmMakeReportMessageListItem : ElmMakeExecutableFile.ElmMakeReportMessageListItem -> { string : String, bold : Bool, underline : Bool, color : Maybe String }
+styledTextFromElmMakeReportMessageListItem elmMakeReportMessageListItem =
+    case elmMakeReportMessageListItem of
+        ElmMakeExecutableFile.ElmMakeReportMessageListItemPlain text ->
+            { string = text
+            , bold = False
+            , underline = False
+            , color = Nothing
+            }
+
+        ElmMakeExecutableFile.ElmMakeReportMessageListItemStyled styled ->
+            styled
 
 
 buttonElement : { label : String, onPress : Maybe Event } -> Element.Element Event

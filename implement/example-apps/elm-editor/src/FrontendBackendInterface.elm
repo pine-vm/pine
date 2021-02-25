@@ -23,6 +23,7 @@ type alias ElmMakeRequestStructure =
 type alias ElmMakeResponseStructure =
     { processOutput : ProcessOutputStructure
     , outputFileContentBase64 : Maybe String
+    , reportJsonProcessOutput : ProcessOutputStructure
     }
 
 

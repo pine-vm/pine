@@ -113,6 +113,8 @@ public class ElmMakeResponseStructure
     public ProcessOutput processOutput;
 
     public Maybe<string> outputFileContentBase64;
+
+    public ProcessOutput reportJsonProcessOutput;
 }
 
 public struct ProcessOutput
@@ -282,40 +284,49 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
 
     var elmMakeOutputFileName = "elm-make-output.html";
 
-    var commandLineArguments = "make " + entryPointFilePath + " --output=" + elmMakeOutputFileName;
+    var commandLineCommonArguments = "make " + entryPointFilePath;
 
-    var commandResults = Kalmit.ExecutableFile.ExecuteFileWithArguments(
-        platformSpecificFiles,
-        GetElmExecutableFile,
-        commandLineArguments,
-        new Dictionary<string, string>()
-        {
-        //  Avoid elm make failing on `getAppUserDataDirectory`.
-        /* Also, work around problems with elm make like this:
-        -- HTTP PROBLEM ----------------------------------------------------------------
+    var commandLineArguments = commandLineCommonArguments + " --output=" + elmMakeOutputFileName;
+    var reportJsonCommandLineArguments = commandLineCommonArguments + " --report=json";
 
-        The following HTTP request failed:
-            <https://github.com/elm/core/zipball/1.0.0/>
+    (Kalmit.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
+    {
+        return
+            Kalmit.ExecutableFile.ExecuteFileWithArguments(
+                platformSpecificFiles,
+                GetElmExecutableFile,
+                arguments,
+                new Dictionary<string, string>()
+                {
+                //  Avoid elm make failing on `getAppUserDataDirectory`.
+                /* Also, work around problems with elm make like this:
+                -- HTTP PROBLEM ----------------------------------------------------------------
 
-        Here is the error message I was able to extract:
+                The following HTTP request failed:
+                    <https://github.com/elm/core/zipball/1.0.0/>
 
-        HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
-        requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
-        path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
-        Nothing rawBody = False redirectCount = 10 responseTimeout =
-        ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
-        (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
-        Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
-        [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
-        GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
-        Too Many
-        Requests"),("Retry-After","120")
+                Here is the error message I was able to extract:
 
-        To avoid elm make failing with this error, break isolation here and reuse elm home directory.
-        An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
-        */
-        {"ELM_HOME", GetElmHomeDirectory()},
-        });
+                HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
+                requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
+                path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
+                Nothing rawBody = False redirectCount = 10 responseTimeout =
+                ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
+                (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
+                Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
+                [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
+                GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
+                Too Many
+                Requests"),("Retry-After","120")
+
+                To avoid elm make failing with this error, break isolation here and reuse elm home directory.
+                An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
+                */
+                {"ELM_HOME", GetElmHomeDirectory()},
+                });
+    }
+
+    var commandResults = commandResultsFromArguments(commandLineArguments);
 
     var platformSpecificNewFiles =
         commandResults.resultingFiles
@@ -345,10 +356,20 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
         exitCode = commandResults.processOutput.ExitCode,
     };
 
+    var reportJsonCommandResults = commandResultsFromArguments(reportJsonCommandLineArguments);
+
+    var reportJsonProcessOutput = new ProcessOutput
+    {
+        standardOutput = reportJsonCommandResults.processOutput.StandardOutput,
+        standardError = reportJsonCommandResults.processOutput.StandardError,
+        exitCode = reportJsonCommandResults.processOutput.ExitCode,
+    };
+
     var responseStructure = new ElmMakeResponseStructure
     {
         processOutput = processOutput,
         outputFileContentBase64 = Maybe<string>.NothingFromNull(outputFileContentBase64),
+        reportJsonProcessOutput = reportJsonProcessOutput,
     };
 
     return responseStructure;
