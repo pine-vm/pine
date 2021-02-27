@@ -22,7 +22,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
 <div id="container" style="height:100%;width:100%;"></div>
 
-<script type="text/javascript" src="url-to-the-monaco-cdn-directory-min/vs/loader.js"></script>
+<script type="text/javascript" src=\""""
+        ++ cdnUrlToMin
+        ++ """/vs/loader.js"></script>
 
 <script>
 
@@ -77,7 +79,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 </script>
 
 <script>
-  require.config({ paths: { 'vs': 'url-to-the-monaco-cdn-directory-min/vs' }});
+  require.config({ paths: { 'vs': '"""
+        ++ cdnUrlToMin
+        ++ """/vs' }});
 
   // Before loading vs/editor/editor.main, define a global MonacoEnvironment that overwrites
   // the default worker url location (used when creating WebWorkers). The problem here is that
@@ -87,9 +91,13 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     getWorkerUrl: function(workerId, label) {
       return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
         self.MonacoEnvironment = {
-          baseUrl: 'url-to-the-monaco-cdn-directory-min/'
+          baseUrl: '"""
+        ++ cdnUrlToMin
+        ++ """/'
         };
-        importScripts('url-to-the-monaco-cdn-directory-min/vs/base/worker/workerMain.js');`
+        importScripts('"""
+        ++ cdnUrlToMin
+        ++ """/vs/base/worker/workerMain.js');`
       )}`;
     }
   };
@@ -171,4 +179,3 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 </body>
 </html>
 """
-        |> String.replace "url-to-the-monaco-cdn-directory-min" cdnUrlToMin
