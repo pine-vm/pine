@@ -27,6 +27,7 @@ import Html.Events
 import Http
 import Json.Decode
 import Json.Encode
+import List.Extra
 import Maybe.Extra
 import ProjectState
 import ProjectState_2021_01
@@ -46,9 +47,7 @@ port receiveMessageFromMonacoFrame : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias ElmMakeRequestStructure =
-    { requestToBackend : FrontendBackendInterface.ElmMakeRequestStructure
-    , entryPointFilePath : List String
-    }
+    FrontendBackendInterface.ElmMakeRequestStructure
 
 
 type alias ElmMakeResponseStructure =
@@ -764,7 +763,7 @@ userInputCompileFileOpenedInEditor stateBefore =
                 , elmMakeResult = Nothing
               }
             , requestToApiCmd
-                (FrontendBackendInterface.ElmMakeRequest elmMakeRequest.requestToBackend)
+                (FrontendBackendInterface.ElmMakeRequest elmMakeRequest)
                 jsonDecoder
                 (BackendElmMakeResponseEvent elmMakeRequest)
             )
@@ -790,19 +789,16 @@ elmMakeRequestForFileOpenedInEditor state =
                                 filePath
                         in
                         Just
-                            { requestToBackend =
-                                { entryPointFilePath = entryPointFilePath
-                                , files =
-                                    workspace.fileTree
-                                        |> ProjectState.flatListOfBlobsFromFileTreeNode
-                                        |> List.map
-                                            (\( path, content ) ->
-                                                { path = path
-                                                , contentBase64 = content |> base64FromBytes
-                                                }
-                                            )
-                                }
-                            , entryPointFilePath = entryPointFilePath
+                            { entryPointFilePath = entryPointFilePath
+                            , files =
+                                workspace.fileTree
+                                    |> ProjectState.flatListOfBlobsFromFileTreeNode
+                                    |> List.map
+                                        (\( path, content ) ->
+                                            { path = path
+                                            , contentBase64 = content |> base64FromBytes
+                                            }
+                                        )
                             }
             )
         >> Maybe.Extra.join
@@ -1434,8 +1430,8 @@ viewWhenEditorOpen filePathOpenedInEditor state =
                                     elmMakeRequestForFileOpenedInEditor state
 
                                 currentFileContentIsStillSame =
-                                    Just elmMakeRequest.requestToBackend.files
-                                        == (elmMakeRequestFromCurrentState |> Maybe.map (.requestToBackend >> .files))
+                                    Just elmMakeRequest.files
+                                        == (elmMakeRequestFromCurrentState |> Maybe.map .files)
 
                                 warningFileContentChangedElement =
                                     "⚠️ The file contents changed since compiling"
@@ -1480,7 +1476,7 @@ viewWhenEditorOpen filePathOpenedInEditor state =
 
                                                                 Ok elmMakeErrors ->
                                                                     elmMakeErrors
-                                                                        |> List.map viewElmMakeError
+                                                                        |> List.map (viewElmMakeError elmMakeRequest)
                                                                         |> Element.column
                                                                             [ Element.spacing defaultFontSize
                                                                             , Element.width Element.fill
@@ -1563,19 +1559,24 @@ viewWhenEditorOpen filePathOpenedInEditor state =
         |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
 
 
-viewElmMakeError : ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element msg
-viewElmMakeError elmMakeError =
+viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element msg
+viewElmMakeError elmMakeRequest elmMakeError =
     elmMakeError.problems
         |> List.map
             (\elmMakeProblem ->
                 let
-                    displayPath =
+                    pathSegments =
                         elmMakeError.path
                             |> String.split "/"
                             |> List.concatMap (String.split "\\")
-                            |> List.reverse
+
+                    displayPath =
+                        pathSegments
+                            |> List.Extra.tails
+                            |> List.filter (List.isEmpty >> not)
+                            |> List.filter (\pathEnd -> elmMakeRequest.files |> List.map .path |> List.member pathEnd)
                             |> List.head
-                            |> Maybe.withDefault elmMakeError.path
+                            |> Maybe.withDefault pathSegments
 
                     problemHeadingElement =
                         [ elmMakeProblem.title
@@ -1583,8 +1584,8 @@ viewElmMakeError elmMakeError =
                             |> String.Extra.toTitleCase
                             |> Element.text
                             |> Element.el [ Element.Font.bold ]
-                        , (displayPath
-                            ++ " Line "
+                        , (String.join "/" displayPath
+                            ++ " - Line "
                             ++ String.fromInt elmMakeProblem.region.start.line
                             ++ ", Column "
                             ++ String.fromInt elmMakeProblem.region.start.column
