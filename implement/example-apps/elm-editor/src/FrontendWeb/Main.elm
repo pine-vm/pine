@@ -1656,7 +1656,7 @@ viewElmMakeError elmMakeRequest elmMakeError =
                 [ problemHeadingElement
                 , [ styledTextElements
                         |> List.map elementFromStyledTextElement
-                        |> Html.span [ HA.style "font-size" "90%" ]
+                        |> Html.span [ HA.style "font-size" "90%", HA.style "filter" "contrast(0.5) brightness(1.3)" ]
                         |> Element.html
                   ]
                     |> Element.paragraph
