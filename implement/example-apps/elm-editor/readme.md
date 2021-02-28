@@ -2,13 +2,13 @@
 
 The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps.
 
-![working on a game using the Elm Editor](./../../../guide/image/2020-12-31-elm-editor-with-project-freemake.png)
+This project minimizes the friction for newcomers to get started with programming.
 
 To see the Elm Editor in action, test the public instance at https://elm-editor.com
 
-This project evolved to help newcomers get started with minimal friction and is optimized for trainers and students.
+![working on a game using the Elm Editor](./../../../guide/image/2020-12-31-elm-editor-with-project-freemake.png)
 
-The user interface also supports:
+## Overview of Features
 
 + Viewing and editing all Elm module files and the `elm.json` file.
 + Check for Elm compiler errors using the chosen Elm module as the entry point.
@@ -49,4 +49,9 @@ To make the links into projects even smaller, the interface to save a project co
 
 ## Code Editor
 
-The Elm Editor frontend integrates the [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide functionality around code editing and features like syntax highlighting.
+The code editor is a central part of an IDE. Elm Editor integrates the [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide a range of standard IDE features, including the following:
+
++ Text search with options for case sensitivity, regular expressions, and replacing instances.
++ Visual markers in the code to quickly find locations of problems.
++ Command palette helps discover new functionality and keyboard shortcuts for commands they already use.
++ Minimap for improved navigation of large documents.
