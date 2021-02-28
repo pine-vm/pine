@@ -4,6 +4,7 @@ module FrontendWeb.MonacoEditor exposing (..)
 type MessageToEditor
     = SetValue String
     | SetModelMarkers (List EditorMarker)
+    | RevealPositionInCenter { lineNumber : Int, column : Int }
 
 
 type MessageFromEditor

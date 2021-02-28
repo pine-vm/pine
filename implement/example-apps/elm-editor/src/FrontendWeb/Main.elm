@@ -102,6 +102,7 @@ type Event
     | UserInputSave (Maybe { createDiffIfBaseAvailable : Bool })
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputCloseModalDialog
+    | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
     | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
     | BackendLoadFromGitResultEvent String (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
@@ -298,6 +299,16 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                                 }
                     )
             , Cmd.none
+            )
+
+        UserInputRevealPositionInEditor revealPositionInEditor ->
+            ( stateBefore
+            , if (stateBefore |> fileOpenedInEditorFromState |> Maybe.map Tuple.first) == Just revealPositionInEditor.filePath then
+                revealPositionInCenterInMonacoEditorCmd
+                    { lineNumber = revealPositionInEditor.lineNumber, column = revealPositionInEditor.column }
+
+              else
+                Cmd.none
             )
 
         MonacoEditorEvent monacoEditorEvent ->
@@ -1600,7 +1611,7 @@ viewWhenEditorOpen filePathOpenedInEditor state =
         |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
 
 
-viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element msg
+viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element Event
 viewElmMakeError elmMakeRequest elmMakeError =
     elmMakeError.problems
         |> List.map
@@ -1623,6 +1634,16 @@ viewElmMakeError elmMakeRequest elmMakeError =
                             ++ String.fromInt elmMakeProblem.region.start.column
                           )
                             |> Element.text
+                            |> Element.el
+                                (Element.Events.onClick
+                                    (UserInputRevealPositionInEditor
+                                        { filePath = displayPath
+                                        , lineNumber = elmMakeProblem.region.start.line
+                                        , column = elmMakeProblem.region.start.column
+                                        }
+                                    )
+                                    :: elementLinkStyleAttributes
+                                )
                         ]
                             |> Element.column
                                 [ Element.spacing (defaultFontSize // 2)
@@ -1830,6 +1851,13 @@ setTextInMonacoEditorCmd =
         >> sendMessageToMonacoFrame
 
 
+revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd Event
+revealPositionInCenterInMonacoEditorCmd =
+    FrontendWeb.MonacoEditor.RevealPositionInCenter
+        >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> sendMessageToMonacoFrame
+
+
 setModelMarkersInMonacoEditorCmd : List FrontendWeb.MonacoEditor.EditorMarker -> Cmd Event
 setModelMarkersInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetModelMarkers
@@ -1972,11 +2000,18 @@ rootFontFamily =
 linkElementFromUrlAndTextLabel : { url : String, labelText : String } -> Element.Element event
 linkElementFromUrlAndTextLabel { url, labelText } =
     Element.link
-        [ -- https://github.com/mdgriffith/elm-ui/issues/158#issuecomment-624231895
-          Element.Border.widthEach { bottom = 1, left = 0, top = 0, right = 0 }
-        , Element.Border.color <| Element.rgba 0 0 0 0
-        , Element.mouseOver [ Element.Border.color <| Element.rgba 0.7 0.7 1 0.5 ]
-        ]
+        elementLinkStyleAttributes
         { url = url
         , label = labelText |> Element.text
         }
+
+
+elementLinkStyleAttributes : List (Element.Attribute a)
+elementLinkStyleAttributes =
+    [ Element.pointer
+
+    -- https://github.com/mdgriffith/elm-ui/issues/158#issuecomment-624231895
+    , Element.Border.widthEach { bottom = 1, left = 0, top = 0, right = 0 }
+    , Element.Border.color <| Element.rgba 0 0 0 0
+    , Element.mouseOver [ Element.Border.color <| Element.rgba 0.7 0.7 1 0.5 ]
+    ]

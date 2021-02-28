@@ -46,6 +46,13 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         monaco?.editor?.setModelMarkers(getEditorModel(), "", markers.map(monacoMarkerFromElmMonacoMarker));
     }
 
+    function monacoEditorRevealPositionInCenter(position) {
+        if (typeof theEditor === 'undefined')
+            return;
+
+        theEditor?.revealPositionInCenter(position);
+    }
+
     function monacoMarkerFromElmMonacoMarker(elmMonacoMarker) {
         return {
             message : elmMonacoMarker.message,
@@ -80,6 +87,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         if(message.SetModelMarkers)
             monacoEditorSetModelMarkers(message.SetModelMarkers[0]);
+
+        if(message.RevealPositionInCenter)
+            monacoEditorRevealPositionInCenter(message.RevealPositionInCenter[0]);
     }
 
     function tryCompleteSetup() {
@@ -209,6 +219,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             }
         });
 
+        window.theEditor = editor;
 
         tryCompleteSetup();
     });
