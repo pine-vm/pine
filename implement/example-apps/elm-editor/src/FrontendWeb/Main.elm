@@ -61,7 +61,7 @@ type alias State =
     , workspace : WorkspaceStateStructure
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
-    , lastElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
+    , pendingElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , modalDialog : Maybe ModalDialogState
@@ -164,7 +164,7 @@ init _ url navigationKey =
             , workspace = WorkspaceOk defaultProject
             , decodeMessageFromMonacoEditorError = Nothing
             , lastTextReceivedFromEditor = Nothing
-            , lastElmMakeRequest = Nothing
+            , pendingElmMakeRequest = Nothing
             , elmMakeResult = Nothing
             , elmFormatResult = Nothing
             , modalDialog = Nothing
@@ -189,10 +189,10 @@ update event stateBefore =
 
         setTextToEditorCmd =
             if Just textForEditor == state.lastTextReceivedFromEditor then
-                Cmd.none
+                Nothing
 
             else
-                setTextInMonacoEditorCmd textForEditor
+                Just (setTextInMonacoEditorCmd textForEditor)
 
         setModelMarkersToEditorCmd =
             case fileOpenedInEditorFromState stateBefore of
@@ -205,7 +205,11 @@ update event stateBefore =
                             Nothing
 
                         Just ( elmMakeRequest, elmMakeResult ) ->
-                            if stateBeforeConsiderCompile.elmMakeResult == stateBefore.elmMakeResult then
+                            if
+                                (stateBeforeConsiderCompile.elmMakeResult == stateBefore.elmMakeResult)
+                                    && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromState stateBefore)
+                                    && (setTextToEditorCmd == Nothing)
+                            then
                                 Nothing
 
                             else
@@ -218,12 +222,9 @@ update event stateBefore =
                                     |> Just
 
         triggerCompile =
-            case filePathOpenedInEditorFromState stateBeforeConsiderCompile of
-                Nothing ->
-                    False
-
-                Just filePathOpenedInEditor ->
-                    Just filePathOpenedInEditor /= filePathOpenedInEditorFromState stateBefore
+            (filePathOpenedInEditorFromState stateBeforeConsiderCompile /= Nothing)
+                && (stateBeforeConsiderCompile.pendingElmMakeRequest == Nothing)
+                && (stateBeforeConsiderCompile.elmMakeResult == Nothing)
 
         ( state, compileCmd ) =
             if triggerCompile then
@@ -235,7 +236,7 @@ update event stateBefore =
     ( state
     , Cmd.batch
         [ cmd
-        , setTextToEditorCmd
+        , Maybe.withDefault Cmd.none setTextToEditorCmd
         , Maybe.withDefault Cmd.none setModelMarkersToEditorCmd
         , compileCmd
         ]
@@ -418,7 +419,10 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                                 }
                             )
             in
-            ( { stateBefore | elmMakeResult = Just ( elmMakeRequest, elmMakeResult ) }
+            ( { stateBefore
+                | elmMakeResult = Just ( elmMakeRequest, elmMakeResult )
+                , pendingElmMakeRequest = Nothing
+              }
             , Cmd.none
             )
 
@@ -560,6 +564,8 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                                         { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
                                         , editing = { filePathOpenedInEditor = Nothing }
                                         }
+                                , elmMakeResult = Nothing
+                                , pendingElmMakeRequest = Nothing
                               }
                             , Cmd.none
                             )
@@ -815,7 +821,7 @@ userInputCompileFileOpenedInEditor stateBefore =
                             Json.Decode.fail "Unexpected response"
             in
             ( { stateBefore
-                | lastElmMakeRequest =
+                | pendingElmMakeRequest =
                     stateBefore.time |> Maybe.map (\time -> { time = time, request = elmMakeRequest })
                 , elmMakeResult = Nothing
               }
@@ -939,20 +945,6 @@ view state =
                     , Element.width Element.fill
                     ]
 
-        mainContentFromNavigationButtonElementsAndContent config =
-            [ config.buttonElements
-                |> Element.row
-                    [ Element.spacing defaultFontSize
-                    , Element.padding (defaultFontSize // 2)
-                    ]
-            , config.contentElement
-            ]
-                |> Element.column
-                    [ Element.spacing (defaultFontSize // 2)
-                    , Element.width (Element.fillPortion 4)
-                    , Element.height Element.fill
-                    ]
-
         mainContent =
             case state.workspace of
                 WorkspaceLoadingFromLink loadingProjectStateFromLink ->
@@ -993,85 +985,133 @@ view state =
                         }
 
                 WorkspaceOk workingState ->
-                    case workingState.editing.filePathOpenedInEditor of
-                        Nothing ->
-                            let
-                                projectFiles =
-                                    workingState.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode
+                    let
+                        workspaceView =
+                            case workingState.editing.filePathOpenedInEditor of
+                                Nothing ->
+                                    { editorPaneButtons =
+                                        [ saveButton, loadFromGitOpenDialogButton ]
+                                    , outputPaneButtons =
+                                        []
+                                    , editorPaneContent =
+                                        let
+                                            projectFiles =
+                                                workingState.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode
 
-                                filesToOfferToOpenInEditor =
-                                    projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
+                                            filesToOfferToOpenInEditor =
+                                                projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
 
-                                filesToOfferToOpenInEditorNames =
-                                    filesToOfferToOpenInEditor |> List.map Tuple.first
+                                            filesToOfferToOpenInEditorNames =
+                                                filesToOfferToOpenInEditor |> List.map Tuple.first
 
-                                otherFilesList =
-                                    case
-                                        filesToOfferToOpenInEditorNames
-                                            |> List.foldl Dict.remove (Dict.fromList projectFiles)
-                                            |> Dict.toList
-                                    of
-                                        [] ->
-                                            Element.none
+                                            otherFilesList =
+                                                case
+                                                    filesToOfferToOpenInEditorNames
+                                                        |> List.foldl Dict.remove (Dict.fromList projectFiles)
+                                                        |> Dict.toList
+                                                of
+                                                    [] ->
+                                                        Element.none
 
-                                        otherFilesInTheProject ->
-                                            [ Element.text ("There are " ++ (String.fromInt (List.length otherFilesInTheProject) ++ " other files in this project:"))
-                                            , otherFilesInTheProject
-                                                |> List.map (\( filePath, _ ) -> Element.text (String.join "/" filePath))
-                                                |> Element.column [ Element.spacing 4, Element.padding 8 ]
-                                            ]
-                                                |> Element.column []
+                                                    otherFilesInTheProject ->
+                                                        [ Element.text ("There are " ++ (String.fromInt (List.length otherFilesInTheProject) ++ " other files in this project:"))
+                                                        , otherFilesInTheProject
+                                                            |> List.map (\( filePath, _ ) -> Element.text (String.join "/" filePath))
+                                                            |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                                        ]
+                                                            |> Element.column []
 
-                                chooseElmFileElement =
-                                    case filesToOfferToOpenInEditor of
-                                        [] ->
-                                            Element.text "Did not find any .elm file in this project."
+                                            chooseElmFileElement =
+                                                case filesToOfferToOpenInEditor of
+                                                    [] ->
+                                                        Element.text "Did not find any .elm file in this project."
 
-                                        _ ->
-                                            [ Element.text "Choose one of the files in the project to open in the editor:"
-                                            , filesToOfferToOpenInEditor
-                                                |> List.map
-                                                    (\( filePath, _ ) ->
-                                                        Element.Input.button
-                                                            [ Element.mouseOver [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
-                                                            ]
-                                                            { label = Element.text (String.join "/" filePath)
-                                                            , onPress = Just (UserInputOpenFileInEditor filePath)
-                                                            }
-                                                    )
-                                                |> Element.column [ Element.spacing 4, Element.padding 8 ]
-                                            ]
-                                                |> Element.column []
-                            in
-                            mainContentFromNavigationButtonElementsAndContent
-                                { buttonElements = [ saveButton, loadFromGitOpenDialogButton ]
-                                , contentElement =
-                                    [ chooseElmFileElement, otherFilesList ]
-                                        |> Element.column
-                                            [ Element.spacing defaultFontSize
-                                            , Element.centerX
-                                            , Element.centerY
-                                            ]
-                                }
+                                                    _ ->
+                                                        [ Element.text "Choose one of the files in the project to open in the editor:"
+                                                        , filesToOfferToOpenInEditor
+                                                            |> List.map
+                                                                (\( filePath, _ ) ->
+                                                                    Element.Input.button
+                                                                        [ Element.mouseOver [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
+                                                                        ]
+                                                                        { label = Element.text (String.join "/" filePath)
+                                                                        , onPress = Just (UserInputOpenFileInEditor filePath)
+                                                                        }
+                                                                )
+                                                            |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                                        ]
+                                                            |> Element.column []
+                                        in
+                                        [ chooseElmFileElement, otherFilesList ]
+                                            |> Element.column
+                                                [ Element.spacing defaultFontSize
+                                                , Element.centerX
+                                                , Element.centerY
+                                                ]
+                                    }
 
-                        Just filePathOpenedInEditor ->
-                            viewWhenEditorOpen filePathOpenedInEditor state
+                                Just _ ->
+                                    { editorPaneButtons =
+                                        [ saveButton, buttonElement { label = "📄 Format", onPress = Just UserInputFormat } ]
+                                    , outputPaneButtons =
+                                        [ buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile } ]
+                                    , editorPaneContent =
+                                        monacoEditorElement state
+                                    }
+                    in
+                    [ [ workspaceView.editorPaneButtons
+                            |> Element.row
+                                [ Element.spacing defaultFontSize
+                                , Element.padding (defaultFontSize // 2)
+                                ]
+                      , workspaceView.editorPaneContent
+                      ]
+                        |> Element.column
+                            [ Element.spacing (defaultFontSize // 2)
+                            , Element.width (Element.fillPortion 4)
+                            , Element.height Element.fill
+                            ]
+                    , [ workspaceView.outputPaneButtons |> Element.row [ Element.padding (defaultFontSize // 2) ]
+                      , state
+                            |> viewOutputPaneContent
+                            |> Element.el
+                                [ Element.width Element.fill
+                                , Element.height Element.fill
+
+                                -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
+                                , Element.clip
+                                , Element.htmlAttribute (HA.style "flex-shrink" "1")
+                                ]
+                      ]
+                        |> Element.column
+                            [ Element.width (Element.fillPortion 4)
+                            , Element.height Element.fill
+                            ]
+                    ]
+                        |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
 
                 WorkspaceErr projectStateError ->
-                    mainContentFromNavigationButtonElementsAndContent
-                        { buttonElements = [ loadFromGitOpenDialogButton ]
-                        , contentElement =
-                            [ ("Failed to load project state: "
-                                ++ (projectStateError |> String.left 500)
-                              )
-                                |> Element.text
+                    [ [ loadFromGitOpenDialogButton ]
+                        |> Element.row
+                            [ Element.spacing defaultFontSize
+                            , Element.padding (defaultFontSize // 2)
                             ]
-                                |> Element.paragraph
-                                    [ Element.Font.color (Element.rgb 1 0.64 0)
-                                    , Element.padding defaultFontSize
-                                    , Element.width Element.fill
-                                    ]
-                        }
+                    , [ ("Failed to load project state: "
+                            ++ (projectStateError |> String.left 500)
+                        )
+                            |> Element.text
+                      ]
+                        |> Element.paragraph
+                            [ Element.Font.color (Element.rgb 1 0.64 0)
+                            , Element.padding defaultFontSize
+                            , Element.width Element.fill
+                            ]
+                    ]
+                        |> Element.column
+                            [ Element.spacing (defaultFontSize // 2)
+                            , Element.width (Element.fillPortion 4)
+                            , Element.height Element.fill
+                            ]
 
         popupAttributes =
             case state.modalDialog of
@@ -1449,166 +1489,141 @@ popupAttributesFromProperties { title, guide, contentElement } =
     ]
 
 
-viewWhenEditorOpen : List String -> State -> Element.Element Event
-viewWhenEditorOpen filePathOpenedInEditor state =
-    let
-        elmMakeResultForFileOpenedInEditor =
-            state.elmMakeResult
-                |> Maybe.andThen
-                    (\elmMakeRequestAndResult ->
-                        if (elmMakeRequestAndResult |> Tuple.first |> .entryPointFilePath) == filePathOpenedInEditor then
-                            Just elmMakeRequestAndResult
-
-                        else
-                            Nothing
-                    )
-
-        resultElement =
-            case elmMakeResultForFileOpenedInEditor of
+viewOutputPaneContent : State -> Element.Element Event
+viewOutputPaneContent state =
+    case state.elmMakeResult of
+        Nothing ->
+            case state.pendingElmMakeRequest of
                 Nothing ->
-                    case state.lastElmMakeRequest of
-                        Nothing ->
-                            [ "No compilation started so far. You can use the 'Compile' button to check program text for errors and see your app in action."
+                    if filePathOpenedInEditorFromState state == Nothing then
+                        Element.none
+
+                    else
+                        [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
+                            |> Element.text
+                        ]
+                            |> Element.paragraph [ Element.padding defaultFontSize ]
+
+                Just _ ->
+                    Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
+
+        Just ( elmMakeRequest, elmMakeResult ) ->
+            case elmMakeResult of
+                Err elmMakeError ->
+                    ("Error: " ++ describeHttpError elmMakeError) |> Element.text
+
+                Ok elmMakeOk ->
+                    let
+                        elmMakeRequestFromCurrentState =
+                            elmMakeRequestForFileOpenedInEditor state
+
+                        currentFileContentIsStillSame =
+                            Just elmMakeRequest.files
+                                == (elmMakeRequestFromCurrentState |> Maybe.map .files)
+
+                        warnAboutOutdatedCompilationText =
+                            if
+                                Just elmMakeRequest.entryPointFilePath
+                                    /= filePathOpenedInEditorFromState state
+                            then
+                                Just
+                                    ("⚠️ Last compilation started for another file: '"
+                                        ++ String.join "/" elmMakeRequest.entryPointFilePath
+                                        ++ "'"
+                                    )
+
+                            else if currentFileContentIsStillSame then
+                                Nothing
+
+                            else
+                                Just "⚠️ File contents changed since compiling"
+
+                        warnAboutOutdatedCompilationElement =
+                            warnAboutOutdatedCompilationText
+                                |> Maybe.withDefault ""
                                 |> Element.text
+                                |> Element.el
+                                    [ Element.padding (defaultFontSize // 2)
+                                    , Element.Background.color (Element.rgb 0.3 0.2 0.1)
+                                    , Element.width Element.fill
+                                    , Element.transparent (warnAboutOutdatedCompilationText == Nothing)
+                                    ]
+
+                        outputElementFromPlainText outputText =
+                            [ outputText
+                                |> Html.text
+                                |> Element.html
                             ]
-                                |> Element.paragraph [ Element.padding defaultFontSize ]
+                                |> Element.paragraph
+                                    [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
+                                    , Element.htmlAttribute attributeMonospaceFont
+                                    ]
 
-                        Just _ ->
-                            Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
+                        compileResultElement =
+                            case elmMakeOk.compiledHtmlDocument of
+                                Nothing ->
+                                    let
+                                        standardErrorElement =
+                                            case elmMakeOk.reportFromJson of
+                                                Nothing ->
+                                                    outputElementFromPlainText elmMakeOk.response.processOutput.standardError
 
-                Just ( elmMakeRequest, elmMakeResult ) ->
-                    case elmMakeResult of
-                        Err elmMakeError ->
-                            ("Error: " ++ describeHttpError elmMakeError) |> Element.text
+                                                Just elmMakeReport ->
+                                                    case
+                                                        elmMakeReport
+                                                            |> Result.andThen (.errors >> Result.fromMaybe "Missing field 'errors'")
+                                                    of
+                                                        Err decodeError ->
+                                                            outputElementFromPlainText
+                                                                ("Failed to decode JSON report: " ++ decodeError)
 
-                        Ok elmMakeOk ->
-                            let
-                                elmMakeRequestFromCurrentState =
-                                    elmMakeRequestForFileOpenedInEditor state
-
-                                currentFileContentIsStillSame =
-                                    Just elmMakeRequest.files
-                                        == (elmMakeRequestFromCurrentState |> Maybe.map .files)
-
-                                warningFileContentChangedElement =
-                                    "⚠️ The file contents changed since compiling"
-                                        |> Element.text
-                                        |> Element.el
-                                            [ Element.transparent currentFileContentIsStillSame
+                                                        Ok elmMakeErrors ->
+                                                            elmMakeErrors
+                                                                |> List.map (viewElmMakeError elmMakeRequest)
+                                                                |> Element.column
+                                                                    [ Element.spacing defaultFontSize
+                                                                    , Element.width Element.fill
+                                                                    ]
+                                    in
+                                    [ ( "standard error", standardErrorElement )
+                                    , ( "standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
+                                    ]
+                                        |> List.map
+                                            (\( channel, outputElement ) ->
+                                                [ channel |> Element.text |> Element.el (headingAttributes 3)
+                                                , outputElement |> indentOneLevel
+                                                ]
+                                                    |> Element.column
+                                                        [ Element.spacing (defaultFontSize // 2)
+                                                        , Element.width Element.fill
+                                                        ]
+                                            )
+                                        |> Element.column
+                                            [ Element.spacing (defaultFontSize * 2)
+                                            , Element.width Element.fill
+                                            , Element.height Element.fill
+                                            , Element.scrollbarY
                                             , Element.padding (defaultFontSize // 2)
                                             ]
 
-                                outputElementFromPlainText outputText =
-                                    [ outputText
-                                        |> Html.text
+                                Just compiledHtmlDocument ->
+                                    Html.iframe
+                                        [ HA.srcdoc compiledHtmlDocument
+                                        , HA.style "height" "98%"
+                                        ]
+                                        []
                                         |> Element.html
-                                    ]
-                                        |> Element.paragraph
-                                            [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
-                                            , Element.htmlAttribute attributeMonospaceFont
+                                        |> Element.el
+                                            [ Element.width Element.fill
+                                            , Element.height Element.fill
                                             ]
-
-                                compileResultElement =
-                                    case elmMakeOk.compiledHtmlDocument of
-                                        Nothing ->
-                                            let
-                                                standardErrorElement =
-                                                    case elmMakeOk.reportFromJson of
-                                                        Nothing ->
-                                                            outputElementFromPlainText elmMakeOk.response.processOutput.standardError
-
-                                                        Just elmMakeReport ->
-                                                            case
-                                                                elmMakeReport
-                                                                    |> Result.andThen (.errors >> Result.fromMaybe "Missing field 'errors'")
-                                                            of
-                                                                Err decodeError ->
-                                                                    outputElementFromPlainText
-                                                                        ("Failed to decode JSON report: " ++ decodeError)
-
-                                                                Ok elmMakeErrors ->
-                                                                    elmMakeErrors
-                                                                        |> List.map (viewElmMakeError elmMakeRequest)
-                                                                        |> Element.column
-                                                                            [ Element.spacing defaultFontSize
-                                                                            , Element.width Element.fill
-                                                                            ]
-                                            in
-                                            [ ( "standard error", standardErrorElement )
-                                            , ( "standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
-                                            ]
-                                                |> List.map
-                                                    (\( channel, outputElement ) ->
-                                                        [ channel |> Element.text |> Element.el (headingAttributes 3)
-                                                        , outputElement |> indentOneLevel
-                                                        ]
-                                                            |> Element.column
-                                                                [ Element.spacing (defaultFontSize // 2)
-                                                                , Element.width Element.fill
-                                                                ]
-                                                    )
-                                                |> Element.column
-                                                    [ Element.spacing defaultFontSize
-                                                    , Element.width Element.fill
-                                                    , Element.height Element.fill
-                                                    , Element.scrollbarY
-                                                    , Element.padding (defaultFontSize // 2)
-                                                    ]
-
-                                        Just compiledHtmlDocument ->
-                                            Html.iframe
-                                                [ HA.srcdoc compiledHtmlDocument
-                                                , HA.style "height" "98%"
-                                                ]
-                                                []
-                                                |> Element.html
-                                                |> Element.el
-                                                    [ Element.width Element.fill
-                                                    , Element.height Element.fill
-                                                    ]
-                            in
-                            [ warningFileContentChangedElement, compileResultElement ]
-                                |> Element.column
-                                    [ Element.spacing (defaultFontSize // 2)
-                                    , Element.width Element.fill
-                                    , Element.height Element.fill
-                                    ]
-
-        formatButton =
-            buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
-
-        compileButton =
-            buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
-    in
-    [ [ [ saveButton, formatButton ]
-            |> Element.row
-                [ Element.spacing defaultFontSize
-                , Element.padding (defaultFontSize // 2)
-                ]
-      , monacoEditorElement state
-      ]
-        |> Element.column
-            [ Element.spacing (defaultFontSize // 2)
-            , Element.width (Element.fillPortion 4)
-            , Element.height Element.fill
-            ]
-    , [ [ compileButton ] |> Element.row [ Element.padding (defaultFontSize // 2) ]
-      , resultElement
-            |> Element.el
-                [ Element.width Element.fill
-                , Element.height Element.fill
-
-                -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
-                , Element.clip
-                , Element.htmlAttribute (HA.style "flex-shrink" "1")
-                ]
-      ]
-        |> Element.column
-            [ Element.width (Element.fillPortion 4)
-            , Element.height Element.fill
-            ]
-    ]
-        |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+                    in
+                    [ warnAboutOutdatedCompilationElement, compileResultElement ]
+                        |> Element.column
+                            [ Element.spacing (defaultFontSize // 2)
+                            , Element.width Element.fill
+                            , Element.height Element.fill
+                            ]
 
 
 viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element Event
