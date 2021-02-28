@@ -88,6 +88,7 @@ type alias WorkingProjectStateStructure =
 type alias ElmMakeResultStructure =
     { response : ElmMakeResponseStructure
     , compiledHtmlDocument : Maybe String
+    , reportFromJson : Maybe (Result String ElmMakeExecutableFile.ElmMakeReportFromJson)
     }
 
 
@@ -180,18 +181,9 @@ update event stateBefore =
             updateWithoutCmdToUpdateEditor event stateBefore
 
         textForEditor =
-            stateBeforeConsiderCompile.workspace
-                |> mapWorkspaceIfOk
-                    (\workspace ->
-                        case workspace.editing.filePathOpenedInEditor of
-                            Nothing ->
-                                Nothing
-
-                            Just filePath ->
-                                workspace.fileTree |> ProjectState.getBlobAtPathFromFileTree filePath
-                    )
-                |> Maybe.Extra.join
-                |> Maybe.andThen stringFromFileContent
+            stateBeforeConsiderCompile
+                |> fileOpenedInEditorFromState
+                |> Maybe.andThen (Tuple.second >> stringFromFileContent)
                 |> Maybe.withDefault "Failed to map file content to string."
 
         setTextToEditorCmd =
@@ -200,6 +192,29 @@ update event stateBefore =
 
             else
                 setTextInMonacoEditorCmd textForEditor
+
+        setModelMarkersToEditorCmd =
+            case fileOpenedInEditorFromState stateBefore of
+                Nothing ->
+                    Nothing
+
+                Just fileOpenedInEditor ->
+                    case stateBeforeConsiderCompile.elmMakeResult of
+                        Nothing ->
+                            Nothing
+
+                        Just ( elmMakeRequest, elmMakeResult ) ->
+                            if stateBeforeConsiderCompile.elmMakeResult == stateBefore.elmMakeResult then
+                                Nothing
+
+                            else
+                                elmMakeResult
+                                    |> Result.toMaybe
+                                    |> Maybe.andThen .reportFromJson
+                                    |> editorDocumentMarkersFromElmMakeReport
+                                        { elmMakeRequest = elmMakeRequest, fileOpenedInEditor = fileOpenedInEditor }
+                                    |> setModelMarkersInMonacoEditorCmd
+                                    |> Just
 
         triggerCompile =
             case filePathOpenedInEditorFromState stateBeforeConsiderCompile of
@@ -216,14 +231,36 @@ update event stateBefore =
             else
                 ( stateBeforeConsiderCompile, Cmd.none )
     in
-    ( state, Cmd.batch [ cmd, setTextToEditorCmd, compileCmd ] )
+    ( state
+    , Cmd.batch
+        [ cmd
+        , setTextToEditorCmd
+        , Maybe.withDefault Cmd.none setModelMarkersToEditorCmd
+        , compileCmd
+        ]
+    )
 
 
 filePathOpenedInEditorFromState : State -> Maybe (List String)
-filePathOpenedInEditorFromState state =
+filePathOpenedInEditorFromState =
+    fileOpenedInEditorFromState >> Maybe.map Tuple.first
+
+
+fileOpenedInEditorFromState : State -> Maybe ( List String, Bytes.Bytes )
+fileOpenedInEditorFromState state =
     case state.workspace of
         WorkspaceOk workingState ->
-            workingState.editing.filePathOpenedInEditor
+            case workingState.editing.filePathOpenedInEditor of
+                Nothing ->
+                    Nothing
+
+                Just filePathOpenedInEditor ->
+                    case workingState.fileTree |> ProjectState.getBlobAtPathFromFileTree filePathOpenedInEditor of
+                        Nothing ->
+                            Nothing
+
+                        Just fileContent ->
+                            Just ( filePathOpenedInEditor, fileContent )
 
         _ ->
             Nothing
@@ -349,9 +386,24 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                                                     |> Common.decodeBase64ToString
                                                     |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
                                                     |> Just
+
+                                    reportFromJson =
+                                        case
+                                            elmMakeResponse.reportJsonProcessOutput.standardError
+                                                |> Json.Decode.decodeString Json.Decode.value
+                                        of
+                                            Err _ ->
+                                                Nothing
+
+                                            Ok elmMakeReportJson ->
+                                                elmMakeReportJson
+                                                    |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
+                                                    |> Result.mapError Json.Decode.errorToString
+                                                    |> Just
                                 in
                                 { response = elmMakeResponse
                                 , compiledHtmlDocument = compiledHtmlDocument
+                                , reportFromJson = reportFromJson
                                 }
                             )
             in
@@ -685,39 +737,33 @@ fileTreeNodeFromListFileWithPath =
 
 elmFormatCmd : State -> Cmd Event
 elmFormatCmd state =
-    state.workspace
-        |> mapWorkspaceIfOk
-            (\workspace ->
-                case workspace.editing.filePathOpenedInEditor of
-                    Nothing ->
-                        Cmd.none
+    (case fileOpenedInEditorFromState state of
+        Nothing ->
+            Nothing
 
-                    Just filePath ->
-                        case
-                            workspace.fileTree
-                                |> ProjectState.getBlobAtPathFromFileTree filePath
-                                |> Maybe.andThen stringFromFileContent
-                        of
-                            Nothing ->
-                                Cmd.none
+        Just ( filePath, fileContent ) ->
+            case stringFromFileContent fileContent of
+                Nothing ->
+                    Nothing
 
-                            Just fileContent ->
-                                let
-                                    request =
-                                        fileContent |> FrontendBackendInterface.FormatElmModuleTextRequest
+                Just fileContentString ->
+                    let
+                        request =
+                            FrontendBackendInterface.FormatElmModuleTextRequest fileContentString
 
-                                    jsonDecoder backendResponse =
-                                        case backendResponse of
-                                            FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
-                                                Json.Decode.succeed formatResponse
+                        jsonDecoder backendResponse =
+                            case backendResponse of
+                                FrontendBackendInterface.FormatElmModuleTextResponse formatResponse ->
+                                    Json.Decode.succeed formatResponse
 
-                                            _ ->
-                                                Json.Decode.fail "Unexpected response"
-                                in
-                                requestToApiCmd request
-                                    jsonDecoder
-                                    (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
-            )
+                                _ ->
+                                    Json.Decode.fail "Unexpected response"
+                    in
+                    requestToApiCmd request
+                        jsonDecoder
+                        (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
+                        |> Just
+    )
         |> Maybe.withDefault Cmd.none
 
 
@@ -1456,18 +1502,13 @@ viewWhenEditorOpen filePathOpenedInEditor state =
                                         Nothing ->
                                             let
                                                 standardErrorElement =
-                                                    case
-                                                        elmMakeOk.response.reportJsonProcessOutput.standardError
-                                                            |> Json.Decode.decodeString Json.Decode.value
-                                                    of
-                                                        Err _ ->
+                                                    case elmMakeOk.reportFromJson of
+                                                        Nothing ->
                                                             outputElementFromPlainText elmMakeOk.response.processOutput.standardError
 
-                                                        Ok elmMakeReportJson ->
+                                                        Just elmMakeReport ->
                                                             case
-                                                                elmMakeReportJson
-                                                                    |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
-                                                                    |> Result.mapError Json.Decode.errorToString
+                                                                elmMakeReport
                                                                     |> Result.andThen (.errors >> Result.fromMaybe "Missing field 'errors'")
                                                             of
                                                                 Err decodeError ->
@@ -1565,23 +1606,14 @@ viewElmMakeError elmMakeRequest elmMakeError =
         |> List.map
             (\elmMakeProblem ->
                 let
-                    pathSegments =
-                        elmMakeError.path
-                            |> String.split "/"
-                            |> List.concatMap (String.split "\\")
-
                     displayPath =
-                        pathSegments
-                            |> List.Extra.tails
-                            |> List.filter (List.isEmpty >> not)
-                            |> List.filter (\pathEnd -> elmMakeRequest.files |> List.map .path |> List.member pathEnd)
-                            |> List.head
-                            |> Maybe.withDefault pathSegments
+                        filePathFromExistingPathsAndElmMakeReportPathString
+                            (elmMakeRequest.files |> List.map .path)
+                            elmMakeError.path
 
                     problemHeadingElement =
                         [ elmMakeProblem.title
-                            |> String.toLower
-                            |> String.Extra.toTitleCase
+                            |> elmEditorProblemDisplayTitleFromReportTitle
                             |> Element.text
                             |> Element.el [ Element.Font.bold ]
                         , (String.join "/" displayPath
@@ -1644,6 +1676,111 @@ viewElmMakeError elmMakeRequest elmMakeError =
             ]
 
 
+editorDocumentMarkersFromElmMakeReport :
+    { elmMakeRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, Bytes.Bytes ) }
+    -> Maybe (Result String ElmMakeExecutableFile.ElmMakeReportFromJson)
+    -> List FrontendWeb.MonacoEditor.EditorMarker
+editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } maybeReportFromJson =
+    case maybeReportFromJson of
+        Nothing ->
+            []
+
+        Just reportFromJson ->
+            let
+                filePathOpenedInEditor =
+                    Tuple.first fileOpenedInEditor
+
+                fileOpenedInEditorBase64 =
+                    fileOpenedInEditor
+                        |> Tuple.second
+                        |> Base64.fromBytes
+                        |> Maybe.withDefault "Error encoding in base64"
+
+                markersFromGeneralProblem errorText =
+                    [ { message = errorText
+                      , startLineNumber = 1
+                      , startColumn = 1
+                      , endLineNumber = 11
+                      , endColumn = 13
+                      , severity = FrontendWeb.MonacoEditor.ErrorSeverity
+                      }
+                    ]
+            in
+            case elmMakeRequest.files |> List.filter (.path >> (==) filePathOpenedInEditor) |> List.head of
+                Nothing ->
+                    []
+
+                Just requestFile ->
+                    if requestFile.contentBase64 /= fileOpenedInEditorBase64 then
+                        []
+
+                    else
+                        case reportFromJson of
+                            Err decodeError ->
+                                markersFromGeneralProblem ("Failed to decode JSON report: " ++ decodeError)
+
+                            Ok report ->
+                                case report.errors of
+                                    Nothing ->
+                                        markersFromGeneralProblem "Missing field 'errors'"
+
+                                    Just errors ->
+                                        errors
+                                            |> List.filter
+                                                (.path
+                                                    >> filePathFromExistingPathsAndElmMakeReportPathString
+                                                        (elmMakeRequest.files |> List.map .path)
+                                                    >> (==) filePathOpenedInEditor
+                                                )
+                                            |> List.concatMap .problems
+                                            |> List.map editorDocumentMarkerFromElmMakeProblem
+
+
+elmEditorProblemDisplayTitleFromReportTitle : String -> String
+elmEditorProblemDisplayTitleFromReportTitle =
+    String.toLower >> String.Extra.toTitleCase
+
+
+editorDocumentMarkerFromElmMakeProblem : ElmMakeExecutableFile.ElmMakeReportProblem -> FrontendWeb.MonacoEditor.EditorMarker
+editorDocumentMarkerFromElmMakeProblem elmMakeProblem =
+    let
+        messageItemText messageItem =
+            case messageItem of
+                ElmMakeExecutableFile.ElmMakeReportMessageListItemPlain text ->
+                    text
+
+                ElmMakeExecutableFile.ElmMakeReportMessageListItemStyled styled ->
+                    styled.string
+    in
+    { message =
+        "# "
+            ++ elmEditorProblemDisplayTitleFromReportTitle elmMakeProblem.title
+            ++ "\n"
+            ++ (elmMakeProblem.message |> List.map messageItemText |> String.join "")
+    , startLineNumber = elmMakeProblem.region.start.line
+    , startColumn = elmMakeProblem.region.start.column
+    , endLineNumber = elmMakeProblem.region.end.line
+    , endColumn = elmMakeProblem.region.end.column
+    , severity = FrontendWeb.MonacoEditor.ErrorSeverity
+    }
+
+
+filePathFromExistingPathsAndElmMakeReportPathString : List (List String) -> String -> List String
+filePathFromExistingPathsAndElmMakeReportPathString existingPaths elmMakeReportPathString =
+    let
+        pathSegments =
+            elmMakeReportPathString
+                |> String.split "/"
+                |> List.concatMap (String.split "\\")
+    in
+    pathSegments
+        |> List.Extra.tails
+        |> List.filter (List.isEmpty >> not)
+        |> List.filter (\pathEnd -> existingPaths |> List.member pathEnd)
+        |> List.head
+        |> Maybe.withDefault pathSegments
+
+
 styledTextFromElmMakeReportMessageListItem : ElmMakeExecutableFile.ElmMakeReportMessageListItem -> { string : String, bold : Bool, underline : Bool, color : Maybe String }
 styledTextFromElmMakeReportMessageListItem elmMakeReportMessageListItem =
     case elmMakeReportMessageListItem of
@@ -1689,6 +1826,13 @@ loadFromGitOpenDialogButton =
 setTextInMonacoEditorCmd : String -> Cmd Event
 setTextInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetValue
+        >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> sendMessageToMonacoFrame
+
+
+setModelMarkersInMonacoEditorCmd : List FrontendWeb.MonacoEditor.EditorMarker -> Cmd Event
+setModelMarkersInMonacoEditorCmd =
+    FrontendWeb.MonacoEditor.SetModelMarkers
         >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 

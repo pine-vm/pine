@@ -39,9 +39,47 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         getEditorModel()?.setValue(newValue);
     }
 
+    function monacoEditorSetModelMarkers(markers) {
+        if (typeof monaco === 'undefined')
+            return;
+
+        monaco?.editor?.setModelMarkers(getEditorModel(), "", markers.map(monacoMarkerFromElmMonacoMarker));
+    }
+
+    function monacoMarkerFromElmMonacoMarker(elmMonacoMarker) {
+        return {
+            message : elmMonacoMarker.message,
+            startLineNumber : elmMonacoMarker.startLineNumber,
+            startColumn : elmMonacoMarker.startColumn,
+            endLineNumber : elmMonacoMarker.endLineNumber,
+            endColumn : elmMonacoMarker.endColumn,
+            severity : monacoMarkerSeverityFromElmMonacoMarkerSeverity(elmMonacoMarker.severity),
+        };
+    }
+
+    function monacoMarkerSeverityFromElmMonacoMarkerSeverity(elmMonacoMarkerSeverity) {
+        if (typeof monaco === 'undefined')
+            return -1;
+
+        if (elmMonacoMarkerSeverity.ErrorSeverity != null)
+            return monaco?.MarkerSeverity.Error;
+
+        if (elmMonacoMarkerSeverity.WarningSeverity != null)
+            return monaco?.MarkerSeverity.Warning;
+
+        if (elmMonacoMarkerSeverity.InfoSeverity != null)
+            return monaco?.MarkerSeverity.Info;
+
+        if (elmMonacoMarkerSeverity.HintSeverity != null)
+            return monaco?.MarkerSeverity.Hint;
+    }
+
     function dispatchMessage(message) {
         if(message.SetValue)
             monacoEditorSetValue(message.SetValue[0]);
+
+        if(message.SetModelMarkers)
+            monacoEditorSetModelMarkers(message.SetModelMarkers[0]);
     }
 
     function tryCompleteSetup() {
