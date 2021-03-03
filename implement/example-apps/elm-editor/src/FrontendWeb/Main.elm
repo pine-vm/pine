@@ -19,6 +19,7 @@ import ElmFullstackCompilerInterface.GenerateJsonCoders
 import ElmFullstackCompilerInterface.SourceFiles
 import ElmMakeExecutableFile
 import FrontendBackendInterface
+import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
 import FrontendWeb.MonacoEditor
 import FrontendWeb.ProjectStateInUrl
 import Html
@@ -28,7 +29,6 @@ import Http
 import Json.Decode
 import Json.Encode
 import List.Extra
-import Maybe.Extra
 import ProjectState
 import ProjectState_2021_01
 import Result.Extra
@@ -57,13 +57,8 @@ type alias ElmMakeResponseStructure =
 type alias State =
     { navigationKey : Navigation.Key
     , url : Url.Url
-    , time : Maybe Time.Posix
+    , time : Time.Posix
     , workspace : WorkspaceStateStructure
-    , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
-    , lastTextReceivedFromEditor : Maybe String
-    , pendingElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
-    , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
-    , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , modalDialog : Maybe ModalDialogState
     , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure )
     }
@@ -82,6 +77,11 @@ type WorkspaceStateStructure
 type alias WorkingProjectStateStructure =
     { fileTree : ProjectState.FileTreeNode
     , editing : { filePathOpenedInEditor : Maybe (List String) }
+    , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
+    , lastTextReceivedFromEditor : Maybe String
+    , pendingElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
+    , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
+    , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     }
 
 
@@ -93,22 +93,26 @@ type alias ElmMakeResultStructure =
 
 
 type Event
-    = UserInputChangeTextInEditor String
-    | MonacoEditorEvent Json.Decode.Value
-    | TimeHasArrived Time.Posix
-    | UserInputOpenFileInEditor (List String)
-    | UserInputFormat
-    | UserInputCompile
-    | UserInputSave (Maybe { createDiffIfBaseAvailable : Bool })
+    = TimeHasArrived Time.Posix
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputCloseModalDialog
-    | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
-    | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
-    | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
     | BackendLoadFromGitResultEvent String (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
+    | WorkspaceEvent WorkspaceEventStructure
+    | UserInputSave (Maybe { createDiffIfBaseAvailable : Bool })
     | DiscardEvent
+
+
+type WorkspaceEventStructure
+    = MonacoEditorEvent Json.Decode.Value
+    | UserInputChangeTextInEditor String
+    | UserInputOpenFileInEditor (List String)
+    | UserInputFormat
+    | UserInputCompile
+    | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
+    | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
+    | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
 
 
 type UserInputLoadFromGitEventStructure
@@ -134,12 +138,16 @@ type alias LoadFromGitDialogState =
     }
 
 
-main : Program () State Event
+main : Program () (BrowserApplicationInitWithTime.State () State Event) (BrowserApplicationInitWithTime.Event Event)
 main =
-    Browser.application
+    BrowserApplicationInitWithTime.application
         { init = init
         , update = update
         , subscriptions = subscriptions
+        , viewWhileWaitingForTime =
+            { title = "Elm Editor - Initializing"
+            , body = [ Html.text "Waiting for first measurement of time..." ]
+            }
         , view = view
         , onUrlRequest = UrlRequest
         , onUrlChange = UrlChange
@@ -148,283 +156,29 @@ main =
 
 subscriptions : State -> Sub Event
 subscriptions _ =
-    [ receiveMessageFromMonacoFrame MonacoEditorEvent
+    [ receiveMessageFromMonacoFrame (MonacoEditorEvent >> WorkspaceEvent)
     , Time.every 500 TimeHasArrived
     ]
         |> Sub.batch
 
 
-init : () -> Url.Url -> Navigation.Key -> ( State, Cmd Event )
-init _ url navigationKey =
-    let
-        ( model, urlChangeCmd ) =
-            { navigationKey = navigationKey
-            , url = url
-            , time = Nothing
-            , workspace = WorkspaceOk defaultProject
-            , decodeMessageFromMonacoEditorError = Nothing
-            , lastTextReceivedFromEditor = Nothing
-            , pendingElmMakeRequest = Nothing
-            , elmMakeResult = Nothing
-            , elmFormatResult = Nothing
-            , modalDialog = Nothing
-            , lastBackendLoadFromGitResult = Nothing
-            }
-                |> update (UrlChange url)
-    in
-    ( model, urlChangeCmd )
+init : () -> Url.Url -> Navigation.Key -> Time.Posix -> ( State, Cmd Event )
+init _ url navigationKey time =
+    { navigationKey = navigationKey
+    , url = url
+    , time = time
+    , workspace = defaultProject |> initWorkspaceFromFileTreeAndFileSelection |> WorkspaceOk
+    , modalDialog = Nothing
+    , lastBackendLoadFromGitResult = Nothing
+    }
+        |> update (UrlChange url)
 
 
 update : Event -> State -> ( State, Cmd Event )
-update event stateBeforeApplyingEvent =
-    let
-        ( stateBeforeConsiderCompile, cmd ) =
-            updateWithoutCmdToUpdateEditor event stateBeforeApplyingEvent
-
-        textForEditor =
-            stateBeforeConsiderCompile
-                |> fileOpenedInEditorFromState
-                |> Maybe.andThen (Tuple.second >> stringFromFileContent)
-                |> Maybe.withDefault "Failed to map file content to string."
-
-        setTextToEditorCmd =
-            if Just textForEditor == state.lastTextReceivedFromEditor then
-                Nothing
-
-            else
-                Just (setTextInMonacoEditorCmd textForEditor)
-
-        setModelMarkersToEditorCmd =
-            case fileOpenedInEditorFromState stateBeforeConsiderCompile of
-                Nothing ->
-                    Nothing
-
-                Just fileOpenedInEditor ->
-                    case stateBeforeConsiderCompile.elmMakeResult of
-                        Nothing ->
-                            Nothing
-
-                        Just ( elmMakeRequest, elmMakeResult ) ->
-                            if
-                                (stateBeforeConsiderCompile.elmMakeResult == stateBeforeApplyingEvent.elmMakeResult)
-                                    && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromState stateBeforeApplyingEvent)
-                                    && (setTextToEditorCmd == Nothing)
-                            then
-                                Nothing
-
-                            else
-                                elmMakeResult
-                                    |> Result.toMaybe
-                                    |> Maybe.andThen .reportFromJson
-                                    |> editorDocumentMarkersFromElmMakeReport
-                                        { elmMakeRequest = elmMakeRequest, fileOpenedInEditor = fileOpenedInEditor }
-                                    |> setModelMarkersInMonacoEditorCmd
-                                    |> Just
-
-        triggerCompile =
-            (filePathOpenedInEditorFromState stateBeforeConsiderCompile /= Nothing)
-                && (stateBeforeConsiderCompile.pendingElmMakeRequest == Nothing)
-                && (stateBeforeConsiderCompile.elmMakeResult == Nothing)
-
-        ( state, compileCmd ) =
-            if triggerCompile then
-                userInputCompileFileOpenedInEditor stateBeforeConsiderCompile
-
-            else
-                ( stateBeforeConsiderCompile, Cmd.none )
-    in
-    ( state
-    , Cmd.batch
-        [ cmd
-        , Maybe.withDefault Cmd.none setTextToEditorCmd
-        , Maybe.withDefault Cmd.none setModelMarkersToEditorCmd
-        , compileCmd
-        ]
-    )
-
-
-filePathOpenedInEditorFromState : State -> Maybe (List String)
-filePathOpenedInEditorFromState =
-    fileOpenedInEditorFromState >> Maybe.map Tuple.first
-
-
-fileOpenedInEditorFromState : State -> Maybe ( List String, Bytes.Bytes )
-fileOpenedInEditorFromState state =
-    case state.workspace of
-        WorkspaceOk workingState ->
-            case workingState.editing.filePathOpenedInEditor of
-                Nothing ->
-                    Nothing
-
-                Just filePathOpenedInEditor ->
-                    case workingState.fileTree |> ProjectState.getBlobAtPathFromFileTree filePathOpenedInEditor of
-                        Nothing ->
-                            Nothing
-
-                        Just fileContent ->
-                            Just ( filePathOpenedInEditor, fileContent )
-
-        _ ->
-            Nothing
-
-
-updateWithoutCmdToUpdateEditor : Event -> State -> ( State, Cmd Event )
-updateWithoutCmdToUpdateEditor event stateBefore =
+update event stateBefore =
     case event of
-        UserInputOpenFileInEditor filePath ->
-            ( stateBefore
-                |> updateWorkspaceIfOk
-                    (\workspace ->
-                        let
-                            editing =
-                                workspace.editing
-                        in
-                        { workspace | editing = { editing | filePathOpenedInEditor = Just filePath } }
-                    )
-            , Cmd.none
-            )
-
-        UserInputChangeTextInEditor inputText ->
-            ( { stateBefore | lastTextReceivedFromEditor = Just inputText }
-                |> updateWorkspaceIfOk
-                    (\workspace ->
-                        case workspace.editing.filePathOpenedInEditor of
-                            Nothing ->
-                                workspace
-
-                            Just filePath ->
-                                { workspace
-                                    | fileTree =
-                                        workspace.fileTree
-                                            |> ProjectState.setBlobAtPathInSortedFileTree ( filePath, fileContentFromString inputText )
-                                }
-                    )
-            , Cmd.none
-            )
-
-        UserInputRevealPositionInEditor revealPositionInEditor ->
-            ( stateBefore
-            , if (stateBefore |> fileOpenedInEditorFromState |> Maybe.map Tuple.first) == Just revealPositionInEditor.filePath then
-                revealPositionInCenterInMonacoEditorCmd
-                    { lineNumber = revealPositionInEditor.lineNumber, column = revealPositionInEditor.column }
-
-              else
-                Cmd.none
-            )
-
-        MonacoEditorEvent monacoEditorEvent ->
-            case
-                monacoEditorEvent
-                    |> Json.Decode.decodeValue ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
-            of
-                Err decodeError ->
-                    ( { stateBefore | decodeMessageFromMonacoEditorError = Just decodeError }, Cmd.none )
-
-                Ok decodedMonacoEditorEvent ->
-                    case decodedMonacoEditorEvent of
-                        FrontendWeb.MonacoEditor.DidChangeContentEvent content ->
-                            stateBefore |> update (UserInputChangeTextInEditor content)
-
-                        FrontendWeb.MonacoEditor.CompletedSetupEvent ->
-                            ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
-
-                        FrontendWeb.MonacoEditor.EditorActionCloseFileEvent ->
-                            ( stateBefore
-                                |> updateWorkspaceIfOk
-                                    (\workspace ->
-                                        let
-                                            editing =
-                                                workspace.editing
-                                        in
-                                        { workspace | editing = { editing | filePathOpenedInEditor = Nothing } }
-                                    )
-                            , Cmd.none
-                            )
-
-                        FrontendWeb.MonacoEditor.EditorActionFormatDocumentEvent ->
-                            update UserInputFormat stateBefore
-
-                        FrontendWeb.MonacoEditor.EditorActionCompileEvent ->
-                            userInputCompileFileOpenedInEditor stateBefore
-
         TimeHasArrived time ->
-            ( { stateBefore | time = Just time }, Cmd.none )
-
-        UserInputFormat ->
-            ( stateBefore, elmFormatCmd stateBefore )
-
-        UserInputCompile ->
-            userInputCompileFileOpenedInEditor stateBefore
-
-        BackendElmFormatResponseEvent formatResponseEvent ->
-            ( { stateBefore | elmFormatResult = Just formatResponseEvent.result }
-                |> updateWorkspaceIfOk
-                    (\workspace ->
-                        if Just formatResponseEvent.filePath /= workspace.editing.filePathOpenedInEditor then
-                            workspace
-
-                        else
-                            case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
-                                Nothing ->
-                                    workspace
-
-                                Just formattedText ->
-                                    { workspace
-                                        | fileTree =
-                                            workspace.fileTree
-                                                |> ProjectState.setBlobAtPathInSortedFileTree
-                                                    ( formatResponseEvent.filePath
-                                                    , fileContentFromString formattedText
-                                                    )
-                                    }
-                    )
-            , Cmd.none
-            )
-
-        BackendElmMakeResponseEvent elmMakeRequest httpResponse ->
-            let
-                elmMakeResult =
-                    httpResponse
-                        |> Result.map
-                            (\elmMakeResponse ->
-                                let
-                                    compiledHtmlDocument =
-                                        case elmMakeResponse.outputFileContentBase64 of
-                                            Nothing ->
-                                                Nothing
-
-                                            Just outputFileContentBase64 ->
-                                                outputFileContentBase64
-                                                    |> Common.decodeBase64ToString
-                                                    |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
-                                                    |> Just
-
-                                    reportFromJson =
-                                        case
-                                            elmMakeResponse.reportJsonProcessOutput.standardError
-                                                |> Json.Decode.decodeString Json.Decode.value
-                                        of
-                                            Err _ ->
-                                                Nothing
-
-                                            Ok elmMakeReportJson ->
-                                                elmMakeReportJson
-                                                    |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
-                                                    |> Result.mapError Json.Decode.errorToString
-                                                    |> Just
-                                in
-                                { response = elmMakeResponse
-                                , compiledHtmlDocument = compiledHtmlDocument
-                                , reportFromJson = reportFromJson
-                                }
-                            )
-            in
-            ( { stateBefore
-                | elmMakeResult = Just ( elmMakeRequest, elmMakeResult )
-                , pendingElmMakeRequest = Nothing
-              }
-            , Cmd.none
-            )
+            ( { stateBefore | time = time }, Cmd.none )
 
         UrlChange url ->
             processEventUrlChanged url stateBefore
@@ -541,7 +295,7 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                     let
                         dialogState =
                             { urlIntoGitRepository = urlIntoGitRepository
-                            , requestTime = stateBefore.time
+                            , requestTime = Just stateBefore.time
                             , loadCompositionResult = Nothing
                             }
                     in
@@ -560,12 +314,11 @@ updateWithoutCmdToUpdateEditor event stateBefore =
                             ( { stateBefore
                                 | modalDialog = Nothing
                                 , workspace =
-                                    WorkspaceOk
-                                        { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
-                                        , editing = { filePathOpenedInEditor = Nothing }
-                                        }
-                                , elmMakeResult = Nothing
-                                , pendingElmMakeRequest = Nothing
+                                    { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
+                                    , filePathOpenedInEditor = Nothing
+                                    }
+                                        |> initWorkspaceFromFileTreeAndFileSelection
+                                        |> WorkspaceOk
                               }
                             , Cmd.none
                             )
@@ -582,8 +335,256 @@ updateWithoutCmdToUpdateEditor event stateBefore =
         UserInputCloseModalDialog ->
             ( { stateBefore | modalDialog = Nothing }, Cmd.none )
 
+        WorkspaceEvent workspaceEvent ->
+            case stateBefore.workspace of
+                WorkspaceOk workspaceBefore ->
+                    let
+                        ( workspace, workspaceCmd ) =
+                            workspaceBefore
+                                |> updateWorkspace { time = stateBefore.time } workspaceEvent
+                    in
+                    ( { stateBefore | workspace = WorkspaceOk workspace }
+                    , Cmd.map WorkspaceEvent workspaceCmd
+                    )
+
+                WorkspaceLoadingFromLink _ ->
+                    ( stateBefore, Cmd.none )
+
+                WorkspaceErr _ ->
+                    ( stateBefore, Cmd.none )
+
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+updateWorkspace : { time : Time.Posix } -> WorkspaceEventStructure -> WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+updateWorkspace updateConfig event stateBeforeApplyingEvent =
+    let
+        ( stateBeforeConsiderCompile, cmd ) =
+            updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBeforeApplyingEvent
+
+        textForEditor =
+            stateBeforeConsiderCompile
+                |> fileOpenedInEditorFromWorkspace
+                |> Maybe.andThen (Tuple.second >> stringFromFileContent)
+                |> Maybe.withDefault "Failed to map file content to string."
+
+        setTextToEditorCmd =
+            if Just textForEditor == state.lastTextReceivedFromEditor then
+                Nothing
+
+            else
+                Just (setTextInMonacoEditorCmd textForEditor)
+
+        setModelMarkersToEditorCmd =
+            case fileOpenedInEditorFromWorkspace stateBeforeConsiderCompile of
+                Nothing ->
+                    Nothing
+
+                Just fileOpenedInEditor ->
+                    case stateBeforeConsiderCompile.elmMakeResult of
+                        Nothing ->
+                            Nothing
+
+                        Just ( elmMakeRequest, elmMakeResult ) ->
+                            if
+                                (stateBeforeConsiderCompile.elmMakeResult == stateBeforeApplyingEvent.elmMakeResult)
+                                    && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromWorkspace stateBeforeApplyingEvent)
+                                    && (setTextToEditorCmd == Nothing)
+                            then
+                                Nothing
+
+                            else
+                                elmMakeResult
+                                    |> Result.toMaybe
+                                    |> Maybe.andThen .reportFromJson
+                                    |> editorDocumentMarkersFromElmMakeReport
+                                        { elmMakeRequest = elmMakeRequest, fileOpenedInEditor = fileOpenedInEditor }
+                                    |> setModelMarkersInMonacoEditorCmd
+                                    |> Just
+
+        triggerCompile =
+            (filePathOpenedInEditorFromWorkspace stateBeforeConsiderCompile /= Nothing)
+                && (stateBeforeConsiderCompile.pendingElmMakeRequest == Nothing)
+                && (stateBeforeConsiderCompile.elmMakeResult == Nothing)
+
+        ( state, compileCmd ) =
+            if triggerCompile then
+                userInputCompileFileOpenedInEditor updateConfig stateBeforeConsiderCompile
+
+            else
+                ( stateBeforeConsiderCompile, Cmd.none )
+    in
+    ( state
+    , Cmd.batch
+        [ cmd
+        , Maybe.withDefault Cmd.none setTextToEditorCmd
+        , Maybe.withDefault Cmd.none setModelMarkersToEditorCmd
+        , compileCmd
+        ]
+    )
+
+
+filePathOpenedInEditorFromWorkspace : WorkingProjectStateStructure -> Maybe (List String)
+filePathOpenedInEditorFromWorkspace =
+    fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
+
+
+fileOpenedInEditorFromWorkspace : WorkingProjectStateStructure -> Maybe ( List String, Bytes.Bytes )
+fileOpenedInEditorFromWorkspace workingState =
+    case workingState.editing.filePathOpenedInEditor of
+        Nothing ->
+            Nothing
+
+        Just filePathOpenedInEditor ->
+            case workingState.fileTree |> ProjectState.getBlobAtPathFromFileTree filePathOpenedInEditor of
+                Nothing ->
+                    Nothing
+
+                Just fileContent ->
+                    Just ( filePathOpenedInEditor, fileContent )
+
+
+updateWorkspaceWithoutCmdToUpdateEditor : { time : Time.Posix } -> WorkspaceEventStructure -> WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
+    case event of
+        UserInputOpenFileInEditor filePath ->
+            ( let
+                editing =
+                    stateBefore.editing
+              in
+              { stateBefore | editing = { editing | filePathOpenedInEditor = Just filePath } }
+            , Cmd.none
+            )
+
+        UserInputChangeTextInEditor inputText ->
+            ( case stateBefore.editing.filePathOpenedInEditor of
+                Nothing ->
+                    stateBefore
+
+                Just filePath ->
+                    { stateBefore
+                        | fileTree =
+                            stateBefore.fileTree
+                                |> ProjectState.setBlobAtPathInSortedFileTree ( filePath, fileContentFromString inputText )
+                        , lastTextReceivedFromEditor = Just inputText
+                    }
+            , Cmd.none
+            )
+
+        UserInputRevealPositionInEditor revealPositionInEditor ->
+            ( stateBefore
+            , if (stateBefore |> fileOpenedInEditorFromWorkspace |> Maybe.map Tuple.first) == Just revealPositionInEditor.filePath then
+                revealPositionInCenterInMonacoEditorCmd
+                    { lineNumber = revealPositionInEditor.lineNumber, column = revealPositionInEditor.column }
+
+              else
+                Cmd.none
+            )
+
+        MonacoEditorEvent monacoEditorEvent ->
+            case
+                monacoEditorEvent
+                    |> Json.Decode.decodeValue ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
+            of
+                Err decodeError ->
+                    ( { stateBefore | decodeMessageFromMonacoEditorError = Just decodeError }, Cmd.none )
+
+                Ok decodedMonacoEditorEvent ->
+                    case decodedMonacoEditorEvent of
+                        FrontendWeb.MonacoEditor.DidChangeContentEvent content ->
+                            stateBefore |> updateWorkspaceWithoutCmdToUpdateEditor updateConfig (UserInputChangeTextInEditor content)
+
+                        FrontendWeb.MonacoEditor.CompletedSetupEvent ->
+                            ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
+
+                        FrontendWeb.MonacoEditor.EditorActionCloseFileEvent ->
+                            ( let
+                                editing =
+                                    stateBefore.editing
+                              in
+                              { stateBefore | editing = { editing | filePathOpenedInEditor = Nothing } }
+                            , Cmd.none
+                            )
+
+                        FrontendWeb.MonacoEditor.EditorActionFormatDocumentEvent ->
+                            updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputFormat stateBefore
+
+                        FrontendWeb.MonacoEditor.EditorActionCompileEvent ->
+                            userInputCompileFileOpenedInEditor updateConfig stateBefore
+
+        UserInputFormat ->
+            ( stateBefore, elmFormatCmd stateBefore |> Maybe.withDefault Cmd.none )
+
+        UserInputCompile ->
+            userInputCompileFileOpenedInEditor updateConfig stateBefore
+
+        BackendElmFormatResponseEvent formatResponseEvent ->
+            ( if Just formatResponseEvent.filePath /= stateBefore.editing.filePathOpenedInEditor then
+                stateBefore
+
+              else
+                case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
+                    Nothing ->
+                        stateBefore
+
+                    Just formattedText ->
+                        { stateBefore
+                            | fileTree =
+                                stateBefore.fileTree
+                                    |> ProjectState.setBlobAtPathInSortedFileTree
+                                        ( formatResponseEvent.filePath
+                                        , fileContentFromString formattedText
+                                        )
+                            , elmFormatResult = Just formatResponseEvent.result
+                        }
+            , Cmd.none
+            )
+
+        BackendElmMakeResponseEvent elmMakeRequest httpResponse ->
+            let
+                elmMakeResult =
+                    httpResponse
+                        |> Result.map
+                            (\elmMakeResponse ->
+                                let
+                                    compiledHtmlDocument =
+                                        case elmMakeResponse.outputFileContentBase64 of
+                                            Nothing ->
+                                                Nothing
+
+                                            Just outputFileContentBase64 ->
+                                                outputFileContentBase64
+                                                    |> Common.decodeBase64ToString
+                                                    |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
+                                                    |> Just
+
+                                    reportFromJson =
+                                        case
+                                            elmMakeResponse.reportJsonProcessOutput.standardError
+                                                |> Json.Decode.decodeString Json.Decode.value
+                                        of
+                                            Err _ ->
+                                                Nothing
+
+                                            Ok elmMakeReportJson ->
+                                                elmMakeReportJson
+                                                    |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
+                                                    |> Result.mapError Json.Decode.errorToString
+                                                    |> Just
+                                in
+                                { response = elmMakeResponse
+                                , compiledHtmlDocument = compiledHtmlDocument
+                                , reportFromJson = reportFromJson
+                                }
+                            )
+            in
+            ( { stateBefore
+                | elmMakeResult = Just ( elmMakeRequest, elmMakeResult )
+                , pendingElmMakeRequest = Nothing
+              }
+            , Cmd.none
+            )
 
 
 processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
@@ -606,20 +607,16 @@ processEventUrlChanged url stateBefore =
                     False
 
         continueWithDiffProjectState projectStateDescription =
-            if projectWithMatchingStateHashAlreadyLoaded then
-                ( stateBefore, Cmd.none )
-
-            else
-                ( { stateBefore
-                    | workspace =
-                        WorkspaceLoadingFromLink
-                            { projectStateDescription = projectStateDescription
-                            , filePathToOpen = filePathToOpen
-                            , expectedCompositionHash = projectStateExpectedCompositionHash
-                            }
-                  }
-                , loadFromGitCmd projectStateDescription.base
-                )
+            ( { stateBefore
+                | workspace =
+                    WorkspaceLoadingFromLink
+                        { projectStateDescription = projectStateDescription
+                        , filePathToOpen = filePathToOpen
+                        , expectedCompositionHash = projectStateExpectedCompositionHash
+                        }
+              }
+            , loadFromGitCmd projectStateDescription.base
+            )
     in
     case FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl url of
         Nothing ->
@@ -632,23 +629,29 @@ processEventUrlChanged url stateBefore =
             , Cmd.none
             )
 
-        Just (Ok (FrontendWeb.ProjectStateInUrl.LiteralProjectState projectState)) ->
-            updateForLoadedProjectState
-                { expectedCompositionHash = projectStateExpectedCompositionHash
-                , filePathToOpen = filePathToOpen
-                }
-                projectState
-                ProjectState_2021_01.noDifference
-                stateBefore
+        Just (Ok projectStateDescription) ->
+            if projectWithMatchingStateHashAlreadyLoaded then
+                ( stateBefore, Cmd.none )
 
-        Just (Ok (FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState)) ->
-            continueWithDiffProjectState
-                { base = linkToProjectState
-                , differenceFromBase = ProjectState_2021_01.noDifference
-                }
+            else
+                case projectStateDescription of
+                    FrontendWeb.ProjectStateInUrl.LiteralProjectState projectState ->
+                        updateForLoadedProjectState
+                            { expectedCompositionHash = projectStateExpectedCompositionHash
+                            , filePathToOpen = filePathToOpen
+                            }
+                            projectState
+                            ProjectState_2021_01.noDifference
+                            stateBefore
 
-        Just (Ok (FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState)) ->
-            continueWithDiffProjectState diffProjectState
+                    FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState ->
+                        continueWithDiffProjectState
+                            { base = linkToProjectState
+                            , differenceFromBase = ProjectState_2021_01.noDifference
+                            }
+
+                    FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState ->
+                        continueWithDiffProjectState diffProjectState
 
 
 processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> ( State, Cmd Event )
@@ -712,8 +715,9 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
                 continueIfHashOk =
                     { stateBefore
                         | workspace =
-                            WorkspaceOk
-                                { fileTree = composedProjectState, editing = { filePathOpenedInEditor = config.filePathToOpen } }
+                            { fileTree = composedProjectState, filePathOpenedInEditor = config.filePathToOpen }
+                                |> initWorkspaceFromFileTreeAndFileSelection
+                                |> WorkspaceOk
                     }
                         |> Ok
             in
@@ -752,9 +756,9 @@ fileTreeNodeFromListFileWithPath =
         >> ProjectState.sortedFileTreeFromListOfBlobs
 
 
-elmFormatCmd : State -> Cmd Event
+elmFormatCmd : WorkingProjectStateStructure -> Maybe (Cmd WorkspaceEventStructure)
 elmFormatCmd state =
-    (case fileOpenedInEditorFromState state of
+    case fileOpenedInEditorFromWorkspace state of
         Nothing ->
             Nothing
 
@@ -780,8 +784,6 @@ elmFormatCmd state =
                         jsonDecoder
                         (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
                         |> Just
-    )
-        |> Maybe.withDefault Cmd.none
 
 
 loadFromGitCmd : String -> Cmd Event
@@ -804,8 +806,8 @@ loadFromGitCmd urlIntoGitRepository =
         (BackendLoadFromGitResultEvent urlIntoGitRepository)
 
 
-userInputCompileFileOpenedInEditor : State -> ( State, Cmd Event )
-userInputCompileFileOpenedInEditor stateBefore =
+userInputCompileFileOpenedInEditor : { time : Time.Posix } -> WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+userInputCompileFileOpenedInEditor { time } stateBefore =
     case elmMakeRequestForFileOpenedInEditor stateBefore of
         Nothing ->
             ( stateBefore, Cmd.none )
@@ -821,8 +823,7 @@ userInputCompileFileOpenedInEditor stateBefore =
                             Json.Decode.fail "Unexpected response"
             in
             ( { stateBefore
-                | pendingElmMakeRequest =
-                    stateBefore.time |> Maybe.map (\time -> { time = time, request = elmMakeRequest })
+                | pendingElmMakeRequest = Just { time = time, request = elmMakeRequest }
                 , elmMakeResult = Nothing
               }
             , requestToApiCmd
@@ -832,46 +833,41 @@ userInputCompileFileOpenedInEditor stateBefore =
             )
 
 
-elmMakeRequestForFileOpenedInEditor : State -> Maybe ElmMakeRequestStructure
-elmMakeRequestForFileOpenedInEditor state =
-    state.workspace
-        |> mapWorkspaceIfOk
-            (\workspace ->
-                case workspace.editing.filePathOpenedInEditor of
-                    Nothing ->
-                        Nothing
+elmMakeRequestForFileOpenedInEditor : WorkingProjectStateStructure -> Maybe ElmMakeRequestStructure
+elmMakeRequestForFileOpenedInEditor workspace =
+    case workspace.editing.filePathOpenedInEditor of
+        Nothing ->
+            Nothing
 
-                    Just filePath ->
-                        let
-                            base64FromBytes : Bytes.Bytes -> String
-                            base64FromBytes =
-                                Base64.fromBytes
-                                    >> Maybe.withDefault "Error encoding in base64"
+        Just filePath ->
+            let
+                base64FromBytes : Bytes.Bytes -> String
+                base64FromBytes =
+                    Base64.fromBytes
+                        >> Maybe.withDefault "Error encoding in base64"
 
-                            entryPointFilePath =
-                                filePath
-                        in
-                        Just
-                            { entryPointFilePath = entryPointFilePath
-                            , files =
-                                workspace.fileTree
-                                    |> ProjectState.flatListOfBlobsFromFileTreeNode
-                                    |> List.map
-                                        (\( path, content ) ->
-                                            { path = path
-                                            , contentBase64 = content |> base64FromBytes
-                                            }
-                                        )
-                            }
-            )
-        >> Maybe.Extra.join
+                entryPointFilePath =
+                    filePath
+            in
+            Just
+                { entryPointFilePath = entryPointFilePath
+                , files =
+                    workspace.fileTree
+                        |> ProjectState.flatListOfBlobsFromFileTreeNode
+                        |> List.map
+                            (\( path, content ) ->
+                                { path = path
+                                , contentBase64 = content |> base64FromBytes
+                                }
+                            )
+                }
 
 
 requestToApiCmd :
     FrontendBackendInterface.RequestStructure
     -> (FrontendBackendInterface.ResponseStructure -> Json.Decode.Decoder event)
-    -> (Result Http.Error event -> Event)
-    -> Cmd Event
+    -> (Result Http.Error event -> mappedEvent)
+    -> Cmd mappedEvent
 requestToApiCmd request jsonDecoderSpecialization eventConstructor =
     let
         jsonDecoder =
@@ -1048,13 +1044,15 @@ view state =
                                                 , Element.centerX
                                                 , Element.centerY
                                                 ]
+                                            |> Element.map WorkspaceEvent
                                     }
 
                                 Just _ ->
                                     { editorPaneButtons =
-                                        [ saveButton, buttonElement { label = "📄 Format", onPress = Just UserInputFormat } ]
+                                        [ saveButton, buttonElement { label = "📄 Format", onPress = Just UserInputFormat } |> Element.map WorkspaceEvent ]
                                     , outputPaneButtons =
                                         [ buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile } ]
+                                            |> List.map (Element.map WorkspaceEvent)
                                     , editorPaneContent =
                                         monacoEditorElement state
                                     }
@@ -1072,7 +1070,7 @@ view state =
                             , Element.height Element.fill
                             ]
                     , [ workspaceView.outputPaneButtons |> Element.row [ Element.padding (defaultFontSize // 2) ]
-                      , state
+                      , workingState
                             |> viewOutputPaneContent
                             |> Element.el
                                 [ Element.width Element.fill
@@ -1082,6 +1080,7 @@ view state =
                                 , Element.clip
                                 , Element.htmlAttribute (HA.style "flex-shrink" "1")
                                 ]
+                            |> Element.map WorkspaceEvent
                       ]
                         |> Element.column
                             [ Element.width (Element.fillPortion 4)
@@ -1122,7 +1121,7 @@ view state =
                     case state.workspace of
                         WorkspaceOk workingState ->
                             viewSaveOrShareDialog saveOrShareDialog workingState.fileTree
-                                |> popupAttributesFromProperties
+                                |> popupElementAttributesFromAttributes
 
                         _ ->
                             []
@@ -1184,7 +1183,7 @@ view state =
                                     ]
                                         |> Element.column [ Element.spacing (defaultFontSize // 2) ]
                     in
-                    popupAttributesFromProperties
+                    popupElementAttributesFromAttributes
                         { title = "Load Project from Tree in Git Repository"
                         , guide = "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: https://github.com/onlinegamemaker/making-online-games/tree/7b0fe6018e6f464bbee193f063d26c80cc6e6653/games-program-codes/simple-snake"
                         , contentElement =
@@ -1217,14 +1216,14 @@ view state =
     { title = "Elm Editor", body = [ body ] }
 
 
-type alias PopupAttributes =
+type alias PopupAttributes event =
     { title : String
     , guide : String
-    , contentElement : Element.Element Event
+    , contentElement : Element.Element event
     }
 
 
-viewSaveOrShareDialog : SaveOrShareDialogState -> ProjectState.FileTreeNode -> PopupAttributes
+viewSaveOrShareDialog : SaveOrShareDialogState -> ProjectState.FileTreeNode -> PopupAttributes Event
 viewSaveOrShareDialog saveOrShareDialog projectState =
     let
         projectFiles =
@@ -1318,24 +1317,6 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
                 , Element.width Element.fill
                 ]
     }
-
-
-updateWorkspaceIfOk : (WorkingProjectStateStructure -> WorkingProjectStateStructure) -> State -> State
-updateWorkspaceIfOk map stateBefore =
-    stateBefore.workspace
-        |> mapWorkspaceIfOk map
-        |> Maybe.map (\workspace -> { stateBefore | workspace = WorkspaceOk workspace })
-        |> Maybe.withDefault stateBefore
-
-
-mapWorkspaceIfOk : (WorkingProjectStateStructure -> a) -> WorkspaceStateStructure -> Maybe a
-mapWorkspaceIfOk map projectState =
-    case projectState of
-        WorkspaceOk workspace ->
-            Just (map workspace)
-
-        _ ->
-            Nothing
 
 
 describeErrorLoadingContentsFromGit : Http.Error -> String
@@ -1450,8 +1431,8 @@ actionIconSvgPathsData icon =
             ]
 
 
-popupAttributesFromProperties : { title : String, guide : String, contentElement : Element.Element Event } -> List (Element.Attribute Event)
-popupAttributesFromProperties { title, guide, contentElement } =
+popupElementAttributesFromAttributes : PopupAttributes Event -> List (Element.Attribute Event)
+popupElementAttributesFromAttributes { title, guide, contentElement } =
     [ [ title |> Element.text |> Element.el (headingAttributes 3)
       , [ guide |> Element.text ] |> Element.paragraph [ elementFontSizePercent 80 ]
       , contentElement
@@ -1489,13 +1470,13 @@ popupAttributesFromProperties { title, guide, contentElement } =
     ]
 
 
-viewOutputPaneContent : State -> Element.Element Event
+viewOutputPaneContent : WorkingProjectStateStructure -> Element.Element WorkspaceEventStructure
 viewOutputPaneContent state =
     case state.elmMakeResult of
         Nothing ->
             case state.pendingElmMakeRequest of
                 Nothing ->
-                    if filePathOpenedInEditorFromState state == Nothing then
+                    if filePathOpenedInEditorFromWorkspace state == Nothing then
                         Element.none
 
                     else
@@ -1524,7 +1505,7 @@ viewOutputPaneContent state =
                         warnAboutOutdatedCompilationText =
                             if
                                 Just elmMakeRequest.entryPointFilePath
-                                    /= filePathOpenedInEditorFromState state
+                                    /= filePathOpenedInEditorFromWorkspace state
                             then
                                 Just
                                     ("⚠️ Last compilation started for another file: '"
@@ -1626,7 +1607,7 @@ viewOutputPaneContent state =
                             ]
 
 
-viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element Event
+viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
 viewElmMakeError elmMakeRequest elmMakeError =
     elmMakeError.problems
         |> List.map
@@ -1831,7 +1812,7 @@ styledTextFromElmMakeReportMessageListItem elmMakeReportMessageListItem =
             styled
 
 
-buttonElement : { label : String, onPress : Maybe Event } -> Element.Element Event
+buttonElement : { label : String, onPress : Maybe event } -> Element.Element event
 buttonElement buttonConfig =
     Element.Input.button
         [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
@@ -1859,28 +1840,28 @@ loadFromGitOpenDialogButton =
         }
 
 
-setTextInMonacoEditorCmd : String -> Cmd Event
+setTextInMonacoEditorCmd : String -> Cmd WorkspaceEventStructure
 setTextInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetValue
         >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
-revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd Event
+revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd WorkspaceEventStructure
 revealPositionInCenterInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.RevealPositionInCenter
         >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
-setModelMarkersInMonacoEditorCmd : List FrontendWeb.MonacoEditor.EditorMarker -> Cmd Event
+setModelMarkersInMonacoEditorCmd : List FrontendWeb.MonacoEditor.EditorMarker -> Cmd WorkspaceEventStructure
 setModelMarkersInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetModelMarkers
         >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
-monacoEditorElement : State -> Element.Element Event
+monacoEditorElement : State -> Element.Element event
 monacoEditorElement _ =
     Html.iframe
         [ HA.src "/monaco"
@@ -1893,7 +1874,7 @@ monacoEditorElement _ =
         |> Element.html
 
 
-defaultProject : WorkingProjectStateStructure
+defaultProject : { fileTree : ProjectState.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
 defaultProject =
     { fileTree =
         ProjectState.TreeNode
@@ -1908,7 +1889,21 @@ defaultProject =
                     ]
               )
             ]
-    , editing = { filePathOpenedInEditor = Just [ "src", "Main.elm" ] }
+    , filePathOpenedInEditor = Just [ "src", "Main.elm" ]
+    }
+
+
+initWorkspaceFromFileTreeAndFileSelection :
+    { fileTree : ProjectState.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
+    -> WorkingProjectStateStructure
+initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
+    { fileTree = fileTree
+    , editing = { filePathOpenedInEditor = filePathOpenedInEditor }
+    , decodeMessageFromMonacoEditorError = Nothing
+    , lastTextReceivedFromEditor = Nothing
+    , pendingElmMakeRequest = Nothing
+    , elmMakeResult = Nothing
+    , elmFormatResult = Nothing
     }
 
 
