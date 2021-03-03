@@ -176,10 +176,10 @@ init _ url navigationKey =
 
 
 update : Event -> State -> ( State, Cmd Event )
-update event stateBefore =
+update event stateBeforeApplyingEvent =
     let
         ( stateBeforeConsiderCompile, cmd ) =
-            updateWithoutCmdToUpdateEditor event stateBefore
+            updateWithoutCmdToUpdateEditor event stateBeforeApplyingEvent
 
         textForEditor =
             stateBeforeConsiderCompile
@@ -195,7 +195,7 @@ update event stateBefore =
                 Just (setTextInMonacoEditorCmd textForEditor)
 
         setModelMarkersToEditorCmd =
-            case fileOpenedInEditorFromState stateBefore of
+            case fileOpenedInEditorFromState stateBeforeConsiderCompile of
                 Nothing ->
                     Nothing
 
@@ -206,8 +206,8 @@ update event stateBefore =
 
                         Just ( elmMakeRequest, elmMakeResult ) ->
                             if
-                                (stateBeforeConsiderCompile.elmMakeResult == stateBefore.elmMakeResult)
-                                    && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromState stateBefore)
+                                (stateBeforeConsiderCompile.elmMakeResult == stateBeforeApplyingEvent.elmMakeResult)
+                                    && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromState stateBeforeApplyingEvent)
                                     && (setTextToEditorCmd == Nothing)
                             then
                                 Nothing
