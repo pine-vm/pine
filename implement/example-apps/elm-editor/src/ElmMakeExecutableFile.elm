@@ -1,12 +1,18 @@
 module ElmMakeExecutableFile exposing (..)
 
+import Dict
 import Json.Decode
-import Json.Decode.Extra
 
 
-type alias ElmMakeReportFromJson =
-    { type_ : String
-    , errors : Maybe (List ElmMakeReportCompileErrorStructure)
+type ElmMakeReportFromJson
+    = CompileErrorsReport (List ElmMakeReportCompileErrorStructure)
+    | ErrorReport ErrorReportStructure
+
+
+type alias ErrorReportStructure =
+    { path : Maybe String
+    , title : String
+    , message : List ElmMakeReportMessageListItem
     }
 
 
@@ -51,9 +57,36 @@ type alias ElmMakeReportMessageListItemStyledStructure =
 
 jsonDecodeElmMakeReport : Json.Decode.Decoder ElmMakeReportFromJson
 jsonDecodeElmMakeReport =
-    Json.Decode.map2 ElmMakeReportFromJson
-        (Json.Decode.field "type" Json.Decode.string)
-        (Json.Decode.Extra.optionalField "errors" (Json.Decode.list jsonDecodeElmMakeReportCompileError))
+    Json.Decode.field "type" Json.Decode.string
+        |> Json.Decode.andThen
+            (\type_ ->
+                typesDecoders
+                    |> Dict.get type_
+                    |> Maybe.withDefault (Json.Decode.fail ("Unknown report type: '" ++ type_ ++ "'"))
+            )
+
+
+typesDecoders : Dict.Dict String (Json.Decode.Decoder ElmMakeReportFromJson)
+typesDecoders =
+    [ ( "error", jsonDecodeElmMakeReportError )
+    , ( "compile-errors", jsonDecodeElmMakeReportCompileErrors )
+    ]
+        |> Dict.fromList
+
+
+jsonDecodeElmMakeReportError : Json.Decode.Decoder ElmMakeReportFromJson
+jsonDecodeElmMakeReportError =
+    Json.Decode.map3 ErrorReportStructure
+        (Json.Decode.field "path" (Json.Decode.nullable Json.Decode.string))
+        (Json.Decode.field "title" Json.Decode.string)
+        (Json.Decode.field "message" (Json.Decode.list jsonDecodeElmMakeReportMessageListItem))
+        |> Json.Decode.map ErrorReport
+
+
+jsonDecodeElmMakeReportCompileErrors : Json.Decode.Decoder ElmMakeReportFromJson
+jsonDecodeElmMakeReportCompileErrors =
+    Json.Decode.field "errors" (Json.Decode.list jsonDecodeElmMakeReportCompileError)
+        |> Json.Decode.map CompileErrorsReport
 
 
 jsonDecodeElmMakeReportCompileError : Json.Decode.Decoder ElmMakeReportCompileErrorStructure

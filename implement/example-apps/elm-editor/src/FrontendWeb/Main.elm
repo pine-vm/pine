@@ -1549,22 +1549,28 @@ viewOutputPaneContent state =
                                                 Nothing ->
                                                     outputElementFromPlainText elmMakeOk.response.processOutput.standardError
 
-                                                Just elmMakeReport ->
-                                                    case
-                                                        elmMakeReport
-                                                            |> Result.andThen (.errors >> Result.fromMaybe "Missing field 'errors'")
-                                                    of
-                                                        Err decodeError ->
-                                                            outputElementFromPlainText
-                                                                ("Failed to decode JSON report: " ++ decodeError)
+                                                Just (Err decodeError) ->
+                                                    outputElementFromPlainText
+                                                        ("Failed to decode JSON report: " ++ decodeError)
 
-                                                        Ok elmMakeErrors ->
-                                                            elmMakeErrors
-                                                                |> List.map (viewElmMakeError elmMakeRequest)
-                                                                |> Element.column
-                                                                    [ Element.spacing defaultFontSize
-                                                                    , Element.width Element.fill
-                                                                    ]
+                                                Just (Ok (ElmMakeExecutableFile.CompileErrorsReport compileErrors)) ->
+                                                    compileErrors
+                                                        |> List.map (viewElmMakeCompileError elmMakeRequest)
+                                                        |> Element.column
+                                                            [ Element.spacing defaultFontSize
+                                                            , Element.width Element.fill
+                                                            ]
+
+                                                Just (Ok (ElmMakeExecutableFile.ErrorReport error)) ->
+                                                    [ error.title
+                                                        |> Element.text
+                                                        |> Element.el [ Element.Font.bold ]
+                                                    , viewElementFromElmMakeCompileErrorMessage error.message
+                                                    ]
+                                                        |> Element.column
+                                                            [ Element.spacing (defaultFontSize // 2)
+                                                            , Element.width Element.fill
+                                                            ]
                                     in
                                     [ ( "standard error", standardErrorElement )
                                     , ( "standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
@@ -1607,8 +1613,8 @@ viewOutputPaneContent state =
                             ]
 
 
-viewElmMakeError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
-viewElmMakeError elmMakeRequest elmMakeError =
+viewElmMakeCompileError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
+viewElmMakeCompileError elmMakeRequest elmMakeError =
     elmMakeError.problems
         |> List.map
             (\elmMakeProblem ->
@@ -1645,42 +1651,9 @@ viewElmMakeError elmMakeRequest elmMakeError =
                                 [ Element.spacing (defaultFontSize // 2)
                                 , Element.width Element.fill
                                 ]
-
-                    styledTextElements =
-                        elmMakeProblem.message
-                            |> List.map styledTextFromElmMakeReportMessageListItem
-
-                    elementFromStyledTextElement styledTextElement =
-                        [ styledTextElement.string |> Html.text ]
-                            |> Html.span
-                                [ HA.style "font-weight"
-                                    (if styledTextElement.bold then
-                                        "bold"
-
-                                     else
-                                        "inherit"
-                                    )
-                                , HA.style "text-decoration"
-                                    (if styledTextElement.underline then
-                                        "underline"
-
-                                     else
-                                        "none"
-                                    )
-                                , HA.style "color" (styledTextElement.color |> Maybe.withDefault "inherit")
-                                ]
                 in
                 [ problemHeadingElement
-                , [ styledTextElements
-                        |> List.map elementFromStyledTextElement
-                        |> Html.span [ HA.style "font-size" "90%", HA.style "filter" "contrast(0.5) brightness(1.3)" ]
-                        |> Element.html
-                  ]
-                    |> Element.paragraph
-                        [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
-                        , Element.htmlAttribute attributeMonospaceFont
-                        ]
-                    |> indentOneLevel
+                , viewElementFromElmMakeCompileErrorMessage elmMakeProblem.message |> indentOneLevel
                 ]
                     |> Element.column
                         [ Element.spacing (defaultFontSize // 2)
@@ -1690,6 +1663,40 @@ viewElmMakeError elmMakeRequest elmMakeError =
         |> Element.column
             [ Element.spacing defaultFontSize
             , Element.width Element.fill
+            ]
+
+
+viewElementFromElmMakeCompileErrorMessage : List ElmMakeExecutableFile.ElmMakeReportMessageListItem -> Element.Element a
+viewElementFromElmMakeCompileErrorMessage =
+    let
+        elementFromStyledTextElement styledTextElement =
+            [ styledTextElement.string |> Html.text ]
+                |> Html.span
+                    [ HA.style "font-weight"
+                        (if styledTextElement.bold then
+                            "bold"
+
+                         else
+                            "inherit"
+                        )
+                    , HA.style "text-decoration"
+                        (if styledTextElement.underline then
+                            "underline"
+
+                         else
+                            "none"
+                        )
+                    , HA.style "color" (styledTextElement.color |> Maybe.withDefault "inherit")
+                    ]
+    in
+    List.map styledTextFromElmMakeReportMessageListItem
+        >> List.map elementFromStyledTextElement
+        >> Html.span [ HA.style "font-size" "90%", HA.style "filter" "contrast(0.5) brightness(1.3)" ]
+        >> Element.html
+        >> List.singleton
+        >> Element.paragraph
+            [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
+            , Element.htmlAttribute attributeMonospaceFont
             ]
 
 
@@ -1712,16 +1719,6 @@ editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } ma
                         |> Tuple.second
                         |> Base64.fromBytes
                         |> Maybe.withDefault "Error encoding in base64"
-
-                markersFromGeneralProblem errorText =
-                    [ { message = errorText
-                      , startLineNumber = 1
-                      , startColumn = 1
-                      , endLineNumber = 11
-                      , endColumn = 13
-                      , severity = FrontendWeb.MonacoEditor.ErrorSeverity
-                      }
-                    ]
             in
             case elmMakeRequest.files |> List.filter (.path >> (==) filePathOpenedInEditor) |> List.head of
                 Nothing ->
@@ -1733,16 +1730,16 @@ editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } ma
 
                     else
                         case reportFromJson of
-                            Err decodeError ->
-                                markersFromGeneralProblem ("Failed to decode JSON report: " ++ decodeError)
+                            Err _ ->
+                                []
 
                             Ok report ->
-                                case report.errors of
-                                    Nothing ->
-                                        markersFromGeneralProblem "Missing field 'errors'"
+                                case report of
+                                    ElmMakeExecutableFile.ErrorReport _ ->
+                                        []
 
-                                    Just errors ->
-                                        errors
+                                    ElmMakeExecutableFile.CompileErrorsReport compileErrors ->
+                                        compileErrors
                                             |> List.filter
                                                 (.path
                                                     >> filePathFromExistingPathsAndElmMakeReportPathString
@@ -1758,22 +1755,23 @@ elmEditorProblemDisplayTitleFromReportTitle =
     String.toLower >> String.Extra.toTitleCase
 
 
+elmMakeReportTextFromMessageItem : ElmMakeExecutableFile.ElmMakeReportMessageListItem -> String
+elmMakeReportTextFromMessageItem messageItem =
+    case messageItem of
+        ElmMakeExecutableFile.ElmMakeReportMessageListItemPlain text ->
+            text
+
+        ElmMakeExecutableFile.ElmMakeReportMessageListItemStyled styled ->
+            styled.string
+
+
 editorDocumentMarkerFromElmMakeProblem : ElmMakeExecutableFile.ElmMakeReportProblem -> FrontendWeb.MonacoEditor.EditorMarker
 editorDocumentMarkerFromElmMakeProblem elmMakeProblem =
-    let
-        messageItemText messageItem =
-            case messageItem of
-                ElmMakeExecutableFile.ElmMakeReportMessageListItemPlain text ->
-                    text
-
-                ElmMakeExecutableFile.ElmMakeReportMessageListItemStyled styled ->
-                    styled.string
-    in
     { message =
         "# "
             ++ elmEditorProblemDisplayTitleFromReportTitle elmMakeProblem.title
             ++ "\n"
-            ++ (elmMakeProblem.message |> List.map messageItemText |> String.join "")
+            ++ (elmMakeProblem.message |> List.map elmMakeReportTextFromMessageItem |> String.join "")
     , startLineNumber = elmMakeProblem.region.start.line
     , startColumn = elmMakeProblem.region.start.column
     , endLineNumber = elmMakeProblem.region.end.line
