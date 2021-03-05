@@ -1,0 +1,15 @@
+{
+    "type": "error",
+    "path": null,
+    "title": "NO elm.json FILE",
+    "message": [
+        "It looks like you are starting a new Elm project. Very exciting! Try running:\n\n    ",
+        {
+            "bold": false,
+            "underline": false,
+            "color": "GREEN",
+            "string": "elm init"
+        },
+        "\n\nIt will help you get set up. It is really simple!"
+    ]
+}

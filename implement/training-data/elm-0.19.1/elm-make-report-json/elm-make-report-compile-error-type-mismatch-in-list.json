@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "C:\\Users\\Raetzel_M\\AppData\\Local\\Temp\\havjzbzg.vhc\\src\\Main.elm",
+            "name": "Main",
+            "problems": [
+                {
+                    "title": "TYPE MISMATCH",
+                    "region": {
+                        "start": {
+                            "line": 8,
+                            "column": 33
+                        },
+                        "end": {
+                            "line": 8,
+                            "column": 37
+                        }
+                    },
+                    "message": [
+                        "The 2nd element of this list does not match all the previous elements:\n\n8|     [ Html.text \"Hello World!\", 1234 ]\n                                   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^"
+                        },
+                        "\nThe 2nd element is a number of type:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "number"
+                        },
+                        "\n\nBut all the previous elements in the list are:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Html.Html msg"
+                        },
+                        "\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Hint"
+                        },
+                        ": Everything in a list must be the same type of value. This way, we never\nrun into unexpected values partway through a List.map, List.foldl, etc. Read\n<https://elm-lang.org/0.19.1/custom-types> to learn how to Ã”Ã‡Â£mixÃ”Ã‡Ã˜ types."
+                    ]
+                }
+            ]
+        }
+    ]
+}
