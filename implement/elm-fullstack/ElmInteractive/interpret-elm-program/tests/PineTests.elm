@@ -10,16 +10,10 @@ pineExpressionEncodeDecodeRoundtrip =
     [ ( "literal empty list", Pine.LiteralExpression (Pine.ListValue []) )
     , ( "literal blob", Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ]) )
     , ( "list empty", Pine.ListExpression [] )
-    , ( "application zero args"
-      , Pine.ApplicationExpression
-            { function = Pine.LiteralExpression (Pine.ListValue [])
-            , arguments = []
-            }
-      )
     , ( "application one arg"
       , Pine.ApplicationExpression
             { function = Pine.LiteralExpression (Pine.ListValue [])
-            , arguments = [ Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ]) ]
+            , argument = Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ])
             }
       )
     , ( "if block"

@@ -23,7 +23,7 @@ type alias ListExpressionStructure =
 
 type alias ApplicationExpressionStructure =
     { function : Expression
-    , arguments : List Expression
+    , argument : Expression
     }
 
 
@@ -359,87 +359,62 @@ lookUpNameAsValueInContext path context =
                                 Err (DescribePathEnd ("'" ++ getPathFirstElementAsString () ++ "' has unexpected type: Not a list."))
 
 
-evaluateFunctionApplication : ExpressionContext -> { function : Expression, arguments : List Expression } -> Result (PathDescription String) Value
+evaluateFunctionApplication : ExpressionContext -> { function : Expression, argument : Expression } -> Result (PathDescription String) Value
 evaluateFunctionApplication context application =
-    application.arguments
-        |> List.map
-            (\argumentExpression ->
-                evaluateExpression context argumentExpression
-                    |> Result.mapError (DescribePathNode ("Failed to evaluate argument '" ++ describeExpression argumentExpression ++ "'"))
-            )
-        |> Result.Extra.combine
-        |> Result.andThen
-            (\arguments ->
-                evaluateFunctionApplicationWithEvaluatedArgs context { function = application.function, arguments = arguments }
-            )
-
-
-evaluateFunctionApplicationWithEvaluatedArgs : ExpressionContext -> { function : Expression, arguments : List Value } -> Result (PathDescription String) Value
-evaluateFunctionApplicationWithEvaluatedArgs context application =
     evaluateExpression context application.function
         |> Result.mapError (DescribePathNode ("Failed to evaluate function expression '" ++ describeExpression application.function ++ "'"))
         |> Result.andThen
-            (\functionOrValue ->
-                case application.arguments of
-                    [] ->
-                        Ok functionOrValue
-
-                    firstArgument :: remainingArguments ->
-                        let
-                            continueWithClosure closureContext functionValue =
-                                case functionValue of
-                                    ClosureValue nextClosureContext closureExpression ->
-                                        case closureExpression of
-                                            FunctionExpression functionExpression ->
-                                                evaluateFunctionApplicationWithEvaluatedArgs
-                                                    (addToContext
-                                                        [ valueFromContextExpansionWithName ( functionExpression.argumentName, firstArgument ) ]
-                                                        nextClosureContext
-                                                    )
-                                                    { function = functionExpression.body, arguments = remainingArguments }
-                                                    |> Result.mapError
-                                                        (DescribePathNode
-                                                            ("Failed application of '"
-                                                                ++ describeExpression application.function
-                                                                ++ "' with argument '"
-                                                                ++ functionExpression.argumentName
-                                                            )
-                                                        )
-
-                                            _ ->
-                                                Err
-                                                    (DescribePathEnd
-                                                        ("Failed to apply: Expression "
-                                                            ++ describeExpression closureExpression
-                                                            ++ " is not a function (Too many arguments)."
-                                                        )
-                                                    )
-
-                                    KernelFunction kernelFunction ->
-                                        kernelFunction firstArgument
-                                            |> Result.mapError (DescribePathNode "Failed to apply kernel function")
-                                            |> Result.andThen
-                                                (\kernelFunctionResult ->
-                                                    evaluateFunctionApplicationWithEvaluatedArgs
-                                                        context
-                                                        { function = LiteralExpression kernelFunctionResult
-                                                        , arguments = remainingArguments
-                                                        }
-                                                )
-
-                                    _ ->
-                                        case decodeExpressionFromValue functionValue of
-                                            Ok expressionFromValue ->
-                                                continueWithClosure closureContext (ClosureValue closureContext expressionFromValue)
-
-                                            Err decodeError ->
-                                                Err
-                                                    (DescribePathEnd
-                                                        ("Too many arguments: Failed to decode expression from value: " ++ decodeError)
-                                                    )
-                        in
-                        continueWithClosure context functionOrValue
+            (\functionValue ->
+                evaluateExpression context application.argument
+                    |> Result.mapError (DescribePathNode ("Failed to evaluate argument '" ++ describeExpression application.argument ++ "'"))
+                    |> Result.andThen
+                        (\argumentValue ->
+                            evaluateFunctionApplicationWithValues context
+                                { function = functionValue, argument = argumentValue }
+                        )
             )
+
+
+evaluateFunctionApplicationWithValues : ExpressionContext -> { function : Value, argument : Value } -> Result (PathDescription String) Value
+evaluateFunctionApplicationWithValues context application =
+    case application.function of
+        ClosureValue nextClosureContext closureExpression ->
+            case closureExpression of
+                FunctionExpression functionExpression ->
+                    Ok
+                        (ClosureValue
+                            (addToContext
+                                [ valueFromContextExpansionWithName ( functionExpression.argumentName, application.argument ) ]
+                                nextClosureContext
+                            )
+                            functionExpression.body
+                        )
+
+                _ ->
+                    Err
+                        (DescribePathEnd
+                            ("Failed to apply: Expression "
+                                ++ describeExpression closureExpression
+                                ++ " is not a function (Too many arguments)."
+                            )
+                        )
+
+        KernelFunction kernelFunction ->
+            kernelFunction application.argument
+                |> Result.mapError (DescribePathNode "Failed to apply kernel function")
+
+        _ ->
+            decodeExpressionFromValue application.function
+                |> Result.mapError
+                    (DescribePathEnd >> DescribePathNode "Too many arguments: Failed to decode expression from value")
+                |> Result.andThen
+                    (\expressionFromValue ->
+                        evaluateFunctionApplicationWithValues
+                            { commonModel = [] }
+                            { function = ClosureValue context expressionFromValue
+                            , argument = application.argument
+                            }
+                    )
 
 
 intFromBigInt : BigInt.BigInt -> Result String Int
@@ -819,7 +794,7 @@ jsonEncodeExpression expression =
                 [ ( "ApplicationExpression"
                   , Json.Encode.object
                         [ ( "function", jsonEncodeExpression applicationExpression.function )
-                        , ( "arguments", Json.Encode.list jsonEncodeExpression applicationExpression.arguments )
+                        , ( "argument", jsonEncodeExpression applicationExpression.argument )
                         ]
                   )
                 ]
@@ -867,7 +842,7 @@ jsonDecodeExpression =
             (Json.Decode.map ApplicationExpression
                 (Json.Decode.map2 ApplicationExpressionStructure
                     (Json.Decode.field "function" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                    (Json.Decode.field "arguments" (Json.Decode.lazy (\() -> Json.Decode.list jsonDecodeExpression)))
+                    (Json.Decode.field "argument" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
                 )
             )
         , Json.Decode.field "FunctionOrValueExpression"
