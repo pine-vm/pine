@@ -1,4 +1,4 @@
-﻿using LibGit2Sharp;
+using LibGit2Sharp;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace Kalmit
 {
-    static public class LoadFromGithub
+    static public class LoadFromGitHubOrGitLab
     {
         /// <summary>
         /// Sample address to a tree:
@@ -22,13 +22,21 @@ namespace Kalmit
         /// Support loading from the root tree:
         /// https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7/
         /// https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7
+        ///
+        /// Blob on GitLab:
+        /// https://gitlab.com/gilmi/strema/-/blob/de9f6a401f89215cb6cebbbbf2eed0252aeef1d1/overview.org
+        ///
+        /// Tree on GitLab:
+        /// https://gitlab.com/gilmi/strema/-/tree/de9f6a401f89215cb6cebbbbf2eed0252aeef1d1/src/Strema
         /// </summary>
-        static string GithubRegexPattern(
+        static string GitHubOrGitLabRegexPattern(
             string repositoryGroupName,
             string typeGroupName,
             string refGroupName,
             string pathGroupName) =>
-            "(?<" + repositoryGroupName + ">" + Regex.Escape("https://github.com/") + "[^/]+/[^/]+)/(?<" + typeGroupName + ">blob|tree)/" +
+            "(?<" + repositoryGroupName + ">" +
+            "https://(github\\.com|gitlab\\.com)/" +
+            "[^/]+/[^/]+)/(-/|)(?<" + typeGroupName + ">blob|tree)/" +
             "(?<" + refGroupName + ">[^/]+)($|/(?<" + pathGroupName + ">.*))";
 
         public class ParseObjectUrlResult
@@ -56,7 +64,7 @@ namespace Kalmit
             };
         }
 
-        static public ParseObjectUrlResult ParseGitHubObjectUrl(string objectUrl)
+        static public ParseObjectUrlResult ParsePathFromUrl(string objectUrl)
         {
             const string repositoryGroupName = "repo";
             const string typeGroupName = "type";
@@ -65,7 +73,7 @@ namespace Kalmit
 
             var regexMatch = Regex.Match(
                 objectUrl,
-                GithubRegexPattern(
+                GitHubOrGitLabRegexPattern(
                     repositoryGroupName: repositoryGroupName,
                     typeGroupName: typeGroupName,
                     refGroupName: refGroupName,
@@ -91,12 +99,12 @@ namespace Kalmit
 
         static public LoadFromUrlResult LoadFromUrl(string sourceUrl)
         {
-            var parsedUrl = ParseGitHubObjectUrl(sourceUrl);
+            var parsedUrl = ParsePathFromUrl(sourceUrl);
 
             if (parsedUrl == null)
                 return new LoadFromUrlResult
                 {
-                    Error = "Failed to parse string '" + sourceUrl + "' as GitHub object URL.",
+                    Error = "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab object URL.",
                 };
 
             var refLooksLikeCommit = Regex.IsMatch(parsedUrl.@ref, "[A-Fa-f0-9]{40}");
@@ -105,8 +113,21 @@ namespace Kalmit
 
             var gitRepositoryLocalDirectory = Path.Combine(tempWorkingDirectory, "git-repository");
 
-            //  https://github.com/libgit2/libgit2sharp/wiki/git-clone
-            Repository.Clone(parsedUrl.repository, gitRepositoryLocalDirectory, new CloneOptions { Checkout = false });
+            var branchName = refLooksLikeCommit ? null : parsedUrl.@ref;
+
+            var cloneUrl = parsedUrl.repository.TrimEnd('/') + ".git";
+
+            try
+            {
+                //  https://github.com/libgit2/libgit2sharp/wiki/git-clone
+                Repository.Clone(
+                    cloneUrl, gitRepositoryLocalDirectory,
+                    new CloneOptions { Checkout = false, BranchName = branchName });
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Failed to clone from '" + cloneUrl + "'", e);
+            }
 
             Composition.TreeWithStringPath literalNodeObject = null;
             string urlInCommit = null;
@@ -138,7 +159,7 @@ namespace Kalmit
                 if (linkedObject == null)
                     return new LoadFromUrlResult
                     {
-                        Error = "I did not find an object at path '" + parsedUrl.path + "'.",
+                        Error = "I did not find an object at path '" + parsedUrl.path + "' in " + commit.Sha,
                     };
 
                 IEnumerable<Commit> traceBackTreeParents()
@@ -256,7 +277,7 @@ namespace Kalmit
             {
                 message = commit.Message,
                 author = GetParticipantSignature(commit.Author),
-                comitter = GetParticipantSignature(commit.Committer),
+                committer = GetParticipantSignature(commit.Committer),
             });
         }
 
@@ -347,7 +368,7 @@ namespace Kalmit
 
             public GitParticipantSignature author;
 
-            public GitParticipantSignature comitter;
+            public GitParticipantSignature committer;
         }
 
         public class GitParticipantSignature

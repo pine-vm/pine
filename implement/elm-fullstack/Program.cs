@@ -580,7 +580,7 @@ namespace elm_fullstack
                         ("a tree containing " + blobs.Count + " blobs:\n" +
                         string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path))))
                         :
-                        "a blob";
+                        "a blob containing " + loadFromPathResult?.Ok.tree.BlobContent.Count + " bytes";
 
                     Console.WriteLine(
                         "Composition " + compositionId + " is " + compositionDescription);
