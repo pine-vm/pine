@@ -7,7 +7,6 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import Common
-import Dict
 import Element
 import Element.Background
 import Element.Border
@@ -410,7 +409,12 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                                     |> Just
 
         triggerCompile =
-            (filePathOpenedInEditorFromWorkspace stateBeforeConsiderCompile /= Nothing)
+            (stateBeforeConsiderCompile
+                |> filePathOpenedInEditorFromWorkspace
+                |> Maybe.andThen (List.reverse >> List.head)
+                |> Maybe.map (String.endsWith ".elm")
+                |> Maybe.withDefault False
+            )
                 && (stateBeforeConsiderCompile.pendingElmMakeRequest == Nothing)
                 && (stateBeforeConsiderCompile.elmMakeResult == Nothing)
 
@@ -455,13 +459,17 @@ updateWorkspaceWithoutCmdToUpdateEditor : { time : Time.Posix } -> WorkspaceEven
 updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
-            ( let
-                editing =
-                    stateBefore.editing
-              in
-              { stateBefore | editing = { editing | filePathOpenedInEditor = Just filePath } }
-            , Cmd.none
-            )
+            if ProjectState.getBlobAtPathFromFileTree filePath stateBefore.fileTree == Nothing then
+                ( stateBefore, Cmd.none )
+
+            else
+                ( let
+                    editing =
+                        stateBefore.editing
+                  in
+                  { stateBefore | editing = { editing | filePathOpenedInEditor = Just filePath } }
+                , Cmd.none
+                )
 
         UserInputChangeTextInEditor inputText ->
             ( case stateBefore.editing.filePathOpenedInEditor of
@@ -892,39 +900,6 @@ requestToApiCmd request jsonDecoderSpecialization eventConstructor =
         }
 
 
-priorityToOfferToOpenFileInEditor : ( List String, String ) -> Maybe Int
-priorityToOfferToOpenFileInEditor ( filePath, _ ) =
-    if filePath == [ "elm.json" ] then
-        Just 0
-
-    else if filePath |> List.reverse |> List.head |> Maybe.map (String.endsWith ".elm") |> Maybe.withDefault False then
-        Just 1
-
-    else
-        Nothing
-
-
-sortFilesIntoPrioritiesToOfferToOpenFileInEditor : List ( List String, Bytes.Bytes ) -> List ( List String, String )
-sortFilesIntoPrioritiesToOfferToOpenFileInEditor projectFiles =
-    projectFiles
-        |> List.filterMap
-            (\( filePath, fileContent ) ->
-                case stringFromFileContent fileContent of
-                    Nothing ->
-                        Nothing
-
-                    Just fileContentString ->
-                        case priorityToOfferToOpenFileInEditor ( filePath, fileContentString ) of
-                            Nothing ->
-                                Nothing
-
-                            Just priority ->
-                                Just ( priority, ( filePath, fileContentString ) )
-            )
-        |> List.sortBy (Tuple.first >> negate)
-        |> List.map Tuple.second
-
-
 view : State -> Browser.Document Event
 view state =
     let
@@ -1029,58 +1004,21 @@ view state =
                                         []
                                     , editorPaneContent =
                                         let
-                                            projectFiles =
-                                                workingState.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode
+                                            selectEventFromFileTreeNode upperPath ( nodeName, nodeContent ) =
+                                                case nodeContent of
+                                                    ProjectState.BlobNode _ ->
+                                                        Just (UserInputOpenFileInEditor (upperPath ++ [ nodeName ]))
 
-                                            filesToOfferToOpenInEditor =
-                                                projectFiles |> sortFilesIntoPrioritiesToOfferToOpenFileInEditor
-
-                                            filesToOfferToOpenInEditorNames =
-                                                filesToOfferToOpenInEditor |> List.map Tuple.first
-
-                                            otherFilesList =
-                                                case
-                                                    filesToOfferToOpenInEditorNames
-                                                        |> List.foldl Dict.remove (Dict.fromList projectFiles)
-                                                        |> Dict.toList
-                                                of
-                                                    [] ->
-                                                        Element.none
-
-                                                    otherFilesInTheProject ->
-                                                        [ Element.text ("There are " ++ (String.fromInt (List.length otherFilesInTheProject) ++ " other files in this project:"))
-                                                        , otherFilesInTheProject
-                                                            |> List.map (\( filePath, _ ) -> Element.text (String.join "/" filePath))
-                                                            |> Element.column [ Element.spacing 4, Element.padding 8 ]
-                                                        ]
-                                                            |> Element.column []
-
-                                            chooseElmFileElement =
-                                                case filesToOfferToOpenInEditor of
-                                                    [] ->
-                                                        Element.text "Did not find any .elm file in this project."
-
-                                                    _ ->
-                                                        [ Element.text "Choose one of the files in the project to open in the editor:"
-                                                        , filesToOfferToOpenInEditor
-                                                            |> List.map
-                                                                (\( filePath, _ ) ->
-                                                                    Element.Input.button
-                                                                        [ Element.mouseOver [ Element.Background.color (Element.rgb 0 0.5 0.8) ]
-                                                                        ]
-                                                                        { label = Element.text (String.join "/" filePath)
-                                                                        , onPress = Just (UserInputOpenFileInEditor filePath)
-                                                                        }
-                                                                )
-                                                            |> Element.column [ Element.spacing 4, Element.padding 8 ]
-                                                        ]
-                                                            |> Element.column []
+                                                    ProjectState.TreeNode _ ->
+                                                        Nothing
                                         in
-                                        [ chooseElmFileElement, otherFilesList ]
+                                        [ Element.text "Choose one of the files in the project to open in the editor"
+                                        , viewFileTree { selectEventFromNode = selectEventFromFileTreeNode } workingState.fileTree
+                                        ]
                                             |> Element.column
                                                 [ Element.spacing defaultFontSize
-                                                , Element.centerX
-                                                , Element.centerY
+                                                , Element.padding defaultFontSize
+                                                , Element.width Element.fill
                                                 ]
                                             |> Element.map WorkspaceEvent
                                     }
@@ -1244,6 +1182,81 @@ view state =
                     )
     in
     { title = "Elm Editor", body = [ body ] }
+
+
+type alias FileTreeNodeViewModel event =
+    { indentLevel : Int
+    , label : String
+    , selectEvent : Maybe event
+    }
+
+
+viewFileTree :
+    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event }
+    -> ProjectState.FileTreeNode
+    -> Element.Element event
+viewFileTree configuration rootNode =
+    case rootNode of
+        ProjectState.BlobNode _ ->
+            Element.text "Error: Root node is a blob, not a tree"
+
+        ProjectState.TreeNode treeItems ->
+            treeItems
+                |> List.concatMap (buildFileTreeViewList configuration [])
+                |> viewFileTreeList
+
+
+buildFileTreeViewList :
+    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event }
+    -> List String
+    -> ( String, ProjectState.FileTreeNode )
+    -> List (FileTreeNodeViewModel event)
+buildFileTreeViewList configuration path ( currentNodeName, currentNodeContent ) =
+    case currentNodeContent of
+        ProjectState.BlobNode _ ->
+            [ { indentLevel = List.length path
+              , label = currentNodeName
+              , selectEvent = configuration.selectEventFromNode path ( currentNodeName, currentNodeContent )
+              }
+            ]
+
+        ProjectState.TreeNode tree ->
+            { indentLevel = List.length path
+            , label = currentNodeName
+            , selectEvent = configuration.selectEventFromNode path ( currentNodeName, currentNodeContent )
+            }
+                :: List.concatMap (buildFileTreeViewList configuration (path ++ [ currentNodeName ])) tree
+
+
+viewFileTreeList : List (FileTreeNodeViewModel event) -> Element.Element event
+viewFileTreeList items =
+    items
+        |> List.map
+            (\item ->
+                let
+                    interactionAttributes =
+                        item.selectEvent
+                            |> Maybe.map
+                                (\event ->
+                                    [ Element.Events.onClick event
+                                    , Element.mouseOver [ Element.Background.color (Element.rgba 1 1 1 0.1) ]
+                                    , Element.pointer
+                                    ]
+                                )
+                            |> Maybe.withDefault []
+
+                    currentNodeElement =
+                        Element.text item.label
+                            |> Element.el [ Element.padding 5 ]
+                            |> Element.el
+                                (Element.paddingEach { left = item.indentLevel * defaultFontSize, right = 0, top = 0, bottom = 0 }
+                                    :: Element.width Element.fill
+                                    :: interactionAttributes
+                                )
+                in
+                currentNodeElement
+            )
+        |> Element.column [ Element.width Element.fill ]
 
 
 toggleEnlargedPaneButton : WorkingProjectStateStructure -> WorkspacePane -> Element.Element WorkspaceEventStructure
