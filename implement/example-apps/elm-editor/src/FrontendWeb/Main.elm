@@ -1601,7 +1601,7 @@ viewOutputPaneContent state =
                             case elmMakeOk.compiledHtmlDocument of
                                 Nothing ->
                                     let
-                                        standardErrorElement =
+                                        errorsElement =
                                             case elmMakeOk.reportFromJson of
                                                 Nothing ->
                                                     outputElementFromPlainText elmMakeOk.response.processOutput.standardError
@@ -1629,8 +1629,8 @@ viewOutputPaneContent state =
                                                             , Element.width Element.fill
                                                             ]
                                     in
-                                    [ ( "standard error", standardErrorElement )
-                                    , ( "standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
+                                    [ ( "Errors", errorsElement )
+                                    , ( "Elm make standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
                                     ]
                                         |> List.map
                                             (\( channel, outputElement ) ->
