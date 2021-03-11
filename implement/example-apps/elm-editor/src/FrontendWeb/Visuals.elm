@@ -10,6 +10,8 @@ type Icon
     | GitHubActionIcon
     | GrowActionIcon
     | ShrinkActionIcon
+    | DirectoryExpandedIcon
+    | FileTypeElmIcon
 
 
 iconSvgElementFromIcon : { color : String } -> Icon -> Element.Element event
@@ -87,6 +89,44 @@ iconSvgPathsData icon =
                   , fillNone = False
                   }
                 , { pathData = "M1.0 13.5L1.0 16.0L6.0 16.0L0 22.0L2.0 24.0L7.5 18.5L7.5 23.0L10.5 23.0L10.5 13.5L1.0 13.5Z"
+                  , fillNone = False
+                  }
+                ]
+            }
+
+        DirectoryExpandedIcon ->
+            { width = 200
+            , height = 200
+            , paths =
+                [ { pathData = "M20 40L100 120L180 40L200 60L100 160L0 60L20 40Z"
+                  , fillNone = False
+                  }
+                ]
+            }
+
+        FileTypeElmIcon ->
+            { width = 640
+            , height = 640
+            , paths =
+                [ { pathData = "M0 620L300 320L0 20L0 620Z"
+                  , fillNone = False
+                  }
+                , { pathData = "M620 640L20 640L320 338.92L620 640Z"
+                  , fillNone = False
+                  }
+                , { pathData = "M160 140L460 140L320 0L20 0L160 140Z"
+                  , fillNone = False
+                  }
+                , { pathData = "M640 280L640 0L360 0L640 280Z"
+                  , fillNone = False
+                  }
+                , { pathData = "M320 300L460 160L180 160L320 300Z"
+                  , fillNone = False
+                  }
+                , { pathData = "M490 470L640 320L490 168.92L340 320L490 470Z"
+                  , fillNone = False
+                  }
+                , { pathData = "M640 620L640 360L510 490L640 620Z"
                   , fillNone = False
                   }
                 ]

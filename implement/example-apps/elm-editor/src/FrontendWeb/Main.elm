@@ -1011,9 +1011,20 @@ view state =
 
                                                     ProjectState.TreeNode _ ->
                                                         Nothing
+
+                                            iconFromFileName fileName =
+                                                if String.endsWith ".elm" fileName then
+                                                    Just ( Visuals.FileTypeElmIcon, "rgb(127, 201, 255)" )
+
+                                                else
+                                                    Nothing
                                         in
                                         [ Element.text "Choose one of the files in the project to open in the editor"
-                                        , viewFileTree { selectEventFromNode = selectEventFromFileTreeNode } workingState.fileTree
+                                        , viewFileTree
+                                            { selectEventFromNode = selectEventFromFileTreeNode
+                                            , iconFromFileName = iconFromFileName
+                                            }
+                                            workingState.fileTree
                                         ]
                                             |> Element.column
                                                 [ Element.spacing defaultFontSize
@@ -1188,11 +1199,14 @@ type alias FileTreeNodeViewModel event =
     { indentLevel : Int
     , label : String
     , selectEvent : Maybe event
+    , icon : Maybe ( Visuals.Icon, String )
     }
 
 
 viewFileTree :
-    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event }
+    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event
+    , iconFromFileName : String -> Maybe ( Visuals.Icon, String )
+    }
     -> ProjectState.FileTreeNode
     -> Element.Element event
 viewFileTree configuration rootNode =
@@ -1207,56 +1221,76 @@ viewFileTree configuration rootNode =
 
 
 buildFileTreeViewList :
-    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event }
+    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event
+    , iconFromFileName : String -> Maybe ( Visuals.Icon, String )
+    }
     -> List String
     -> ( String, ProjectState.FileTreeNode )
     -> List (FileTreeNodeViewModel event)
 buildFileTreeViewList configuration path ( currentNodeName, currentNodeContent ) =
-    case currentNodeContent of
-        ProjectState.BlobNode _ ->
-            [ { indentLevel = List.length path
-              , label = currentNodeName
-              , selectEvent = configuration.selectEventFromNode path ( currentNodeName, currentNodeContent )
-              }
-            ]
+    let
+        icon =
+            case currentNodeContent of
+                ProjectState.TreeNode _ ->
+                    Just ( Visuals.DirectoryExpandedIcon, "white" )
 
-        ProjectState.TreeNode tree ->
+                ProjectState.BlobNode _ ->
+                    configuration.iconFromFileName currentNodeName
+
+        currentItem =
             { indentLevel = List.length path
             , label = currentNodeName
             , selectEvent = configuration.selectEventFromNode path ( currentNodeName, currentNodeContent )
+            , icon = icon
             }
+    in
+    case currentNodeContent of
+        ProjectState.BlobNode _ ->
+            [ currentItem ]
+
+        ProjectState.TreeNode tree ->
+            currentItem
                 :: List.concatMap (buildFileTreeViewList configuration (path ++ [ currentNodeName ])) tree
 
 
 viewFileTreeList : List (FileTreeNodeViewModel event) -> Element.Element event
-viewFileTreeList items =
-    items
-        |> List.map
-            (\item ->
-                let
-                    interactionAttributes =
-                        item.selectEvent
-                            |> Maybe.map
-                                (\event ->
-                                    [ Element.Events.onClick event
-                                    , Element.mouseOver [ Element.Background.color (Element.rgba 1 1 1 0.1) ]
-                                    , Element.pointer
-                                    ]
-                                )
-                            |> Maybe.withDefault []
+viewFileTreeList =
+    List.map
+        (\item ->
+            let
+                interactionAttributes =
+                    item.selectEvent
+                        |> Maybe.map
+                            (\event ->
+                                [ Element.Events.onClick event
+                                , Element.mouseOver [ Element.Background.color (Element.rgba 1 1 1 0.1) ]
+                                , Element.pointer
+                                ]
+                            )
+                        |> Maybe.withDefault []
 
-                    currentNodeElement =
-                        Element.text item.label
-                            |> Element.el [ Element.padding 5 ]
-                            |> Element.el
-                                (Element.paddingEach { left = item.indentLevel * defaultFontSize, right = 0, top = 0, bottom = 0 }
-                                    :: Element.width Element.fill
-                                    :: interactionAttributes
-                                )
-                in
-                currentNodeElement
-            )
-        |> Element.column [ Element.width Element.fill ]
+                iconElement =
+                    case item.icon of
+                        Nothing ->
+                            Element.none
+
+                        Just ( iconType, iconColor ) ->
+                            Visuals.iconSvgElementFromIcon { color = iconColor } iconType
+
+                currentNodeElement =
+                    [ iconElement |> Element.el [ Element.width (Element.px defaultFontSize), Element.alpha 0.8 ]
+                    , Element.text item.label
+                    ]
+                        |> Element.row [ Element.spacing (defaultFontSize // 2), Element.padding 5 ]
+                        |> Element.el
+                            (Element.paddingEach { left = item.indentLevel * defaultFontSize, right = 0, top = 0, bottom = 0 }
+                                :: Element.width Element.fill
+                                :: interactionAttributes
+                            )
+            in
+            currentNodeElement
+        )
+        >> Element.column [ Element.width Element.fill ]
 
 
 toggleEnlargedPaneButton : WorkingProjectStateStructure -> WorkspacePane -> Element.Element WorkspaceEventStructure
