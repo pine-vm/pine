@@ -1268,7 +1268,7 @@ toggleEnlargedPaneButton state pane =
         , Element.padding 4
         ]
         { label =
-            Visuals.iconSvgElementFromIcon { color = "rgba(255,255,255,0.7)", viewBoxWidth = 24, viewBoxHeight = 24 } icon
+            Visuals.iconSvgElementFromIcon { color = "rgba(255,255,255,0.7)" } icon
                 |> Element.el [ Element.width (Element.px iconSize), Element.height (Element.px iconSize) ]
         , onPress = Just (UserInputSetEnlargedPane onPress)
         }
@@ -1415,7 +1415,7 @@ activityBar =
                                     [ Element.width Element.fill ]
                                     { url = justLinkUrl, label = linkLabel }
             in
-            Visuals.actionIconSvgElementFromIcon icon
+            Visuals.iconSvgElementFromIcon { color = "white" } icon
                 |> Element.el
                     [ Element.padding actionItemIconPadding
                     , Element.centerX
