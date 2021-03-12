@@ -104,7 +104,7 @@ type Event
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
-    | UserInputSave (Maybe { createDiffIfBaseAvailable : Bool })
+    | UserInputSaveProject (Maybe { createDiffIfBaseAvailable : Bool })
     | DiscardEvent
 
 
@@ -197,7 +197,7 @@ update event stateBefore =
                 Browser.External url ->
                     ( stateBefore, Navigation.load url )
 
-        UserInputSave maybeGenerateLink ->
+        UserInputSaveProject maybeGenerateLink ->
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
                     let
@@ -978,7 +978,7 @@ view state =
 
                 WorkspaceOk workingState ->
                     let
-                        paneLayout paneProperties =
+                        workspacePaneLayout paneProperties =
                             let
                                 widthFillPortion =
                                     if workingState.viewEnlargedPane == Just paneProperties.pane then
@@ -987,13 +987,17 @@ view state =
                                     else
                                         4
                             in
-                            [ [ paneProperties.buttons
-                                    |> Element.row
-                                        [ Element.spacing defaultFontSize
-                                        , Element.width Element.fill
-                                        , Element.clipX
+                            [ [ paneProperties.headerElement
+                                    |> Element.el
+                                        [ Element.width Element.fill
+                                        , Element.height Element.fill
+
+                                        -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
+                                        , Element.clip
+                                        , Element.htmlAttribute (HA.style "flex-shrink" "1")
                                         ]
-                              , toggleEnlargedPaneButton workingState paneProperties.pane |> Element.map WorkspaceEvent
+                              , toggleEnlargedPaneButton workingState paneProperties.pane
+                                    |> Element.el [ Element.alignTop, Element.alignRight ]
                               ]
                                 |> Element.row
                                     [ Element.spacing defaultFontSize
@@ -1007,13 +1011,20 @@ view state =
                                     , Element.height Element.fill
                                     ]
 
+                        topButtons =
+                            [ [ saveProjectButton ]
+                            , if workingState.editing.filePathOpenedInEditor == Nothing then
+                                [ loadFromGitOpenDialogButton ]
+
+                              else
+                                []
+                            ]
+                                |> List.concat
+
                         workspaceView =
                             case workingState.editing.filePathOpenedInEditor of
                                 Nothing ->
-                                    { editorPaneButtons =
-                                        [ saveButton, loadFromGitOpenDialogButton ]
-                                    , outputPaneButtons =
-                                        []
+                                    { editorPaneHeader = Element.none
                                     , editorPaneContent =
                                         let
                                             selectEventFromFileTreeNode upperPath ( nodeName, nodeContent ) =
@@ -1043,7 +1054,6 @@ view state =
                                                 , Element.width Element.fill
                                                 , Element.height Element.fill
                                                 ]
-                                            |> Element.map WorkspaceEvent
                                     }
 
                                 Just filePathOpenedInEditor ->
@@ -1094,51 +1104,60 @@ view state =
                                                 }
 
                                         headerElement =
-                                            [ filePathElement, closeEditorElement ]
+                                            [ [ filePathElement, closeEditorElement ]
                                                 |> Element.row
                                                     [ Element.width Element.fill
                                                     , Element.height Element.fill
                                                     , Element.spacing defaultFontSize
                                                     , Element.alignLeft
-                                                    , Element.paddingXY defaultFontSize (defaultFontSize // 3)
                                                     , Element.alpha 0.8
                                                     ]
+                                            , [ buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
+                                              , buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
+                                              ]
+                                                |> Element.row
+                                                    [ Element.spacing defaultFontSize
+                                                    , Element.width Element.fill
+                                                    ]
+                                            ]
+                                                |> Element.wrappedRow
+                                                    [ Element.spacing defaultFontSize
+                                                    , Element.paddingXY defaultFontSize 0
+                                                    , Element.width Element.fill
+                                                    ]
                                     in
-                                    { editorPaneButtons =
-                                        [ saveButton, buttonElement { label = "📄 Format", onPress = Just UserInputFormat } |> Element.map WorkspaceEvent ]
-                                    , outputPaneButtons =
-                                        [ buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile } ]
-                                            |> List.map (Element.map WorkspaceEvent)
-                                    , editorPaneContent =
-                                        [ headerElement |> Element.map WorkspaceEvent
-                                        , monacoEditorElement state
-                                        ]
-                                            |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
+                                    { editorPaneHeader = headerElement
+                                    , editorPaneContent = monacoEditorElement state
                                     }
-                    in
-                    [ paneLayout
-                        { pane = EditorPane
-                        , buttons = workspaceView.editorPaneButtons
-                        , mainContent = workspaceView.editorPaneContent
-                        }
-                    , paneLayout
-                        { pane = OutputPane
-                        , buttons = workspaceView.outputPaneButtons
-                        , mainContent =
-                            workingState
-                                |> viewOutputPaneContent
-                                |> Element.el
-                                    [ Element.width Element.fill
-                                    , Element.height Element.fill
 
-                                    -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
-                                    , Element.clip
-                                    , Element.htmlAttribute (HA.style "flex-shrink" "1")
-                                    ]
-                                |> Element.map WorkspaceEvent
-                        }
-                    ]
+                        outputPaneElements =
+                            viewOutputPaneContent workingState
+                    in
+                    [ topButtons |> Element.row [ Element.spacing defaultFontSize, Element.width Element.fill, Element.padding (defaultFontSize // 2) ]
+                    , [ workspacePaneLayout
+                            { pane = EditorPane
+                            , headerElement = workspaceView.editorPaneHeader
+                            , mainContent = workspaceView.editorPaneContent
+                            }
+                      , workspacePaneLayout
+                            { pane = OutputPane
+                            , headerElement = outputPaneElements.header
+                            , mainContent =
+                                outputPaneElements.mainContent
+                                    |> Element.el
+                                        [ Element.width Element.fill
+                                        , Element.height Element.fill
+
+                                        -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
+                                        , Element.clip
+                                        , Element.htmlAttribute (HA.style "flex-shrink" "1")
+                                        ]
+                            }
+                      ]
                         |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+                        |> Element.map WorkspaceEvent
+                    ]
+                        |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
 
                 WorkspaceErr projectStateError ->
                     [ [ loadFromGitOpenDialogButton ]
@@ -1406,15 +1425,15 @@ iconFromFileName fileName =
 toggleEnlargedPaneButton : WorkingProjectStateStructure -> WorkspacePane -> Element.Element WorkspaceEventStructure
 toggleEnlargedPaneButton state pane =
     let
-        isPaneEnlarged =
-            state.viewEnlargedPane == Just pane
-
         ( icon, onPress ) =
-            if isPaneEnlarged then
+            if state.viewEnlargedPane == Just pane then
                 ( Visuals.ShrinkActionIcon, Nothing )
 
-            else
+            else if state.viewEnlargedPane == Nothing then
                 ( Visuals.GrowActionIcon, Just pane )
+
+            else
+                ( Visuals.GrowActionIcon, Nothing )
 
         iconSize =
             24
@@ -1459,7 +1478,7 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
         buttonGenerateUrl =
             buttonElement
                 { label = "Generate link to project"
-                , onPress = Just (UserInputSave (Just { createDiffIfBaseAvailable = True }))
+                , onPress = Just (UserInputSaveProject (Just { createDiffIfBaseAvailable = True }))
                 }
 
         linkElementFromUrl urlToProject =
@@ -1637,28 +1656,33 @@ popupElementAttributesFromAttributes { title, guide, contentElement } =
     ]
 
 
-viewOutputPaneContent : WorkingProjectStateStructure -> Element.Element WorkspaceEventStructure
+viewOutputPaneContent :
+    WorkingProjectStateStructure
+    -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element e }
 viewOutputPaneContent state =
     case state.elmMakeResult of
         Nothing ->
-            case state.pendingElmMakeRequest of
-                Nothing ->
-                    if filePathOpenedInEditorFromWorkspace state == Nothing then
-                        Element.none
+            { mainContent =
+                case state.pendingElmMakeRequest of
+                    Nothing ->
+                        if filePathOpenedInEditorFromWorkspace state == Nothing then
+                            Element.none
 
-                    else
-                        [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
-                            |> Element.text
-                        ]
-                            |> Element.paragraph [ Element.padding defaultFontSize ]
+                        else
+                            [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
+                                |> Element.text
+                            ]
+                                |> Element.paragraph [ Element.padding defaultFontSize ]
 
-                Just _ ->
-                    Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
+                    Just _ ->
+                        Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
+            , header = Element.none
+            }
 
         Just ( elmMakeRequest, elmMakeResult ) ->
             case elmMakeResult of
                 Err elmMakeError ->
-                    ("Error: " ++ describeHttpError elmMakeError) |> Element.text
+                    { mainContent = ("Error: " ++ describeHttpError elmMakeError) |> Element.text, header = Element.none }
 
                 Ok elmMakeOk ->
                     let
@@ -1773,12 +1797,9 @@ viewOutputPaneContent state =
                                             , Element.height Element.fill
                                             ]
                     in
-                    [ warnAboutOutdatedCompilationElement, compileResultElement ]
-                        |> Element.column
-                            [ Element.spacing (defaultFontSize // 2)
-                            , Element.width Element.fill
-                            , Element.height Element.fill
-                            ]
+                    { mainContent = compileResultElement
+                    , header = warnAboutOutdatedCompilationElement
+                    }
 
 
 viewElmMakeCompileError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
@@ -1993,9 +2014,9 @@ buttonElement buttonConfig =
         }
 
 
-saveButton : Element.Element Event
-saveButton =
-    buttonElement { label = "💾 Save", onPress = Just (UserInputSave Nothing) }
+saveProjectButton : Element.Element Event
+saveProjectButton =
+    buttonElement { label = "💾 Save Project", onPress = Just (UserInputSaveProject Nothing) }
 
 
 loadFromGitOpenDialogButton : Element.Element Event
