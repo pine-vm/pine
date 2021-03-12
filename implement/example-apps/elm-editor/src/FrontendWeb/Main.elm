@@ -1626,7 +1626,8 @@ viewOutputPaneContent state =
                             warnAboutOutdatedCompilationText
                                 |> Maybe.withDefault ""
                                 |> Element.text
-                                |> Element.el
+                                |> List.singleton
+                                |> Element.paragraph
                                     [ Element.padding (defaultFontSize // 2)
                                     , Element.Background.color (Element.rgb 0.3 0.2 0.1)
                                     , Element.width Element.fill
