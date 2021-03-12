@@ -1026,7 +1026,7 @@ view state =
                                             { selectEventFromNode = selectEventFromFileTreeNode
                                             , iconFromFileName = iconFromFileName
                                             }
-                                            workingState.fileTree
+                                            (sortFileTreeForExplorerView workingState.fileTree)
                                             |> Element.el
                                                 [ Element.scrollbars
                                                 , Element.width Element.fill
@@ -1162,7 +1162,7 @@ view state =
                                         { selectEventFromNode = always (always Nothing)
                                         , iconFromFileName = iconFromFileName
                                         }
-                                        loadOk.fileTree
+                                        (sortFileTreeForExplorerView loadOk.fileTree)
                                         |> Element.el
                                             [ Element.scrollbars
                                             , Element.width Element.fill
@@ -1218,6 +1218,26 @@ type alias FileTreeNodeViewModel event =
     , selectEvent : Maybe event
     , icon : Maybe ( Visuals.Icon, String )
     }
+
+
+sortFileTreeForExplorerView : ProjectState.FileTreeNode -> ProjectState.FileTreeNode
+sortFileTreeForExplorerView node =
+    case node of
+        ProjectState.BlobNode _ ->
+            node
+
+        ProjectState.TreeNode tree ->
+            tree
+                |> List.map (Tuple.mapSecond sortFileTreeForExplorerView)
+                |> List.sortBy
+                    (\( _, child ) ->
+                        if ProjectState.isBlobNode child then
+                            0
+
+                        else
+                            1
+                    )
+                |> ProjectState.TreeNode
 
 
 viewFileTree :

@@ -314,3 +314,13 @@ searchProjectStateDifference_2021_01 projectState { baseComposition } =
             addedOrChangedBlobsWithHash
                 |> List.map (\blob -> ( blob.blobPath, blob.changesFromBaseBlob ))
         }
+
+
+isBlobNode : FileTreeNode -> Bool
+isBlobNode node =
+    case node of
+        BlobNode _ ->
+            True
+
+        TreeNode _ ->
+            False
