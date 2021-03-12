@@ -111,8 +111,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         }
     }
 
-    function editorActionCloseFile() {
-        parent?.messageFromMonacoFrame?.({"EditorActionCloseFileEvent":[]});
+    function editorActionCloseEditor() {
+        parent?.messageFromMonacoFrame?.({"EditorActionCloseEditorEvent":[]});
     }
 
     function editorActionFormatDocument() {
@@ -174,8 +174,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         });
 
         editor.addAction({
-            id: 'close-file-action',
-            label: 'Close File',
+            id: 'close-editor-action',
+            label: 'Close Editor',
             keybindings: [],
             precondition: null,
             keybindingContext: null,
@@ -184,7 +184,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             contextMenuOrder: 99,
 
             run: function(ed) {
-                editorActionCloseFile();
+                editorActionCloseEditor();
                 return null;
             }
         });

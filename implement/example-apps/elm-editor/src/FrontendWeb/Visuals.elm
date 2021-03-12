@@ -11,6 +11,8 @@ type Icon
     | GrowActionIcon
     | ShrinkActionIcon
     | DirectoryExpandedIcon
+    | DirectoryCollapsedIcon
+    | CloseEditorIcon
     | FileTypeElmIcon
 
 
@@ -99,6 +101,26 @@ iconSvgPathsData icon =
             , height = 200
             , paths =
                 [ { pathData = "M20 40L100 120L180 40L200 60L100 160L0 60L20 40Z"
+                  , fillNone = False
+                  }
+                ]
+            }
+
+        DirectoryCollapsedIcon ->
+            { width = 200
+            , height = 200
+            , paths =
+                [ { pathData = "M40 20L120 100L40 180L60 200L160 100L60 0L40 20Z"
+                  , fillNone = False
+                  }
+                ]
+            }
+
+        CloseEditorIcon ->
+            { width = 200
+            , height = 200
+            , paths =
+                [ { pathData = "M0 20L80 100L0 180L20 200L100 120L180 200L200 180L120 100L200 20L180 0L100 80L20 0L0 20Z"
                   , fillNone = False
                   }
                 ]

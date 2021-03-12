@@ -114,6 +114,7 @@ type WorkspaceEventStructure
     | UserInputOpenFileInEditor (List String)
     | UserInputFormat
     | UserInputCompile
+    | UserInputCloseEditor
     | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
     | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
@@ -509,14 +510,8 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                         FrontendWeb.MonacoEditor.CompletedSetupEvent ->
                             ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
 
-                        FrontendWeb.MonacoEditor.EditorActionCloseFileEvent ->
-                            ( let
-                                editing =
-                                    stateBefore.editing
-                              in
-                              { stateBefore | editing = { editing | filePathOpenedInEditor = Nothing } }
-                            , Cmd.none
-                            )
+                        FrontendWeb.MonacoEditor.EditorActionCloseEditorEvent ->
+                            updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCloseEditor stateBefore
 
                         FrontendWeb.MonacoEditor.EditorActionFormatDocumentEvent ->
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputFormat stateBefore
@@ -529,6 +524,15 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
         UserInputCompile ->
             userInputCompileFileOpenedInEditor updateConfig { stateBefore | viewEnlargedPane = Nothing }
+
+        UserInputCloseEditor ->
+            ( let
+                editing =
+                    stateBefore.editing
+              in
+              { stateBefore | editing = { editing | filePathOpenedInEditor = Nothing } }
+            , Cmd.none
+            )
 
         BackendElmFormatResponseEvent formatResponseEvent ->
             ( if Just formatResponseEvent.filePath /= stateBefore.editing.filePathOpenedInEditor then
@@ -1042,14 +1046,74 @@ view state =
                                             |> Element.map WorkspaceEvent
                                     }
 
-                                Just _ ->
+                                Just filePathOpenedInEditor ->
+                                    let
+                                        headerIconElementFromTypeAndColor maybeTypeAndColor =
+                                            maybeTypeAndColor
+                                                |> Maybe.map
+                                                    (\( iconType, iconColor ) ->
+                                                        Visuals.iconSvgElementFromIcon { color = iconColor } iconType
+                                                    )
+                                                |> Maybe.withDefault Element.none
+                                                |> Element.el [ Element.width (Element.px (defaultFontSize * 8 // 10)) ]
+
+                                        filePathElement =
+                                            case List.reverse filePathOpenedInEditor of
+                                                [] ->
+                                                    Element.none
+
+                                                fileName :: directoryPathReversed ->
+                                                    let
+                                                        directorySeparatorIconElement =
+                                                            headerIconElementFromTypeAndColor (Just ( Visuals.DirectoryCollapsedIcon, "white" ))
+
+                                                        fileIconElement =
+                                                            filePathOpenedInEditor
+                                                                |> List.reverse
+                                                                |> List.head
+                                                                |> Maybe.andThen iconFromFileName
+                                                                |> headerIconElementFromTypeAndColor
+                                                    in
+                                                    (directoryPathReversed |> List.map Element.text)
+                                                        ++ [ [ fileIconElement, fileName |> Element.text ]
+                                                                |> Element.row [ Element.spacing (defaultFontSize // 2) ]
+                                                           ]
+                                                        |> List.intersperse directorySeparatorIconElement
+                                                        |> Element.row
+                                                            [ Element.spacing (defaultFontSize // 2)
+                                                            , elementFontSizePercent 80
+                                                            ]
+
+                                        closeEditorElement =
+                                            Element.Input.button
+                                                [ Element.mouseOver [ Element.Background.color (Element.rgba 0 0.5 0.8 0.5) ]
+                                                , Element.padding 4
+                                                ]
+                                                { label = headerIconElementFromTypeAndColor (Just ( Visuals.CloseEditorIcon, "white" ))
+                                                , onPress = Just UserInputCloseEditor
+                                                }
+
+                                        headerElement =
+                                            [ filePathElement, closeEditorElement ]
+                                                |> Element.row
+                                                    [ Element.width Element.fill
+                                                    , Element.height Element.fill
+                                                    , Element.spacing defaultFontSize
+                                                    , Element.alignLeft
+                                                    , Element.paddingXY defaultFontSize (defaultFontSize // 3)
+                                                    , Element.alpha 0.8
+                                                    ]
+                                    in
                                     { editorPaneButtons =
                                         [ saveButton, buttonElement { label = "📄 Format", onPress = Just UserInputFormat } |> Element.map WorkspaceEvent ]
                                     , outputPaneButtons =
                                         [ buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile } ]
                                             |> List.map (Element.map WorkspaceEvent)
                                     , editorPaneContent =
-                                        monacoEditorElement state
+                                        [ headerElement |> Element.map WorkspaceEvent
+                                        , monacoEditorElement state
+                                        ]
+                                            |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
                                     }
                     in
                     [ paneLayout

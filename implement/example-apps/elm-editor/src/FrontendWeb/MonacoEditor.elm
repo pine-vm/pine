@@ -10,7 +10,7 @@ type MessageToEditor
 type MessageFromEditor
     = CompletedSetupEvent
     | DidChangeContentEvent String
-    | EditorActionCloseFileEvent
+    | EditorActionCloseEditorEvent
     | EditorActionFormatDocumentEvent
     | EditorActionCompileEvent
 
