@@ -58,7 +58,7 @@ type alias State =
     , time : Time.Posix
     , workspace : WorkspaceStateStructure
     , modalDialog : Maybe ModalDialogState
-    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure )
+    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error ProjectState.FileTreeNode )
     }
 
 
@@ -139,7 +139,7 @@ type alias SaveOrShareDialogState =
 type alias LoadFromGitDialogState =
     { urlIntoGitRepository : String
     , requestTime : Maybe Time.Posix
-    , loadCompositionResult : Maybe (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
+    , loadCompositionResult : Maybe (Result Http.Error { fileTree : ProjectState.FileTreeNode, compositionIdCache : String })
     }
 
 
@@ -232,10 +232,7 @@ update event stateBefore =
                                                                 Nothing
 
                                                             Ok loadFromGitOk ->
-                                                                Just
-                                                                    ( loadFromGitUrl
-                                                                    , fileTreeNodeFromListFileWithPath loadFromGitOk.filesAsFlatList
-                                                                    )
+                                                                Just ( loadFromGitUrl, loadFromGitOk )
 
                                         url =
                                             stateBefore.url
@@ -319,7 +316,7 @@ update event stateBefore =
                             ( { stateBefore
                                 | modalDialog = Nothing
                                 , workspace =
-                                    { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
+                                    { fileTree = loadOk.fileTree
                                     , filePathOpenedInEditor = Nothing
                                     }
                                         |> initWorkspaceFromFileTreeAndFileSelection
@@ -674,14 +671,25 @@ processEventUrlChanged url stateBefore =
 processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> ( State, Cmd Event )
 processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeRememberingResult =
     let
+        resultWithFileTreeAndCache =
+            result
+                |> Result.map
+                    (\loadOk ->
+                        { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
+                        , compositionIdCache = loadOk.compositionId
+                        }
+                    )
+
         stateBefore =
-            { stateBeforeRememberingResult | lastBackendLoadFromGitResult = Just ( urlIntoGitRepository, result ) }
+            { stateBeforeRememberingResult
+                | lastBackendLoadFromGitResult = Just ( urlIntoGitRepository, resultWithFileTreeAndCache |> Result.map .fileTree )
+            }
     in
     case stateBefore.modalDialog of
         Just (LoadFromGitDialog dialogStateBefore) ->
             let
                 dialogState =
-                    { dialogStateBefore | loadCompositionResult = Just result }
+                    { dialogStateBefore | loadCompositionResult = Just resultWithFileTreeAndCache }
             in
             ( { stateBefore | modalDialog = Just (LoadFromGitDialog dialogState) }, Cmd.none )
 
@@ -689,13 +697,13 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
             case stateBefore.workspace of
                 WorkspaceLoadingFromLink projectStateLoadingFromLink ->
                     if urlIntoGitRepository == projectStateLoadingFromLink.projectStateDescription.base then
-                        case result of
+                        case resultWithFileTreeAndCache of
                             Ok loadOk ->
                                 updateForLoadedProjectState
                                     { expectedCompositionHash = projectStateLoadingFromLink.expectedCompositionHash
                                     , filePathToOpen = projectStateLoadingFromLink.filePathToOpen
                                     }
-                                    (fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList)
+                                    loadOk.fileTree
                                     projectStateLoadingFromLink.projectStateDescription.differenceFromBase
                                     stateBefore
 
@@ -1011,13 +1019,6 @@ view state =
 
                                                     ProjectState.TreeNode _ ->
                                                         Nothing
-
-                                            iconFromFileName fileName =
-                                                if String.endsWith ".elm" fileName then
-                                                    Just ( Visuals.FileTypeElmIcon, "rgb(127, 201, 255)" )
-
-                                                else
-                                                    Nothing
                                         in
                                         [ [ Element.text "Choose one of the files in the project to open in the editor" ]
                                             |> Element.paragraph []
@@ -1149,18 +1150,27 @@ view state =
 
                                 Just (Ok loadOk) ->
                                     [ [ ("Loaded composition "
-                                            ++ loadOk.compositionId
+                                            ++ loadOk.compositionIdCache
                                             ++ " containing "
-                                            ++ (loadOk.filesAsFlatList |> List.length |> String.fromInt)
+                                            ++ (loadOk.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
                                             ++ " files:"
                                         )
                                             |> Element.text
                                       ]
                                         |> Element.paragraph []
-                                    , loadOk.filesAsFlatList
-                                        |> List.sortBy (.path >> List.length)
-                                        |> List.map (.path >> String.join "/" >> Element.text)
-                                        |> Element.column [ Element.spacing 4, Element.padding 8 ]
+                                    , viewFileTree
+                                        { selectEventFromNode = always (always Nothing)
+                                        , iconFromFileName = iconFromFileName
+                                        }
+                                        loadOk.fileTree
+                                        |> Element.el
+                                            [ Element.scrollbars
+                                            , Element.width Element.fill
+                                            , Element.height (Element.px 200)
+                                            , Element.padding defaultFontSize
+                                            , Element.Border.width 1
+                                            , Element.Border.color (Element.rgba 1 1 1 0.5)
+                                            ]
                                     , buttonElement
                                         { label = "Set these files as project state"
                                         , onPress = Just (UserInputLoadFromGit LoadFromGitTakeResultAsProjectStateEvent)
@@ -1298,6 +1308,15 @@ viewFileTreeList =
             currentNodeElement
         )
         >> Element.column [ Element.width Element.fill ]
+
+
+iconFromFileName : String -> Maybe ( Visuals.Icon, String )
+iconFromFileName fileName =
+    if String.endsWith ".elm" fileName then
+        Just ( Visuals.FileTypeElmIcon, "rgb(127, 201, 255)" )
+
+    else
+        Nothing
 
 
 toggleEnlargedPaneButton : WorkingProjectStateStructure -> WorkspacePane -> Element.Element WorkspaceEventStructure
