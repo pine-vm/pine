@@ -1019,17 +1019,24 @@ view state =
                                                 else
                                                     Nothing
                                         in
-                                        [ Element.text "Choose one of the files in the project to open in the editor"
+                                        [ [ Element.text "Choose one of the files in the project to open in the editor" ]
+                                            |> Element.paragraph []
                                         , viewFileTree
                                             { selectEventFromNode = selectEventFromFileTreeNode
                                             , iconFromFileName = iconFromFileName
                                             }
                                             workingState.fileTree
+                                            |> Element.el
+                                                [ Element.scrollbars
+                                                , Element.width Element.fill
+                                                , Element.height Element.fill
+                                                ]
                                         ]
                                             |> Element.column
                                                 [ Element.spacing defaultFontSize
                                                 , Element.padding defaultFontSize
                                                 , Element.width Element.fill
+                                                , Element.height Element.fill
                                                 ]
                                             |> Element.map WorkspaceEvent
                                     }
