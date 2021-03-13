@@ -464,9 +464,9 @@ namespace elm_fullstack
                 });
             });
 
-            app.Command("enter-interactive", enterInteractiveCmd =>
+            app.Command("interactive", enterInteractiveCmd =>
             {
-                enterInteractiveCmd.Description = "Enter an environment supporting interactive exploration and composition of Elm programs.";
+                enterInteractiveCmd.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
 
                 var contextAppOption =
                     enterInteractiveCmd
@@ -487,7 +487,7 @@ namespace elm_fullstack
                     ReadLine.HistoryEnabled = true;
 
                     Console.WriteLine(
-                        "---- Elm-fullstack " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " interactive (REPL) ----");
+                        "---- Elm Interactive v" + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " ----");
 
                     Composition.TreeWithStringPath contextAppCodeTree = null;
 
