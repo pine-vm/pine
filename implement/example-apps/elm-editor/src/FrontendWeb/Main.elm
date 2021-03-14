@@ -937,7 +937,7 @@ view state =
                     , Element.width Element.fill
                     ]
 
-        mainContent =
+        ( mainContent, topBarButtons ) =
             case state.workspace of
                 WorkspaceLoadingFromLink loadingProjectStateFromLink ->
                     let
@@ -970,11 +970,13 @@ view state =
                             else
                                 Nothing
                     in
-                    mainContentFromLoadingFromLink
+                    ( mainContentFromLoadingFromLink
                         { linkUrl = loadingProjectStateFromLink.projectStateDescription.base
                         , progressOrResultElement = progressOrResultElement
                         , expectedCompositionHash = expectedCompositionHash
                         }
+                    , [ loadFromGitOpenDialogButton ]
+                    )
 
                 WorkspaceOk workingState ->
                     let
@@ -1010,16 +1012,6 @@ view state =
                                     [ Element.width (Element.fillPortion widthFillPortion |> Element.minimum 80)
                                     , Element.height Element.fill
                                     ]
-
-                        topButtons =
-                            [ [ saveProjectButton ]
-                            , if workingState.editing.filePathOpenedInEditor == Nothing then
-                                [ loadFromGitOpenDialogButton ]
-
-                              else
-                                []
-                            ]
-                                |> List.concat
 
                         workspaceView =
                             case workingState.editing.filePathOpenedInEditor of
@@ -1133,13 +1125,12 @@ view state =
                         outputPaneElements =
                             viewOutputPaneContent workingState
                     in
-                    [ topButtons |> Element.row [ Element.spacing defaultFontSize, Element.width Element.fill, Element.padding (defaultFontSize // 2) ]
-                    , [ workspacePaneLayout
+                    ( [ [ workspacePaneLayout
                             { pane = EditorPane
                             , headerElement = workspaceView.editorPaneHeader
                             , mainContent = workspaceView.editorPaneContent
                             }
-                      , workspacePaneLayout
+                        , workspacePaneLayout
                             { pane = OutputPane
                             , headerElement = outputPaneElements.header
                             , mainContent =
@@ -1153,34 +1144,51 @@ view state =
                                         , Element.htmlAttribute (HA.style "flex-shrink" "1")
                                         ]
                             }
+                        ]
+                            |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+                            |> Element.map WorkspaceEvent
                       ]
-                        |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
-                        |> Element.map WorkspaceEvent
-                    ]
                         |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
+                    , [ saveProjectButton, loadFromGitOpenDialogButton ]
+                    )
 
                 WorkspaceErr projectStateError ->
-                    [ [ loadFromGitOpenDialogButton ]
-                        |> Element.row
-                            [ Element.spacing defaultFontSize
-                            , Element.padding (defaultFontSize // 2)
-                            ]
-                    , [ ("Failed to load project state: "
-                            ++ (projectStateError |> String.left 500)
-                        )
+                    ( [ [ ("Failed to load project state: " ++ (projectStateError |> String.left 500))
                             |> Element.text
+                        ]
+                            |> Element.paragraph
+                                [ Element.Font.color (Element.rgb 1 0.64 0)
+                                , Element.padding defaultFontSize
+                                , Element.width Element.fill
+                                ]
                       ]
-                        |> Element.paragraph
-                            [ Element.Font.color (Element.rgb 1 0.64 0)
-                            , Element.padding defaultFontSize
-                            , Element.width Element.fill
-                            ]
-                    ]
                         |> Element.column
                             [ Element.spacing (defaultFontSize // 2)
                             , Element.width (Element.fillPortion 4)
                             , Element.height Element.fill
                             ]
+                    , [ loadFromGitOpenDialogButton ]
+                    )
+
+        logoElement =
+            [ Visuals.elmEditorIconSvg "1.2em" |> Element.html |> Element.el []
+            , "Elm editor" |> Element.text |> Element.el [ Element.Font.bold ]
+            ]
+                |> Element.row
+                    [ Element.spacing defaultFontSize
+                    , Element.htmlAttribute (HA.style "cursor" "default")
+                    , Element.htmlAttribute (HA.style "user-select" "none")
+                    ]
+
+        topBar =
+            [ logoElement |> Element.el [ Element.paddingXY defaultFontSize 0 ]
+            , topBarButtons |> Element.row [ Element.spacing defaultFontSize ]
+            ]
+                |> Element.row
+                    [ Element.spacing (defaultFontSize * 2)
+                    , Element.width Element.fill
+                    , Element.Background.color (Element.rgb 0.24 0.24 0.24)
+                    ]
 
         popupAttributes =
             case state.modalDialog of
@@ -1277,11 +1285,11 @@ view state =
                         }
 
         body =
-            [ activityBar, mainContent ]
-                |> Element.row
-                    [ Element.width Element.fill
-                    , Element.height Element.fill
-                    ]
+            [ topBar
+            , [ activityBar, mainContent ]
+                |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+            ]
+                |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
                 |> Element.layout
                     ([ Element.Font.family (rootFontFamily |> List.map Element.Font.typeface)
                      , Element.Font.size defaultFontSize

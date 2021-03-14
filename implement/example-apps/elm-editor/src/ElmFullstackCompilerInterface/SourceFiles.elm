@@ -23,3 +23,10 @@ file____default_app_src_Main_elm =
     "The Elm-fullstack compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
+
+
+file____static_favicon_svg : Bytes.Bytes
+file____static_favicon_svg =
+    "The Elm-fullstack compiler replaces this value."
+        |> Bytes.Encode.string
+        |> Bytes.Encode.encode

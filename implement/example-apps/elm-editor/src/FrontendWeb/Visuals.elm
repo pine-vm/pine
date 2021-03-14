@@ -1,6 +1,7 @@
 module FrontendWeb.Visuals exposing (..)
 
 import Element
+import Html
 import Svg
 import Svg.Attributes
 
@@ -153,3 +154,30 @@ iconSvgPathsData icon =
                   }
                 ]
             }
+
+
+elmEditorIconSvg : String -> Html.Html e
+elmEditorIconSvg size =
+    let
+        foregroundPaths =
+            [ "M 42.901 68.565 L 42.901 76.396 L 11 76.396 L 11 20 L 42.901 20 L 42.901 27.792 L 20.219 27.792 L 20.219 43.145 L 41.474 43.145 L 41.474 50.859 L 20.219 50.859 L 20.219 68.565 L 42.901 68.565 Z"
+            , "M 89.344 52.209 L 89.344 57.108 L 60.915 57.108 Q 61.108 63.319 64.271 66.656 A 11.689 11.689 0 0 0 73.182 69.992 Q 76.962 69.992 80.221 69.279 A 36.901 36.901 0 0 0 87.223 66.906 L 87.223 74.274 A 27.832 27.832 0 0 1 80.511 76.511 A 41.157 41.157 0 0 1 72.757 77.167 A 20.638 20.638 0 0 1 57.193 71.362 Q 51.58 65.556 51.58 55.373 A 24.326 24.326 0 0 1 56.626 39.128 A 18.314 18.314 0 0 1 56.788 38.94 A 17.987 17.987 0 0 1 71.099 32.961 A 17.58 17.58 0 0 1 84.445 38.091 A 19.604 19.604 0 0 1 89.344 52.209 Z M 61.069 50.551 L 80.434 50.551 A 11.809 11.809 0 0 0 77.888 42.547 A 8.708 8.708 0 0 0 71.099 39.827 Q 66.778 39.827 64.175 42.566 Q 61.571 45.305 61.069 50.551 Z"
+            , "M0 100L0 0L100 0L100 100L0 100ZM4 97L97 97L97 3L3 3L3 97Z"
+            ]
+
+        backgroundPathData =
+            "M1 99L1 1L99 1L99 99L1 99Z"
+
+        foregroundPathsElements =
+            foregroundPaths
+                |> List.map
+                    (\pathData -> Svg.path [ Svg.Attributes.d pathData, Svg.Attributes.fill "#7BCA39" ] [])
+    in
+    Svg.svg
+        [ Svg.Attributes.viewBox ([ 0, 0, 100, 100 ] |> List.map String.fromInt |> String.join " ")
+        , Svg.Attributes.width size
+        , Svg.Attributes.height size
+        ]
+        (Svg.path [ Svg.Attributes.d backgroundPathData, Svg.Attributes.fill "#1A2B0C" ] []
+            :: foregroundPathsElements
+        )
