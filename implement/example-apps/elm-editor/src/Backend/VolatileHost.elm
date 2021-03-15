@@ -1,4 +1,4 @@
-module Backend.ElmMakeVolatileHost exposing
+module Backend.VolatileHost exposing
     ( jsonDecodeResponseStructure
     , requestToVolatileHost
     , volatileHostScript

@@ -4,9 +4,9 @@ module Backend.Main exposing
     , interfaceToHost_processEvent
     )
 
-import Backend.ElmMakeVolatileHost as ElmMakeVolatileHost
 import Backend.InterfaceToHost as InterfaceToHost
 import Backend.Route
+import Backend.VolatileHost as VolatileHost
 import Base64
 import Bytes.Encode
 import Common
@@ -304,7 +304,7 @@ tasksFromState state =
         tasksToEnsureEnoughVolatileHostsCreated =
             if List.length state.volatileHostsIds < parallelVolatileHostsCount then
                 [ { taskId = "create-vhost"
-                  , task = InterfaceToHost.CreateVolatileHost { script = ElmMakeVolatileHost.volatileHostScript }
+                  , task = InterfaceToHost.CreateVolatileHost { script = VolatileHost.volatileHostScript }
                   }
                 ]
 
