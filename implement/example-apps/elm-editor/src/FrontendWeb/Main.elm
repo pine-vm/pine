@@ -1093,7 +1093,7 @@ view state =
                                                                 |> Maybe.andThen iconFromFileName
                                                                 |> headerIconElementFromTypeAndColor
                                                     in
-                                                    (directoryPathReversed |> List.map Element.text)
+                                                    (directoryPathReversed |> List.reverse |> List.map Element.text)
                                                         ++ [ [ fileIconElement, fileName |> Element.text ]
                                                                 |> Element.row [ Element.spacing (defaultFontSize // 2) ]
                                                            ]
