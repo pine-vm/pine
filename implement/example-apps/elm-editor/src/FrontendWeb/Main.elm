@@ -1172,7 +1172,7 @@ view state =
 
         logoElement =
             [ Visuals.elmEditorIconSvg "1.2em" |> Element.html |> Element.el []
-            , "Elm editor" |> Element.text |> Element.el [ Element.Font.bold ]
+            , "Elm Editor" |> Element.text |> Element.el [ Element.Font.semiBold ]
             ]
                 |> Element.row
                     [ Element.spacing defaultFontSize
@@ -1185,7 +1185,7 @@ view state =
             , topBarButtons |> Element.row [ Element.spacing defaultFontSize ]
             ]
                 |> Element.row
-                    [ Element.spacing (defaultFontSize * 2)
+                    [ Element.spacing defaultFontSize
                     , Element.width Element.fill
                     , Element.Background.color (Element.rgb 0.24 0.24 0.24)
                     ]
