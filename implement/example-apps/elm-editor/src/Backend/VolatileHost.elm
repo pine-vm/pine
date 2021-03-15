@@ -49,8 +49,7 @@ volatileHostScript =
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
 #r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
-// from elm-fullstack-separate-assemblies-52aa3ed298b05c93d37503d601de56211d2163be-linux-x64
-#r "sha256:bf80ff2fb8a61b6b2a0d22c49771aad07fcc07a282bf7768730b3a525c84fd2d"
+#r "sha256:ffbbf81111c3981a7f09dfb9be6e3d3255a9669a95d468245350a644928cf1a4"
 
 using System;
 using System.Collections.Generic;
@@ -91,7 +90,9 @@ public class ElmMakeRequestStructure
 {
     public IReadOnlyList<FileWithPath> files;
 
-    public IReadOnlyList<string> entryPointFilePath;
+    public IReadOnlyList<string> entryPointFilePathFromWorkingDirectory;
+
+    public IReadOnlyList<string> workingDirectoryPath;
 }
 
 public class FormatElmModuleTextResponseStructure
@@ -275,25 +276,24 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
             file => (IImmutableList<string>)file.path.ToImmutableList(),
             file => (IImmutableList<byte>)Convert.FromBase64String(file.contentBase64).ToImmutableList());
 
-    var platformSpecificFiles =
-        elmCodeFiles
-        .Select(elmCodeFile => (MakePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value))
-        .ToImmutableList();
+    var environmentFiles =
+        elmCodeFiles.Select(file => (path: file.Key, content: file.Value)).ToImmutableList();
 
-    var entryPointFilePath = MakePlatformSpecificPath(elmMakeRequest.entryPointFilePath);
+    var entryPointFilePathFromWorkingDirectory =
+        MakePlatformSpecificPath(elmMakeRequest.entryPointFilePathFromWorkingDirectory);
 
     var elmMakeOutputFileName = "elm-make-output.html";
 
-    var commandLineCommonArguments = "make " + entryPointFilePath;
+    var commandLineCommonArguments = "make " + entryPointFilePathFromWorkingDirectory;
 
     var commandLineArguments = commandLineCommonArguments + " --output=" + elmMakeOutputFileName;
     var reportJsonCommandLineArguments = commandLineCommonArguments + " --report=json";
 
-    (Kalmit.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
+    (Kalmit.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
     {
         return
             Kalmit.ExecutableFile.ExecuteFileWithArguments(
-                platformSpecificFiles,
+                environmentFiles,
                 GetElmExecutableFile,
                 arguments,
                 new Dictionary<string, string>()
@@ -323,21 +323,18 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
                 An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
                 */
                 {"ELM_HOME", GetElmHomeDirectory()},
-                });
+                },
+                workingDirectory: elmMakeRequest.workingDirectoryPath.ToImmutableList());
     }
 
     var commandResults = commandResultsFromArguments(commandLineArguments);
 
-    var platformSpecificNewFiles =
-        commandResults.resultingFiles
-        .Where(file => !platformSpecificFiles.Any(inputFile => inputFile.Item1 == file.name))
-        .ToImmutableList();
-
     var newFiles =
-        platformSpecificNewFiles
+        commandResults.resultingFiles
+        .Where(file => !environmentFiles.Any(inputFile => inputFile.Item1.SequenceEqual(file.path)))
         .Select(file => new FileWithPath
         {
-            path = file.name.Split('/', '\\\\'),
+            path = file.path,
             contentBase64 = Convert.ToBase64String(file.content.ToArray()),
         })
         .ToImmutableList();
@@ -418,17 +415,19 @@ static public class ElmFormat
     {
         var elmModuleFileName = "ElmModuleToFormat.elm";
 
+        var elmModuleFilePath = ImmutableList.Create(elmModuleFileName);
+
         var elmFormatResult =
             Kalmit.ExecutableFile.ExecuteFileWithArguments(
                 ImmutableList.Create(
-                    (elmModuleFileName, (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText).ToImmutableList())),
+                    ((IImmutableList<string>)elmModuleFilePath, (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText).ToImmutableList())),
                 GetElmFormatExecutableFile,
                 " " + elmModuleFileName + " --yes",
                 environmentStrings: null);
 
         var resultingFile =
             elmFormatResult.resultingFiles
-            .FirstOrDefault(file => file.name.EndsWith(elmModuleFileName))
+            .FirstOrDefault(file => file.path.SequenceEqual(elmModuleFilePath))
             .content;
 
         var formattedText =

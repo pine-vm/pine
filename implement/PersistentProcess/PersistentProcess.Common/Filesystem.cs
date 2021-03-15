@@ -16,16 +16,18 @@ namespace Kalmit
                     RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME"),
                 "kalmit", ".cache");
 
-        static public IReadOnlyCollection<(string path, IImmutableList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
+        static public IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
             GetFilesFromDirectory(
                 directoryPath: directoryPath,
                 filterByRelativeName: _ => true);
 
-        static public IReadOnlyCollection<(string path, IImmutableList<byte> content)> GetFilesFromDirectory(
+        static public IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> GetFilesFromDirectory(
             string directoryPath,
-            Func<string, bool> filterByRelativeName) =>
+            Func<IImmutableList<string>, bool> filterByRelativeName) =>
             Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
-            .Select(filePath => (absolutePath: filePath, relativePath: GetRelativePath(directoryPath, filePath)))
+            .Select(filePath =>
+                (absolutePath: filePath,
+                relativePath: (IImmutableList<string>)GetRelativePath(directoryPath, filePath).Split(Path.DirectorySeparatorChar).ToImmutableList()))
             .Where(filePath => filterByRelativeName(filePath.relativePath))
             .Select(filePath => (filePath.relativePath, (IImmutableList<byte>)File.ReadAllBytes(filePath.absolutePath).ToImmutableList()))
             .ToList();
@@ -45,5 +47,8 @@ namespace Kalmit
             Directory.CreateDirectory(directory);
             return directory;
         }
+
+        static public string MakePlatformSpecificPath(IImmutableList<string> path) =>
+            string.Join(Path.DirectorySeparatorChar.ToString(), path);
     }
 }

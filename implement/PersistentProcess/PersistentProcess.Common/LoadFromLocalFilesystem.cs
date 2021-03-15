@@ -14,13 +14,9 @@ namespace Kalmit
             if (!Directory.Exists(path))
                 return null;
 
-            var blobs =
-                Filesystem.GetAllFilesFromDirectory(path)
-                .Select(file => (path: (System.Collections.Immutable.IImmutableList<string>)file.path.Split('/', '\\').ToImmutableList(), content: file.content))
-                .ToImmutableList();
+            var blobs = Filesystem.GetAllFilesFromDirectory(path);
 
-            return
-                Composition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
+            return Composition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
         }
     }
 }

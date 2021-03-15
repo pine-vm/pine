@@ -16,7 +16,8 @@ type ResponseStructure
 
 type alias ElmMakeRequestStructure =
     { files : List FileWithPath
-    , entryPointFilePath : List String
+    , workingDirectoryPath : List String
+    , entryPointFilePathFromWorkingDirectory : List String
     }
 
 

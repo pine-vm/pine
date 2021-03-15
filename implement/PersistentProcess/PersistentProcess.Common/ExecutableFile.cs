@@ -20,19 +20,22 @@ namespace Kalmit
             public int ExitCode;
         }
 
-        static public (ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles) ExecuteFileWithArguments(
-            IImmutableList<(string name, IImmutableList<byte> content)> environmentFiles,
+        static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles) ExecuteFileWithArguments(
+            IImmutableList<(IImmutableList<string> path, IImmutableList<byte> content)> environmentFiles,
             byte[] executableFile,
             string arguments,
-            IDictionary<string, string> environmentStrings)
+            IDictionary<string, string> environmentStrings,
+            IImmutableList<string> workingDirectory = null)
         {
-            var workingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+            var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
             var executableFileName = "name-used-to-execute-file.exe";
 
+            var executableFilePathRelative = ImmutableList.Create(executableFileName);
+
             foreach (var environmentFile in environmentFiles)
             {
-                var environmentFilePath = Path.Combine(workingDirectory, environmentFile.name);
+                var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.path));
                 var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath);
 
                 Directory.CreateDirectory(environmentFileDirectory);
@@ -40,25 +43,30 @@ namespace Kalmit
                 File.WriteAllBytes(environmentFilePath, environmentFile.content.ToArray());
             }
 
-            var executableFilePath = Path.Combine(workingDirectory, executableFileName);
+            var executableFilePathAbsolute = Path.Combine(containerDirectory, executableFileName);
 
-            File.WriteAllBytes(executableFilePath, executableFile);
+            File.WriteAllBytes(executableFilePathAbsolute, executableFile);
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePath);
+                var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePathAbsolute);
 
                 unixFileInfo.FileAccessPermissions |=
                     FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
                     FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
             }
 
+            var workingDirectoryAbsolute =
+                Path.Combine(
+                    containerDirectory,
+                    Filesystem.MakePlatformSpecificPath(workingDirectory ?? ImmutableList<string>.Empty));
+
             var process = new System.Diagnostics.Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    WorkingDirectory = workingDirectory,
-                    FileName = executableFilePath,
+                    WorkingDirectory = workingDirectoryAbsolute,
+                    FileName = executableFilePathAbsolute,
                     Arguments = arguments,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -79,12 +87,12 @@ namespace Kalmit
 
             var createdFiles =
                 Filesystem.GetFilesFromDirectory(
-                    directoryPath: workingDirectory,
-                    filterByRelativeName: path => path != executableFileName);
+                    directoryPath: containerDirectory,
+                    filterByRelativeName: path => !path.SequenceEqual(executableFilePathRelative));
 
             try
             {
-                Directory.Delete(path: workingDirectory, recursive: true);
+                Directory.Delete(path: containerDirectory, recursive: true);
             }
             // Avoid crash in scenario like https://forum.botengine.org/t/farm-manager-tribal-wars-2-farmbot/3038/170
             catch (UnauthorizedAccessException)

@@ -197,19 +197,17 @@ namespace Kalmit
             */
             var maxRetryCount = 2;
 
-            var command = "make " + MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
+            var command = "make " + Filesystem.MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
-            var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(string name, IImmutableList<byte> content)> resultingFiles)>();
+            var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles)>();
 
-            var platformSpecificFiles =
-                elmCodeFiles
-                .Select(elmCodeFile => (MakePlatformSpecificPath(elmCodeFile.Key), elmCodeFile.Value))
-                .ToImmutableList();
+            var environmentFiles =
+                elmCodeFiles.Select(file => (path: file.Key, content: file.Value)).ToImmutableList();
 
             do
             {
                 var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                    platformSpecificFiles,
+                    environmentFiles,
                     GetElmExecutableFile,
                     command,
                     new Dictionary<string, string>()
@@ -243,13 +241,14 @@ namespace Kalmit
 
                 attemptsResults.Add(commandResults);
 
-                var platformSpecificNewFiles =
+                var newFiles =
                     commandResults.resultingFiles
-                    .Where(file => !platformSpecificFiles.Any(inputFile => inputFile.Item1 == file.name))
+                    .Where(file => !environmentFiles.Any(inputFile => inputFile.Item1.SequenceEqual(file.path)))
                     .ToImmutableList();
 
                 var outputFileContent =
-                    platformSpecificNewFiles.FirstOrDefault(resultFile => resultFile.name == outputFileName).content;
+                    newFiles
+                    .FirstOrDefault(resultFile => resultFile.path.SequenceEqual(ImmutableList.Create(outputFileName))).content;
 
                 if (outputFileContent != null)
                     return Encoding.UTF8.GetString(outputFileContent.ToArray());
@@ -270,9 +269,6 @@ namespace Kalmit
                 "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
                 "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
         }
-
-        static public string MakePlatformSpecificPath(IImmutableList<string> path) =>
-            string.Join(Path.DirectorySeparatorChar.ToString(), path);
 
         static public byte[] GetElmExecutableFile =>
             CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);

@@ -868,19 +868,34 @@ elmMakeRequestForFileOpenedInEditor workspace =
         Nothing ->
             Nothing
 
-        Just filePath ->
+        Just entryPointFilePath ->
             let
                 base64FromBytes : Bytes.Bytes -> String
                 base64FromBytes =
                     Base64.fromBytes
                         >> Maybe.withDefault "Error encoding in base64"
 
-                entryPointFilePath =
-                    filePath
+                allFilePaths =
+                    workspace.fileTree
+                        |> ProjectState.flatListOfBlobsFromFileTreeNode
+                        |> List.map Tuple.first
+
+                directoryContainsElmJson directoryPath =
+                    allFilePaths |> List.member (directoryPath ++ [ "elm.json" ])
+
+                workingDirectoryPath =
+                    entryPointFilePath
+                        |> List.reverse
+                        |> List.drop 1
+                        |> List.reverse
+                        |> List.Extra.inits
+                        |> List.sortBy List.length
+                        |> List.filter directoryContainsElmJson
+                        |> List.head
+                        |> Maybe.withDefault []
             in
             Just
-                { entryPointFilePath = entryPointFilePath
-                , files =
+                { files =
                     workspace.fileTree
                         |> ProjectState.flatListOfBlobsFromFileTreeNode
                         |> List.map
@@ -889,6 +904,8 @@ elmMakeRequestForFileOpenedInEditor workspace =
                                 , contentBase64 = content |> base64FromBytes
                                 }
                             )
+                , workingDirectoryPath = workingDirectoryPath
+                , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
                 }
 
 
@@ -1701,14 +1718,18 @@ viewOutputPaneContent state =
                             Just elmMakeRequest.files
                                 == (elmMakeRequestFromCurrentState |> Maybe.map .files)
 
+                        elmMakeRequestEntryPointFilePathAbs =
+                            elmMakeRequest.workingDirectoryPath
+                                ++ elmMakeRequest.entryPointFilePathFromWorkingDirectory
+
                         warnAboutOutdatedCompilationText =
                             if
-                                Just elmMakeRequest.entryPointFilePath
+                                Just elmMakeRequestEntryPointFilePathAbs
                                     /= filePathOpenedInEditorFromWorkspace state
                             then
                                 Just
                                     ("⚠️ Last compilation started for another file: '"
-                                        ++ String.join "/" elmMakeRequest.entryPointFilePath
+                                        ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
                                         ++ "'"
                                     )
 
