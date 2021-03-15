@@ -49,7 +49,8 @@ volatileHostScript =
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
 #r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
-#r "sha256:ffbbf81111c3981a7f09dfb9be6e3d3255a9669a95d468245350a644928cf1a4"
+// from elm-fullstack-separate-assemblies-50feeb958ba1bbbe8b30a727e9801b3a52c4f037-linux-x64.zip
+#r "sha256:a391898aa89282ed0f4a1ff38f7320623d4f748b74000fe5ecb056f8a06fb2a1"
 
 using System;
 using System.Collections.Generic;
