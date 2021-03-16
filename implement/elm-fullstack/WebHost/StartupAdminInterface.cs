@@ -683,7 +683,7 @@ namespace Kalmit.PersistentProcess.WebHost
                     {
                         context.Response.StatusCode = 200;
                         await context.Response.WriteAsync(
-                            "Welcome to Elm-fullstack version " + Program.AppVersionId + ".\n" +
+                            "Welcome to Elm-fullstack version " + elm_fullstack.Program.AppVersionId + ".\n" +
                             "To learn about this admin interface, see http://elm-fullstack.org/");
                         return;
                     }

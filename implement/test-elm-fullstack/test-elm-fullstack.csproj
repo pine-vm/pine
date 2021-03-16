@@ -17,8 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PersistentProcess\PersistentProcess.Common\PersistentProcess.Common.csproj" />
-    <ProjectReference Include="..\PersistentProcess\PersistentProcess.WebHost\PersistentProcess.WebHost.csproj" />
     <ProjectReference Include="..\elm-fullstack\elm-fullstack.csproj" />
   </ItemGroup>
 

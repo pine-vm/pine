@@ -5,8 +5,8 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2021.0315.0.0</AssemblyVersion>
-    <FileVersion>2021.0315.0.0</FileVersion>
+    <AssemblyVersion>2021.0316.0.0</AssemblyVersion>
+    <FileVersion>2021.0316.0.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -14,13 +14,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.116.0" />
+    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.10.0" />
+    <PackageReference Include="LibGit2Sharp" Version="0.27.0-preview-0096" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.0.0" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.1.0" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.1.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="3.6.0" />
+    <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\PersistentProcess\PersistentProcess.WebHost\PersistentProcess.WebHost.csproj" />
-    <ProjectReference Include="..\PersistentProcess\PersistentProcess.Common\PersistentProcess.Common.csproj" />
+    <PackageReference Include="System.Collections.Immutable" Version="1.7.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -14,6 +14,8 @@ namespace elm_fullstack
 {
     public class Program
     {
+        static public string AppVersionId => "2021-03-16";
+
         static int Main(string[] args)
         {
             Kalmit.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
@@ -28,7 +30,7 @@ namespace elm_fullstack
             app.HelpTextGenerator =
                 new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false };
 
-            app.VersionOption(template: "-v|--version", shortFormVersion: "version " + Kalmit.PersistentProcess.WebHost.Program.AppVersionId);
+            app.VersionOption(template: "-v|--version", shortFormVersion: "version " + AppVersionId);
 
             app.Command("install", installCmd =>
             {
@@ -487,7 +489,7 @@ namespace elm_fullstack
                     ReadLine.HistoryEnabled = true;
 
                     Console.WriteLine(
-                        "---- Elm Interactive v" + Kalmit.PersistentProcess.WebHost.Program.AppVersionId + " ----");
+                        "---- Elm Interactive v" + AppVersionId + " ----");
 
                     Composition.TreeWithStringPath contextAppCodeTree = null;
 
@@ -1277,7 +1279,7 @@ namespace elm_fullstack
         {
             httpRequest.Headers.UserAgent.Add(
                 new System.Net.Http.Headers.ProductInfoHeaderValue(
-                    new System.Net.Http.Headers.ProductHeaderValue("elm-fullstack-cli", Kalmit.PersistentProcess.WebHost.Program.AppVersionId)));
+                    new System.Net.Http.Headers.ProductHeaderValue("elm-fullstack-cli", AppVersionId)));
 
             return httpRequest;
         }
