@@ -4,8 +4,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-02-19/elm-fullstack-bin-4dc13c37736b40461ff7ab8953736d2185c35bc3-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-02-19/elm-fullstack-bin-4dc13c37736b40461ff7ab8953736d2185c35bc3-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-03-15/elm-fullstack-bin-50feeb958ba1bbbe8b30a727e9801b3a52c4f037-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-03-15/elm-fullstack-bin-50feeb958ba1bbbe8b30a727e9801b3a52c4f037-linux-x64.zip
 
 To register the elm-fs executable on your systems PATH environment variable, run the `elm-fs  install` command.
 
@@ -13,12 +13,12 @@ To register the elm-fs executable on your systems PATH environment variable, run
 
 To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/bca07197d8753ad6584de71cf25d58ce6991fe77/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/bca07197d8753ad6584de71cf25d58ce6991fe77/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -26,7 +26,7 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition 0a748dfed56d1f88c51e604d35dd8fdde95bc4accfb9557e11359c60316f9413 from 'https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app'.
+Loaded source composition 0a748dfed56d1f88c51e604d35dd8fdde95bc4accfb9557e11359c60316f9413 from 'https://github.com/elm-fullstack/elm-fullstack/tree/bca07197d8753ad6584de71cf25d58ce6991fe77/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -233,7 +233,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2021-02-19.
+Welcome to Elm-fullstack version 2021-03-15.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
