@@ -1,13 +1,13 @@
-using Kalmit;
-using Kalmit.PersistentProcess.WebHost;
-using Microsoft.AspNetCore.Hosting;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
+using ElmFullstack.WebHost;
+using Microsoft.AspNetCore.Hosting;
+using Newtonsoft.Json;
+using Pine;
 
 namespace test_elm_fullstack
 {
@@ -111,7 +111,7 @@ namespace test_elm_fullstack
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                 "Basic",
                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                    Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+                    ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
             return client;
         }
@@ -138,46 +138,46 @@ namespace test_elm_fullstack
             if (deployAppConfigAndInitElmState != null)
             {
                 var compositionLogEvent =
-                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
                     {
                         DeployAppConfigAndInitElmAppState =
-                            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                            new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                             {
                                 HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(deployAppConfigAndInitElmState))
                             }
                     };
 
                 var processStoreWriter =
-                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                     defaultFileStore);
 
                 processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
 
-                var compositionRecord = new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
+                var compositionRecord = new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
                 {
-                    parentHashBase16 = Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    parentHashBase16 = ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
                     compositionEvent = compositionLogEvent
                 };
 
                 var serializedCompositionLogRecord =
-                    Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreInFileStore.Serialize(compositionRecord);
+                    ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreInFileStore.Serialize(compositionRecord);
 
                 processStoreWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
             }
         }
 
-        public Kalmit.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
+        public Pine.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
                 new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
-        public Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
-            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+        public ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
+            new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                 BuildProcessStoreFileStoreReaderInFileDirectory());
 
-        public IEnumerable<Kalmit.PersistentProcess.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
+        public IEnumerable<ElmFullstack.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
         {
             var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-            Kalmit.PersistentProcess.InterfaceToHost.AppEventStructure eventFromHash(string eventComponentHash)
+            ElmFullstack.InterfaceToHost.AppEventStructure eventFromHash(string eventComponentHash)
             {
                 var component = processStoreReader.LoadComponent(eventComponentHash);
 
@@ -189,14 +189,14 @@ namespace test_elm_fullstack
 
                 var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
-                return Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.PersistentProcess.InterfaceToHost.AppEventStructure>(eventString);
+                return Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.AppEventStructure>(eventString);
             }
 
             return
                 BuildProcessStoreReaderInFileDirectory()
                 .EnumerateSerializedCompositionLogRecordsReverse()
                 .Select(Encoding.UTF8.GetString)
-                .Select(JsonConvert.DeserializeObject<Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
+                .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
                 .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
                 .WhereNotNull()
                 .Select(updateElmAppStateForEvent => eventFromHash(updateElmAppStateForEvent.HashBase16));

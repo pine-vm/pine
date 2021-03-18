@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Kalmit.PersistentProcess.WebHost
+namespace ElmFullstack.WebHost
 {
     public interface IRateLimit
     {

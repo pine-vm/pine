@@ -5,10 +5,11 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations;
+using ElmFullstack.WebHost.ProcessStoreSupportingMigrations;
 using Newtonsoft.Json;
+using Pine;
 
-namespace Kalmit.PersistentProcess.WebHost.PersistentProcess
+namespace ElmFullstack.WebHost.PersistentProcess
 {
     public interface IPersistentProcess
     {
@@ -709,14 +710,14 @@ main =
                     pathToCompilationRootModuleFile,
                     Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
 
-                var javascriptFromElmMake = Kalmit.ProcessFromElm019Code.CompileElmToJavascript(
+                var javascriptFromElmMake = ElmFullstack.ProcessFromElm019Code.CompileElmToJavascript(
                     migrateElmAppFiles,
                     pathToCompilationRootModuleFile);
 
-                var javascriptMinusCrashes = Kalmit.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
+                var javascriptMinusCrashes = ElmFullstack.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
 
                 var javascriptToRun =
-                    Kalmit.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                    ElmFullstack.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
                         javascriptMinusCrashes,
                         new[]
                         {
@@ -740,7 +741,7 @@ main =
                     }
 
                     var migrateResultStructure =
-                        JsonConvert.DeserializeObject<Kalmit.ElmValueCommonJson.Result<string, string>>(
+                        JsonConvert.DeserializeObject<ElmFullstack.ElmValueCommonJson.Result<string, string>>(
                             migrateResultString);
 
                     var elmAppStateMigratedSerialized = migrateResultStructure?.Ok?.FirstOrDefault();

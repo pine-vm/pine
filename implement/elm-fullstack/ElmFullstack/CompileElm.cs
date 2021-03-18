@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace Kalmit
+namespace ElmFullstack
 {
     public class CompileElm
     {
@@ -176,7 +176,7 @@ namespace Kalmit
         static public string TypeAnnotationFromFunctionName(string functionName, string elmModuleText)
         {
             var function =
-                CompileElm.ParseAllFunctionsFromModule(elmModuleText)
+                ParseAllFunctionsFromModule(elmModuleText)
                 .FirstOrDefault(c => c.functionName == functionName);
 
             if (function.functionName != functionName)

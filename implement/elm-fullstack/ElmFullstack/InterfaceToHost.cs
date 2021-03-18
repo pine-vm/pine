@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Kalmit.PersistentProcess.InterfaceToHost
+namespace ElmFullstack.InterfaceToHost
 {
     public class AppEventStructure
     {

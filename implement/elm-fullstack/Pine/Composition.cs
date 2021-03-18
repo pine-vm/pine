@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace Kalmit
+namespace Pine
 {
     public class Composition
     {

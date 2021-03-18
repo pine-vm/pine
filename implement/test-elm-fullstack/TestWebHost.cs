@@ -1,12 +1,3 @@
-using FluentAssertions;
-using Kalmit;
-using Kalmit.PersistentProcess;
-using Kalmit.PersistentProcess.WebHost;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using MoreLinq;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -15,6 +6,15 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using ElmFullstack;
+using ElmFullstack.WebHost;
+using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using MoreLinq;
+using Pine;
 
 namespace test_elm_fullstack
 {
@@ -318,7 +318,7 @@ namespace test_elm_fullstack
             static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppState(
                 HttpClient client, string state) =>
                 client.PostAsync(
-                    Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiElmAppState,
+                    ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState,
                     new StringContent(state, System.Text.Encoding.UTF8));
 
             using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
@@ -358,7 +358,7 @@ namespace test_elm_fullstack
                             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                                 "Basic",
                                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                                    Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+                                    ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
                             Assert.AreEqual(
                                 HttpStatusCode.OK,
@@ -486,7 +486,7 @@ namespace test_elm_fullstack
                             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                             var echoRequestStructure =
-                                Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.PersistentProcess.InterfaceToHost.HttpRequest>(responseContentString);
+                                Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.HttpRequest>(responseContentString);
 
                             Assert.AreEqual(
                                 Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
@@ -528,7 +528,7 @@ namespace test_elm_fullstack
                             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                             var echoRequestStructure =
-                                Newtonsoft.Json.JsonConvert.DeserializeObject<Kalmit.PersistentProcess.InterfaceToHost.HttpRequest>(responseContentString);
+                                Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.HttpRequest>(responseContentString);
 
                             var observedContentType =
                                 echoRequestStructure.headers
@@ -927,7 +927,7 @@ namespace test_elm_fullstack
                         }
 
                         var processVersionAfterFirstBatch =
-                            Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
+                            ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
                                 testSetup
                                 .BuildProcessStoreReaderInFileDirectory()
                                 .EnumerateSerializedCompositionLogRecordsReverse().First());
@@ -1166,8 +1166,8 @@ namespace test_elm_fullstack
                 promptForPasswordOnConsole: false);
 
             using (var restoredProcess =
-                Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
-                    new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+                ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
+                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                         new FileStoreFromSystemIOFile(testDirectory)),
                         _ => { }))
             {

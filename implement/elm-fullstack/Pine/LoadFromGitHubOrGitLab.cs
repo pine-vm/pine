@@ -1,4 +1,3 @@
-using LibGit2Sharp;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -7,8 +6,9 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using LibGit2Sharp;
 
-namespace Kalmit
+namespace Pine
 {
     static public class LoadFromGitHubOrGitLab
     {
@@ -109,7 +109,7 @@ namespace Kalmit
 
             var refLooksLikeCommit = Regex.IsMatch(parsedUrl.@ref, "[A-Fa-f0-9]{40}");
 
-            var tempWorkingDirectory = Kalmit.Filesystem.CreateRandomDirectoryInTempDirectory();
+            var tempWorkingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
             var gitRepositoryLocalDirectory = Path.Combine(tempWorkingDirectory, "git-repository");
 

@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 
-namespace Kalmit
+namespace Pine
 {
     /*
     2020-07-16 Discovered: The roundtrip over `ZipArchiveFromEntries` and `EntriesFromZipArchive` changed the order of entries!

@@ -1,4 +1,4 @@
-namespace Kalmit.PersistentProcess
+namespace ElmFullstack
 {
     public class WebAppConfigurationJsonStructure
     {

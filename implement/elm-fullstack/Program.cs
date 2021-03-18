@@ -4,21 +4,21 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Kalmit;
-using Kalmit.PersistentProcess.WebHost;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Pine;
+using static ElmFullstack.WebHost.Configuration;
 
 namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-03-16";
+        static public string AppVersionId => "2021-03-18";
 
         static int Main(string[] args)
         {
-            Kalmit.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
+            ElmFullstack.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
 
             var app = new CommandLineApplication
             {
@@ -146,7 +146,7 @@ namespace elm_fullstack
                         Console.WriteLine("Loading app config to deploy...");
 
                         var appConfigZipArchive =
-                            Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                            ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                                 sourcePath: deployAppFromOption.Value()).configZipArchive;
 
                         var appConfigTree =
@@ -156,13 +156,13 @@ namespace elm_fullstack
                         var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
                         var processStoreWriter =
-                            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                            new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                                 processStoreFileStore);
 
                         processStoreWriter.StoreComponent(appConfigComponent);
 
                         var appConfigValueInFile =
-                            new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                            new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                             {
                                 HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
                             };
@@ -172,11 +172,11 @@ namespace elm_fullstack
                             processStoreDirectoryPath == null;
 
                         var compositionLogEvent =
-                            Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                            ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                                 appConfigValueInFile: appConfigValueInFile,
                                 initElmAppState: initElmAppState);
 
-                        var testDeployResult = Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
+                        var testDeployResult = ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
                             compositionLogEvent: compositionLogEvent,
                             fileStoreReader: processStoreFileStore);
 
@@ -194,7 +194,7 @@ namespace elm_fullstack
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                         .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                         .UseUrls(adminInterfaceUrls)
-                        .UseStartup<StartupAdminInterface>()
+                        .UseStartup<ElmFullstack.WebHost.StartupAdminInterface>()
                         .WithSettingPublicWebHostUrls(publicAppUrls)
                         .WithProcessStoreFileStore(processStoreFileStore);
 
@@ -395,7 +395,7 @@ namespace elm_fullstack
                     var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var sourceFiles =
-                        Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TreeToFlatDictionaryWithPathComparer(
+                        ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TreeToFlatDictionaryWithPathComparer(
                             loadFromPathResult.Ok.tree);
 
                     var compilationLog = new List<string>();
@@ -405,9 +405,9 @@ namespace elm_fullstack
 
                     try
                     {
-                        var loweredAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                        var loweredAppFiles = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
-                            ElmAppInterfaceConfig.Default,
+                            ElmFullstack.ElmAppInterfaceConfig.Default,
                             compilationLog.Add);
 
                         compiledTree =
@@ -434,7 +434,7 @@ namespace elm_fullstack
                     if (compiledTree != null)
                     {
                         var compiledFiles =
-                            ElmApp.ToFlatDictionaryWithPathComparer(
+                            ElmFullstack.ElmApp.ToFlatDictionaryWithPathComparer(
                                 compiledTree.EnumerateBlobsTransitive().ToImmutableList());
 
                         var compiledCompositionArchive =
@@ -622,8 +622,7 @@ namespace elm_fullstack
         }
 
         static public string ElmMakeHomeDirectoryPath =>
-            System.IO.Path.Combine(
-                Kalmit.Filesystem.CacheDirectory, "elm-make-home");
+            System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
 
         static public void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
         {
@@ -728,7 +727,7 @@ namespace elm_fullstack
             Console.WriteLine("Beginning to build configuration...");
 
             var buildResult =
-                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                     sourcePath: sourcePath);
 
             var (sourceCompositionId, sourceSummary) = compileSourceSummary(buildResult.sourceTree);
@@ -739,9 +738,9 @@ namespace elm_fullstack
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
 
             var filteredSourceCompositionId =
-                Kalmit.CommonConversion.StringBase16FromByteArray(
+                Pine.CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        Kalmit.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
+                        Pine.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
                 "Built app config " + filteredSourceCompositionId + " from " + sourceCompositionId + ".");
@@ -758,9 +757,9 @@ namespace elm_fullstack
                         (site.TrimEnd('/')) +
                         (initElmAppState
                         ?
-                        StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
+                        ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
                         :
-                        StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
+                        ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
 
                     Console.WriteLine("Attempting to deploy app '" + filteredSourceCompositionId + "' to '" + deployAddress + "'...");
 
@@ -804,10 +803,10 @@ namespace elm_fullstack
                 }
                 else
                 {
-                    var processStoreFileStore = new Kalmit.FileStoreFromSystemIOFile(site);
+                    var processStoreFileStore = new FileStoreFromSystemIOFile(site);
 
                     var processStoreWriter =
-                        new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                             processStoreFileStore);
 
                     var appConfigTree =
@@ -819,18 +818,18 @@ namespace elm_fullstack
                     processStoreWriter.StoreComponent(appConfigComponent);
 
                     var appConfigValueInFile =
-                        new Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
                             HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
                         };
 
                     var compositionLogEvent =
-                        Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                        ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                             appConfigValueInFile: appConfigValueInFile,
                             initElmAppState: initElmAppState);
 
                     var attemptDeployReport =
-                        Kalmit.PersistentProcess.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
+                        ElmFullstack.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
                             compositionLogEvent,
                             processStoreFileStore);
 
@@ -879,7 +878,7 @@ namespace elm_fullstack
                     httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                         "Basic",
                         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                            Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(password))));
+                            ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(password))));
                 }
 
                 setHttpClientPassword(defaultPassword);
@@ -958,7 +957,7 @@ namespace elm_fullstack
                     return new System.Net.Http.HttpRequestMessage
                     {
                         Method = System.Net.Http.HttpMethod.Post,
-                        RequestUri = new Uri(site.TrimEnd('/') + StartupAdminInterface.PathApiElmAppState),
+                        RequestUri = new Uri(site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState),
                         Content = httpContent,
                     };
                 },
@@ -1024,7 +1023,7 @@ namespace elm_fullstack
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var requestUrl =
-                site.TrimEnd('/') + StartupAdminInterface.PathApiTruncateProcessHistory;
+                site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiTruncateProcessHistory;
 
             Console.WriteLine("Beginning to truncate process history at '" + site + "'...");
 
@@ -1076,14 +1075,14 @@ namespace elm_fullstack
                 sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sourceAdminPassword))));
+                        ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(sourceAdminPassword))));
 
-                var processHistoryFileStoreRemoteReader = new Kalmit.DelegatingFileStoreReader
+                var processHistoryFileStoreRemoteReader = new Pine.DelegatingFileStoreReader
                 {
                     GetFileContentDelegate = filePath =>
                     {
                         var httpRequestPath =
-                            Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                            ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
                             string.Join("/", filePath);
 
                         var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
@@ -1098,7 +1097,7 @@ namespace elm_fullstack
                     }
                 };
 
-                return Kalmit.PersistentProcess.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
+                return ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
             }
         }
 
@@ -1123,7 +1122,7 @@ namespace elm_fullstack
             var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
 
             return
-                ElmApp.ToFlatDictionaryWithPathComparer(
+                ElmFullstack.ElmApp.ToFlatDictionaryWithPathComparer(
                     Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
                     .EnumerateBlobsTransitive());
         }
@@ -1150,11 +1149,11 @@ namespace elm_fullstack
                 httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        Kalmit.PersistentProcess.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
+                        ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
 
                 var deployAddress =
                     site.TrimEnd('/') +
-                    Kalmit.PersistentProcess.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
+                    ElmFullstack.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
 
                 Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
 
@@ -1216,7 +1215,7 @@ namespace elm_fullstack
             string outputOption)
         {
             var buildResult =
-                Kalmit.PersistentProcess.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                     sourcePath: sourcePath);
 
             var configZipArchive = buildResult.configZipArchive;
@@ -1225,9 +1224,9 @@ namespace elm_fullstack
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
 
             var webAppConfigFileId =
-                Kalmit.CommonConversion.StringBase16FromByteArray(
+                Pine.CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        Kalmit.ZipArchive.EntriesFromZipArchive(configZipArchive)))));
+                        Pine.ZipArchive.EntriesFromZipArchive(configZipArchive)))));
 
             Console.WriteLine(
                 "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");

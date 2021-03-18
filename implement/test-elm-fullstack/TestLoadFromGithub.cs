@@ -1,6 +1,6 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Linq;
 using System.Collections.Immutable;
+using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace test_elm_fullstack
 {
@@ -23,7 +23,7 @@ namespace test_elm_fullstack
             };
 
             var loadFromGithubResult =
-                Kalmit.LoadFromGitHubOrGitLab.LoadFromUrl(
+                Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                     "https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app");
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
@@ -39,8 +39,8 @@ namespace test_elm_fullstack
                 loadedFilesNamesAndContents
                 .Select(fileNameAndContent =>
                     (fileNameAndContent.fileName,
-                        Kalmit.CommonConversion.StringBase16FromByteArray(
-                            Kalmit.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
+                        Pine.CommonConversion.StringBase16FromByteArray(
+                            Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
                 .ToImmutableList();
 
             CollectionAssert.AreEquivalent(
@@ -58,7 +58,7 @@ namespace test_elm_fullstack
             };
 
             var loadFromGithubResult =
-                Kalmit.LoadFromGitHubOrGitLab.LoadFromUrl(
+                Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                     "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/");
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
@@ -74,8 +74,8 @@ namespace test_elm_fullstack
                 loadedFilesNamesAndContents
                 .Select(fileNameAndContent =>
                     (fileName: fileNameAndContent.fileName,
-                        fileHash: Kalmit.CommonConversion.StringBase16FromByteArray(
-                            Kalmit.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
+                        fileHash: Pine.CommonConversion.StringBase16FromByteArray(
+                            Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
                 .ToImmutableList();
 
             foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
@@ -93,7 +93,7 @@ namespace test_elm_fullstack
             var expectedFileHash = "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238";
 
             var loadFromGithubResult =
-                Kalmit.LoadFromGitHubOrGitLab.LoadFromUrl(
+                Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                     "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md");
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);
@@ -103,8 +103,8 @@ namespace test_elm_fullstack
             Assert.IsNotNull(blobContent, "Found blobContent.");
 
             Assert.AreEqual(expectedFileHash,
-                Kalmit.CommonConversion.StringBase16FromByteArray(
-                    Kalmit.CommonConversion.HashSHA256(blobContent.ToArray()))
+                Pine.CommonConversion.StringBase16FromByteArray(
+                    Pine.CommonConversion.HashSHA256(blobContent.ToArray()))
                 .ToLowerInvariant(),
                 "Loaded blob content hash equals expected hash.");
         }
@@ -113,7 +113,7 @@ namespace test_elm_fullstack
         public void LoadFromGithub_Commits_Contents_And_Lineage()
         {
             var loadFromGithubResult =
-                Kalmit.LoadFromGitHubOrGitLab.LoadFromUrl(
+                Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                     "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications");
 
             Assert.IsNull(loadFromGithubResult.Error, "No error: " + loadFromGithubResult.Error);

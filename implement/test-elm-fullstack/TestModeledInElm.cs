@@ -2,8 +2,8 @@ using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using ElmFullstack;
 using JavaScriptEngineSwitcher.V8;
-using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace test_elm_fullstack
@@ -21,7 +21,7 @@ namespace test_elm_fullstack
             IImmutableList<string> directoryPath)
         {
             return
-                ElmApp.AsCompletelyLoweredElmApp(
+                ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                     sourceFiles: TestSetup.GetElmAppFromDirectoryPath(directoryPath),
                     ElmAppInterfaceConfig.Default,
                     Console.WriteLine);
@@ -33,7 +33,7 @@ namespace test_elm_fullstack
         static string GetTestsValueFromModuleMain(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles)
         {
-            var javascriptFromElmMake = Kalmit.ProcessFromElm019Code.CompileElmToJavascript(
+            var javascriptFromElmMake = ProcessFromElm019Code.CompileElmToJavascript(
                 elmAppFiles,
                 ImmutableList.Create("src", "Main.elm"));
 
@@ -44,8 +44,8 @@ namespace test_elm_fullstack
             );
 
             var javascriptPreparedToRun =
-                Kalmit.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
-                    Kalmit.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake),
+                ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                    ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake),
                     new[]
                     {(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)});
 

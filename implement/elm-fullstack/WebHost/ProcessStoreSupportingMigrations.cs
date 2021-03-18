@@ -1,11 +1,12 @@
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Newtonsoft.Json;
+using Pine;
 
-namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
+namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 {
     public interface IProcessStoreWriter
     {
@@ -234,7 +235,7 @@ namespace Kalmit.PersistentProcess.WebHost.ProcessStoreSupportingMigrations
 
         protected IFileStoreReader literalElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
-        //  Plain Kalmit component.
+        //  Plain Pine component.
         protected IFileStoreReader componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
 
         protected IFileStoreReader deflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);

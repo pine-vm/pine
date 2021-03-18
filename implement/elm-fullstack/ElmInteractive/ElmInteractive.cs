@@ -4,8 +4,9 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Kalmit;
-using static Kalmit.Composition;
+using ElmFullstack;
+using Pine;
+using static Pine.Composition;
 
 namespace elm_fullstack.ElmInteractive
 {

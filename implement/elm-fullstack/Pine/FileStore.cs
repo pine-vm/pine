@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 
-namespace Kalmit
+namespace Pine
 {
     public interface IFileStoreReader
     {

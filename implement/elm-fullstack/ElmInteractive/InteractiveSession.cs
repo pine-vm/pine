@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using static Kalmit.Composition;
+using static Pine.Composition;
 
 namespace elm_fullstack.ElmInteractive
 {

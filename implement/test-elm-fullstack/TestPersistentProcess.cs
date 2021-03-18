@@ -1,13 +1,14 @@
-using FluentAssertions;
-using Kalmit;
-using Kalmit.PersistentProcess;
-using Kalmit.ProcessStore;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using MoreLinq;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ElmFullstack;
+using ElmFullstack.PersistentProcess;
+using ElmFullstack.ProcessStore;
+using FluentAssertions;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using MoreLinq;
+using Pine;
 
 namespace test_elm_fullstack
 {
@@ -19,7 +20,7 @@ namespace test_elm_fullstack
         {
             var elmApp = TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromExampleName("echo"));
 
-            using (var process = Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(
+            using (var process = ElmFullstack.ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 elmCodeFiles: elmApp).process)
             {
                 var response = process.ProcessEvent("Hello!");
@@ -91,10 +92,10 @@ namespace test_elm_fullstack
 
             IDisposableProcessWithStringInterface InstantiatePersistentProcess()
             {
-                var storeReader = new Kalmit.ProcessStore.ProcessStoreReaderInFileStore(
+                var storeReader = new ElmFullstack.ProcessStore.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(processStoreDirectory));
 
-                var storeWriter = new Kalmit.ProcessStore.ProcessStoreWriterInFileStore(
+                var storeWriter = new ElmFullstack.ProcessStore.ProcessStoreWriterInFileStore(
                     new FileStoreFromSystemIOFile(processStoreDirectory), null);
 
                 return new PersistentProcessWithControlFlowOverStoreWriter(
@@ -320,7 +321,7 @@ namespace test_elm_fullstack
         }
 
         static void AssertProcessRestoresStateWithSequenceOfEventsAndExpectedResponses(
-            Func<Kalmit.IDisposableProcessWithStringInterface> buildNewProcessInstance,
+            Func<ElmFullstack.IDisposableProcessWithStringInterface> buildNewProcessInstance,
             IEnumerable<(string serializedEvent, string expectedResponse)> eventsAndExpectedResponses)
         {
             using (var baseProcess = buildNewProcessInstance())

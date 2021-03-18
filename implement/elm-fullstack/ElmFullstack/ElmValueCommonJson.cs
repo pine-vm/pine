@@ -1,4 +1,4 @@
-namespace Kalmit.ElmValueCommonJson
+namespace ElmFullstack.ElmValueCommonJson
 {
     public class Result<ErrT, OkT>
     {

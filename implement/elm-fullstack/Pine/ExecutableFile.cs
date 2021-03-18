@@ -7,7 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Mono.Unix;
 
-namespace Kalmit
+namespace Pine
 {
     public class ExecutableFile
     {

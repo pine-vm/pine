@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Immutable;
 using System.Linq;
-using Kalmit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace test_elm_fullstack
@@ -63,7 +62,7 @@ module Module exposing ( somethingElse, nameToExpose)",
 
             foreach (var testCase in testCases)
             {
-                var compiledModule = Kalmit.CompileElm.ExposeValueInElmModule(testCase.originalElmModule, "nameToExpose");
+                var compiledModule = ElmFullstack.CompileElm.ExposeValueInElmModule(testCase.originalElmModule, "nameToExpose");
 
                 Assert.AreEqual(testCase.expectedElmModule, compiledModule);
             }
@@ -103,7 +102,7 @@ module Module exposing ( somethingElse, nameToExpose)",
 
             foreach (var testCase in testCases)
             {
-                var compiledModule = Kalmit.CompileElm.ExposeCustomTypeAllTagsInElmModule(testCase.originalElmModule, "TypeToExpose");
+                var compiledModule = ElmFullstack.CompileElm.ExposeCustomTypeAllTagsInElmModule(testCase.originalElmModule, "TypeToExpose");
 
                 Assert.AreEqual(testCase.expectedElmModule, compiledModule);
             }
@@ -307,7 +306,7 @@ type Dict key value
                     "interfaceToHost_processEvent : String -> " + testCase.typeToResolve + " -> ( " + testCase.typeToResolve + ", String )\n\n" +
                     module.moduleText);
 
-                var resolvedType = Kalmit.CompileElmValueSerializer.ResolveType(
+                var resolvedType = ElmFullstack.CompileElmValueSerializer.ResolveType(
                     testCase.typeToResolve,
                     testCase.typeToResolveModule,
                     elmModules,
@@ -324,12 +323,12 @@ type Dict key value
                         .ToImmutableList();
 
                     var originalAppFiles =
-                        ElmApp.ToFlatDictionaryWithPathComparer(originalAppFilesList);
+                        ElmFullstack.ElmApp.ToFlatDictionaryWithPathComparer(originalAppFilesList);
 
                     var loweredElmApp =
-                        ElmApp.AsCompletelyLoweredElmApp(
+                        ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                             sourceFiles: originalAppFiles,
-                            new ElmAppInterfaceConfig { RootModuleName = "RootModule" },
+                            new ElmFullstack.ElmAppInterfaceConfig { RootModuleName = "RootModule" },
                             Console.WriteLine);
                 }
                 catch (Exception e)

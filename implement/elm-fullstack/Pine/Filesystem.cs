@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace Kalmit
+namespace Pine
 {
     public class Filesystem
     {
@@ -14,7 +14,7 @@ namespace Kalmit
             Path.Combine(
                 Environment.GetEnvironmentVariable(
                     RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME"),
-                "kalmit", ".cache");
+                "pine", ".cache");
 
         static public IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
             GetFilesFromDirectory(

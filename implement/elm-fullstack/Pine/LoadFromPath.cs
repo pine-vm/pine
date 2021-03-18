@@ -1,6 +1,6 @@
-using static Kalmit.Composition;
+using static Pine.Composition;
 
-namespace Kalmit
+namespace Pine
 {
     static public class LoadFromPath
     {

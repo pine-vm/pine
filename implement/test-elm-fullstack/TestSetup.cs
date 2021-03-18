@@ -1,11 +1,11 @@
-using Kalmit;
-using Kalmit.PersistentProcess;
-using Kalmit.ProcessStore;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using ElmFullstack;
+using ElmFullstack.ProcessStore;
+using Pine;
 
 namespace test_elm_fullstack
 {
@@ -42,8 +42,8 @@ namespace test_elm_fullstack
             return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
         }
 
-        static public Kalmit.IDisposableProcessWithStringInterface BuildInstanceOfCounterProcess() =>
-            Kalmit.ProcessFromElm019Code.ProcessFromElmCodeFiles(AsLoweredElmApp(CounterElmApp)).process;
+        static public ElmFullstack.IDisposableProcessWithStringInterface BuildInstanceOfCounterProcess() =>
+            ElmFullstack.ProcessFromElm019Code.ProcessFromElmCodeFiles(AsLoweredElmApp(CounterElmApp)).process;
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CounterElmApp =
             GetElmAppFromExampleName("counter");
@@ -67,7 +67,7 @@ namespace test_elm_fullstack
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalWebAppConfig,
             WebAppConfigurationJsonStructure jsonStructure)
         {
-            var filePath = Kalmit.PersistentProcess.WebHost.StartupAdminInterface.JsonFilePath;
+            var filePath = ElmFullstack.WebHost.StartupAdminInterface.JsonFilePath;
 
             return
                 jsonStructure == null ?

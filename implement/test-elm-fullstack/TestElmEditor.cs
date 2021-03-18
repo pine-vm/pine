@@ -1,11 +1,11 @@
-using Kalmit;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Newtonsoft.Json;
+using Pine;
 
 namespace test_elm_fullstack
 {
@@ -109,7 +109,7 @@ a =
 
         public class FormatElmModuleTextResponseStructure
         {
-            public Kalmit.ElmJsonStructure.Maybe<string> formattedText;
+            public ElmFullstack.ElmJsonStructure.Maybe<string> formattedText;
 
             public ExecutableFile.ProcessOutput processOutput;
         }

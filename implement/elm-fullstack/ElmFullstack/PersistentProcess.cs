@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Kalmit.ProcessStore;
+using ElmFullstack.ProcessStore;
 using Newtonsoft.Json;
+using Pine;
 
-namespace Kalmit.PersistentProcess
+namespace ElmFullstack.PersistentProcess
 {
     public interface IPersistentProcess
     {

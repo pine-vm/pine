@@ -1,6 +1,3 @@
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
-using Microsoft.CodeAnalysis.Scripting;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -8,8 +5,11 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Scripting;
 
-namespace Kalmit
+namespace Pine
 {
     public class VolatileHost
     {
@@ -203,14 +203,14 @@ namespace Kalmit
 
                     if (sha256Match.Success)
                     {
-                        var hash = Kalmit.CommonConversion.ByteArrayFromStringBase16(sha256Match.Groups[1].Value);
+                        var hash = Pine.CommonConversion.ByteArrayFromStringBase16(sha256Match.Groups[1].Value);
 
                         var assembly = getFileFromHashSHA256?.Invoke(hash);
 
                         if (assembly == null)
                             return new ImmutableArray<PortableExecutableReference>();
 
-                        if (!Kalmit.CommonConversion.HashSHA256(assembly).SequenceEqual(hash))
+                        if (!Pine.CommonConversion.HashSHA256(assembly).SequenceEqual(hash))
                             return new ImmutableArray<PortableExecutableReference>();
 
                         var assemblyMetadata = AssemblyMetadata.CreateFromImage(assembly);
