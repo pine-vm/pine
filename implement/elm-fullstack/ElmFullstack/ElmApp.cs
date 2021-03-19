@@ -554,68 +554,45 @@ namespace ElmFullstack
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForSourceFiles(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles)
         {
-            var interfaceModuleFilePath = FilePathFromModuleName(ElmAppInterfaceConvention.SourceFilesInterfaceModuleName);
-
-            if (!sourceFiles.ContainsKey(interfaceModuleFilePath))
+            using (var jsEngine = PrepareJsEngineToCompileElmApp())
             {
-                return sourceFiles;
+                var sourceFilesJson =
+                    sourceFiles
+                    .Select(appCodeFile => new AppCodeEntry
+                    {
+                        path = appCodeFile.Key,
+                        content = new BytesJson { AsBase64 = Convert.ToBase64String(appCodeFile.Value.ToArray()) },
+                    })
+                    .ToImmutableList();
+
+                var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+                    new
+                    {
+                        sourceFiles = sourceFilesJson,
+                        compilationInterfaceElmModuleName = ElmAppInterfaceConvention.SourceFilesInterfaceModuleName,
+                    }
+                );
+
+                var responseJson =
+                    jsEngine.CallFunction("lowerForSourceFilesSerialized", argumentsJson)
+                    ?.ToString();
+
+                var responseStructure =
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<string, IReadOnlyList<AppCodeEntry>>>(
+                        responseJson);
+
+                if (responseStructure.Ok?.FirstOrDefault() == null)
+                    throw new Exception("Failed compilation: " + responseStructure.Err?.FirstOrDefault());
+
+                var resultFiles =
+                    responseStructure.Ok?.FirstOrDefault()
+                    .ToImmutableDictionary(
+                        entry => (IImmutableList<string>)entry.path.ToImmutableList(),
+                        entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
+                    .WithComparers(EnumerableExtension.EqualityComparer<string>());
+
+                return resultFiles;
             }
-
-            var interfaceModuleOriginalFile = sourceFiles[interfaceModuleFilePath];
-
-            var interfaceModuleOriginalFileText =
-                Encoding.UTF8.GetString(interfaceModuleOriginalFile.ToArray());
-
-            var originalFunctions = CompileElm.ParseAllFunctionsFromModule(interfaceModuleOriginalFileText);
-
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> replaceFunction(
-                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
-                string fileFunctionName,
-                string originalFunctionText)
-            {
-                var functionNameMatch = Regex.Match(fileFunctionName, "file____(.*)");
-
-                if (!functionNameMatch.Success)
-                    throw new NotSupportedException("Function name does not match supported pattern: '" + fileFunctionName + "'");
-
-                var filePathRepresentation = functionNameMatch.Groups[1].Value;
-
-                var matchingFileResult =
-                    FindFileWithPathMatchingRepresentationInFunctionName(sourceFiles, filePathRepresentation);
-
-                if (matchingFileResult.Ok.Key == null)
-                    throw new Exception("Failed to identify file for '" + filePathRepresentation + "': " + matchingFileResult.Err);
-
-                var fileAsBase64 = Convert.ToBase64String(matchingFileResult.Ok.Value.ToArray());
-
-                var fileExpression = "\"" + fileAsBase64 + @"""|> Base64.toBytes |> Maybe.withDefault (""Failed to convert from base64"" |> Bytes.Encode.string |> Bytes.Encode.encode)";
-
-                var newFunctionBody = CompileElmValueSerializer.IndentElmCodeLines(1, fileExpression);
-
-                var originalFunctionTextLines =
-                    originalFunctionText.Replace("\r", "").Split("\n");
-
-                var newFunctionText =
-                    String.Join("\n", originalFunctionTextLines.Take(2).Concat(new[] { newFunctionBody }));
-
-                return
-                    ReplaceFunctionInModule(
-                        previousAppFiles: ImportModuleInModule(
-                            previousAppFiles: previousAppFiles,
-                            moduleName: ElmAppInterfaceConvention.SourceFilesInterfaceModuleName,
-                            moduleToImport: ImmutableList.Create("Base64")),
-                        moduleName: ElmAppInterfaceConvention.SourceFilesInterfaceModuleName,
-                        functionName: fileFunctionName,
-                        newFunctionText: newFunctionText);
-            }
-
-            return
-                originalFunctions
-                .Aggregate(sourceFiles, (intermediateAppFiles, originalFunction) =>
-                    replaceFunction(
-                        intermediateAppFiles,
-                        originalFunction.functionName,
-                        originalFunction.functionText));
         }
 
         static Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>> FindFileWithPathMatchingRepresentationInFunctionName(
@@ -832,5 +809,68 @@ jsonDecodeState =
         ]
 
 ";
+
+        struct AppCodeEntry
+        {
+            public IReadOnlyList<string> path;
+
+            public BytesJson content;
+        }
+
+        struct BytesJson
+        {
+            public string AsBase64;
+        }
+
+        static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToCompileElmApp()
+        {
+            var parseElmAppCodeFiles = CompileElmProgramAppCodeFiles();
+
+            var javascriptFromElmMake =
+                ProcessFromElm019Code.CompileElmToJavascript(
+                    parseElmAppCodeFiles,
+                    ImmutableList.Create("src", "Main.elm"));
+
+            var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
+
+            var listFunctionToPublish =
+                new[]
+                {
+                    (functionNameInElm: "Main.lowerForSourceFilesSerialized",
+                    publicName: "lowerForSourceFilesSerialized",
+                    arity: 1),
+                };
+
+            var javascriptPreparedToRun =
+                ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                    javascriptMinusCrashes,
+                    listFunctionToPublish);
+
+            var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
+
+            var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
+
+            return javascriptEngine;
+        }
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CompileElmProgramAppCodeFiles() =>
+            ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty
+            .WithComparers(EnumerableExtension.EqualityComparer<string>())
+            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.elm.json").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "CompileFullstackApp.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.CompileFullstackApp.elm").ToImmutableList())
+            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.Main.elm").ToImmutableList());
+
+        static byte[] GetManifestResourceStreamContent(string name)
+        {
+            using (var stream = typeof(ElmApp).Assembly.GetManifestResourceStream(name))
+            {
+                using (var memoryStream = new System.IO.MemoryStream())
+                {
+                    stream.CopyTo(memoryStream);
+
+                    return memoryStream.ToArray();
+                }
+            }
+        }
     }
 }

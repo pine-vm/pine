@@ -29,6 +29,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="ElmFullstack\compile-elm-program\elm.json" />
+    <EmbeddedResource Include="ElmFullstack\compile-elm-program\src\CompileFullstackApp.elm" />
+    <EmbeddedResource Include="ElmFullstack\compile-elm-program\src\Main.elm" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="ElmInteractive\interpret-elm-program\elm.json" />
     <EmbeddedResource Include="ElmInteractive\interpret-elm-program\src\Pine.elm" />
     <EmbeddedResource Include="ElmInteractive\interpret-elm-program\src\ElmInteractive.elm" />
