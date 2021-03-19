@@ -109,7 +109,7 @@ a =
 
         public class FormatElmModuleTextResponseStructure
         {
-            public ElmFullstack.ElmJsonStructure.Maybe<string> formattedText;
+            public ElmFullstack.ElmValueCommonJson.Maybe<string> formattedText;
 
             public ExecutableFile.ProcessOutput processOutput;
         }

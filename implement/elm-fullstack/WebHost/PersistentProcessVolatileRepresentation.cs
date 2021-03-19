@@ -741,8 +741,7 @@ main =
                     }
 
                     var migrateResultStructure =
-                        JsonConvert.DeserializeObject<ElmFullstack.ElmValueCommonJson.Result<string, string>>(
-                            migrateResultString);
+                        JsonConvert.DeserializeObject<ElmFullstack.ElmValueCommonJson.Result<string, string>>(migrateResultString);
 
                     var elmAppStateMigratedSerialized = migrateResultStructure?.Ok?.FirstOrDefault();
 
