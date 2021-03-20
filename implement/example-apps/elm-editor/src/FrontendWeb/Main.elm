@@ -1033,7 +1033,9 @@ view state =
                         workspaceView =
                             case workingState.editing.filePathOpenedInEditor of
                                 Nothing ->
-                                    { editorPaneHeader = Element.none
+                                    { editorPaneHeader =
+                                        [ Element.text "Choose a file to open in the editor" ]
+                                            |> Element.paragraph []
                                     , editorPaneContent =
                                         let
                                             selectEventFromFileTreeNode upperPath ( nodeName, nodeContent ) =
@@ -1044,9 +1046,7 @@ view state =
                                                     ProjectState.TreeNode _ ->
                                                         Nothing
                                         in
-                                        [ [ Element.text "Choose one of the files in the project to open in the editor" ]
-                                            |> Element.paragraph []
-                                        , viewFileTree
+                                        viewFileTree
                                             { selectEventFromNode = selectEventFromFileTreeNode
                                             , iconFromFileName = iconFromFileName
                                             }
@@ -1055,13 +1055,7 @@ view state =
                                                 [ Element.scrollbars
                                                 , Element.width Element.fill
                                                 , Element.height Element.fill
-                                                ]
-                                        ]
-                                            |> Element.column
-                                                [ Element.spacing defaultFontSize
                                                 , Element.padding defaultFontSize
-                                                , Element.width Element.fill
-                                                , Element.height Element.fill
                                                 ]
                                     }
 
@@ -1286,10 +1280,16 @@ view state =
                                         |> Element.el [ Element.centerX ]
                                     ]
                                         |> Element.column [ Element.spacing (defaultFontSize // 2) ]
+
+                        exampleUrl =
+                            "https://github.com/onlinegamemaker/making-online-games/tree/fd35d23d89a50014097e64d362f1a991a8af206f/games-program-codes/simple-snake"
                     in
                     popupElementAttributesFromAttributes
-                        { title = "Load Project from Tree in Git Repository"
-                        , guide = "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: https://github.com/onlinegamemaker/making-online-games/tree/7b0fe6018e6f464bbee193f063d26c80cc6e6653/games-program-codes/simple-snake"
+                        { title = "Load Project from Git Repository"
+                        , guideParagraphItems =
+                            [ Element.text "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: "
+                            , linkElementFromUrlAndTextLabel { url = exampleUrl, labelText = exampleUrl }
+                            ]
                         , contentElement =
                             [ urlInputElement
                             , sendRequestButton
@@ -1478,7 +1478,7 @@ toggleEnlargedPaneButton state pane =
 
 type alias PopupAttributes event =
     { title : String
-    , guide : String
+    , guideParagraphItems : List (Element.Element event)
     , contentElement : Element.Element event
     }
 
@@ -1566,7 +1566,8 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
                     linkElementFromUrl urlToProject
     in
     { title = "Save or Share Project"
-    , guide = "Get a link that you or others can later use to load the project's current state into the editor again."
+    , guideParagraphItems =
+        [ Element.text "Get a link that you or others can later use to load the project's current state into the editor again." ]
     , contentElement =
         [ projectSummaryElement
         , buttonGenerateUrl |> Element.el [ Element.centerX ]
@@ -1643,9 +1644,9 @@ activityBar =
 
 
 popupElementAttributesFromAttributes : PopupAttributes Event -> List (Element.Attribute Event)
-popupElementAttributesFromAttributes { title, guide, contentElement } =
+popupElementAttributesFromAttributes { title, guideParagraphItems, contentElement } =
     [ [ title |> Element.text |> Element.el (headingAttributes 3)
-      , [ guide |> Element.text ] |> Element.paragraph [ elementFontSizePercent 80 ]
+      , guideParagraphItems |> Element.paragraph [ elementFontSizePercent 80 ]
       , contentElement
       ]
         |> Element.column
@@ -1699,8 +1700,19 @@ viewOutputPaneContent state =
                             ]
                                 |> Element.paragraph [ Element.padding defaultFontSize ]
 
-                    Just _ ->
-                        Element.text "Compiling..." |> Element.el [ Element.padding defaultFontSize ]
+                    Just pendingElmMakeRequest ->
+                        let
+                            elmMakeRequestEntryPointFilePathAbs =
+                                pendingElmMakeRequest.request.workingDirectoryPath
+                                    ++ pendingElmMakeRequest.request.entryPointFilePathFromWorkingDirectory
+                        in
+                        [ Element.text
+                            ("Compiling module '"
+                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                ++ "' ..."
+                            )
+                        ]
+                            |> Element.paragraph [ Element.padding defaultFontSize ]
             , header = Element.none
             }
 
@@ -2051,7 +2063,7 @@ saveProjectButton =
 loadFromGitOpenDialogButton : Element.Element Event
 loadFromGitOpenDialogButton =
     buttonElement
-        { label = "📂 Load From Git"
+        { label = "📂 Load From Git Repository"
         , onPress = Just (UserInputLoadFromGit LoadFromGitOpenDialog)
         }
 
