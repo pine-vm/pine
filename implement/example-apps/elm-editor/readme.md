@@ -3,10 +3,11 @@
 The [Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor) is an integrated development environment for building Elm apps.
 
 This project minimizes the friction for newcomers to get started with programming.
+Since the frontend is entirely web-based, it requires practically no installation. Any modern web browser is sufficient to write code, see code diagnostics, and live test apps.
 
 To see the Elm Editor in action, test the public instance at https://elm-editor.com
 
-![working on a game using the Elm Editor](./../../../guide/image/2020-12-31-elm-editor-with-project-freemake.png)
+![working on a game using the Elm Editor](./../../../guide/image/2021-03-17-elm-editor-user-interface.png)
 
 ## Overview of Features
 
