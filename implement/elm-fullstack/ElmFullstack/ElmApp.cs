@@ -824,11 +824,22 @@ jsonDecodeState =
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToCompileElmApp()
         {
-            var parseElmAppCodeFiles = CompileElmProgramAppCodeFiles();
+            var javascript = JavascriptToCompileElmApp.Value;
 
+            var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
+
+            var initAppResult = javascriptEngine.Evaluate(javascript);
+
+            return javascriptEngine;
+        }
+
+        static readonly Lazy<string> JavascriptToCompileElmApp = new Lazy<string>(BuildJavascriptToCompileElmApp);
+
+        static string BuildJavascriptToCompileElmApp()
+        {
             var javascriptFromElmMake =
                 ProcessFromElm019Code.CompileElmToJavascript(
-                    parseElmAppCodeFiles,
+                    CompileElmProgramAppCodeFiles(),
                     ImmutableList.Create("src", "Main.elm"));
 
             var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
@@ -841,16 +852,10 @@ jsonDecodeState =
                     arity: 1),
                 };
 
-            var javascriptPreparedToRun =
+            return
                 ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
                     javascriptMinusCrashes,
                     listFunctionToPublish);
-
-            var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
-
-            var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
-
-            return javascriptEngine;
         }
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CompileElmProgramAppCodeFiles() =>
