@@ -9,43 +9,55 @@ import Json.Encode
 import Platform
 
 
-type alias LowerForSourceFilesArguments =
+type alias CompilationArguments =
     { sourceFiles : CompileFullstackApp.AppFiles
-    , compilationInterfaceElmModuleName : String
+    , compilationInterfaceElmModuleNamePrefixes : List String
     }
 
 
-type alias LowerForSourceFilesResponse =
-    Result String CompileFullstackApp.AppFiles
+type alias CompilationResponse =
+    Result (List CompileFullstackApp.CompilationError) CompileFullstackApp.AppFiles
 
 
 lowerForSourceFilesSerialized : String -> String
 lowerForSourceFilesSerialized argumentsJson =
     (case Json.Decode.decodeString jsonDecodeLowerForSourceFilesArguments argumentsJson of
         Err decodeError ->
-            Err
-                ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError)
+            Err ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError)
 
         Ok args ->
-            CompileFullstackApp.loweredForSourceFiles args.compilationInterfaceElmModuleName args.sourceFiles
+            CompileFullstackApp.loweredForSourceFiles args.compilationInterfaceElmModuleNamePrefixes args.sourceFiles
     )
+        |> Result.mapError (CompileFullstackApp.OtherCompilationError >> List.singleton)
         |> jsonEncodeLowerForSourceFilesResponse
         |> Json.Encode.encode 0
 
 
-jsonEncodeLowerForSourceFilesResponse : LowerForSourceFilesResponse -> Json.Encode.Value
+jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value
 jsonEncodeLowerForSourceFilesResponse submissionResponse =
     json_encode_Result
-        Json.Encode.string
+        (Json.Encode.list jsonEncodeCompilationError)
         jsonEncodeAppCode
         submissionResponse
 
 
-jsonDecodeLowerForSourceFilesArguments : Json.Decode.Decoder LowerForSourceFilesArguments
+jsonDecodeLowerForSourceFilesArguments : Json.Decode.Decoder CompilationArguments
 jsonDecodeLowerForSourceFilesArguments =
-    Json.Decode.map2 LowerForSourceFilesArguments
+    Json.Decode.map2 CompilationArguments
         (Json.Decode.field "sourceFiles" jsonDecodeAppCode)
-        (Json.Decode.field "compilationInterfaceElmModuleName" Json.Decode.string)
+        (Json.Decode.field "compilationInterfaceElmModuleNamePrefixes" (Json.Decode.list Json.Decode.string))
+
+
+jsonEncodeCompilationError : CompileFullstackApp.CompilationError -> Json.Encode.Value
+jsonEncodeCompilationError compilationError =
+    case compilationError of
+        CompileFullstackApp.MissingDependencyError _ ->
+            [ ( "MissingDependencyError", Json.Encode.string "Not implemented" ) ]
+                |> Json.Encode.object
+
+        CompileFullstackApp.OtherCompilationError otherError ->
+            [ ( "OtherCompilationError", Json.Encode.list identity [ Json.Encode.string otherError ] ) ]
+                |> Json.Encode.object
 
 
 jsonEncodeAppCode : CompileFullstackApp.AppFiles -> Json.Encode.Value

@@ -32,7 +32,7 @@ namespace ElmFullstack
 
         static public string GenerateJsonCodersInterfaceModuleName => "ElmFullstackCompilerInterface.GenerateJsonCoders";
 
-        static public string SourceFilesInterfaceModuleName => "ElmFullstackCompilerInterface.SourceFiles";
+        static public IImmutableList<string> CompilationInterfaceModuleNamePrefixes => ImmutableList.Create("ElmFullstackCompilerInterface", "CompilationInterface");
 
         static public string FrontendWebElmModuleName => "FrontendWeb.Main";
     }
@@ -558,10 +558,10 @@ namespace ElmFullstack
             {
                 var sourceFilesJson =
                     sourceFiles
-                    .Select(appCodeFile => new AppCodeEntry
+                    .Select(appCodeFile => new CompilerSerialInterface.AppCodeEntry
                     {
                         path = appCodeFile.Key,
-                        content = new BytesJson { AsBase64 = Convert.ToBase64String(appCodeFile.Value.ToArray()) },
+                        content = new CompilerSerialInterface.BytesJson { AsBase64 = Convert.ToBase64String(appCodeFile.Value.ToArray()) },
                     })
                     .ToImmutableList();
 
@@ -569,7 +569,7 @@ namespace ElmFullstack
                     new
                     {
                         sourceFiles = sourceFilesJson,
-                        compilationInterfaceElmModuleName = ElmAppInterfaceConvention.SourceFilesInterfaceModuleName,
+                        compilationInterfaceElmModuleNamePrefixes = ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes,
                     }
                 );
 
@@ -578,11 +578,21 @@ namespace ElmFullstack
                     ?.ToString();
 
                 var responseStructure =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<string, IReadOnlyList<AppCodeEntry>>>(
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(
                         responseJson);
 
                 if (responseStructure.Ok?.FirstOrDefault() == null)
-                    throw new Exception("Failed compilation: " + responseStructure.Err?.FirstOrDefault());
+                {
+                    var compilationErrors = responseStructure.Err?.FirstOrDefault();
+
+                    if (compilationErrors == null)
+                        throw new Exception("Failed compilation: Protocol error: Missing error descriptions.");
+
+                    var errorsText =
+                        string.Join("\n", compilationErrors.Select(DescribeCompilationError));
+
+                    throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + errorsText);
+                }
 
                 var resultFiles =
                     responseStructure.Ok?.FirstOrDefault()
@@ -810,18 +820,6 @@ jsonDecodeState =
 
 ";
 
-        struct AppCodeEntry
-        {
-            public IReadOnlyList<string> path;
-
-            public BytesJson content;
-        }
-
-        struct BytesJson
-        {
-            public string AsBase64;
-        }
-
         static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToCompileElmApp()
         {
             var javascript = JavascriptToCompileElmApp.Value;
@@ -876,6 +874,29 @@ jsonDecodeState =
                     return memoryStream.ToArray();
                 }
             }
+        }
+
+        static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError) =>
+            Newtonsoft.Json.JsonConvert.SerializeObject(compilationError, Newtonsoft.Json.Formatting.Indented);
+    }
+
+    namespace CompilerSerialInterface
+    {
+        struct CompilationError
+        {
+            public IReadOnlyList<string> OtherCompilationError;
+        }
+
+        struct AppCodeEntry
+        {
+            public IReadOnlyList<string> path;
+
+            public BytesJson content;
+        }
+
+        struct BytesJson
+        {
+            public string AsBase64;
         }
     }
 }

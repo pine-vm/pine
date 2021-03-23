@@ -1,4 +1,4 @@
-module CompileFullstackApp exposing (AppFiles, loweredForSourceFiles)
+module CompileFullstackApp exposing (AppFiles, CompilationError(..), loweredForSourceFiles)
 
 import Base64
 import Bytes
@@ -23,7 +23,7 @@ type alias AppFiles =
 
 type CompilationError
     = MissingDependencyError DependencyKey
-    | NotSupportedError String
+    | OtherCompilationError String
 
 
 type DependencyKey
@@ -52,12 +52,17 @@ asCompletelyLoweredElmApp dependencies sourceFiles =
     Ok sourceFiles
 
 
-loweredForSourceFiles : String -> AppFiles -> Result String AppFiles
-loweredForSourceFiles compilationInterfaceElmModuleName sourceFiles =
-    mapElmModuleWithNameIfExists
-        compilationInterfaceElmModuleName
-        (mapSourceFilesModuleText sourceFiles)
-        sourceFiles
+loweredForSourceFiles : List String -> AppFiles -> Result String AppFiles
+loweredForSourceFiles compilationInterfaceElmModuleNamePrefixes sourceFiles =
+    compilationInterfaceElmModuleNamePrefixes
+        |> listFoldlToAggregateResult
+            (\compilationInterfaceElmModuleNamePrefix files ->
+                mapElmModuleWithNameIfExists
+                    (compilationInterfaceElmModuleNamePrefix ++ ".SourceFiles")
+                    (mapSourceFilesModuleText sourceFiles)
+                    files
+            )
+            (Ok sourceFiles)
 
 
 sourceFileFunctionNameStart : String
@@ -90,23 +95,19 @@ mapSourceFilesModuleText sourceFiles moduleText =
                             _ ->
                                 Nothing
                     )
-                |> List.foldl
-                    (\functionName previousAggregateResult ->
-                        previousAggregateResult
-                            |> Result.andThen
-                                (\previousAggregate ->
-                                    replaceFunctionInSourceFilesModuleText
-                                        sourceFiles
-                                        { moduleText = previousAggregate
-                                        , functionName = functionName
-                                        }
-                                        |> Result.mapError
-                                            (\replaceFunctionError ->
-                                                "Failed to replace function '"
-                                                    ++ functionName
-                                                    ++ "': "
-                                                    ++ replaceFunctionError
-                                            )
+                |> listFoldlToAggregateResult
+                    (\functionName previousAggregate ->
+                        replaceFunctionInSourceFilesModuleText
+                            sourceFiles
+                            { moduleText = previousAggregate
+                            , functionName = functionName
+                            }
+                            |> Result.mapError
+                                (\replaceFunctionError ->
+                                    "Failed to replace function '"
+                                        ++ functionName
+                                        ++ "': "
+                                        ++ replaceFunctionError
                                 )
                     )
                     (addImportInElmModuleText [ "Base64" ] moduleText)
@@ -474,3 +475,11 @@ parserProblemToString p =
 
         Parser.BadRepeat ->
             "bad repeat"
+
+
+listFoldlToAggregateResult : (a -> b -> Result e b) -> Result e b -> List a -> Result e b
+listFoldlToAggregateResult getElementResult =
+    List.foldl
+        (\element previousAggregateResult ->
+            previousAggregateResult |> Result.andThen (\previousAggregate -> getElementResult element previousAggregate)
+        )
