@@ -1788,36 +1788,49 @@ viewOutputPaneContent state =
                         compileResultElement =
                             case elmMakeOk.compiledHtmlDocument of
                                 Nothing ->
-                                    let
-                                        errorsElement =
-                                            case elmMakeOk.reportFromJson of
-                                                Nothing ->
-                                                    outputElementFromPlainText elmMakeOk.response.processOutput.standardError
+                                    [ if
+                                        (elmMakeOk.response.reportJsonProcessOutput.exitCode == 0)
+                                            && (elmMakeOk.response.reportJsonProcessOutput.standardError |> String.trim |> String.isEmpty)
+                                      then
+                                        ( "✔ No Errors"
+                                        , [ ("Found no errors in module '"
+                                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                                ++ "'"
+                                            )
+                                                |> Element.text
+                                          ]
+                                            |> Element.paragraph []
+                                        )
 
-                                                Just (Err decodeError) ->
-                                                    outputElementFromPlainText
-                                                        ("Failed to decode JSON report: " ++ decodeError)
+                                      else
+                                        ( "Errors"
+                                        , case elmMakeOk.reportFromJson of
+                                            Nothing ->
+                                                outputElementFromPlainText elmMakeOk.response.processOutput.standardError
 
-                                                Just (Ok (ElmMakeExecutableFile.CompileErrorsReport compileErrors)) ->
-                                                    compileErrors
-                                                        |> List.map (viewElmMakeCompileError elmMakeRequest)
-                                                        |> Element.column
-                                                            [ Element.spacing defaultFontSize
-                                                            , Element.width Element.fill
-                                                            ]
+                                            Just (Err decodeError) ->
+                                                outputElementFromPlainText
+                                                    ("Failed to decode JSON report: " ++ decodeError)
 
-                                                Just (Ok (ElmMakeExecutableFile.ErrorReport error)) ->
-                                                    [ error.title
-                                                        |> Element.text
-                                                        |> Element.el [ Element.Font.bold ]
-                                                    , viewElementFromElmMakeCompileErrorMessage error.message
-                                                    ]
-                                                        |> Element.column
-                                                            [ Element.spacing (defaultFontSize // 2)
-                                                            , Element.width Element.fill
-                                                            ]
-                                    in
-                                    [ ( "Errors", errorsElement )
+                                            Just (Ok (ElmMakeExecutableFile.CompileErrorsReport compileErrors)) ->
+                                                compileErrors
+                                                    |> List.map (viewElmMakeCompileError elmMakeRequest)
+                                                    |> Element.column
+                                                        [ Element.spacing defaultFontSize
+                                                        , Element.width Element.fill
+                                                        ]
+
+                                            Just (Ok (ElmMakeExecutableFile.ErrorReport error)) ->
+                                                [ error.title
+                                                    |> Element.text
+                                                    |> Element.el [ Element.Font.bold ]
+                                                , viewElementFromElmMakeCompileErrorMessage error.message
+                                                ]
+                                                    |> Element.column
+                                                        [ Element.spacing (defaultFontSize // 2)
+                                                        , Element.width Element.fill
+                                                        ]
+                                        )
                                     , ( "Elm make standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
                                     ]
                                         |> List.map
