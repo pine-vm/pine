@@ -6,6 +6,8 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
+            "Gizra/elm-keyboard-event": "1.0.1",
+            "SwiftsNamesake/proper-keyboard": "4.0.0",
             "TSFoster/elm-bytes-extra": "1.3.0",
             "cmditch/elm-bigint": "2.0.1",
             "danfishgold/base64-bytes": "1.0.3",

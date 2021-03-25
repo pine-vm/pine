@@ -2,6 +2,7 @@ port module FrontendWeb.Main exposing (Event(..), State, defaultProject, init, m
 
 import Base64
 import Browser
+import Browser.Events
 import Browser.Navigation as Navigation
 import Bytes
 import Bytes.Decode
@@ -28,6 +29,8 @@ import Html.Events
 import Http
 import Json.Decode
 import Json.Encode
+import Keyboard.Event
+import Keyboard.Key
 import List.Extra
 import ProjectState
 import ProjectState_2021_01
@@ -105,6 +108,7 @@ type Event
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
     | UserInputSaveProject (Maybe { createDiffIfBaseAvailable : Bool })
+    | UserInputKeyDownEvent Keyboard.Event.KeyboardEvent
     | DiscardEvent
 
 
@@ -164,6 +168,7 @@ subscriptions : State -> Sub Event
 subscriptions _ =
     [ receiveMessageFromMonacoFrame (MonacoEditorEvent >> WorkspaceEvent)
     , Time.every 500 TimeHasArrived
+    , Browser.Events.onKeyDown (Keyboard.Event.decodeKeyboardEvent |> Json.Decode.map UserInputKeyDownEvent)
     ]
         |> Sub.batch
 
@@ -355,6 +360,13 @@ update event stateBefore =
 
                 WorkspaceErr _ ->
                     ( stateBefore, Cmd.none )
+
+        UserInputKeyDownEvent keyboardEvent ->
+            if keyboardEvent.keyCode == Keyboard.Key.Escape then
+                update UserInputCloseModalDialog stateBefore
+
+            else
+                ( stateBefore, Cmd.none )
 
         DiscardEvent ->
             ( stateBefore, Cmd.none )
