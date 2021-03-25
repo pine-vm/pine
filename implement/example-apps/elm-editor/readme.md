@@ -7,6 +7,8 @@ Since the frontend is entirely web-based, it requires practically no setup. Any 
 
 To see Elm Editor in action, check out the public instance at https://elm-editor.com
 
+For background information and an overview of the project, see https://youtu.be/ayeIgeFfnL8
+
 ![running an app in Elm Editor](./../../../guide/image/2021-03-17-elm-editor-user-interface.png)
 
 ## Overview of Features
