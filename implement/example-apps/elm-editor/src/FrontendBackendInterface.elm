@@ -18,6 +18,7 @@ type alias ElmMakeRequestStructure =
     { files : List FileWithPath
     , workingDirectoryPath : List String
     , entryPointFilePathFromWorkingDirectory : List String
+    , makeOptionDebug : Bool
     }
 
 

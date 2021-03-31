@@ -84,6 +84,7 @@ type alias WorkingProjectStateStructure =
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , viewEnlargedPane : Maybe WorkspacePane
+    , enableInspectionOnCompile : Bool
     }
 
 
@@ -123,6 +124,7 @@ type WorkspaceEventStructure
     | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
     | UserInputSetEnlargedPane (Maybe WorkspacePane)
+    | UserInputSetInspectionOnCompile Bool
 
 
 type UserInputLoadFromGitEventStructure
@@ -616,6 +618,17 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
         UserInputSetEnlargedPane enlargedPane ->
             ( { stateBefore | viewEnlargedPane = enlargedPane }, Cmd.none )
 
+        UserInputSetInspectionOnCompile enableInspection ->
+            let
+                state =
+                    { stateBefore | enableInspectionOnCompile = enableInspection }
+            in
+            if state == stateBefore then
+                ( stateBefore, Cmd.none )
+
+            else
+                updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile state
+
 
 processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
 processEventUrlChanged url stateBefore =
@@ -918,6 +931,7 @@ elmMakeRequestForFileOpenedInEditor workspace =
                             )
                 , workingDirectoryPath = workingDirectoryPath
                 , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
+                , makeOptionDebug = workspace.enableInspectionOnCompile
                 }
 
 
@@ -1696,7 +1710,7 @@ popupElementAttributesFromAttributes { title, guideParagraphItems, contentElemen
 
 viewOutputPaneContent :
     WorkingProjectStateStructure
-    -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element e }
+    -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element WorkspaceEventStructure }
 viewOutputPaneContent state =
     case state.elmMakeResult of
         Nothing ->
@@ -1721,7 +1735,14 @@ viewOutputPaneContent state =
                         [ Element.text
                             ("Compiling module '"
                                 ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
-                                ++ "' ..."
+                                ++ "' with inspection "
+                                ++ (if pendingElmMakeRequest.request.makeOptionDebug then
+                                        "enabled"
+
+                                    else
+                                        "disabled"
+                                   )
+                                ++ " ..."
                             )
                         ]
                             |> Element.paragraph [ Element.padding defaultFontSize ]
@@ -1763,17 +1784,28 @@ viewOutputPaneContent state =
                             else
                                 Just "⚠️ File contents changed since compiling"
 
-                        warnAboutOutdatedCompilationElement =
-                            warnAboutOutdatedCompilationText
-                                |> Maybe.withDefault ""
-                                |> Element.text
-                                |> List.singleton
-                                |> Element.paragraph
-                                    [ Element.padding (defaultFontSize // 2)
-                                    , Element.Background.color (Element.rgb 0.3 0.2 0.1)
-                                    , Element.width Element.fill
-                                    , Element.transparent (warnAboutOutdatedCompilationText == Nothing)
-                                    ]
+                        ( toggleInspectionLabel, toggleInspectionEvent ) =
+                            if state.enableInspectionOnCompile then
+                                ( "Disable Inspection", UserInputSetInspectionOnCompile False )
+
+                            else
+                                ( "🔍 Enable Inspection", UserInputSetInspectionOnCompile True )
+
+                        warnAboutOutdatedOrOfferModifyCompilationElement =
+                            case warnAboutOutdatedCompilationText of
+                                Just warnText ->
+                                    warnText
+                                        |> Element.text
+                                        |> List.singleton
+                                        |> Element.paragraph
+                                            [ Element.padding (defaultFontSize // 2)
+                                            , Element.Background.color (Element.rgb 0.3 0.2 0.1)
+                                            , Element.width Element.fill
+                                            , Element.transparent (warnAboutOutdatedCompilationText == Nothing)
+                                            ]
+
+                                Nothing ->
+                                    buttonElement { label = toggleInspectionLabel, onPress = Just toggleInspectionEvent }
 
                         outputElementFromPlainText outputText =
                             [ outputText
@@ -1864,7 +1896,7 @@ viewOutputPaneContent state =
                                             ]
                     in
                     { mainContent = compileResultElement
-                    , header = warnAboutOutdatedCompilationElement
+                    , header = warnAboutOutdatedOrOfferModifyCompilationElement
                     }
 
 
@@ -2158,6 +2190,7 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     , elmMakeResult = Nothing
     , elmFormatResult = Nothing
     , viewEnlargedPane = Nothing
+    , enableInspectionOnCompile = False
     }
 
 

@@ -94,6 +94,8 @@ public class ElmMakeRequestStructure
     public IReadOnlyList<string> entryPointFilePathFromWorkingDirectory;
 
     public IReadOnlyList<string> workingDirectoryPath;
+
+    public bool makeOptionDebug;
 }
 
 public class FormatElmModuleTextResponseStructure
@@ -285,7 +287,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
 
     var elmMakeOutputFileName = "elm-make-output.html";
 
-    var commandLineCommonArguments = "make " + entryPointFilePathFromWorkingDirectory;
+    var commandLineCommonArguments = "make " + entryPointFilePathFromWorkingDirectory + " " + (elmMakeRequest.makeOptionDebug ? "--debug" : "");
 
     var commandLineArguments = commandLineCommonArguments + " --output=" + elmMakeOutputFileName;
     var reportJsonCommandLineArguments = commandLineCommonArguments + " --report=json";
