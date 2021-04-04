@@ -295,57 +295,8 @@ namespace ElmFullstack.WebHost
                         }
                     }
 
-                    var requestPathIsDeployAppConfigAndInitElmAppState =
-                        context.Request.Path.Equals(new PathString(PathApiDeployAppConfigAndInitElmAppState));
-
-                    if (context.Request.Path.Equals(new PathString(PathApiGetDeployedAppConfig)))
+                    async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
                     {
-                        if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            context.Response.StatusCode = 405;
-                            await context.Response.WriteAsync("Method not supported.");
-                            return;
-                        }
-
-                        var appConfig = publicAppHost?.processVolatileRepresentation?.lastAppConfig?.appConfigComponent;
-
-                        if (appConfig == null)
-                        {
-                            context.Response.StatusCode = 404;
-                            await context.Response.WriteAsync("I did not find an app config in the history. Looks like no app was deployed so far.");
-                            return;
-                        }
-
-                        var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
-
-                        var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
-
-                        var appConfigFilesNamesAndContents =
-                            appConfigTree.EnumerateBlobsTransitive();
-
-                        var appConfigZipArchive =
-                            ZipArchive.ZipArchiveFromEntries(
-                                ElmApp.ToFlatDictionaryWithPathComparer(appConfigFilesNamesAndContents));
-
-                        context.Response.StatusCode = 200;
-                        context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
-                        context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString());
-                        context.Response.Headers.Add("Content-Type", new MediaTypeHeaderValue("application/zip").ToString());
-
-                        await context.Response.Body.WriteAsync(appConfigZipArchive);
-                        return;
-                    }
-
-                    if (requestPathIsDeployAppConfigAndInitElmAppState ||
-                        context.Request.Path.Equals(new PathString(PathApiDeployAppConfigAndMigrateElmAppState)))
-                    {
-                        if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            context.Response.StatusCode = 405;
-                            await context.Response.WriteAsync("Method not supported.");
-                            return;
-                        }
-
                         var memoryStream = new MemoryStream();
                         context.Request.Body.CopyTo(memoryStream);
 
@@ -384,9 +335,203 @@ namespace ElmFullstack.WebHost
                         var compositionLogEvent =
                             CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                                 appConfigValueInFile: appConfigValueInFile,
-                                initElmAppState: requestPathIsDeployAppConfigAndInitElmAppState);
+                                initElmAppState: initElmAppState);
 
                         await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
+                    }
+
+                    var apiRoutes = new[]
+                    {
+                        new ApiRoute
+                        {
+                            path = PathApiGetDeployedAppConfig,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("get", async (context, publicAppHost) =>
+                            {
+                                var appConfig = publicAppHost?.processVolatileRepresentation?.lastAppConfig?.appConfigComponent;
+
+                                if (appConfig == null)
+                                {
+                                    context.Response.StatusCode = 404;
+                                    await context.Response.WriteAsync("I did not find an app config in the history. Looks like no app was deployed so far.");
+                                    return;
+                                }
+
+                                var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
+
+                                var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
+
+                                var appConfigFilesNamesAndContents =
+                                    appConfigTree.EnumerateBlobsTransitive();
+
+                                var appConfigZipArchive =
+                                    ZipArchive.ZipArchiveFromEntries(
+                                        ElmApp.ToFlatDictionaryWithPathComparer(appConfigFilesNamesAndContents));
+
+                                context.Response.StatusCode = 200;
+                                context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
+                                context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString());
+                                context.Response.Headers.Add("Content-Type", new MediaTypeHeaderValue("application/zip").ToString());
+
+                                await context.Response.Body.WriteAsync(appConfigZipArchive);
+                            }),
+                        },
+                        new ApiRoute
+                        {
+                            path = PathApiElmAppState,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("get", async (context, publicAppHost) =>
+                            {
+                                if (publicAppHost == null)
+                                {
+                                    context.Response.StatusCode = 400;
+                                    await context.Response.WriteAsync("Not possible because there is no app (state).");
+                                    return;
+                                }
+
+                                var processVolatileRepresentation = publicAppHost?.processVolatileRepresentation;
+
+                                var components = new List<Composition.Component>();
+
+                                var storeWriter = new DelegatingProcessStoreWriter
+                                {
+                                    StoreComponentDelegate = components.Add,
+                                    StoreProvisionalReductionDelegate = _ => { },
+                                    SetCompositionLogHeadRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
+                                };
+
+                                var reductionRecord =
+                                    processVolatileRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
+
+                                if (reductionRecord == null)
+                                {
+                                    context.Response.StatusCode = 500;
+                                    await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
+                                    return;
+                                }
+
+                                var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
+
+                                var elmAppStateReductionComponent =
+                                    components.First(c => CommonConversion.StringBase16FromByteArray(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
+
+                                var elmAppStateReductionString =
+                                    Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.ToArray());
+
+                                context.Response.StatusCode = 200;
+                                context.Response.ContentType = "application/json";
+                                await context.Response.WriteAsync(elmAppStateReductionString);
+                            })
+                            .Add("post", async (context, publicAppHost) =>
+                            {
+                                if (publicAppHost == null)
+                                {
+                                    context.Response.StatusCode = 400;
+                                    await context.Response.WriteAsync("Not possible because there is no app (state).");
+                                    return;
+                                }
+
+                                var elmAppStateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEndAsync().Result;
+
+                                var elmAppStateComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
+
+                                var appConfigValueInFile =
+                                    new ValueInFileStructure
+                                    {
+                                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
+                                    };
+
+                                processStoreWriter.StoreComponent(elmAppStateComponent);
+
+                                await attemptContinueWithCompositionEventAndSendHttpResponse(
+                                    new CompositionLogRecordInFile.CompositionEvent
+                                    {
+                                        SetElmAppState = appConfigValueInFile
+                                    });
+                            }),
+                        },
+                        new ApiRoute
+                        {
+                            path = PathApiReplaceProcessHistory,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("post", async (context, publicAppHost) =>
+                            {
+                                var memoryStream = new MemoryStream();
+                                context.Request.Body.CopyTo(memoryStream);
+
+                                var webAppConfigZipArchive = memoryStream.ToArray();
+
+                                var replacementFiles =
+                                    ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
+                                    .Select(filePathAndContent =>
+                                        (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
+                                        , content: filePathAndContent.content))
+                                    .ToImmutableList();
+
+                                lock (avoidConcurrencyLock)
+                                {
+                                    stopPublicApp();
+
+                                    foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
+                                        processStoreFileStore.DeleteFile(filePath);
+
+                                    foreach (var replacementFile in replacementFiles)
+                                        processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
+
+                                    startPublicApp();
+                                }
+
+                                context.Response.StatusCode = 200;
+                                await context.Response.WriteAsync("Successfully replaced the process history.");
+                            }),
+                        },
+                        new ApiRoute
+                        {
+                            path = PathApiDeployAppConfigAndInitElmAppState,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true)),
+                        },
+                        new ApiRoute
+                        {
+                            path = PathApiDeployAppConfigAndMigrateElmAppState,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false)),
+                        },
+                    };
+
+                    foreach (var apiRoute in apiRoutes)
+                    {
+                        if (!context.Request.Path.Equals(new PathString(apiRoute.path)))
+                            continue;
+
+                        var matchingMethod =
+                            apiRoute.methods
+                            ?.FirstOrDefault(m => m.Key.ToUpperInvariant() == context.Request.Method.ToUpperInvariant());
+
+                        if (matchingMethod?.Value == null)
+                        {
+                            var supportedMethodsNames =
+                                apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
+
+                            var guide =
+                                HtmlFromLines(
+                                    "<h2>Method Not Allowed</h2>",
+                                    "",
+                                    context.Request.Path.ToString() +
+                                    " is a valid path, but the method " + context.Request.Method.ToUpperInvariant() +
+                                    " is not supported here.",
+                                    "Only following " +
+                                    (supportedMethodsNames.Count == 1 ? "method is" : "methods are") +
+                                    " supported here: " + string.Join(", ", supportedMethodsNames),
+                                    "", "",
+                                    ApiGuide);
+
+                            context.Response.StatusCode = 405;
+                            await context.Response.WriteAsync(HtmlDocument(guide));
+                            return;
+                        }
+
+                        matchingMethod?.Value?.Invoke(context, publicAppHost);
                         return;
                     }
 
@@ -416,115 +561,6 @@ namespace ElmFullstack.WebHost
                         {
                             RevertProcessTo = new ValueInFileStructure { HashBase16 = processVersionId },
                         });
-                        return;
-                    }
-
-                    if (context.Request.Path.Equals(new PathString(PathApiElmAppState)))
-                    {
-                        if (publicAppHost == null)
-                        {
-                            context.Response.StatusCode = 400;
-                            await context.Response.WriteAsync("Not possible because there is no app (state).");
-                            return;
-                        }
-
-                        if (string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            var processVolatileRepresentation = publicAppHost?.processVolatileRepresentation;
-
-                            var components = new List<Composition.Component>();
-
-                            var storeWriter = new DelegatingProcessStoreWriter
-                            {
-                                StoreComponentDelegate = components.Add,
-                                StoreProvisionalReductionDelegate = _ => { },
-                                SetCompositionLogHeadRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
-                            };
-
-                            var reductionRecord =
-                                processVolatileRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
-
-                            if (reductionRecord == null)
-                            {
-                                context.Response.StatusCode = 500;
-                                await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
-                                return;
-                            }
-
-                            var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
-
-                            var elmAppStateReductionComponent =
-                                components.First(c => CommonConversion.StringBase16FromByteArray(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
-
-                            var elmAppStateReductionString =
-                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.ToArray());
-
-                            context.Response.StatusCode = 200;
-                            context.Response.ContentType = "application/json";
-                            await context.Response.WriteAsync(elmAppStateReductionString);
-                            return;
-                        }
-                        else
-                        {
-                            if (string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                var elmAppStateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEndAsync().Result;
-
-                                var elmAppStateComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
-
-                                var appConfigValueInFile =
-                                    new ValueInFileStructure
-                                    {
-                                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
-                                    };
-
-                                processStoreWriter.StoreComponent(elmAppStateComponent);
-
-                                await attemptContinueWithCompositionEventAndSendHttpResponse(
-                                    new CompositionLogRecordInFile.CompositionEvent
-                                    {
-                                        SetElmAppState = appConfigValueInFile
-                                    });
-                                return;
-                            }
-                            else
-                            {
-                                context.Response.StatusCode = 405;
-                                await context.Response.WriteAsync("Method not supported.");
-                                return;
-                            }
-                        }
-                    }
-
-                    if (context.Request.Path.Equals(new PathString(PathApiReplaceProcessHistory)))
-                    {
-                        var memoryStream = new MemoryStream();
-                        context.Request.Body.CopyTo(memoryStream);
-
-                        var webAppConfigZipArchive = memoryStream.ToArray();
-
-                        var replacementFiles =
-                            ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
-                            .Select(filePathAndContent =>
-                                (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
-                                , content: filePathAndContent.content))
-                            .ToImmutableList();
-
-                        lock (avoidConcurrencyLock)
-                        {
-                            stopPublicApp();
-
-                            foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
-                                processStoreFileStore.DeleteFile(filePath);
-
-                            foreach (var replacementFile in replacementFiles)
-                                processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
-
-                            startPublicApp();
-                        }
-
-                        context.Response.StatusCode = 200;
-                        await context.Response.WriteAsync("Successfully replaced the process history.");
                         return;
                     }
 
@@ -677,15 +713,24 @@ namespace ElmFullstack.WebHost
 
                         context.Response.StatusCode = statusCode;
                         await context.Response.WriteAsync(responseBodyString);
-                        return;
                     }
 
                     if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
                     {
+                        var httpApiGuide =
+                            HtmlFromLines(
+                                "<h3>HTTP APIs</h3>\n" +
+                                HtmlFromLines(apiRoutes.Select(HtmlToDescribeApiRoute).ToArray())
+                            );
+
                         context.Response.StatusCode = 200;
                         await context.Response.WriteAsync(
-                            "Welcome to Elm-fullstack version " + elm_fullstack.Program.AppVersionId + ".\n" +
-                            "To learn about this admin interface, see http://elm-fullstack.org/");
+                            HtmlDocument(
+                                HtmlFromLines(
+                                    "Welcome to the Elm Fullstack admin interface version " + elm_fullstack.Program.AppVersionId + ".",
+                                    httpApiGuide,
+                                    "",
+                                    ApiGuide)));
                         return;
                     }
 
@@ -694,6 +739,42 @@ namespace ElmFullstack.WebHost
                     return;
                 });
         }
+
+        static string ApiGuide =>
+            HtmlFromLines(
+                "The easiest way to use the APIs is via the command-line interface in the elm-fs executable file.",
+                "To learn about the admin interface and how to deploy an app, see  " + LinkHtmlElementFromUrl(LinkToGuideUrl)
+            );
+
+        static string LinkToGuideUrl => "https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md";
+
+        static string LinkHtmlElementFromUrl(string url) =>
+            "<a href='" + url + "'>" + url + "</a>";
+
+        static string HtmlFromLines(params string[] lines) =>
+            String.Join("<br>\n", lines);
+
+        static string HtmlToDescribeApiRoute(ApiRoute apiRoute) =>
+            LinkHtmlElementFromUrl(apiRoute.path) +
+            " [ " + string.Join(", ", apiRoute.methods.Select(m => m.Key.ToUpperInvariant())) + " ]";
+
+        class ApiRoute
+        {
+            public string path;
+
+            public ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>> methods;
+        }
+
+        static public string HtmlDocument(string body) =>
+            String.Join("\n",
+            new[]
+            {
+                "<html>",
+                "<body>",
+                body,
+                "</body>",
+                "</html>"
+            });
 
         static public (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
