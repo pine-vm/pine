@@ -15,12 +15,13 @@ import ElmFullstackCompilerInterface.ElmMake
 import ElmFullstackCompilerInterface.SourceFiles
 import Flate
 import MonacoHtml
+import Set
 import Url
 
 
 type alias State =
     { posixTimeMilli : Int
-    , volatileHostsIds : List String
+    , volatileHostsIds : Set.Set String
     , pendingHttpRequests : List InterfaceToHost.HttpRequestEventStructure
     , pendingTasksForRequestVolatileHost : Dict.Dict String { volatileHostId : String, startPosixTimeMilli : Int }
     }
@@ -218,7 +219,7 @@ processEventTaskComplete taskComplete stateBefore =
 
                 Ok { hostId } ->
                     ( { stateBefore
-                        | volatileHostsIds = hostId :: stateBefore.volatileHostsIds
+                        | volatileHostsIds = Set.insert hostId stateBefore.volatileHostsIds
                       }
                     , InterfaceToHost.passiveAppEventResponse
                     )
@@ -239,21 +240,27 @@ processEventTaskComplete taskComplete stateBefore =
                         bodyFromString =
                             Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
-                        httpResponse =
+                        ( httpResponse, maybeVolatileHostToRemoveId ) =
                             case requestToVolatileHostResponse of
-                                Err _ ->
-                                    { statusCode = 500
-                                    , bodyAsBase64 = bodyFromString "Error running in volatile host."
-                                    , headersToAdd = []
-                                    }
+                                Err InterfaceToHost.HostNotFound ->
+                                    ( { statusCode = 500
+                                      , bodyAsBase64 = bodyFromString "Error: Volatile host disappeared. Starting volatile host again... Please retry."
+                                      , headersToAdd = []
+                                      }
+                                    , stateBefore.pendingTasksForRequestVolatileHost
+                                        |> Dict.get taskComplete.taskId
+                                        |> Maybe.map .volatileHostId
+                                    )
 
                                 Ok requestToVolatileHostComplete ->
                                     case requestToVolatileHostComplete.exceptionToString of
                                         Just exceptionToString ->
-                                            { statusCode = 500
-                                            , bodyAsBase64 = bodyFromString ("Exception in volatile host:\n" ++ exceptionToString)
-                                            , headersToAdd = []
-                                            }
+                                            ( { statusCode = 500
+                                              , bodyAsBase64 = bodyFromString ("Exception in volatile host:\n" ++ exceptionToString)
+                                              , headersToAdd = []
+                                              }
+                                            , Nothing
+                                            )
 
                                         Nothing ->
                                             let
@@ -274,15 +281,24 @@ processEventTaskComplete taskComplete stateBefore =
                                                             , deflateEncodedBody |> Base64.fromBytes
                                                             )
                                             in
-                                            { statusCode = 200
-                                            , bodyAsBase64 = bodyAsBase64
-                                            , headersToAdd = headersToAdd
-                                            }
+                                            ( { statusCode = 200
+                                              , bodyAsBase64 = bodyAsBase64
+                                              , headersToAdd = headersToAdd
+                                              }
+                                            , Nothing
+                                            )
+
+                        volatileHostsIds =
+                            case maybeVolatileHostToRemoveId of
+                                Nothing ->
+                                    stateBefore.volatileHostsIds
+
+                                Just volatileHostToRemoveId ->
+                                    stateBefore.volatileHostsIds |> Set.remove volatileHostToRemoveId
                     in
                     ( { stateBefore
-                        | pendingHttpRequests =
-                            stateBefore.pendingHttpRequests
-                                |> List.filter ((==) httpRequestEvent >> not)
+                        | pendingHttpRequests = stateBefore.pendingHttpRequests |> List.filter ((==) httpRequestEvent >> not)
+                        , volatileHostsIds = volatileHostsIds
                       }
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
@@ -302,7 +318,7 @@ tasksFromState : State -> List InterfaceToHost.StartTaskStructure
 tasksFromState state =
     let
         tasksToEnsureEnoughVolatileHostsCreated =
-            if List.length state.volatileHostsIds < parallelVolatileHostsCount then
+            if Set.size state.volatileHostsIds < parallelVolatileHostsCount then
                 [ { taskId = "create-vhost"
                   , task = InterfaceToHost.CreateVolatileHost { script = VolatileHost.volatileHostScript }
                   }
@@ -329,7 +345,7 @@ tasksFromState state =
 
         freeVolatileHostsIds =
             state.volatileHostsIds
-                |> List.filter
+                |> Set.filter
                     (\volatileHostId ->
                         pendingTasksForRequestVolatileHost
                             |> Dict.values
@@ -342,7 +358,7 @@ tasksFromState state =
             tasksToEnsureEnoughVolatileHostsCreated
 
         Just ( taskId, httpRequestEvent ) ->
-            case List.head freeVolatileHostsIds of
+            case List.head (Set.toList freeVolatileHostsIds) of
                 Nothing ->
                     tasksToEnsureEnoughVolatileHostsCreated
 
@@ -371,7 +387,7 @@ taskIdForHttpRequest httpRequestEvent =
 interfaceToHost_initState : State
 interfaceToHost_initState =
     { posixTimeMilli = 0
-    , volatileHostsIds = []
+    , volatileHostsIds = Set.empty
     , pendingHttpRequests = []
     , pendingTasksForRequestVolatileHost = Dict.empty
     }
