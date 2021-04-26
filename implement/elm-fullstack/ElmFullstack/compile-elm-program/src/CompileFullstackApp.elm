@@ -2,6 +2,7 @@ module CompileFullstackApp exposing
     ( AppFiles
     , CompilationError(..)
     , ElmTypeStructure(..)
+    , appendLineAndStringInLogFile
     , loweredForSourceFiles
     , loweredForSourceFilesAndJsonCoders
     , parseElmTypeText
@@ -135,6 +136,8 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
                     (\functionDeclaration previousAggregate ->
                         replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText
                             { functionDeclaration = functionDeclaration
+                            , declaringModuleName =
+                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
                             , declaringModuleText = moduleText
                             }
                             previousAggregate
@@ -190,8 +193,11 @@ mapSourceFilesModuleText ( sourceFiles, moduleText ) =
                 |> Result.map (Tuple.pair sourceFiles)
 
 
-replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText : { functionDeclaration : Elm.Syntax.Expression.Function, declaringModuleText : String } -> ( AppFiles, String ) -> Result String ( AppFiles, String )
-replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText { functionDeclaration, declaringModuleText } ( sourceFiles, moduleText ) =
+replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText :
+    { functionDeclaration : Elm.Syntax.Expression.Function, declaringModuleName : List String, declaringModuleText : String }
+    -> ( AppFiles, String )
+    -> Result String ( AppFiles, String )
+replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText { functionDeclaration, declaringModuleName, declaringModuleText } ( sourceFiles, moduleText ) =
     case functionDeclaration.signature of
         Nothing ->
             Err "Missing function signature"
@@ -205,7 +211,8 @@ replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText { functionDeclaratio
                     case
                         appWithSupportForCodingElmType
                             sourceFiles
-                            { typeCanonicalName = functionType.typeCanonicalName, moduleText = moduleText }
+                            { typeCanonicalName = functionType.typeCanonicalName, emitModuleName = declaringModuleName }
+                            moduleText
                     of
                         Err error ->
                             Err ("Failed to add supporting coding functions: " ++ error)
@@ -247,367 +254,155 @@ replaceJsonCodingFunctionAndAddSupportingSyntaxInModuleText { functionDeclaratio
 
 {-| Returns a new version of the app files because it adds exposure of custom type tag constructors.
 -}
-appWithSupportForCodingElmType : AppFiles -> { typeCanonicalName : String, moduleText : String } -> Result String ( AppFiles, { moduleText : String, decodeFunctionName : String, encodeFunctionName : String } )
-appWithSupportForCodingElmType appFiles { typeCanonicalName, moduleText } =
+appWithSupportForCodingElmType : AppFiles -> { typeCanonicalName : String, emitModuleName : List String } -> String -> Result String ( AppFiles, { moduleText : String, decodeFunctionName : String, encodeFunctionName : String } )
+appWithSupportForCodingElmType appFiles { typeCanonicalName, emitModuleName } moduleText =
     let
         sourceModules =
             elmModulesDictFromAppFiles appFiles
-
-        getExpressionsAndDependenciesForType : String -> Result String ResolveTypeResult
-        getExpressionsAndDependenciesForType canonicalTypeName =
-            jsonCodingResolveType
-                { rootTypeText = canonicalTypeName
-                , maybeExplicitSourceModuleName = Nothing
-                , rootSourceModuleText = moduleText
-                }
-                sourceModules
     in
-    case getExpressionsAndDependenciesForType typeCanonicalName of
-        Err error ->
-            Err ("Failed to get expressions: " ++ error)
+    case sourceModules |> Dict.get (String.join "." emitModuleName) of
+        Nothing ->
+            Err ("Missing file for module '" ++ String.join "." emitModuleName ++ "'")
 
-        Ok elmTypeExpressionsAndDependencies ->
-            case
-                enumerateExpressionsResolvingAllDependencies
-                    getExpressionsAndDependenciesForType
-                    (Set.singleton elmTypeExpressionsAndDependencies.canonicalTypeText)
-            of
+        Just emitModule ->
+            let
+                getExpressionsAndDependenciesForType : String -> Result String ResolveTypeResult
+                getExpressionsAndDependenciesForType canonicalTypeName =
+                    jsonCodingResolveType
+                        { rootTypeText = canonicalTypeName
+                        , currentModule = emitModule
+                        }
+                        sourceModules
+            in
+            case getExpressionsAndDependenciesForType typeCanonicalName of
                 Err error ->
-                    Err ("Failed to get transitive expressions and dependencies: " ++ error)
+                    Err ("Failed to get expressions: " ++ error)
 
-                Ok functionCodingExpressions ->
+                Ok elmTypeExpressionsAndDependencies ->
                     case
-                        functionCodingExpressions
-                            |> List.map
-                                (\supportingCoding ->
-                                    buildJsonCodingFunctionTexts
-                                        { typeText = supportingCoding.elmType
-                                        , encodeExpression = supportingCoding.expressions.encodeExpression
-                                        , decodeExpression = supportingCoding.expressions.decodeExpression
-                                        }
-                                )
-                            |> Result.Extra.combine
+                        enumerateExpressionsResolvingAllDependencies
+                            getExpressionsAndDependenciesForType
+                            (Set.singleton elmTypeExpressionsAndDependencies.canonicalTypeText)
                     of
                         Err error ->
-                            Err ("Failed to build supporting coding function text: " ++ error)
+                            Err ("Failed to get transitive expressions and dependencies: " ++ error)
 
-                        Ok supportingCodingFunctionsBuilds ->
-                            let
-                                selfModuleName =
-                                    parseElmModuleText moduleText
-                                        |> Result.toMaybe
-                                        |> Maybe.map (.moduleDefinition >> Elm.Syntax.Node.value)
-                                        |> Maybe.map Elm.Syntax.Module.moduleName
-                                        |> Maybe.withDefault []
-
-                                modulesToImportForCustomTypes =
-                                    functionCodingExpressions
-                                        |> List.map (.expressions >> .referencedModules)
-                                        |> List.foldl Set.union Set.empty
-                                        |> Set.toList
-                                        |> List.map (String.split ".")
-
-                                modulesToImport =
-                                    [ [ "Base64" ]
-                                    , [ "Dict" ]
-                                    , [ "Set" ]
-                                    , [ "Json", "Decode" ]
-                                    , [ "Json", "Encode" ]
-                                    , [ "Bytes" ]
-                                    , [ "Bytes", "Decode" ]
-                                    , [ "Bytes", "Encode" ]
-                                    ]
-                                        ++ modulesToImportForCustomTypes
-                                        |> List.filter ((==) selfModuleName >> not)
-
-                                {-
-                                   var appFilesAfterExposingCustomTypesInModules =
-                                       functionCodingExpressionsDict
-                                       .Select(exprResult => exprResult.Key)
-                                       .Aggregate(
-                                           originalAppFiles,
-                                           (partiallyUpdatedAppFiles, elmType) =>
-                                           {
-                                               {
-                                                   var enclosingParenthesesMatch = Regex.Match(elmType.Trim(), @"^\(([^,^\)]+)\)$");
-
-                                                   if (enclosingParenthesesMatch.Success)
-                                                       elmType = enclosingParenthesesMatch.Groups[1].Value;
-                                               }
-
-                                               var qualifiedMatch = Regex.Match(elmType.Trim(), @"^(.+)\.([^\s^\.]+)(\s+[a-z][^\s^\.]*)*$");
-
-                                               if (!qualifiedMatch.Success)
-                                                   return partiallyUpdatedAppFiles;
-
-                                               var moduleName = qualifiedMatch.Groups[1].Value;
-                                               var localTypeName = qualifiedMatch.Groups[2].Value;
-
-                                               var expectedFilePath = FilePathFromModuleName(moduleName);
-
-                                               var moduleBefore =
-                                                   partiallyUpdatedAppFiles
-                                                   .FirstOrDefault(candidate => candidate.Key.SequenceEqual(expectedFilePath));
-
-                                               if (moduleBefore.Value == null)
-                                                   return partiallyUpdatedAppFiles;
-
-                                               var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value.ToArray());
-
-                                               var isCustomTypeMatch = Regex.Match(
-                                                   moduleTextBefore,
-                                                   @"^type\s+" + localTypeName + @"(\s+[a-z][^\s]*){0,}\s*=", RegexOptions.Multiline);
-
-                                               if (!isCustomTypeMatch.Success)
-                                                   return partiallyUpdatedAppFiles;
-
-                                               var moduleText = CompileElm.ExposeCustomTypeAllTagsInElmModule(moduleTextBefore, localTypeName);
-
-                                               return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
-                                           });
-                                -}
-                                appFilesAfterExposingCustomTypesInModules =
-                                    functionCodingExpressions
-                                        |> List.map .elmType
-                                        |> List.foldl exposeNameInElmModuleInAppFilesIfCustomType appFiles
-                                        |> appendLineAndStringInLogFile ("Adding exposing syntax completed for " ++ (String.fromInt (List.length functionCodingExpressions) ++ " supporting types."))
-                                        |> appendLineAndStringInLogFile ("modulesToImportForCustomTypes: " ++ (modulesToImportForCustomTypes |> List.map (String.join ".") |> String.join ", "))
-
-                                specificSupportingCodingFunctions =
-                                    supportingCodingFunctionsBuilds
-                                        |> List.concatMap
-                                            (\buildFunctionResult ->
-                                                [ { functionName = buildFunctionResult.encodeFunction.name
-                                                  , functionText = buildFunctionResult.encodeFunction.text
-                                                  }
-                                                , { functionName = buildFunctionResult.decodeFunction.name
-                                                  , functionText = buildFunctionResult.decodeFunction.text
-                                                  }
-                                                ]
-                                            )
-
-                                supportingFunctions =
-                                    specificSupportingCodingFunctions ++ generalSupportingFunctionsTexts
-
-                                interfaceModuleWithSupportingFunctions =
-                                    supportingFunctions
-                                        |> listFoldlToAggregateResult
-                                            (\supportingFunction ->
-                                                addOrUpdateFunctionInElmModuleText
-                                                    { functionName = supportingFunction.functionName
-                                                    , mapFunctionLines = always [ supportingFunction.functionText ]
-                                                    }
-                                            )
-                                            (Ok moduleText)
-                            in
+                        Ok functionCodingExpressions ->
                             case
-                                listFoldlToAggregateResult
-                                    addImportInElmModuleText
-                                    interfaceModuleWithSupportingFunctions
-                                    modulesToImport
+                                functionCodingExpressions
+                                    |> List.map
+                                        (\supportingCoding ->
+                                            buildJsonCodingFunctionTexts
+                                                { typeText = supportingCoding.elmType
+                                                , encodeExpression = supportingCoding.expressions.encodeExpression
+                                                , decodeExpression = supportingCoding.expressions.decodeExpression
+                                                }
+                                        )
+                                    |> Result.Extra.combine
                             of
                                 Err error ->
-                                    Err ("Failed to add imports: " ++ error)
+                                    Err ("Failed to build supporting coding function text: " ++ error)
 
-                                Ok moduleTextWithImportsAdded ->
-                                    functionNamesAndTypeParametersFromTypeText
-                                        elmTypeExpressionsAndDependencies.canonicalTypeText
-                                        |> Result.map
-                                            (\elmTypeCodingFunctionNames ->
-                                                ( appFilesAfterExposingCustomTypesInModules
-                                                , { moduleText = moduleTextWithImportsAdded
-                                                  , decodeFunctionName = elmTypeCodingFunctionNames.decodeFunctionName
-                                                  , encodeFunctionName = elmTypeCodingFunctionNames.encodeFunctionName
-                                                  }
-                                                )
-                                            )
+                                Ok supportingCodingFunctionsBuilds ->
+                                    let
+                                        modulesToImportForCustomTypes =
+                                            functionCodingExpressions
+                                                |> List.map (.expressions >> .referencedModules)
+                                                |> List.foldl Set.union Set.empty
+                                                |> Set.toList
+                                                |> List.map (String.split ".")
+
+                                        modulesToImport =
+                                            [ [ "Base64" ]
+                                            , [ "Dict" ]
+                                            , [ "Set" ]
+                                            , [ "Json", "Decode" ]
+                                            , [ "Json", "Encode" ]
+                                            , [ "Bytes" ]
+                                            , [ "Bytes", "Decode" ]
+                                            , [ "Bytes", "Encode" ]
+                                            ]
+                                                ++ modulesToImportForCustomTypes
+                                                |> List.filter ((==) emitModuleName >> not)
+
+                                        appFilesAfterExposingCustomTypesInModules =
+                                            modulesToImportForCustomTypes
+                                                |> List.foldl exposeAllInElmModuleInAppFiles appFiles
+
+                                        specificSupportingCodingFunctions =
+                                            supportingCodingFunctionsBuilds
+                                                |> List.concatMap
+                                                    (\buildFunctionResult ->
+                                                        [ { functionName = buildFunctionResult.encodeFunction.name
+                                                          , functionText = buildFunctionResult.encodeFunction.text
+                                                          }
+                                                        , { functionName = buildFunctionResult.decodeFunction.name
+                                                          , functionText = buildFunctionResult.decodeFunction.text
+                                                          }
+                                                        ]
+                                                    )
+
+                                        supportingFunctions =
+                                            specificSupportingCodingFunctions ++ generalSupportingFunctionsTexts
+
+                                        interfaceModuleWithSupportingFunctions =
+                                            supportingFunctions
+                                                |> listFoldlToAggregateResult
+                                                    (\supportingFunction ->
+                                                        addOrUpdateFunctionInElmModuleText
+                                                            { functionName = supportingFunction.functionName
+                                                            , mapFunctionLines = always [ supportingFunction.functionText ]
+                                                            }
+                                                    )
+                                                    (Ok moduleText)
+                                    in
+                                    case
+                                        listFoldlToAggregateResult
+                                            addImportInElmModuleText
+                                            interfaceModuleWithSupportingFunctions
+                                            modulesToImport
+                                    of
+                                        Err error ->
+                                            Err ("Failed to add imports: " ++ error)
+
+                                        Ok moduleTextWithImportsAdded ->
+                                            functionNamesAndTypeParametersFromTypeText
+                                                elmTypeExpressionsAndDependencies.canonicalTypeText
+                                                |> Result.map
+                                                    (\elmTypeCodingFunctionNames ->
+                                                        ( appFilesAfterExposingCustomTypesInModules
+                                                        , { moduleText = moduleTextWithImportsAdded
+                                                          , decodeFunctionName = elmTypeCodingFunctionNames.decodeFunctionName
+                                                          , encodeFunctionName = elmTypeCodingFunctionNames.encodeFunctionName
+                                                          }
+                                                        )
+                                                    )
 
 
-
-{-
-   {
-       var enclosingParenthesesMatch = Regex.Match(elmType.Trim(), @"^\(([^,^\)]+)\)$");
-
-       if (enclosingParenthesesMatch.Success)
-           elmType = enclosingParenthesesMatch.Groups[1].Value;
-   }
-
-   var qualifiedMatch = Regex.Match(elmType.Trim(), @"^(.+)\.([^\s^\.]+)(\s+[a-z][^\s^\.]*)*$");
-
-   if (!qualifiedMatch.Success)
-       return partiallyUpdatedAppFiles;
-
-   var moduleName = qualifiedMatch.Groups[1].Value;
-   var localTypeName = qualifiedMatch.Groups[2].Value;
-
-   var expectedFilePath = FilePathFromModuleName(moduleName);
-
-   var moduleBefore =
-       partiallyUpdatedAppFiles
-       .FirstOrDefault(candidate => candidate.Key.SequenceEqual(expectedFilePath));
-
-   if (moduleBefore.Value == null)
-       return partiallyUpdatedAppFiles;
-
-   var moduleTextBefore = Encoding.UTF8.GetString(moduleBefore.Value.ToArray());
-
-   var isCustomTypeMatch = Regex.Match(
-       moduleTextBefore,
-       @"^type\s+" + localTypeName + @"(\s+[a-z][^\s]*){0,}\s*=", RegexOptions.Multiline);
-
-   if (!isCustomTypeMatch.Success)
-       return partiallyUpdatedAppFiles;
-
-   var moduleText = CompileElm.ExposeCustomTypeAllTagsInElmModule(moduleTextBefore, localTypeName);
-
-   return partiallyUpdatedAppFiles.SetItem(moduleBefore.Key, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
--}
-
-
-exposeNameInElmModuleInAppFilesIfCustomType : String -> AppFiles -> AppFiles
-exposeNameInElmModuleInAppFilesIfCustomType name appFiles =
+exposeAllInElmModuleInAppFiles : List String -> AppFiles -> AppFiles
+exposeAllInElmModuleInAppFiles moduleName appFiles =
     let
-        appFilesWithCaseDescription caseDescription =
-            appFiles |> appendLineAndStringInLogFile ("Exposing name '" ++ name ++ "': " ++ caseDescription)
+        moduleFilePath =
+            filePathFromElmModuleName (String.join "." moduleName)
     in
     case
-        Regex.fromString "^\\(([^,^\\)]+)\\)$"
-            |> Maybe.andThen (\regex -> Regex.find regex name |> List.head)
-            |> Maybe.andThen (.submatches >> List.head)
-            |> Maybe.andThen identity
+        appFiles
+            |> Dict.get moduleFilePath
+            |> Maybe.andThen stringFromFileContent
     of
-        Just inEnclosingParentheses ->
-            exposeNameInElmModuleInAppFilesIfCustomType inEnclosingParentheses appFiles
-
         Nothing ->
-            case name |> String.split "." |> List.reverse of
-                [] ->
-                    appFilesWithCaseDescription "Skipped because it is empty."
+            appFiles
 
-                localTypeName :: moduleNameReversed ->
-                    if moduleNameReversed == [] then
-                        appFilesWithCaseDescription "Skipped because it is not qualified."
-
-                    else
-                        let
-                            moduleName =
-                                List.reverse moduleNameReversed
-
-                            moduleFilePath =
-                                filePathFromElmModuleName (String.join "." moduleName)
-                        in
-                        case
-                            appFiles
-                                |> Dict.get moduleFilePath
-                                |> Maybe.andThen stringFromFileContent
-                        of
-                            Nothing ->
-                                appFilesWithCaseDescription "Skipped because did not find the module."
-
-                            Just originalModuleText ->
-                                case
-                                    Regex.fromString ("\ntype\\s+" ++ localTypeName ++ "(\\s+[a-z][^\\s]*){0,}\\s*\n\\s*=")
-                                        |> Maybe.andThen
-                                            (\regex -> Regex.find regex originalModuleText |> List.head)
-                                of
-                                    Nothing ->
-                                        appFilesWithCaseDescription "Skipped because it is not a custom type."
-
-                                    Just _ ->
-                                        let
-                                            moduleText =
-                                                exposeCustomTypeAllTagsInElmModule { customTypeLocalName = localTypeName }
-                                                    originalModuleText
-                                        in
-                                        appFilesWithCaseDescription "Set exposing syntax"
-                                            |> Dict.insert moduleFilePath (fileContentFromString moduleText)
+        Just originalModuleText ->
+            let
+                moduleText =
+                    exposeAllInElmModule originalModuleText
+            in
+            appFiles |> Dict.insert moduleFilePath (fileContentFromString moduleText)
 
 
-
-{-
-   static public string ExposeCustomTypeAllTagsInElmModule(string originalElmModuleText, string customTypeName)
-   {
-       return AdaptModuleExposeSyntax(originalElmModuleText, originalExposeSyntax =>
-       {
-           if (originalExposeSyntax.everything != null)
-               return originalExposeSyntax;
-
-           var expandedNodes =
-               originalExposeSyntax.something
-               .Select(originalNode =>
-               {
-                   if (originalNode.otherTokens != null)
-                       return originalNode;
-
-                   if (originalNode.exposeValue.name != customTypeName)
-                       return originalNode;
-
-                   if (originalNode.exposeValue.subvalues?.everything != null)
-                       return originalNode;
-
-                   return new ModuleExposeSyntax.ModuleExposeSyntaxNode
-                   {
-                       exposeValue = new ModuleExposeSyntax.ModuleExposeValue
-                       {
-                           name = originalNode.exposeValue.name,
-                           tokensBetweenNameAndDetails = "(",
-                           subvalues = new ModuleExposeSyntax.ModuleExposeValueSubvalues { everything = ".." },
-                           tokensAfterDetails = ")"
-                       }
-                   };
-               }).ToImmutableList();
-
-           var nodesToAppend =
-               expandedNodes.Any(node => node?.exposeValue?.name == customTypeName)
-               ?
-               new ModuleExposeSyntax.ModuleExposeSyntaxNode[] { }
-               :
-               new[]{
-                   new ModuleExposeSyntax.ModuleExposeSyntaxNode
-                   {
-                       otherTokens = ", ",
-                   },
-                   new ModuleExposeSyntax.ModuleExposeSyntaxNode
-                   {
-                       exposeValue =
-                           new ModuleExposeSyntax.ModuleExposeValue
-                           {
-                               name = customTypeName,
-                               tokensBetweenNameAndDetails = "(",
-                               subvalues = new ModuleExposeSyntax.ModuleExposeValueSubvalues { everything = ".." },
-                               tokensAfterDetails = ")"
-                           }
-                   }
-               };
-
-           return new ModuleExposeSyntax
-           {
-               something = expandedNodes.AddRange(nodesToAppend),
-           };
-       });
-   }
--}
-
-
-exposeCustomTypeAllTagsInElmModule : { customTypeLocalName : String } -> String -> String
-exposeCustomTypeAllTagsInElmModule { customTypeLocalName } moduleText =
-    {-
-       adaptModuleExposeSyntax
-           (\exposingListNode ->
-               let
-                   exposingListText =
-                       getTextLinesFromRange (Elm.Syntax.Node.range exposingListNode) moduleText
-                           |> String.join "\n"
-               in
-               case Elm.Syntax.Node.value exposingListNode of
-                   Elm.Syntax.Exposing.All _ ->
-                       exposingListText
-
-                   Elm.Syntax.Exposing.Explicit originalElements ->
-                       exposingListText
-           )
-           moduleText
-    -}
+exposeAllInElmModule : String -> String
+exposeAllInElmModule moduleText =
     case parseElmModuleText moduleText of
         Err _ ->
             moduleText
@@ -634,56 +429,6 @@ exposeCustomTypeAllTagsInElmModule { customTypeLocalName } moduleText =
 
                 Elm.Syntax.Exposing.Explicit _ ->
                     replaceRangeInText exposingListRange "exposing (..)" moduleText
-
-
-
-{-
-   static string AdaptModuleExposeSyntax(
-       string originalElmModuleText,
-       Func<ModuleExposeSyntax, ModuleExposeSyntax> adaptExposeSyntax)
-   {
-       var findAndParseResult = FindAndParseModuleExposeSyntax(originalElmModuleText);
-
-       if (findAndParseResult == null)
-           throw new Exception("Failed to find and parse original expose syntax for module:\n" + originalElmModuleText);
-
-       return
-           originalElmModuleText.Substring(0, findAndParseResult.Value.beginIndex) +
-           adaptExposeSyntax(findAndParseResult.Value.parsedSyntax).ToString() +
-           originalElmModuleText.Substring(findAndParseResult.Value.beginIndex + findAndParseResult.Value.parsedLength);
-   }
--}
-
-
-adaptModuleExposeSyntax : (Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing -> String) -> String -> String
-adaptModuleExposeSyntax updateExposeSyntax moduleText =
-    case parseElmModuleText moduleText of
-        Err _ ->
-            moduleText
-
-        Ok parsedModule ->
-            let
-                exposingListNode =
-                    case Elm.Syntax.Node.value parsedModule.moduleDefinition of
-                        Elm.Syntax.Module.NormalModule normalModule ->
-                            normalModule.exposingList
-
-                        Elm.Syntax.Module.PortModule portModule ->
-                            portModule.exposingList
-
-                        Elm.Syntax.Module.EffectModule effectModule ->
-                            effectModule.exposingList
-
-                exposingListRange =
-                    Elm.Syntax.Node.range exposingListNode
-
-                exposingListText =
-                    getTextLinesFromRange (Elm.Syntax.Node.range exposingListNode) moduleText
-            in
-            replaceRangeInText
-                exposingListRange
-                (updateExposeSyntax exposingListNode)
-                (moduleText ++ "\n{- Exposing text:\n" ++ String.join "\n" exposingListText ++ "\n-}")
 
 
 appendLineAndStringInLogFile : String -> AppFiles -> AppFiles
@@ -722,32 +467,7 @@ buildJsonCodingFunctionTexts { typeText, encodeExpression, decodeExpression } =
                             |> List.map (\t -> "(" ++ t ++ ")")
                             |> String.join " -> "
 
-                    inspectionCommentSyntax =
-                        -- TODO: Remove inspectionCommentSyntax
-                        "\n{- typeText:\n"
-                            ++ typeText
-                            ++ "\ntypeParametersNames: "
-                            ++ (typeParametersNames |> String.join ", ")
-                            ++ "-}"
-
                     typeParameters =
-                        {-
-                           typeParametersNames
-                           .Select(typeParameterName =>
-                           {
-                               var parameterNameCommonPart = "type_parameter_" + typeParameterName;
-
-                               return
-                               new
-                               {
-                                   encodeAnnotation = typeParameterName + " -> Json.Encode.Value",
-                                   encodeParameter = jsonEncodeFunctionNamePrefix + parameterNameCommonPart,
-
-                                   decodeAnnotation = "Json.Decode.Decoder " + typeParameterName,
-                                   decodeParameter = jsonDecodeFunctionNamePrefix + parameterNameCommonPart,
-                               };
-                           })
-                        -}
                         typeParametersNames
                             |> List.map
                                 (\typeParameterName ->
@@ -767,7 +487,6 @@ buildJsonCodingFunctionTexts { typeText, encodeExpression, decodeExpression } =
                             ++ " : "
                             ++ annotationsFromTypeList
                                 ((typeParameters |> List.map .encodeAnnotation) ++ [ typeText, "Json.Encode.Value" ])
-                            ++ inspectionCommentSyntax
                             ++ "\n"
                             ++ encodeFunctionName
                             ++ " "
@@ -782,7 +501,6 @@ buildJsonCodingFunctionTexts { typeText, encodeExpression, decodeExpression } =
                             ++ " : "
                             ++ annotationsFromTypeList
                                 ((typeParameters |> List.map .decodeAnnotation) ++ [ "Json.Decode.Decoder (" ++ typeText ++ ")" ])
-                            ++ inspectionCommentSyntax
                             ++ "\n"
                             ++ decodeFunctionName
                             ++ " "
@@ -840,38 +558,24 @@ type alias ElmCustomTypeStructure =
     }
 
 
-jsonCodingResolveType : { rootTypeText : String, maybeExplicitSourceModuleName : Maybe String, rootSourceModuleText : String } -> Dict.Dict String String -> Result String ResolveTypeResult
-jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceModuleText } sourceModules =
+jsonCodingResolveType :
+    { rootTypeText : String, currentModule : ( String, Elm.Syntax.File.File ) }
+    -> Dict.Dict String ( String, Elm.Syntax.File.File )
+    -> Result String ResolveTypeResult
+jsonCodingResolveType { rootTypeText, currentModule } sourceModules =
     let
-        sourceModuleText =
-            (case maybeExplicitSourceModuleName of
-                Just explicitSourceModuleName ->
-                    sourceModules |> Dict.get explicitSourceModuleName
+        ( currentModuleText, currentModuleParsed ) =
+            currentModule
 
-                Nothing ->
-                    Nothing
-            )
-                |> Maybe.withDefault rootSourceModuleText
+        currentModuleName =
+            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value currentModuleParsed.moduleDefinition)
+
+        currentModuleNameFlat =
+            String.join "." currentModuleName
 
         sourceModuleNamePrefix =
-            case maybeExplicitSourceModuleName of
-                Nothing ->
-                    ""
+            currentModuleNameFlat ++ "."
 
-                Just sourceModuleName ->
-                    sourceModuleName ++ "."
-
-        {-
-           (string canonicalTypeText, IImmutableSet<string> dependencies) ResolveLocalTypeText(string typeText)
-           {
-               if (StartsWithLowercaseLetter(typeText))
-                   return (typeText, ImmutableHashSet<string>.Empty);
-
-               var canonicalTypeText = ResolveType(typeText, sourceModuleName, sourceModules, logWriteLine).canonicalTypeText;
-
-               return (canonicalTypeText, ImmutableHashSet.Create(canonicalTypeText));
-           }
-        -}
         resolveLocalTypeText : String -> Result String { canonicalTypeText : String, dependencies : Set.Set String }
         resolveLocalTypeText typeText =
             if stringStartsWithLowercaseLetter typeText then
@@ -880,8 +584,7 @@ jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceM
             else
                 jsonCodingResolveType
                     { rootTypeText = typeText
-                    , maybeExplicitSourceModuleName = maybeExplicitSourceModuleName
-                    , rootSourceModuleText = rootSourceModuleText
+                    , currentModule = currentModule
                     }
                     sourceModules
                     |> Result.map
@@ -889,269 +592,11 @@ jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceM
                             { canonicalTypeText = resolved.canonicalTypeText, dependencies = Set.singleton resolved.canonicalTypeText }
                         )
 
-        {-
-           ---
-
-           (string encodeExpression, string decodeExpression, IImmutableSet<string> dependencies) compileExpressions()
-           {
-           var tags = rootType.Custom.Value.tags.Select(typeTag =>
-           {
-           var typeTagCanonicalName = sourceModuleName + "." + typeTag.Key;
-
-                       string encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(string argumentSyntax, string objectContentSyntax)
-                       {
-                           var tagEncodeCase =
-                               typeTagCanonicalName + " " + argumentSyntax + " ->";
-
-                           var tagEncodeExpression =
-                               @"Json.Encode.object [ ( """ + typeTag.Key + @""", " + objectContentSyntax + " ) ]";
-
-                           return tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression);
-                       }
-
-                       var decodeSyntaxCommonPart = @"Json.Decode.field """ + typeTag.Key + @"""";
-
-                       if (typeTag.Value.Count == 0)
-                       {
-                           return new
-                           {
-                               encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax("", "Json.Encode.list identity []"),
-                               decodeExpression = decodeSyntaxCommonPart + " (Json.Decode.succeed " + typeTagCanonicalName + ")",
-                               dependencies = ImmutableHashSet<string>.Empty,
-                           };
-                       }
-
-                       var tagParametersExpressions =
-                           typeTag.Value.Select(tagParameterType =>
-                           {
-                               var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
-
-                               var (tagParameterTypeFunctionNames, tagParameterTypeParametersNames) =
-                                   GetFunctionNamesAndTypeParametersFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
-
-                               var tagParameterEncodeFunction =
-                                   expressionTextForFunctionWithOptionalTypeParameters(
-                                       tagParameterTypeFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                               var tagParameterDecodeFunction =
-                                   expressionTextForFunctionWithOptionalTypeParameters(
-                                       tagParameterTypeFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                               return new
-                               {
-                                   encodeFunction = tagParameterEncodeFunction,
-                                   decodeFunction = tagParameterDecodeFunction,
-                                   canonicalTypeTextAndDependencies = tagParameterCanonicalTypeTextAndDependencies,
-                               };
-                           }).ToImmutableList();
-
-                       var tagDecodeExpressionBeforeLazy =
-                           tagParametersExpressions.Count == 1
-                           /*
-                           2020-03-07: To support easy migration of existing applications, support decoding from the older JSON representation for tags with one parameter.
-                           This branch can be removed when all apps have been migrated.
-                           */
-                           ?
-                           "Json.Decode.map " + typeTagCanonicalName +
-                           " (Json.Decode.oneOf [ " + tagParametersExpressions.Single().decodeFunction + ", " +
-                           "(Json.Decode.index 0 " + tagParametersExpressions.Single().decodeFunction + ")" +
-                           " ])"
-                           :
-                           "Json.Decode.map" + tagParametersExpressions.Count.ToString() + " " + typeTagCanonicalName + " " +
-                               string.Join(" ", tagParametersExpressions.Select((tagParamExpr, tagParamIndex) =>
-                                   "(Json.Decode.index " + tagParamIndex.ToString() + " " + tagParamExpr.decodeFunction + ")"));
-
-                       var tagDecodeExpression =
-                           decodeSyntaxCommonPart + @" (Json.Decode.lazy (\_ -> " +
-                           tagDecodeExpressionBeforeLazy +
-                           " ) )";
-
-                       var encodeArgumentsAndExpressions =
-                           tagParametersExpressions
-                           .Select((tagArgumentExpressions, tagParameterIndex) =>
-                           {
-                               var argumentName = "tagArgument" + tagParameterIndex.ToString();
-
-                               return (argumentName, encodeExpression: argumentName + " |> " + tagArgumentExpressions.encodeFunction);
-                           }).ToImmutableList();
-
-                       var encodeArgumentSyntax =
-                           string.Join(" ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.argumentName));
-
-                       var encodeObjectContentSyntax =
-                           "[ " +
-                           string.Join(", ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.encodeExpression))
-                           + " ] |> Json.Encode.list identity";
-
-                       var tagParametersDependencies =
-                           tagParametersExpressions
-                           .Select(tagParamResult => tagParamResult.canonicalTypeTextAndDependencies.dependencies)
-                           .Aggregate(ImmutableHashSet<string>.Empty, (a, b) => a.Union(b));
-
-                       return new
-                       {
-                           encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(
-                               encodeArgumentSyntax,
-                               encodeObjectContentSyntax),
-                           decodeExpression = tagDecodeExpression,
-                           dependencies = tagParametersDependencies,
-                       };
-                   })
-                   .ToImmutableList();
-
-               var encodeCases =
-                   String.Join("\n\n", tags.Select(tag => tag.encodeCase));
-
-               var encodeExpression =
-                   "case " + encodeParamName + " of\n" +
-                   IndentElmCodeLines(1, encodeCases);
-
-               var decodeArrayExpression = "[ " + String.Join("\n, ", tags.Select(tag => tag.decodeExpression)) + "\n]";
-
-               var decodeExpression =
-                   "Json.Decode.oneOf\n" +
-                   IndentElmCodeLines(1, decodeArrayExpression);
-
-               var allTagsDependencies =
-                   tags.SelectMany(field => field.dependencies)
-                   .ToImmutableHashSet();
-
-               return (encodeExpression, decodeExpression, allTagsDependencies);
-
-           }
-
-           var canonicalTypeText = sourceModuleName + "." + rootType.Custom.Value.typeLocalName;
-
-           var canonicalTypeTextWithParameters =
-           rootType.Custom.Value.parameters.Count < 1
-           ?
-           canonicalTypeText
-           :
-           "(" + canonicalTypeText + " " + string.Join(" ", rootType.Custom.Value.parameters) + ")";
-
-           return new ResolveTypeResult
-           {
-           canonicalTypeText = canonicalTypeText,
-           canonicalTypeTextWithParameters = canonicalTypeTextWithParameters,
-
-               compileExpressions = compileExpressions,
-
-               referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
-
-           };
-
-        -}
         jsonCodingResolveTypeCustomType : ElmCustomTypeStructure -> Result String ResolveTypeResult
         jsonCodingResolveTypeCustomType customType =
             let
                 compileExpressions : () -> Result String { encodeExpression : String, decodeExpression : String, dependencies : Set.Set String }
                 compileExpressions _ =
-                    {-
-                            var tags = rootType.Custom.Value.tags.Select(typeTag =>
-                       {
-                       var typeTagCanonicalName = sourceModuleName + "." + typeTag.Key;
-
-                                   string encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(string argumentSyntax, string objectContentSyntax)
-                                   {
-                                       var tagEncodeCase =
-                                           typeTagCanonicalName + " " + argumentSyntax + " ->";
-
-                                       var tagEncodeExpression =
-                                           @"Json.Encode.object [ ( """ + typeTag.Key + @""", " + objectContentSyntax + " ) ]";
-
-                                       return tagEncodeCase + "\n" + IndentElmCodeLines(1, tagEncodeExpression);
-                                   }
-
-                                   var decodeSyntaxCommonPart = @"Json.Decode.field """ + typeTag.Key + @"""";
-
-                                   if (typeTag.Value.Count == 0)
-                                   {
-                                       return new
-                                       {
-                                           encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax("", "Json.Encode.list identity []"),
-                                           decodeExpression = decodeSyntaxCommonPart + " (Json.Decode.succeed " + typeTagCanonicalName + ")",
-                                           dependencies = ImmutableHashSet<string>.Empty,
-                                       };
-                                   }
-
-                                   var tagParametersExpressions =
-                                       typeTag.Value.Select(tagParameterType =>
-                                       {
-                                           var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
-
-                                           var (tagParameterTypeFunctionNames, tagParameterTypeParametersNames) =
-                                               GetFunctionNamesAndTypeParametersFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
-
-                                           var tagParameterEncodeFunction =
-                                               expressionTextForFunctionWithOptionalTypeParameters(
-                                                   tagParameterTypeFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                                           var tagParameterDecodeFunction =
-                                               expressionTextForFunctionWithOptionalTypeParameters(
-                                                   tagParameterTypeFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                                           return new
-                                           {
-                                               encodeFunction = tagParameterEncodeFunction,
-                                               decodeFunction = tagParameterDecodeFunction,
-                                               canonicalTypeTextAndDependencies = tagParameterCanonicalTypeTextAndDependencies,
-                                           };
-                                       }).ToImmutableList();
-
-                                   var tagDecodeExpressionBeforeLazy =
-                                       tagParametersExpressions.Count == 1
-                                       /*
-                                       2020-03-07: To support easy migration of existing applications, support decoding from the older JSON representation for tags with one parameter.
-                                       This branch can be removed when all apps have been migrated.
-                                       */
-                                       ?
-                                       "Json.Decode.map " + typeTagCanonicalName +
-                                       " (Json.Decode.oneOf [ " + tagParametersExpressions.Single().decodeFunction + ", " +
-                                       "(Json.Decode.index 0 " + tagParametersExpressions.Single().decodeFunction + ")" +
-                                       " ])"
-                                       :
-                                       "Json.Decode.map" + tagParametersExpressions.Count.ToString() + " " + typeTagCanonicalName + " " +
-                                           string.Join(" ", tagParametersExpressions.Select((tagParamExpr, tagParamIndex) =>
-                                               "(Json.Decode.index " + tagParamIndex.ToString() + " " + tagParamExpr.decodeFunction + ")"));
-
-                                   var tagDecodeExpression =
-                                       decodeSyntaxCommonPart + @" (Json.Decode.lazy (\_ -> " +
-                                       tagDecodeExpressionBeforeLazy +
-                                       " ) )";
-
-                                   var encodeArgumentsAndExpressions =
-                                       tagParametersExpressions
-                                       .Select((tagArgumentExpressions, tagParameterIndex) =>
-                                       {
-                                           var argumentName = "tagArgument" + tagParameterIndex.ToString();
-
-                                           return (argumentName, encodeExpression: argumentName + " |> " + tagArgumentExpressions.encodeFunction);
-                                       }).ToImmutableList();
-
-                                   var encodeArgumentSyntax =
-                                       string.Join(" ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.argumentName));
-
-                                   var encodeObjectContentSyntax =
-                                       "[ " +
-                                       string.Join(", ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.encodeExpression))
-                                       + " ] |> Json.Encode.list identity";
-
-                                   var tagParametersDependencies =
-                                       tagParametersExpressions
-                                       .Select(tagParamResult => tagParamResult.canonicalTypeTextAndDependencies.dependencies)
-                                       .Aggregate(ImmutableHashSet<string>.Empty, (a, b) => a.Union(b));
-
-                                   return new
-                                   {
-                                       encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(
-                                           encodeArgumentSyntax,
-                                           encodeObjectContentSyntax),
-                                       decodeExpression = tagDecodeExpression,
-                                       dependencies = tagParametersDependencies,
-                                   };
-                               })
-                               .ToImmutableList();
-                    -}
                     let
                         tagsResults =
                             customType.tags
@@ -1183,83 +628,6 @@ jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceM
                                                 }
 
                                         else
-                                            {-
-                                               var tagParametersExpressions =
-                                                      typeTag.Value.Select(tagParameterType =>
-                                                      {
-                                                          var tagParameterCanonicalTypeTextAndDependencies = ResolveLocalTypeText(tagParameterType);
-
-                                                          var (tagParameterTypeFunctionNames, tagParameterTypeParametersNames) =
-                                                              GetFunctionNamesAndTypeParametersFromTypeText(tagParameterCanonicalTypeTextAndDependencies.canonicalTypeText);
-
-                                                          var tagParameterEncodeFunction =
-                                                              expressionTextForFunctionWithOptionalTypeParameters(
-                                                                  tagParameterTypeFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                                                          var tagParameterDecodeFunction =
-                                                              expressionTextForFunctionWithOptionalTypeParameters(
-                                                                  tagParameterTypeFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, tagParameterTypeParametersNames);
-
-                                                          return new
-                                                          {
-                                                              encodeFunction = tagParameterEncodeFunction,
-                                                              decodeFunction = tagParameterDecodeFunction,
-                                                              canonicalTypeTextAndDependencies = tagParameterCanonicalTypeTextAndDependencies,
-                                                          };
-                                                      }).ToImmutableList();
-
-                                                  var tagDecodeExpressionBeforeLazy =
-                                                      tagParametersExpressions.Count == 1
-                                                      /*
-                                                      2020-03-07: To support easy migration of existing applications, support decoding from the older JSON representation for tags with one parameter.
-                                                      This branch can be removed when all apps have been migrated.
-                                                      */
-                                                      ?
-                                                      "Json.Decode.map " + typeTagCanonicalName +
-                                                      " (Json.Decode.oneOf [ " + tagParametersExpressions.Single().decodeFunction + ", " +
-                                                      "(Json.Decode.index 0 " + tagParametersExpressions.Single().decodeFunction + ")" +
-                                                      " ])"
-                                                      :
-                                                      "Json.Decode.map" + tagParametersExpressions.Count.ToString() + " " + typeTagCanonicalName + " " +
-                                                          string.Join(" ", tagParametersExpressions.Select((tagParamExpr, tagParamIndex) =>
-                                                              "(Json.Decode.index " + tagParamIndex.ToString() + " " + tagParamExpr.decodeFunction + ")"));
-
-                                                  var tagDecodeExpression =
-                                                      decodeSyntaxCommonPart + @" (Json.Decode.lazy (\_ -> " +
-                                                      tagDecodeExpressionBeforeLazy +
-                                                      " ) )";
-
-                                                  var encodeArgumentsAndExpressions =
-                                                      tagParametersExpressions
-                                                      .Select((tagArgumentExpressions, tagParameterIndex) =>
-                                                      {
-                                                          var argumentName = "tagArgument" + tagParameterIndex.ToString();
-
-                                                          return (argumentName, encodeExpression: argumentName + " |> " + tagArgumentExpressions.encodeFunction);
-                                                      }).ToImmutableList();
-
-                                                  var encodeArgumentSyntax =
-                                                      string.Join(" ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.argumentName));
-
-                                                  var encodeObjectContentSyntax =
-                                                      "[ " +
-                                                      string.Join(", ", encodeArgumentsAndExpressions.Select(argumentAndExpr => argumentAndExpr.encodeExpression))
-                                                      + " ] |> Json.Encode.list identity";
-
-                                                  var tagParametersDependencies =
-                                                      tagParametersExpressions
-                                                      .Select(tagParamResult => tagParamResult.canonicalTypeTextAndDependencies.dependencies)
-                                                      .Aggregate(ImmutableHashSet<string>.Empty, (a, b) => a.Union(b));
-
-                                                  return new
-                                                  {
-                                                      encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax(
-                                                          encodeArgumentSyntax,
-                                                          encodeObjectContentSyntax),
-                                                      decodeExpression = tagDecodeExpression,
-                                                      dependencies = tagParametersDependencies,
-                                                  };
-                                            -}
                                             let
                                                 tagParametersExpressionsResults =
                                                     tagParameters
@@ -1366,26 +734,6 @@ jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceM
                             Err ("Failed for tags: " ++ error)
 
                         Ok tags ->
-                            {-
-                               var encodeCases =
-                                   String.Join("\n\n", tags.Select(tag => tag.encodeCase));
-
-                               var encodeExpression =
-                                   "case " + encodeParamName + " of\n" +
-                                   IndentElmCodeLines(1, encodeCases);
-
-                               var decodeArrayExpression = "[ " + String.Join("\n, ", tags.Select(tag => tag.decodeExpression)) + "\n]";
-
-                               var decodeExpression =
-                                   "Json.Decode.oneOf\n" +
-                                   IndentElmCodeLines(1, decodeArrayExpression);
-
-                               var allTagsDependencies =
-                                   tags.SelectMany(field => field.dependencies)
-                                   .ToImmutableHashSet();
-
-                               return (encodeExpression, decodeExpression, allTaagsDependencies);
-                            -}
                             let
                                 encodeCases =
                                     String.join "\n\n" (tags |> List.map .encodeCase)
@@ -1428,518 +776,325 @@ jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceM
                 { canonicalTypeText = canonicalTypeText
                 , canonicalTypeTextWithParameters = canonicalTypeTextWithParameters
                 , compileExpressions = compileExpressions
-                , referencedModules = maybeExplicitSourceModuleName |> Maybe.map Set.singleton |> Maybe.withDefault Set.empty
+                , referencedModules = Set.singleton currentModuleNameFlat
                 }
     in
-    parseAndMapElmModuleText
-        (\parsedSourceModule ->
-            let
-                getCanonicalModuleNameAndLocalTypeNameFromNameInSourceModule : String -> Result String ( List String, String )
-                getCanonicalModuleNameAndLocalTypeNameFromNameInSourceModule nameInThisModule =
-                    case getCanonicalNameFromImportedNameInModule parsedSourceModule nameInThisModule of
-                        Just importedName ->
-                            Ok importedName
+    case Dict.get rootTypeText jsonCodeLeafExpressions of
+        Just ( encodeExpression, decodeExpression ) ->
+            Ok
+                { canonicalTypeText = rootTypeText
+                , canonicalTypeTextWithParameters = rootTypeText
+                , compileExpressions =
+                    \() ->
+                        Ok
+                            { encodeExpression = encodeExpression
+                            , decodeExpression = decodeExpression
+                            , dependencies = Set.empty
+                            }
+                , referencedModules = Set.empty
+                }
 
-                        Nothing ->
-                            case maybeExplicitSourceModuleName of
-                                Just explicitSourceModuleName ->
-                                    Ok ( String.split "." explicitSourceModuleName, nameInThisModule )
+        Nothing ->
+            case parseElmTypeText True rootTypeText of
+                Err error ->
+                    Err ("Failed to parse Elm type: " ++ error ++ ", type text: '" ++ rootTypeText ++ "'")
 
-                                Nothing ->
-                                    Err ("Failed to look up name '" ++ nameInThisModule ++ "'.")
-            in
-            case Dict.get rootTypeText jsonCodeLeafExpressions of
-                Just ( encodeExpression, decodeExpression ) ->
-                    Ok
-                        { canonicalTypeText = rootTypeText
-                        , canonicalTypeTextWithParameters = rootTypeText
-                        , compileExpressions =
-                            \() ->
-                                Ok
-                                    { encodeExpression = encodeExpression
-                                    , decodeExpression = decodeExpression
-                                    , dependencies = Set.empty
-                                    }
-                        , referencedModules = Set.empty
-                        }
-
-                Nothing ->
-                    case parseElmTypeText True rootTypeText of
-                        Err error ->
-                            Err ("Failed to parse Elm type: " ++ error ++ ", type text: '" ++ rootTypeText ++ "'")
-
-                        Ok ( rootType, _ ) ->
-                            case rootType of
-                                InstanceElmType instanceElmType ->
-                                    if instanceElmType.parameters == [] then
-                                        {-
-                                           var (referencedModuleName, typeNameInReferencedModule) =
-                                               GetCanonicalModuleNameAndLocalTypeNameFromNameInSourceModule(rootTypeText);
-
-                                           if (referencedModuleName != sourceModuleName)
-                                           {
-                                               logWriteLine?.Invoke("Type '" + rootTypeText + "' in '" + sourceModuleName + "' refers to '" + referencedModuleName + "." + typeNameInReferencedModule + "'.");
-
-                                               return ResolveType(
-                                                   typeNameInReferencedModule,
-                                                   referencedModuleName,
-                                                   sourceModules,
-                                                   logWriteLine);
-                                           }
-
-                                           logWriteLine?.Invoke("Resolve type text for '" + rootTypeText + "' in '" + sourceModuleName + "'.");
-
-                                           var referencedTypeText = GetTypeDefinitionTextFromModuleText(rootTypeText, sourceModuleText);
-
-                                           if (!(0 < referencedTypeText?.Length))
-                                               throw new Exception("Did not find the definition of type '" + rootTypeText + "'.");
-
-                                           return ResolveType(referencedTypeText, sourceModuleName, sourceModules, logWriteLine);
-                                        -}
-                                        case getCanonicalNameFromImportedNameInModule parsedSourceModule rootTypeText of
+                Ok ( rootType, _ ) ->
+                    case rootType of
+                        InstanceElmType instanceElmType ->
+                            if instanceElmType.parameters == [] then
+                                case getCanonicalNameFromImportedNameInModule currentModuleParsed rootTypeText of
+                                    Nothing ->
+                                        case getTypeDefinitionTextFromModuleText instanceElmType.typeName currentModule of
                                             Nothing ->
-                                                case getTypeDefinitionTextFromModuleText instanceElmType.typeName sourceModuleText of
-                                                    Err error ->
-                                                        Err
-                                                            ("Failed to get type definition text for local name '"
-                                                                ++ instanceElmType.typeName
-                                                                ++ "' ("
-                                                                ++ rootTypeText
-                                                                ++ ") in module '"
-                                                                ++ Maybe.withDefault "" maybeExplicitSourceModuleName
-                                                                ++ "': "
-                                                                ++ error
-                                                            )
+                                                Err
+                                                    ("Failed to get type definition text for local name '"
+                                                        ++ instanceElmType.typeName
+                                                        ++ "' ("
+                                                        ++ rootTypeText
+                                                        ++ ") in module '"
+                                                        ++ currentModuleNameFlat
+                                                        ++ "'"
+                                                    )
 
-                                                    Ok Nothing ->
-                                                        Err
-                                                            ("Failed to get type definition text for local name '"
-                                                                ++ instanceElmType.typeName
-                                                                ++ "' ("
-                                                                ++ rootTypeText
-                                                                ++ ") in module '"
-                                                                ++ Maybe.withDefault "" maybeExplicitSourceModuleName
-                                                                ++ "'"
-                                                            )
-
-                                                    Ok (Just typeDefinitionText) ->
-                                                        jsonCodingResolveType
-                                                            { rootTypeText = typeDefinitionText
-                                                            , maybeExplicitSourceModuleName = maybeExplicitSourceModuleName
-                                                            , rootSourceModuleText = rootSourceModuleText
-                                                            }
-                                                            sourceModules
-
-                                            Just ( originatingModuleName, nameInImportedModule ) ->
+                                            Just typeDefinitionText ->
                                                 jsonCodingResolveType
-                                                    { rootTypeText = nameInImportedModule
-                                                    , maybeExplicitSourceModuleName = Just (String.join "." originatingModuleName)
-                                                    , rootSourceModuleText = rootSourceModuleText
+                                                    { rootTypeText = typeDefinitionText
+                                                    , currentModule = currentModule
                                                     }
                                                     sourceModules
 
-                                    else
-                                        {-
-                                                               var parameters =
-                                               rootType.Instance.Value.parameters
-                                               .Select(parameter =>
-                                               {
-                                                   var dependencies = ResolveType(parameter, sourceModuleName, sourceModules, logWriteLine);
+                                    Just ( originatingModuleName, nameInImportedModule ) ->
+                                        case sourceModules |> Dict.get (String.join "." originatingModuleName) of
+                                            Nothing ->
+                                                Err ("Failed to find module '" ++ String.join "." originatingModuleName ++ "' in source modules")
 
-                                                   var (functionNames, typeParametersNames) = GetFunctionNamesAndTypeParametersFromTypeText(dependencies.canonicalTypeText);
+                                            Just originatingModule ->
+                                                jsonCodingResolveType
+                                                    { rootTypeText = nameInImportedModule
+                                                    , currentModule = originatingModule
+                                                    }
+                                                    sourceModules
 
-                                                   var encodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
-                                                       functionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, typeParametersNames);
+                            else
+                                case
+                                    instanceElmType.parameters
+                                        |> List.map
+                                            (\parameter ->
+                                                jsonCodingResolveType
+                                                    { rootTypeText = parameter
+                                                    , currentModule = currentModule
+                                                    }
+                                                    sourceModules
+                                                    |> Result.andThen
+                                                        (\paramDependencies ->
+                                                            functionNamesAndTypeParametersFromTypeText paramDependencies.canonicalTypeText
+                                                                |> Result.map
+                                                                    (\paramFunctionNames ->
+                                                                        let
+                                                                            encodeFunction =
+                                                                                expressionTextForFunctionWithOptionalTypeParameters
+                                                                                    { functionName = paramFunctionNames.encodeFunctionName
+                                                                                    , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
+                                                                                    , typeParametersNames = paramFunctionNames.typeParametersNames
+                                                                                    }
 
-                                                   var decodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
-                                                       functionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, typeParametersNames);
+                                                                            decodeFunction =
+                                                                                expressionTextForFunctionWithOptionalTypeParameters
+                                                                                    { functionName = paramFunctionNames.decodeFunctionName
+                                                                                    , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
+                                                                                    , typeParametersNames = paramFunctionNames.typeParametersNames
+                                                                                    }
+                                                                        in
+                                                                        { encodeFunction = encodeFunction
+                                                                        , decodeFunction = decodeFunction
+                                                                        , dependencies = paramDependencies
+                                                                        }
+                                                                    )
+                                                        )
+                                            )
+                                        |> Result.Extra.combine
+                                of
+                                    Err error ->
+                                        Err ("Failed to map instance parameter: " ++ error)
 
-                                                   return new { encodeFunction, decodeFunction, dependencies };
-                                               })
-                                               .ToImmutableList();
-
-                                           string instantiatedTypeCanonicalName = null;
-                                           string instantiatedTypeFunctionNameCommonPart = null;
-                                           IImmutableSet<string> dependenciesFromInstantiatedType = ImmutableHashSet<string>.Empty;
-
-                                           if (InstantiationSpecialCases.TryGetValue(rootType.Instance.Value.typeName, out var specialCaseFunctionNameCommonPart))
-                                           {
-                                               instantiatedTypeCanonicalName = rootType.Instance.Value.typeName;
-                                               instantiatedTypeFunctionNameCommonPart = specialCaseFunctionNameCommonPart;
-                                           }
-                                           else
-                                           {
-                                               var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, sourceModules, logWriteLine);
-                                               instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText;
-                                               instantiatedTypeFunctionNameCommonPart = GetFunctionNamesAndTypeParametersFromTypeText(instantiatedTypeCanonicalName).functionNames.commonPart;
-                                               dependenciesFromInstantiatedType = ImmutableHashSet.Create(instantiatedTypeResolution.canonicalTypeText);
-                                           }
-
-                                           var parametersTypeTextsForComposition =
-                                               parameters.Select(param =>
-                                               {
-                                                   var needsParentheses =
-                                                       param.dependencies.canonicalTypeText.Contains(" ") &&
-                                                       !param.dependencies.canonicalTypeText.StartsWith("(") &&
-                                                       !param.dependencies.canonicalTypeText.StartsWith("{");
-
-                                                   var beforeParentheses =
-                                                       param.dependencies.canonicalTypeText;
-
-                                                   if (needsParentheses)
-                                                       return "(" + beforeParentheses + ")";
-
-                                                   return beforeParentheses;
-                                               });
-
-                                           return new ResolveTypeResult
-                                           {
-                                               canonicalTypeText = instantiatedTypeCanonicalName + " " + String.Join(" ", parametersTypeTextsForComposition),
-
-                                               compileExpressions = () =>
-                                                   (jsonEncodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.encodeFunction)) + " " + encodeParamName,
-                                                   jsonDecodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.decodeFunction)),
-                                                   dependenciesFromInstantiatedType.Union(parameters.Select(parameter => parameter.dependencies.canonicalTypeText))),
-
-                                               referencedModules = ImmutableHashSet<string>.Empty,
-                                           };
-                                        -}
-                                        case
-                                            instanceElmType.parameters
-                                                |> List.map
-                                                    (\parameter ->
-                                                        jsonCodingResolveType
-                                                            { rootTypeText = parameter
-                                                            , maybeExplicitSourceModuleName = maybeExplicitSourceModuleName
-                                                            , rootSourceModuleText = rootSourceModuleText
-                                                            }
-                                                            sourceModules
-                                                            |> Result.andThen
-                                                                (\paramDependencies ->
-                                                                    {-
-                                                                       var (functionNames, typeParametersNames) = GetFunctionNamesAndTypeParametersFromTypeText(dependencies.canonicalTypeText);
-
-                                                                       var encodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
-                                                                           functionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, typeParametersNames);
-
-                                                                       var decodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
-                                                                           functionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, typeParametersNames);
-
-                                                                       return new { encodeFunction, decodeFunction, dependencies };
-                                                                    -}
-                                                                    functionNamesAndTypeParametersFromTypeText paramDependencies.canonicalTypeText
-                                                                        |> Result.map
-                                                                            (\paramFunctionNames ->
-                                                                                let
-                                                                                    encodeFunction =
-                                                                                        expressionTextForFunctionWithOptionalTypeParameters
-                                                                                            { functionName = paramFunctionNames.encodeFunctionName
-                                                                                            , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
-                                                                                            , typeParametersNames = paramFunctionNames.typeParametersNames
-                                                                                            }
-
-                                                                                    decodeFunction =
-                                                                                        expressionTextForFunctionWithOptionalTypeParameters
-                                                                                            { functionName = paramFunctionNames.decodeFunctionName
-                                                                                            , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
-                                                                                            , typeParametersNames = paramFunctionNames.typeParametersNames
-                                                                                            }
-                                                                                in
-                                                                                { encodeFunction = encodeFunction
-                                                                                , decodeFunction = decodeFunction
-                                                                                , dependencies = paramDependencies
-                                                                                }
-                                                                            )
-                                                                )
-                                                    )
-                                                |> Result.Extra.combine
-                                        of
-                                            Err error ->
-                                                Err ("Failed to map instance parameter: " ++ error)
-
-                                            Ok parameters ->
-                                                {-
-                                                   string instantiatedTypeCanonicalName = null;
-                                                      string instantiatedTypeFunctionNameCommonPart = null;
-                                                      IImmutableSet<string> dependenciesFromInstantiatedType = ImmutableHashSet<string>.Empty;
-
-                                                      if (InstantiationSpecialCases.TryGetValue(rootType.Instance.Value.typeName, out var specialCaseFunctionNameCommonPart))
-                                                      {
-                                                          instantiatedTypeCanonicalName = rootType.Instance.Value.typeName;
-                                                          instantiatedTypeFunctionNameCommonPart = specialCaseFunctionNameCommonPart;
-                                                      }
-                                                      else
-                                                      {
-                                                          var instantiatedTypeResolution = ResolveType(rootType.Instance.Value.typeName, sourceModuleName, sourceModules, logWriteLine);
-                                                          instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText;
-                                                          instantiatedTypeFunctionNameCommonPart = GetFunctionNamesAndTypeParametersFromTypeText(instantiatedTypeCanonicalName).functionNames.commonPart;
-                                                          dependenciesFromInstantiatedType = ImmutableHashSet.Create(instantiatedTypeResolution.canonicalTypeText);
-                                                      }
-
-                                                      var parametersTypeTextsForComposition =
-                                                          parameters.Select(param =>
-                                                          {
-                                                              var needsParentheses =
-                                                                  param.dependencies.canonicalTypeText.Contains(" ") &&
-                                                                  !param.dependencies.canonicalTypeText.StartsWith("(") &&
-                                                                  !param.dependencies.canonicalTypeText.StartsWith("{");
-
-                                                              var beforeParentheses =
-                                                                  param.dependencies.canonicalTypeText;
-
-                                                              if (needsParentheses)
-                                                                  return "(" + beforeParentheses + ")";
-
-                                                              return beforeParentheses;
-                                                          });
-
-                                                      return new ResolveTypeResult
-                                                      {
-                                                          canonicalTypeText = instantiatedTypeCanonicalName + " " + String.Join(" ", parametersTypeTextsForComposition),
-
-                                                          compileExpressions = () =>
-                                                              (jsonEncodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.encodeFunction)) + " " + encodeParamName,
-                                                              jsonDecodeFunctionNamePrefix + instantiatedTypeFunctionNameCommonPart + " " + String.Join(" ", parameters.Select(param => param.decodeFunction)),
-                                                              dependenciesFromInstantiatedType.Union(parameters.Select(parameter => parameter.dependencies.canonicalTypeText))),
-
-                                                          referencedModules = ImmutableHashSet<string>.Empty,
-                                                      };
-                                                -}
+                                    Ok parameters ->
+                                        let
+                                            continueWithComponents components =
                                                 let
-                                                    continueWithComponents components =
-                                                        let
-                                                            parametersTypeTextsForComposition =
-                                                                parameters
-                                                                    |> List.map
-                                                                        (\param ->
-                                                                            let
-                                                                                needsParentheses =
-                                                                                    String.contains " " param.dependencies.canonicalTypeText
-                                                                                        && not (param.dependencies.canonicalTypeText |> String.startsWith "(")
-                                                                                        && not (param.dependencies.canonicalTypeText |> String.startsWith "{")
+                                                    parametersTypeTextsForComposition =
+                                                        parameters
+                                                            |> List.map
+                                                                (\param ->
+                                                                    let
+                                                                        needsParentheses =
+                                                                            String.contains " " param.dependencies.canonicalTypeText
+                                                                                && not (param.dependencies.canonicalTypeText |> String.startsWith "(")
+                                                                                && not (param.dependencies.canonicalTypeText |> String.startsWith "{")
 
-                                                                                beforeParentheses =
-                                                                                    param.dependencies.canonicalTypeText
-                                                                            in
-                                                                            if needsParentheses then
-                                                                                "(" ++ beforeParentheses ++ ")"
+                                                                        beforeParentheses =
+                                                                            param.dependencies.canonicalTypeText
+                                                                    in
+                                                                    if needsParentheses then
+                                                                        "(" ++ beforeParentheses ++ ")"
 
-                                                                            else
-                                                                                beforeParentheses
-                                                                        )
-
-                                                            canonicalTypeText =
-                                                                components.instantiatedTypeCanonicalName ++ " " ++ String.join " " parametersTypeTextsForComposition
-                                                        in
-                                                        { canonicalTypeText = canonicalTypeText
-                                                        , canonicalTypeTextWithParameters = canonicalTypeText
-                                                        , compileExpressions =
-                                                            \() ->
-                                                                Ok
-                                                                    { encodeExpression =
-                                                                        jsonEncodeFunctionNamePrefix ++ components.instantiatedTypeFunctionNameCommonPart ++ " " ++ String.join " " (parameters |> List.map .encodeFunction) ++ " " ++ jsonEncodeParamName
-                                                                    , decodeExpression =
-                                                                        jsonDecodeFunctionNamePrefix ++ components.instantiatedTypeFunctionNameCommonPart ++ " " ++ String.join " " (parameters |> List.map .decodeFunction)
-                                                                    , dependencies =
-                                                                        components.dependenciesFromInstantiatedType
-                                                                            :: (parameters |> List.map (.dependencies >> .canonicalTypeText >> Set.singleton))
-                                                                            |> List.foldl Set.union Set.empty
-                                                                    }
-                                                        , referencedModules = maybeExplicitSourceModuleName |> Maybe.map Set.singleton |> Maybe.withDefault Set.empty
-                                                        }
-                                                in
-                                                case instantiationSpecialCases |> Dict.get instanceElmType.typeName of
-                                                    Just instantiatedTypeFunctionNameCommonPart ->
-                                                        Ok
-                                                            (continueWithComponents
-                                                                { instantiatedTypeCanonicalName = instanceElmType.typeName
-                                                                , instantiatedTypeFunctionNameCommonPart = instantiatedTypeFunctionNameCommonPart
-                                                                , dependenciesFromInstantiatedType = Set.empty
-                                                                }
-                                                            )
-
-                                                    Nothing ->
-                                                        case
-                                                            jsonCodingResolveType
-                                                                { rootTypeText = instanceElmType.typeName
-                                                                , maybeExplicitSourceModuleName = maybeExplicitSourceModuleName
-                                                                , rootSourceModuleText = rootSourceModuleText
-                                                                }
-                                                                sourceModules
-                                                        of
-                                                            Err error ->
-                                                                Err ("Failed to resolve instantiated type '" ++ instanceElmType.typeName ++ "': " ++ error)
-
-                                                            Ok instantiatedTypeResolution ->
-                                                                functionNamesAndTypeParametersFromTypeText instantiatedTypeResolution.canonicalTypeText
-                                                                    |> Result.map
-                                                                        (\instantiatedTypeFunctionNames ->
-                                                                            continueWithComponents
-                                                                                { instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText
-                                                                                , instantiatedTypeFunctionNameCommonPart = instantiatedTypeFunctionNames.commonPart
-                                                                                , dependenciesFromInstantiatedType = Set.singleton instantiatedTypeResolution.canonicalTypeText
-                                                                                }
-                                                                        )
-
-                                RecordElmType recordType ->
-                                    {-
-                                       logWriteLine?.Invoke("'" + rootTypeText + "' is a record type.");
-
-                                       var fields = rootType.Record.Value.fields.Select(recordField =>
-                                           {
-                                               var fieldTypeResolution = ResolveLocalTypeText(recordField.typeText);
-
-                                               var (fieldFunctionNames, fieldTypeParametersNames) =
-                                                   GetFunctionNamesAndTypeParametersFromTypeText(fieldTypeResolution.canonicalTypeText);
-
-                                               var encodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
-                                                   fieldFunctionNames.encodeFunctionName, jsonEncodeFunctionNamePrefix, fieldTypeParametersNames);
-
-                                               var decodeFunction = expressionTextForFunctionWithOptionalTypeParameters(
-                                                   fieldFunctionNames.decodeFunctionName, jsonDecodeFunctionNamePrefix, fieldTypeParametersNames);
-
-                                               var encodeFieldValueExpression =
-                                                   encodeParamName + "." + recordField.name + " |> " + encodeFunction;
-
-                                               return new
-                                               {
-                                                   fieldName = recordField.name,
-                                                   fieldCanonicalType = fieldTypeResolution.canonicalTypeText,
-                                                   encodeExpression = "( \"" + recordField.name + "\", " + encodeFieldValueExpression + " )",
-                                                   decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" + recordField.name + "\" " + decodeFunction + " )",
-                                                   dependencies = fieldTypeResolution.dependencies,
-                                               };
-                                           }).ToImmutableList();
-
-                                       var encodeListExpression =
-                                           "[ " +
-                                           String.Join(
-                                               "\n, ",
-                                               fields.Select(field => field.encodeExpression))
-                                           + "\n]";
-
-                                       var dencodeListExpression =
-                                           String.Join("\n", fields.Select(field => field.decodeExpression));
-
-                                       var allFieldsDependencies =
-                                           fields
-                                           .Select(field => field.dependencies)
-                                           .Aggregate(ImmutableHashSet<string>.Empty, (a, b) => a.Union(b));
-
-                                       var encodeExpression =
-                                           "Json.Encode.object\n" +
-                                           IndentElmCodeLines(1, encodeListExpression);
-
-                                       var recordFieldsNames = rootType.Record.Value.fields.Select(field => field.name);
-
-                                       var decodeMapFunction =
-                                           "(\\" + String.Join(" ", recordFieldsNames) + " -> { " +
-                                           String.Join(", ", recordFieldsNames.Select(fieldName => fieldName + " = " + fieldName))
-                                           + " })";
-
-                                       var decodeExpression =
-                                           "Json.Decode.succeed " + decodeMapFunction + "\n" +
-                                           IndentElmCodeLines(1, dencodeListExpression);
-
-                                       var canonicalTypeText =
-                                           "{" +
-                                           string.Join(",", fields.Select(field => field.fieldName + ":" + field.fieldCanonicalType)) +
-                                           "}";
-
-                                       return new ResolveTypeResult
-                                       {
-                                           canonicalTypeText = canonicalTypeText,
-
-                                           compileExpressions = () => (encodeExpression, decodeExpression, allFieldsDependencies),
-
-                                           referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
-                                       };
-                                    -}
-                                    let
-                                        fieldsResult =
-                                            recordType.fields
-                                                |> List.map
-                                                    (\recordField ->
-                                                        resolveLocalTypeText recordField.typeText
-                                                            |> Result.andThen
-                                                                (\fieldTypeResolution ->
-                                                                    functionNamesAndTypeParametersFromTypeText fieldTypeResolution.canonicalTypeText
-                                                                        |> Result.map
-                                                                            (\fieldFunctionNames ->
-                                                                                let
-                                                                                    encodeFunction =
-                                                                                        expressionTextForFunctionWithOptionalTypeParameters
-                                                                                            { functionName = fieldFunctionNames.encodeFunctionName
-                                                                                            , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
-                                                                                            , typeParametersNames = fieldFunctionNames.typeParametersNames
-                                                                                            }
-
-                                                                                    decodeFunction =
-                                                                                        expressionTextForFunctionWithOptionalTypeParameters
-                                                                                            { functionName = fieldFunctionNames.decodeFunctionName
-                                                                                            , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
-                                                                                            , typeParametersNames = fieldFunctionNames.typeParametersNames
-                                                                                            }
-
-                                                                                    encodeFieldValueExpression =
-                                                                                        jsonEncodeParamName ++ "." ++ recordField.name ++ " |> " ++ encodeFunction
-                                                                                in
-                                                                                { fieldName = recordField.name
-                                                                                , fieldCanonicalType = fieldTypeResolution.canonicalTypeText
-                                                                                , encodeExpression = "( \"" ++ recordField.name ++ "\", " ++ encodeFieldValueExpression ++ " )"
-                                                                                , decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" ++ recordField.name ++ "\" " ++ decodeFunction ++ " )"
-                                                                                , dependencies = fieldTypeResolution.dependencies
-                                                                                }
-                                                                            )
+                                                                    else
+                                                                        beforeParentheses
                                                                 )
+
+                                                    canonicalTypeText =
+                                                        components.instantiatedTypeCanonicalName ++ " " ++ String.join " " parametersTypeTextsForComposition
+                                                in
+                                                { canonicalTypeText = canonicalTypeText
+                                                , canonicalTypeTextWithParameters = canonicalTypeText
+                                                , compileExpressions =
+                                                    \() ->
+                                                        Ok
+                                                            { encodeExpression =
+                                                                jsonEncodeFunctionNamePrefix ++ components.instantiatedTypeFunctionNameCommonPart ++ " " ++ String.join " " (parameters |> List.map .encodeFunction) ++ " " ++ jsonEncodeParamName
+                                                            , decodeExpression =
+                                                                jsonDecodeFunctionNamePrefix ++ components.instantiatedTypeFunctionNameCommonPart ++ " " ++ String.join " " (parameters |> List.map .decodeFunction)
+                                                            , dependencies =
+                                                                components.dependenciesFromInstantiatedType
+                                                                    :: (parameters |> List.map (.dependencies >> .canonicalTypeText >> Set.singleton))
+                                                                    |> List.foldl Set.union Set.empty
+                                                            }
+                                                , referencedModules = Set.singleton currentModuleNameFlat
+                                                }
+                                        in
+                                        case instantiationSpecialCases |> Dict.get instanceElmType.typeName of
+                                            Just instantiatedTypeFunctionNameCommonPart ->
+                                                Ok
+                                                    (continueWithComponents
+                                                        { instantiatedTypeCanonicalName = instanceElmType.typeName
+                                                        , instantiatedTypeFunctionNameCommonPart = instantiatedTypeFunctionNameCommonPart
+                                                        , dependenciesFromInstantiatedType = Set.empty
+                                                        }
                                                     )
-                                                |> Result.Extra.combine
+
+                                            Nothing ->
+                                                case
+                                                    jsonCodingResolveType
+                                                        { rootTypeText = instanceElmType.typeName
+                                                        , currentModule = currentModule
+                                                        }
+                                                        sourceModules
+                                                of
+                                                    Err error ->
+                                                        Err ("Failed to resolve instantiated type '" ++ instanceElmType.typeName ++ "': " ++ error)
+
+                                                    Ok instantiatedTypeResolution ->
+                                                        functionNamesAndTypeParametersFromTypeText instantiatedTypeResolution.canonicalTypeText
+                                                            |> Result.map
+                                                                (\instantiatedTypeFunctionNames ->
+                                                                    continueWithComponents
+                                                                        { instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText
+                                                                        , instantiatedTypeFunctionNameCommonPart = instantiatedTypeFunctionNames.commonPart
+                                                                        , dependenciesFromInstantiatedType = Set.singleton instantiatedTypeResolution.canonicalTypeText
+                                                                        }
+                                                                )
+
+                        RecordElmType recordType ->
+                            let
+                                fieldsResult =
+                                    recordType.fields
+                                        |> List.map
+                                            (\recordField ->
+                                                resolveLocalTypeText recordField.typeText
+                                                    |> Result.andThen
+                                                        (\fieldTypeResolution ->
+                                                            functionNamesAndTypeParametersFromTypeText fieldTypeResolution.canonicalTypeText
+                                                                |> Result.map
+                                                                    (\fieldFunctionNames ->
+                                                                        let
+                                                                            encodeFunction =
+                                                                                expressionTextForFunctionWithOptionalTypeParameters
+                                                                                    { functionName = fieldFunctionNames.encodeFunctionName
+                                                                                    , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
+                                                                                    , typeParametersNames = fieldFunctionNames.typeParametersNames
+                                                                                    }
+
+                                                                            decodeFunction =
+                                                                                expressionTextForFunctionWithOptionalTypeParameters
+                                                                                    { functionName = fieldFunctionNames.decodeFunctionName
+                                                                                    , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
+                                                                                    , typeParametersNames = fieldFunctionNames.typeParametersNames
+                                                                                    }
+
+                                                                            encodeFieldValueExpression =
+                                                                                jsonEncodeParamName ++ "." ++ recordField.name ++ " |> " ++ encodeFunction
+                                                                        in
+                                                                        { fieldName = recordField.name
+                                                                        , fieldCanonicalType = fieldTypeResolution.canonicalTypeText
+                                                                        , encodeExpression = "( \"" ++ recordField.name ++ "\", " ++ encodeFieldValueExpression ++ " )"
+                                                                        , decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" ++ recordField.name ++ "\" " ++ decodeFunction ++ " )"
+                                                                        , dependencies = fieldTypeResolution.dependencies
+                                                                        }
+                                                                    )
+                                                        )
+                                            )
+                                        |> Result.Extra.combine
+                            in
+                            case fieldsResult of
+                                Err error ->
+                                    Err ("Failed to resolve fields: " ++ error)
+
+                                Ok fields ->
+                                    let
+                                        encodeListExpression =
+                                            "["
+                                                ++ (fields |> List.map .encodeExpression |> String.join ",\n")
+                                                ++ "\n]"
+
+                                        dencodeListExpression =
+                                            fields |> List.map .decodeExpression |> String.join "\n"
+
+                                        allFieldsDependencies =
+                                            fields
+                                                |> List.map .dependencies
+                                                |> List.foldl Set.union Set.empty
+
+                                        encodeExpression =
+                                            "Json.Encode.object\n"
+                                                ++ indentElmCodeLines 1 encodeListExpression
+
+                                        recordFieldsNames =
+                                            recordType.fields |> List.map .name
+
+                                        decodeMapFunction =
+                                            "(\\"
+                                                ++ String.join " " recordFieldsNames
+                                                ++ " -> { "
+                                                ++ String.join ", " (recordFieldsNames |> List.map (\fieldName -> fieldName ++ " = " ++ fieldName))
+                                                ++ " })"
+
+                                        decodeExpression =
+                                            "Json.Decode.succeed "
+                                                ++ decodeMapFunction
+                                                ++ "\n"
+                                                ++ indentElmCodeLines 1 dencodeListExpression
+
+                                        canonicalTypeText =
+                                            "{"
+                                                ++ String.join "," (fields |> List.map (\field -> field.fieldName ++ ":" ++ field.fieldCanonicalType))
+                                                ++ "}"
                                     in
-                                    case fieldsResult of
-                                        Err error ->
-                                            Err ("Failed to resolve fields: " ++ error)
+                                    Ok
+                                        { canonicalTypeText = canonicalTypeText
+                                        , canonicalTypeTextWithParameters = canonicalTypeText
+                                        , compileExpressions =
+                                            \() ->
+                                                Ok
+                                                    { encodeExpression = encodeExpression
+                                                    , decodeExpression = decodeExpression
+                                                    , dependencies = allFieldsDependencies
+                                                    }
+                                        , referencedModules = Set.singleton currentModuleNameFlat
+                                        }
 
-                                        Ok fields ->
-                                            let
-                                                encodeListExpression =
-                                                    "["
-                                                        ++ (fields |> List.map .encodeExpression |> String.join ",\n")
-                                                        ++ "\n]"
+                        CustomElmType customType ->
+                            jsonCodingResolveTypeCustomType customType
 
-                                                dencodeListExpression =
-                                                    fields |> List.map .decodeExpression |> String.join "\n"
+                        TupleElmType tupleElements ->
+                            case tupleElements |> List.map resolveLocalTypeText |> Result.Extra.combine of
+                                Err error ->
+                                    Err ("Failed to resolve tuple element type text: " ++ error)
 
-                                                allFieldsDependencies =
-                                                    fields
-                                                        |> List.map .dependencies
-                                                        |> List.foldl Set.union Set.empty
+                                Ok tupleElementsResults ->
+                                    tupleElementsResults
+                                        |> List.map (.canonicalTypeText >> functionNamesAndTypeParametersFromTypeText)
+                                        |> Result.Extra.combine
+                                        |> Result.map
+                                            (\tupleElementsFunctionNames ->
+                                                let
+                                                    allElementsDependencies =
+                                                        tupleElementsResults
+                                                            |> List.map .dependencies
+                                                            |> List.foldl Set.union Set.empty
 
-                                                encodeExpression =
-                                                    "Json.Encode.object\n"
-                                                        ++ indentElmCodeLines 1 encodeListExpression
+                                                    tupleElementsCanonicalTypeName =
+                                                        tupleElementsResults |> List.map .canonicalTypeText
 
-                                                recordFieldsNames =
-                                                    recordType.fields |> List.map .name
+                                                    functionNameCommonPart =
+                                                        jsonCodeTupleFunctionNameCommonPart
+                                                            ++ String.fromInt (List.length tupleElements)
 
-                                                decodeMapFunction =
-                                                    "(\\"
-                                                        ++ String.join " " recordFieldsNames
-                                                        ++ " -> { "
-                                                        ++ String.join ", " (recordFieldsNames |> List.map (\fieldName -> fieldName ++ " = " ++ fieldName))
-                                                        ++ " })"
+                                                    encodeExpression =
+                                                        jsonEncodeFunctionNamePrefix
+                                                            ++ functionNameCommonPart
+                                                            ++ " "
+                                                            ++ (String.join " " (tupleElementsFunctionNames |> List.map .encodeFunctionName) ++ " ")
+                                                            ++ jsonEncodeParamName
 
-                                                decodeExpression =
-                                                    "Json.Decode.succeed "
-                                                        ++ decodeMapFunction
-                                                        ++ "\n"
-                                                        ++ indentElmCodeLines 1 dencodeListExpression
+                                                    decodeExpression =
+                                                        jsonDecodeFunctionNamePrefix
+                                                            ++ functionNameCommonPart
+                                                            ++ " "
+                                                            ++ String.join " " (tupleElementsFunctionNames |> List.map .decodeFunctionName)
 
-                                                canonicalTypeText =
-                                                    "{"
-                                                        ++ String.join "," (fields |> List.map (\field -> field.fieldName ++ ":" ++ field.fieldCanonicalType))
-                                                        ++ "}"
-                                            in
-                                            Ok
+                                                    canonicalTypeText =
+                                                        "(" ++ String.join "," tupleElementsCanonicalTypeName ++ ")"
+                                                in
                                                 { canonicalTypeText = canonicalTypeText
                                                 , canonicalTypeTextWithParameters = canonicalTypeText
                                                 , compileExpressions =
@@ -1947,139 +1102,18 @@ jsonCodingResolveType { rootTypeText, maybeExplicitSourceModuleName, rootSourceM
                                                         Ok
                                                             { encodeExpression = encodeExpression
                                                             , decodeExpression = decodeExpression
-                                                            , dependencies = allFieldsDependencies
+                                                            , dependencies = allElementsDependencies
                                                             }
-                                                , referencedModules = maybeExplicitSourceModuleName |> Maybe.map Set.singleton |> Maybe.withDefault Set.empty
+                                                , referencedModules = Set.singleton currentModuleNameFlat
                                                 }
+                                            )
 
-                                CustomElmType customType ->
-                                    jsonCodingResolveTypeCustomType customType
-
-                                TupleElmType tupleElements ->
-                                    {-
-                                       var tupleElementsResults =
-                                           rootType.Tuple
-                                           .Select(tupleElementType => ResolveLocalTypeText(tupleElementType))
-                                           .ToImmutableList();
-
-                                       var tupleElementsCanonicalTypeName =
-                                           tupleElementsResults
-                                           .Select(elementResult => elementResult.canonicalTypeText)
-                                           .ToImmutableList();
-
-                                       var allElementsDependencies =
-                                           tupleElementsResults.SelectMany(elementResult => elementResult.dependencies)
-                                           .ToImmutableHashSet();
-
-                                       var tupleElementsFunctionNames =
-                                           tupleElementsCanonicalTypeName
-                                           .Select(tupleElement => GetFunctionNamesAndTypeParametersFromTypeText(tupleElement).functionNames)
-                                           .ToImmutableList();
-
-                                       var functionNameCommonPart = jsonCodeTupleFunctionNameCommonPart + rootType.Tuple.Count.ToString();
-
-                                       var encodeExpression =
-                                           jsonEncodeFunctionNamePrefix + functionNameCommonPart + " " +
-                                           String.Join(" ", tupleElementsFunctionNames.Select(functionNamesAndTypeParams =>
-                                               functionNamesAndTypeParams.encodeFunctionName)) + " " +
-                                           encodeParamName;
-
-                                       var decodeExpression =
-                                           jsonDecodeFunctionNamePrefix + functionNameCommonPart + " " +
-                                           String.Join(" ", tupleElementsFunctionNames.Select(functionNamesAndTypeParams =>
-                                               functionNamesAndTypeParams.decodeFunctionName));
-
-                                       var canonicalTypeText = "(" + string.Join(",", tupleElementsCanonicalTypeName) + ")";
-
-                                       return new ResolveTypeResult
-                                       {
-                                           canonicalTypeText = canonicalTypeText,
-
-                                           compileExpressions = () => (encodeExpression, decodeExpression, allElementsDependencies),
-
-                                           referencedModules = ImmutableHashSet<string>.Empty.Add(sourceModuleName),
-                                       };
-                                    -}
-                                    case tupleElements |> List.map resolveLocalTypeText |> Result.Extra.combine of
-                                        Err error ->
-                                            Err ("Failed to resolve tuple element type text: " ++ error)
-
-                                        Ok tupleElementsResults ->
-                                            tupleElementsResults
-                                                |> List.map (.canonicalTypeText >> functionNamesAndTypeParametersFromTypeText)
-                                                |> Result.Extra.combine
-                                                |> Result.map
-                                                    (\tupleElementsFunctionNames ->
-                                                        let
-                                                            allElementsDependencies =
-                                                                tupleElementsResults
-                                                                    |> List.map .dependencies
-                                                                    |> List.foldl Set.union Set.empty
-
-                                                            tupleElementsCanonicalTypeName =
-                                                                tupleElementsResults |> List.map .canonicalTypeText
-
-                                                            functionNameCommonPart =
-                                                                jsonCodeTupleFunctionNameCommonPart
-                                                                    ++ String.fromInt (List.length tupleElements)
-
-                                                            encodeExpression =
-                                                                jsonEncodeFunctionNamePrefix
-                                                                    ++ functionNameCommonPart
-                                                                    ++ " "
-                                                                    ++ (String.join " " (tupleElementsFunctionNames |> List.map .encodeFunctionName) ++ " ")
-                                                                    ++ jsonEncodeParamName
-
-                                                            decodeExpression =
-                                                                jsonDecodeFunctionNamePrefix
-                                                                    ++ functionNameCommonPart
-                                                                    ++ " "
-                                                                    ++ String.join " " (tupleElementsFunctionNames |> List.map .decodeFunctionName)
-
-                                                            canonicalTypeText =
-                                                                "(" ++ String.join "," tupleElementsCanonicalTypeName ++ ")"
-                                                        in
-                                                        { canonicalTypeText = canonicalTypeText
-                                                        , canonicalTypeTextWithParameters = canonicalTypeText
-                                                        , compileExpressions =
-                                                            \() ->
-                                                                Ok
-                                                                    { encodeExpression = encodeExpression
-                                                                    , decodeExpression = decodeExpression
-                                                                    , dependencies = allElementsDependencies
-                                                                    }
-                                                        , referencedModules = maybeExplicitSourceModuleName |> Maybe.map Set.singleton |> Maybe.withDefault Set.empty
-                                                        }
-                                                    )
-
-                                AliasElmType parsedAlias ->
-                                    jsonCodingResolveType
-                                        { rootTypeText = parsedAlias.aliasedText
-                                        , maybeExplicitSourceModuleName = maybeExplicitSourceModuleName
-                                        , rootSourceModuleText = rootSourceModuleText
-                                        }
-                                        sourceModules
-        )
-        sourceModuleText
-
-
-
-{-
-   static string expressionTextForFunctionWithOptionalTypeParameters(
-       string functionName, string typeParametersFunctionsCommonPrefix, IImmutableList<string> typeParametersNames)
-   {
-       var needsParentheses = 0 < typeParametersNames.Count;
-
-       var beforeParentheses =
-           functionName +
-           String.Join("", typeParametersNames.Select(typeParameterName => " " + typeParametersFunctionsCommonPrefix + "type_parameter_" + typeParameterName));
-
-       if (needsParentheses)
-           return "(" + beforeParentheses + ")";
-
-       return beforeParentheses;
-   }
--}
+                        AliasElmType parsedAlias ->
+                            jsonCodingResolveType
+                                { rootTypeText = parsedAlias.aliasedText
+                                , currentModule = currentModule
+                                }
+                                sourceModules
 
 
 expressionTextForFunctionWithOptionalTypeParameters :
@@ -2108,117 +1142,27 @@ expressionTextForFunctionWithOptionalTypeParameters { functionName, typeParamete
         beforeParentheses
 
 
-getTypeDefinitionTextFromModuleText : String -> String -> Result String (Maybe String)
-getTypeDefinitionTextFromModuleText typeNameInModule moduleText =
-    moduleText
-        |> parseElmModuleText
-        |> Result.map
-            (\parsedModule ->
-                parsedModule.declarations
-                    |> List.filter
-                        (\declaration ->
-                            case Elm.Syntax.Node.value declaration of
-                                Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                    Elm.Syntax.Node.value customTypeDeclaration.name == typeNameInModule
+getTypeDefinitionTextFromModuleText : String -> ( String, Elm.Syntax.File.File ) -> Maybe String
+getTypeDefinitionTextFromModuleText typeNameInModule ( moduleText, parsedModule ) =
+    parsedModule.declarations
+        |> List.filter
+            (\declaration ->
+                case Elm.Syntax.Node.value declaration of
+                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                        Elm.Syntax.Node.value customTypeDeclaration.name == typeNameInModule
 
-                                Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-                                    Elm.Syntax.Node.value aliasDeclaration.name == typeNameInModule
+                    Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
+                        Elm.Syntax.Node.value aliasDeclaration.name == typeNameInModule
 
-                                _ ->
-                                    False
-                        )
-                    |> List.head
-                    |> Maybe.map
-                        (\declaration ->
-                            getTextLinesFromRange (Elm.Syntax.Node.range declaration) moduleText
-                                |> String.join "\n"
-                        )
+                    _ ->
+                        False
             )
-        |> Result.mapError (parserDeadEndsToString moduleText)
-
-
-
-{-
-   /*
-   Resolve the 'exposing' and optional 'as' parts 'import' statements.
-   Return null in case this name is not imported.
-   */
-   static public (string moduleName, string localTypeName)? GetCanonicalNameFromImportedNameInModule(
-       string importedNameInModule, string moduleText)
-   {
-       //  Assume: Each import is expressed on a single line.
-
-       var qualifiedMatch = Regex.Match(importedNameInModule, @"(.+)\.(.+)");
-
-       var imports =
-           GetElmModuleTextLines(moduleText)
-           .Select(line => Regex.Match(line, @"^import\s+([\w\d\._]+)(.*)"))
-           .Where(match => match.Success)
-           .ToImmutableDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
-
-       if (qualifiedMatch.Success)
-       {
-           //  In this case, we are looking for 'as' or the unmapped name.
-
-           var moduleName = qualifiedMatch.Groups[1].Value;
-           var typeName = qualifiedMatch.Groups[2].Value;
-
-           {
-               imports.TryGetValue(moduleName, out var literalMatch);
-
-               if (literalMatch != null)
-                   return (moduleName, typeName);
-           }
-
-           {
-               var matchingImportByAs =
-                   imports.FirstOrDefault(import =>
-                   {
-                       var asMatch = Regex.Match(import.Value, @"^\s+as\s+([\w\d_]+)");
-
-                       return asMatch.Success && asMatch.Groups[1].Value == moduleName;
-                   });
-
-               if (matchingImportByAs.Key != null)
-                   return (matchingImportByAs.Key, typeName);
-           }
-
-           return null;
-       }
-       else
-       {
-           foreach (var import in imports)
-           {
-               var exposingMatch = Regex.Match(import.Value, @"^\s*(|as\s+[\w\d_]+\s*)exposing\s*\(([^\)]*)\)");
-
-               if (!exposingMatch.Success)
-                   continue;
-
-               var exposedAggregated = exposingMatch.Groups[2].Value.Trim();
-
-               if (exposedAggregated == "..")
-               {
-                   //  resolving 'exposing(..)' in import is not implemented yet.
-
-                   continue;
-               }
-
-               var exposedNames =
-                   exposedAggregated
-                   .Split(new[] { ',' })
-                   .Select(commaSeparatedValue => commaSeparatedValue.Trim())
-                   .ToImmutableList();
-
-               if (exposedNames.Contains(importedNameInModule))
-               {
-                   return (import.Key, importedNameInModule);
-               }
-           }
-
-           return null;
-       }
-   }
--}
+        |> List.head
+        |> Maybe.map
+            (\declaration ->
+                getTextLinesFromRange (Elm.Syntax.Node.range declaration) moduleText
+                    |> String.join "\n"
+            )
 
 
 getCanonicalNameFromImportedNameInModule : Elm.Syntax.File.File -> String -> Maybe ( List String, String )
@@ -2580,7 +1524,6 @@ parseElmTypeText canBeInstance typeTextBeforeTrimming =
                         Ok ( InstanceElmType { typeName = firstName, parameters = [] }, restAfterFirstName )
 
                     else
-                        -- Err ("parseElmTypeText not implemented yet for '" ++ typeText ++ "'")
                         parseParameters (String.trimLeft restAfterFirstName)
                             |> Result.map
                                 (\( parameters, remainingAfterParameters ) ->
@@ -2643,7 +1586,6 @@ enumerateExpressionsResolvingAllDependenciesIgnoringTypes { typesToIgnore } getE
                                         Err ("Failed to get dependency expression: " ++ error)
 
                                     Ok dependenciesItems ->
-                                        -- Err "enumerateExpressionsResolvingAllDependenciesIgnoringTypes not implemented"
                                         Ok
                                             ({ elmType = expressionsAndDependenciesAndCanonicalName.canonicalTypeTextWithParameters
                                              , expressions =
@@ -2670,18 +1612,6 @@ jsonCodeLeafExpressions =
     , ( "Bytes.Bytes", ( "json_encode_Bytes " ++ jsonEncodeParamName, "json_decode_Bytes" ) )
     ]
         |> Dict.fromList
-
-
-
-{-
-   static IImmutableDictionary<string, string> InstantiationSpecialCases =>
-       ImmutableDictionary<string, string>.Empty
-       .Add("List", jsonCodeListFunctionNameCommonPart)
-       .Add("Set.Set", jsonCodeSetFunctionNameCommonPart)
-       .Add("Maybe", jsonCodeMaybeFunctionNameCommonPart)
-       .Add("Result", jsonCodeResultFunctionNameCommonPart)
-       .Add("Dict.Dict", jsonCodeDictFunctionNameCommonPart);
--}
 
 
 instantiationSpecialCases : Dict.Dict String String
@@ -2719,28 +1649,7 @@ generalSupportingFunctionsTexts =
                 }
             )
     )
-        ++ {-
-              jsonDecode_andMap : Json.Decode.Decoder a -> Json.Decode.Decoder (a -> b) -> Json.Decode.Decoder b
-              jsonDecode_andMap =
-                  Json.Decode.map2 (|>)
-              ",
-              $@"
-              json_encode_Bytes : Bytes.Bytes -> Json.Encode.Value
-              json_encode_Bytes bytes =
-                  [ ( ""AsBase64"", bytes |> Base64.fromBytes |> Maybe.withDefault ""Error encoding to base64"" |> Json.Encode.string ) ]
-                      |> Json.Encode.object
-              ",
-              $@"
-              json_decode_Bytes : Json.Decode.Decoder Bytes.Bytes
-              json_decode_Bytes =
-                  Json.Decode.field ""AsBase64""
-                      (Json.Decode.string
-                          |> Json.Decode.andThen
-                              (Base64.toBytes >> Maybe.map Json.Decode.succeed >> Maybe.withDefault (Json.Decode.fail ""Failed to decode base64.""))
-                      )
-              "
-           -}
-           [ { functionName = "jsonDecode_andMap"
+        ++ [ { functionName = "jsonDecode_andMap"
              , functionText = """
 jsonDecode_andMap : Json.Decode.Decoder a -> Json.Decode.Decoder (a -> b) -> Json.Decode.Decoder b
 jsonDecode_andMap =
@@ -2916,41 +1825,6 @@ functionNamesAndTypeParametersFromTypeText typeText =
             )
 
 
-
-{-
-   static (string typeTextMinusTypeParameters, ImmutableList<string> typeParametersNames) parseForTypeParameters(string typeText)
-   {
-       var instanceTypeTextWithParametersMatch = Regex.Match(typeText.Trim(), @"^\((.+?)((\s+[a-z][^\s]*){1,})\)$");
-
-       if (instanceTypeTextWithParametersMatch.Success)
-           return
-           (instanceTypeTextWithParametersMatch.Groups[1].Value,
-           Regex.Split(instanceTypeTextWithParametersMatch.Groups[2].Value.Trim(), @"\s+").ToImmutableList());
-
-       var parseTypeResult = ParseElmTypeText(typeText, canBeInstance: true);
-
-       var parsedType = parseTypeResult.parsedType;
-
-       if (parsedType.Instance != null)
-       {
-           var typeParametersNames =
-               parsedType.Instance.Value.parameters
-               .SelectMany(EnumerateAllTypeNamesFromTypeText)
-               .Where(typeName => Char.IsLower(typeName[0])).ToImmutableList();
-
-           return (typeText, typeParametersNames);
-       }
-
-       {
-           var typeParametersNames =
-               EnumerateAllTypeNamesFromTypeText(typeText).Where(typeName => Char.IsLower(typeName[0])).ToImmutableList();
-
-           return (typeText, typeParametersNames);
-       }
-   }
--}
-
-
 parseForTypeParameters : String -> Result String ( String, List String )
 parseForTypeParameters typeText =
     case Regex.fromString "^\\((.+?)((\\s+[a-z][^\\s]*){1,})\\)$" of
@@ -2995,38 +1869,6 @@ parseForTypeParameters typeText =
                                                     ( typeText, typesNames |> List.filter stringStartsWithLowercaseLetter )
                                                 )
                             )
-
-
-
-{-
-      static IEnumerable<string> EnumerateAllTypeNamesFromTypeText(string typeText)
-   {
-       var parseTypeResult = ParseElmTypeText(typeText, canBeInstance: true);
-
-       if (0 < parseTypeResult.remainingString?.Trim()?.Length)
-           throw new NotSupportedException("Unexpected remaining string after parsing type: '" + parseTypeResult.remainingString + "'.");
-
-       var parsedType = parseTypeResult.parsedType;
-
-       if (parsedType.Instance != null)
-       {
-           var instancedTypes = new[] { parsedType.Instance.Value.typeName };
-
-           if (parsedType.Instance.Value.parameters.Count < 1)
-               return instancedTypes;
-
-           return instancedTypes.Concat(parsedType.Instance.Value.parameters.SelectMany(EnumerateAllTypeNamesFromTypeText));
-       }
-
-       if (parsedType.Tuple != null)
-           return parsedType.Tuple.SelectMany(EnumerateAllTypeNamesFromTypeText);
-
-       if (parsedType.Record != null)
-           return parsedType.Record.Value.fields.SelectMany(field => EnumerateAllTypeNamesFromTypeText(field.typeText));
-
-       throw new NotImplementedException();
-   }
--}
 
 
 enumerateAllTypeNamesFromTypeText : String -> Result String (List String)
@@ -3074,7 +1916,7 @@ jsonDecodeFunctionNamePrefix =
     "jsonDecode_"
 
 
-elmModulesDictFromAppFiles : AppFiles -> Dict.Dict String String
+elmModulesDictFromAppFiles : AppFiles -> Dict.Dict String ( String, Elm.Syntax.File.File )
 elmModulesDictFromAppFiles appFiles =
     appFiles
         |> Dict.toList
@@ -3088,7 +1930,7 @@ elmModulesDictFromAppFiles appFiles =
                     Ok elmFile ->
                         Just
                             ( String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition))
-                            , fileText
+                            , ( fileText, elmFile )
                             )
             )
         |> Dict.fromList
