@@ -33,6 +33,20 @@ lowerForSourceFilesSerialized argumentsJson =
         |> Json.Encode.encode 0
 
 
+lowerForSourceFilesAndJsonCodersSerialized : String -> String
+lowerForSourceFilesAndJsonCodersSerialized argumentsJson =
+    (case Json.Decode.decodeString jsonDecodeLowerForSourceFilesArguments argumentsJson of
+        Err decodeError ->
+            Err ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError)
+
+        Ok args ->
+            CompileFullstackApp.loweredForSourceFilesAndJsonCoders args.compilationInterfaceElmModuleNamePrefixes args.sourceFiles
+    )
+        |> Result.mapError (CompileFullstackApp.OtherCompilationError >> List.singleton)
+        |> jsonEncodeLowerForSourceFilesResponse
+        |> Json.Encode.encode 0
+
+
 jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value
 jsonEncodeLowerForSourceFilesResponse submissionResponse =
     json_encode_Result
@@ -130,6 +144,11 @@ main =
         { init = \_ -> ( (), Cmd.none )
         , update =
             \_ stateBefore ->
-                ( lowerForSourceFilesSerialized "" |> always stateBefore, Cmd.none )
+                ( [ lowerForSourceFilesSerialized ""
+                  , lowerForSourceFilesAndJsonCodersSerialized ""
+                  ]
+                    |> always stateBefore
+                , Cmd.none
+                )
         , subscriptions = \_ -> Sub.none
         }

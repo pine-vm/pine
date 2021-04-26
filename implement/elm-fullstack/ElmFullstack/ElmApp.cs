@@ -52,9 +52,7 @@ namespace ElmFullstack
             Action<string> logWriteLine) =>
             LoweredElmAppForBackendStateSerializer(
                 LoweredElmAppForElmMake(
-                    originalAppFiles: LoweredElmAppToGenerateJsonCoders(
-                        LoweredElmAppForSourceFiles(sourceFiles), logWriteLine),
-                        logWriteLine: logWriteLine),
+                    originalAppFiles: LoweredElmAppForSourceFilesAndJsonCoders(sourceFiles), logWriteLine),
                 interfaceConfig,
                 logWriteLine: logWriteLine);
 
@@ -551,7 +549,7 @@ namespace ElmFullstack
                     Encoding.UTF8.GetBytes(interfaceModuleWithSupportingFunctions).ToImmutableList());
         }
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForSourceFiles(
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForSourceFilesAndJsonCoders(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles)
         {
             using (var jsEngine = PrepareJsEngineToCompileElmApp())
@@ -574,7 +572,7 @@ namespace ElmFullstack
                 );
 
                 var responseJson =
-                    jsEngine.CallFunction("lowerForSourceFilesSerialized", argumentsJson)
+                    jsEngine.CallFunction("lowerForSourceFilesAndJsonCodersSerialized", argumentsJson)
                     ?.ToString();
 
                 var responseStructure =
@@ -847,6 +845,9 @@ jsonDecodeState =
                 {
                     (functionNameInElm: "Main.lowerForSourceFilesSerialized",
                     publicName: "lowerForSourceFilesSerialized",
+                    arity: 1),
+                    (functionNameInElm: "Main.lowerForSourceFilesAndJsonCodersSerialized",
+                    publicName: "lowerForSourceFilesAndJsonCodersSerialized",
                     arity: 1),
                 };
 
