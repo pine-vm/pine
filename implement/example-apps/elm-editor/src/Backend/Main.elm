@@ -179,12 +179,16 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                     )
 
         InterfaceToHost.TaskCompleteEvent taskComplete ->
-            processEventTaskComplete
-                taskComplete
-                { stateBefore
-                    | pendingTasksForRequestVolatileHost =
-                        stateBefore.pendingTasksForRequestVolatileHost |> Dict.remove taskComplete.taskId
-                }
+            let
+                ( state, response ) =
+                    processEventTaskComplete taskComplete stateBefore
+            in
+            ( { state
+                | pendingTasksForRequestVolatileHost =
+                    stateBefore.pendingTasksForRequestVolatileHost |> Dict.remove taskComplete.taskId
+              }
+            , response
+            )
 
 
 processEventTaskComplete : InterfaceToHost.TaskCompleteEventStructure -> State -> ( State, InterfaceToHost.AppEventResponse )
@@ -240,53 +244,68 @@ processEventTaskComplete taskComplete stateBefore =
                         bodyFromString =
                             Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
+                        httpResponseInternalServerError errorMessage =
+                            { statusCode = 500
+                            , bodyAsBase64 = bodyFromString errorMessage
+                            , headersToAdd = []
+                            }
+
                         ( httpResponse, maybeVolatileHostToRemoveId ) =
-                            case requestToVolatileHostResponse of
-                                Err InterfaceToHost.HostNotFound ->
-                                    ( { statusCode = 500
-                                      , bodyAsBase64 = bodyFromString "Error: Volatile host disappeared. Starting volatile host again... Please retry."
-                                      , headersToAdd = []
-                                      }
+                            case stateBefore.pendingTasksForRequestVolatileHost |> Dict.get taskComplete.taskId of
+                                Nothing ->
+                                    ( httpResponseInternalServerError
+                                        ("Error: Did not find entry for task ID '" ++ taskComplete.taskId ++ "'")
                                     , stateBefore.pendingTasksForRequestVolatileHost
                                         |> Dict.get taskComplete.taskId
                                         |> Maybe.map .volatileHostId
                                     )
 
-                                Ok requestToVolatileHostComplete ->
-                                    case requestToVolatileHostComplete.exceptionToString of
-                                        Just exceptionToString ->
-                                            ( { statusCode = 500
-                                              , bodyAsBase64 = bodyFromString ("Exception in volatile host:\n" ++ exceptionToString)
-                                              , headersToAdd = []
-                                              }
-                                            , Nothing
+                                Just pendingTask ->
+                                    case requestToVolatileHostResponse of
+                                        Err InterfaceToHost.HostNotFound ->
+                                            ( httpResponseInternalServerError
+                                                ("Error: Volatile host '"
+                                                    ++ pendingTask.volatileHostId
+                                                    ++ "' disappeared. Starting volatile host again... Please retry."
+                                                )
+                                            , Just pendingTask.volatileHostId
                                             )
 
-                                        Nothing ->
-                                            let
-                                                ( headersToAdd, bodyAsBase64 ) =
-                                                    case requestToVolatileHostComplete.returnValueToString of
-                                                        Nothing ->
-                                                            ( [], Nothing )
+                                        Ok requestToVolatileHostComplete ->
+                                            case requestToVolatileHostComplete.exceptionToString of
+                                                Just exceptionToString ->
+                                                    ( { statusCode = 500
+                                                      , bodyAsBase64 = bodyFromString ("Exception in volatile host:\n" ++ exceptionToString)
+                                                      , headersToAdd = []
+                                                      }
+                                                    , Nothing
+                                                    )
 
-                                                        Just returnValueToString ->
-                                                            let
-                                                                deflateEncodedBody =
-                                                                    returnValueToString
-                                                                        |> Bytes.Encode.string
-                                                                        |> Bytes.Encode.encode
-                                                                        |> Flate.deflateGZip
-                                                            in
-                                                            ( [ { name = "Content-Encoding", values = [ "gzip" ] } ]
-                                                            , deflateEncodedBody |> Base64.fromBytes
-                                                            )
-                                            in
-                                            ( { statusCode = 200
-                                              , bodyAsBase64 = bodyAsBase64
-                                              , headersToAdd = headersToAdd
-                                              }
-                                            , Nothing
-                                            )
+                                                Nothing ->
+                                                    let
+                                                        ( headersToAdd, bodyAsBase64 ) =
+                                                            case requestToVolatileHostComplete.returnValueToString of
+                                                                Nothing ->
+                                                                    ( [], Nothing )
+
+                                                                Just returnValueToString ->
+                                                                    let
+                                                                        deflateEncodedBody =
+                                                                            returnValueToString
+                                                                                |> Bytes.Encode.string
+                                                                                |> Bytes.Encode.encode
+                                                                                |> Flate.deflateGZip
+                                                                    in
+                                                                    ( [ { name = "Content-Encoding", values = [ "gzip" ] } ]
+                                                                    , deflateEncodedBody |> Base64.fromBytes
+                                                                    )
+                                                    in
+                                                    ( { statusCode = 200
+                                                      , bodyAsBase64 = bodyAsBase64
+                                                      , headersToAdd = headersToAdd
+                                                      }
+                                                    , Nothing
+                                                    )
 
                         volatileHostsIds =
                             case maybeVolatileHostToRemoveId of
