@@ -1,13 +1,17 @@
 module Tests exposing (..)
 
+import Bytes
+import Bytes.Encode
 import CompileFullstackApp
 import Dict
 import Expect
+import Json.Decode
+import Main
 import Test
 
 
-suite : Test.Test
-suite =
+parseElmTypeText : Test.Test
+parseElmTypeText =
     Test.describe "parse Elm type text"
         [ Test.test "Simplest instance" <|
             \() ->
@@ -365,3 +369,95 @@ type Dict key value
                             )
                         )
         ]
+
+
+parseCompilationInterfaceElmMakeFunctionName : Test.Test
+parseCompilationInterfaceElmMakeFunctionName =
+    [ ( "elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm"
+      , Ok
+            { filePathRepresentation = "src_FrontendWeb_Main_elm"
+            , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
+            , enableDebug = True
+            , base64 = True
+            }
+      )
+    , ( "elm_make__javascript__base64____src_FrontendWeb_Main_elm"
+      , Ok
+            { filePathRepresentation = "src_FrontendWeb_Main_elm"
+            , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
+            , enableDebug = False
+            , base64 = True
+            }
+      )
+    , ( "elm_make__debug__base64____src_FrontendWeb_Main_elm"
+      , Ok
+            { filePathRepresentation = "src_FrontendWeb_Main_elm"
+            , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+            , enableDebug = True
+            , base64 = True
+            }
+      )
+    ]
+        |> List.map
+            (\( functionName, expectedResult ) ->
+                Test.test functionName <|
+                    \() ->
+                        CompileFullstackApp.parseElmMakeModuleFunctionName functionName
+                            |> Expect.equal expectedResult
+            )
+        |> Test.describe "parse Compilation Interface Elm Make function name"
+
+
+dependencies_encoding_roundtrip : Test.Test
+dependencies_encoding_roundtrip =
+    [ ( "ElmMakeDependency Empty "
+      , CompileFullstackApp.ElmMakeDependency
+            { files = Dict.empty
+            , entryPointFilePath = []
+            , enableDebug = False
+            , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+            }
+      )
+    , ( "ElmMakeDependency with only Main.elm to HTML"
+      , CompileFullstackApp.ElmMakeDependency
+            { files =
+                [ ( [ "elm.json" ]
+                  , Bytes.Encode.encode (Bytes.Encode.string "elm.json content")
+                  )
+                , ( [ "src", "Main.elm" ]
+                  , Bytes.Encode.encode (Bytes.Encode.string "Main.elm content")
+                  )
+                ]
+                    |> Dict.fromList
+            , entryPointFilePath = [ "src", "Main.elm" ]
+            , enableDebug = True
+            , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+            }
+      )
+    , ( "ElmMakeDependency with only Main.elm to JS"
+      , CompileFullstackApp.ElmMakeDependency
+            { files =
+                [ ( [ "elm.json" ]
+                  , Bytes.Encode.encode (Bytes.Encode.string "elm.json content")
+                  )
+                , ( [ "src", "Main.elm" ]
+                  , Bytes.Encode.encode (Bytes.Encode.string "Main.elm content")
+                  )
+                ]
+                    |> Dict.fromList
+            , entryPointFilePath = [ "src", "Main.elm" ]
+            , enableDebug = True
+            , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
+            }
+      )
+    ]
+        |> List.map
+            (\( testName, dependency ) ->
+                Test.test testName <|
+                    \() ->
+                        dependency
+                            |> Main.jsonEncodeDependencyKey
+                            |> Json.Decode.decodeValue Main.jsonDecodeDependencyKey
+                            |> Expect.equal (Ok dependency)
+            )
+        |> Test.describe "Dependency key encoding roundtrip"
