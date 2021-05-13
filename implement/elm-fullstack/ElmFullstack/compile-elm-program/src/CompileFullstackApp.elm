@@ -2098,22 +2098,8 @@ replaceFunctionInSourceFilesModuleText sourceFiles { functionName } moduleText =
                                     functionLines =
                                         moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
 
-                                    fileContentAsBase64 =
-                                        fileContent |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64"
-
-                                    base64Expression =
-                                        "\"" ++ fileContentAsBase64 ++ "\""
-
                                     fileExpression =
-                                        if base64 then
-                                            base64Expression
-
-                                        else
-                                            [ base64Expression
-                                            , "|> Base64.toBytes"
-                                            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
-                                            ]
-                                                |> String.join "\n"
+                                        buildBytesElmExpression { encodeAsBase64 = base64 } fileContent
 
                                     newFunctionLines =
                                         List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
@@ -2172,22 +2158,8 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionNam
                                                     functionLines =
                                                         moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
 
-                                                    fileContentAsBase64 =
-                                                        dependencyValue |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64"
-
-                                                    base64Expression =
-                                                        "\"" ++ fileContentAsBase64 ++ "\""
-
                                                     fileExpression =
-                                                        if base64 then
-                                                            base64Expression
-
-                                                        else
-                                                            [ base64Expression
-                                                            , "|> Base64.toBytes"
-                                                            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
-                                                            ]
-                                                                |> String.join "\n"
+                                                        buildBytesElmExpression { encodeAsBase64 = base64 } dependencyValue
 
                                                     newFunctionLines =
                                                         List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
@@ -2198,6 +2170,23 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionNam
                                                     |> Result.mapError (OtherCompilationError >> List.singleton)
                                             )
                                 )
+
+
+buildBytesElmExpression : { encodeAsBase64 : Bool } -> Bytes.Bytes -> String
+buildBytesElmExpression { encodeAsBase64 } bytes =
+    let
+        base64Expression =
+            "\"" ++ (bytes |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64") ++ "\""
+    in
+    if encodeAsBase64 then
+        base64Expression
+
+    else
+        [ base64Expression
+        , "|> Base64.toBytes"
+        , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
+        ]
+            |> String.join "\n"
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
