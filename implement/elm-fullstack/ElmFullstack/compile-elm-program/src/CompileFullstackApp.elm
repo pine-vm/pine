@@ -254,22 +254,25 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleText ) =
                             _ ->
                                 Nothing
                     )
-                |> listFoldlToAggregateResult
-                    (\functionDeclaration previousAggregate ->
-                        let
-                            functionName =
-                                Elm.Syntax.Node.value
-                                    (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                        in
-                        replaceFunctionInElmMakeModuleText
+                |> List.map
+                    (\functionDeclaration ->
+                        prepareReplaceFunctionInElmMakeModuleText
                             dependencies
                             sourceFiles
-                            { functionName = functionName
+                            { functionName =
+                                Elm.Syntax.Node.value
+                                    (Elm.Syntax.Node.value functionDeclaration.declaration).name
                             }
-                            previousAggregate
                     )
-                    (addImportInElmModuleText [ "Base64" ] moduleText
-                        |> Result.mapError (OtherCompilationError >> List.singleton)
+                |> resultCombineConcatenatingErrors
+                |> Result.andThen
+                    (\functionsToReplaceFunction ->
+                        functionsToReplaceFunction
+                            |> listFoldlToAggregateResult
+                                (\replaceFunction previousAggregate -> replaceFunction previousAggregate)
+                                (addImportInElmModuleText [ "Base64" ] moduleText
+                                    |> Result.mapError (OtherCompilationError >> List.singleton)
+                                )
                     )
                 |> Result.map (Tuple.pair sourceFiles)
 
@@ -2121,77 +2124,80 @@ replaceFunctionInSourceFilesModuleText sourceFiles { functionName } moduleText =
             )
 
 
-replaceFunctionInElmMakeModuleText : List ( DependencyKey, Bytes.Bytes ) -> AppFiles -> { functionName : String } -> String -> Result (List CompilationError) String
-replaceFunctionInElmMakeModuleText dependencies sourceFiles { functionName } moduleText =
-    getDeclarationFromElmModuleTextAndFunctionName
-        { functionName = functionName, moduleText = moduleText }
-        |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
-        |> Result.mapError (OtherCompilationError >> List.singleton)
-        |> Result.andThen
-            (\functionDeclaration ->
-                case parseElmMakeModuleFunctionName functionName of
-                    Err error ->
-                        Err [ OtherCompilationError ("Failed to parse function name: " ++ error) ]
+prepareReplaceFunctionInElmMakeModuleText : List ( DependencyKey, Bytes.Bytes ) -> AppFiles -> { functionName : String } -> Result (List CompilationError) (String -> Result (List CompilationError) String)
+prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionName } =
+    case parseElmMakeModuleFunctionName functionName of
+        Err error ->
+            Err [ OtherCompilationError ("Failed to parse function name: " ++ error) ]
 
-                    Ok { filePathRepresentation, base64, outputType, enableDebug } ->
-                        case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
-                            Err error ->
-                                Err [ OtherCompilationError ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error) ]
+        Ok { filePathRepresentation, base64, outputType, enableDebug } ->
+            case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
+                Err error ->
+                    Err [ OtherCompilationError ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error) ]
 
-                            Ok ( entryPointFilePath, _ ) ->
-                                let
-                                    sourceFilesForElmMake =
-                                        sourceFiles
-                                            |> Dict.filter (\filePath _ -> includeFilePathInElmMakeRequest filePath)
+                Ok ( entryPointFilePath, _ ) ->
+                    let
+                        sourceFilesForElmMake =
+                            sourceFiles
+                                |> Dict.filter (\filePath _ -> includeFilePathInElmMakeRequest filePath)
 
-                                    elmMakeRequest =
-                                        { files = sourceFilesForElmMake
-                                        , entryPointFilePath = entryPointFilePath
-                                        , outputType = outputType
-                                        , enableDebug = enableDebug
-                                        }
+                        elmMakeRequest =
+                            { files = sourceFilesForElmMake
+                            , entryPointFilePath = entryPointFilePath
+                            , outputType = outputType
+                            , enableDebug = enableDebug
+                            }
 
-                                    dependencyKey =
-                                        ElmMakeDependency elmMakeRequest
-                                in
-                                case
-                                    dependencies
-                                        |> List.filter (Tuple.first >> dependencyKeysAreEqual dependencyKey)
-                                        |> List.head
-                                of
-                                    Nothing ->
-                                        Err [ MissingDependencyError dependencyKey ]
+                        dependencyKey =
+                            ElmMakeDependency elmMakeRequest
+                    in
+                    case
+                        dependencies
+                            |> List.filter (Tuple.first >> dependencyKeysAreEqual dependencyKey)
+                            |> List.head
+                    of
+                        Nothing ->
+                            Err [ MissingDependencyError dependencyKey ]
 
-                                    Just ( _, dependencyValue ) ->
-                                        let
-                                            functionLines =
-                                                moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
+                        Just ( _, dependencyValue ) ->
+                            Ok
+                                (\moduleText ->
+                                    getDeclarationFromElmModuleTextAndFunctionName
+                                        { functionName = functionName, moduleText = moduleText }
+                                        |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
+                                        |> Result.mapError (OtherCompilationError >> List.singleton)
+                                        |> Result.andThen
+                                            (\functionDeclaration ->
+                                                let
+                                                    functionLines =
+                                                        moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
 
-                                            fileContentAsBase64 =
-                                                dependencyValue |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64"
+                                                    fileContentAsBase64 =
+                                                        dependencyValue |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64"
 
-                                            base64Expression =
-                                                "\"" ++ fileContentAsBase64 ++ "\""
+                                                    base64Expression =
+                                                        "\"" ++ fileContentAsBase64 ++ "\""
 
-                                            fileExpression =
-                                                if base64 then
-                                                    base64Expression
+                                                    fileExpression =
+                                                        if base64 then
+                                                            base64Expression
 
-                                                else
-                                                    [ base64Expression
-                                                    , "|> Base64.toBytes"
-                                                    , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
-                                                    ]
-                                                        |> String.join "\n"
+                                                        else
+                                                            [ base64Expression
+                                                            , "|> Base64.toBytes"
+                                                            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
+                                                            ]
+                                                                |> String.join "\n"
 
-                                            newFunctionLines =
-                                                List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
-                                        in
-                                        addOrUpdateFunctionInElmModuleText
-                                            { functionName = functionName, mapFunctionLines = always newFunctionLines }
-                                            moduleText
-                                            |> Result.mapError (OtherCompilationError >> List.singleton)
-            )
+                                                    newFunctionLines =
+                                                        List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
+                                                in
+                                                addOrUpdateFunctionInElmModuleText
+                                                    { functionName = functionName, mapFunctionLines = always newFunctionLines }
+                                                    moduleText
+                                                    |> Result.mapError (OtherCompilationError >> List.singleton)
+                                            )
+                                )
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
@@ -2622,3 +2628,22 @@ areAppFilesEqual a b =
             Dict.map (always (SHA256.fromBytes >> SHA256.toHex))
     in
     representationForComparison a == representationForComparison b
+
+
+resultCombineConcatenatingErrors : List (Result (List err) ok) -> Result (List err) (List ok)
+resultCombineConcatenatingErrors =
+    List.foldl
+        (\result previousAggregate ->
+            case previousAggregate of
+                Err previousErrors ->
+                    Err (previousErrors ++ (result |> Result.Extra.error |> Maybe.withDefault []))
+
+                Ok previousList ->
+                    case result of
+                        Err error ->
+                            Err error
+
+                        Ok newItem ->
+                            Ok (previousList ++ [ newItem ])
+        )
+        (Ok [])
