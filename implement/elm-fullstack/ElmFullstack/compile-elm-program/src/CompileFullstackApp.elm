@@ -2079,8 +2079,8 @@ parseJsonCodingFunctionType moduleText signature =
 
 replaceFunctionInSourceFilesModuleText : AppFiles -> { functionName : String } -> String -> Result String String
 replaceFunctionInSourceFilesModuleText sourceFiles { functionName } moduleText =
-    getDeclarationFromElmModuleTextAndFunctionName
-        { functionName = functionName, moduleText = moduleText }
+    moduleText
+        |> getDeclarationFromFunctionNameAndElmModuleText { functionName = functionName }
         |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
         |> Result.andThen
             (\functionDeclaration ->
@@ -2162,8 +2162,8 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionNam
                         Just ( _, dependencyValue ) ->
                             Ok
                                 (\moduleText ->
-                                    getDeclarationFromElmModuleTextAndFunctionName
-                                        { functionName = functionName, moduleText = moduleText }
+                                    moduleText
+                                        |> getDeclarationFromFunctionNameAndElmModuleText { functionName = functionName }
                                         |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
                                         |> Result.mapError (OtherCompilationError >> List.singleton)
                                         |> Result.andThen
@@ -2211,32 +2211,31 @@ includeFilePathInElmMakeRequest path =
                 || String.endsWith ".elm" fileName
 
 
-getDeclarationFromElmModuleTextAndFunctionName : { moduleText : String, functionName : String } -> Result String (Maybe (Elm.Syntax.Node.Node Elm.Syntax.Expression.Function))
-getDeclarationFromElmModuleTextAndFunctionName { moduleText, functionName } =
-    moduleText
-        |> parseAndMapElmModuleText
-            (\parsedModule ->
-                parsedModule.declarations
-                    |> List.filterMap
-                        (\declaration ->
-                            case Elm.Syntax.Node.value declaration of
-                                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                    Just (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration) functionDeclaration)
+getDeclarationFromFunctionNameAndElmModuleText : { functionName : String } -> String -> Result String (Maybe (Elm.Syntax.Node.Node Elm.Syntax.Expression.Function))
+getDeclarationFromFunctionNameAndElmModuleText { functionName } =
+    parseAndMapElmModuleText
+        (\parsedModule ->
+            parsedModule.declarations
+                |> List.filterMap
+                    (\declaration ->
+                        case Elm.Syntax.Node.value declaration of
+                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                Just (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration) functionDeclaration)
 
-                                _ ->
-                                    Nothing
-                        )
-                    |> List.filter
-                        (Elm.Syntax.Node.value
-                            >> .declaration
-                            >> Elm.Syntax.Node.value
-                            >> .name
-                            >> Elm.Syntax.Node.value
-                            >> (==) functionName
-                        )
-                    |> List.head
-                    |> Ok
-            )
+                            _ ->
+                                Nothing
+                    )
+                |> List.filter
+                    (Elm.Syntax.Node.value
+                        >> .declaration
+                        >> Elm.Syntax.Node.value
+                        >> .name
+                        >> Elm.Syntax.Node.value
+                        >> (==) functionName
+                    )
+                |> List.head
+                |> Ok
+        )
 
 
 getTextLinesFromRange : Elm.Syntax.Range.Range -> String -> List String
