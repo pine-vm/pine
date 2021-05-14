@@ -981,7 +981,7 @@ elmMakeRequestForFileOpenedInEditor workspace =
                         |> List.drop 1
                         |> List.reverse
                         |> List.Extra.inits
-                        |> List.sortBy List.length
+                        |> List.sortBy (List.length >> negate)
                         |> List.filter directoryContainsElmJson
                         |> List.head
                         |> Maybe.withDefault []
