@@ -2,63 +2,25 @@ module Main exposing (..)
 
 import Base64
 import Bytes
-import CompileFullstackApp
+import CompileFullstackApp exposing (CompilationArguments)
 import Dict
 import Json.Decode
 import Json.Encode
 import Platform
 
 
-type alias CompilationArguments =
-    { sourceFiles : CompileFullstackApp.AppFiles
-    , compilationInterfaceElmModuleNamePrefixes : List String
-    , dependencies : List ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
-    }
-
-
 type alias CompilationResponse =
     Result (List CompileFullstackApp.CompilationError) CompileFullstackApp.AppFiles
 
 
-lowerForSourceFilesSerialized : String -> String
-lowerForSourceFilesSerialized argumentsJson =
-    (case Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson of
-        Err decodeError ->
-            Err ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError)
-
-        Ok args ->
-            CompileFullstackApp.loweredForSourceFiles args.compilationInterfaceElmModuleNamePrefixes args.sourceFiles
-    )
-        |> Result.mapError (CompileFullstackApp.OtherCompilationError >> List.singleton)
-        |> jsonEncodeLowerForSourceFilesResponse
-        |> Json.Encode.encode 0
-
-
-lowerForSourceFilesAndJsonCodersSerialized : String -> String
-lowerForSourceFilesAndJsonCodersSerialized argumentsJson =
-    (case Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson of
-        Err decodeError ->
-            Err ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError)
-
-        Ok args ->
-            CompileFullstackApp.loweredForSourceFilesAndJsonCoders args.compilationInterfaceElmModuleNamePrefixes args.sourceFiles
-    )
-        |> Result.mapError (CompileFullstackApp.OtherCompilationError >> List.singleton)
-        |> jsonEncodeLowerForSourceFilesResponse
-        |> Json.Encode.encode 0
-
-
-lowerForSourceFilesAndJsonCodersAndElmMakeSerialized : String -> String
-lowerForSourceFilesAndJsonCodersAndElmMakeSerialized argumentsJson =
+lowerSerialized : String -> String
+lowerSerialized argumentsJson =
     (case Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson of
         Err decodeError ->
             Err [ CompileFullstackApp.OtherCompilationError ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError) ]
 
         Ok args ->
-            CompileFullstackApp.loweredForSourceFilesAndJsonCodersAndElmMake
-                args.compilationInterfaceElmModuleNamePrefixes
-                args.dependencies
-                args.sourceFiles
+            CompileFullstackApp.asCompletelyLoweredElmApp args
     )
         |> jsonEncodeLowerForSourceFilesResponse
         |> Json.Encode.encode 0
@@ -74,10 +36,12 @@ jsonEncodeLowerForSourceFilesResponse submissionResponse =
 
 jsonDecodeCompilationArguments : Json.Decode.Decoder CompilationArguments
 jsonDecodeCompilationArguments =
-    Json.Decode.map3 CompilationArguments
+    Json.Decode.map5 CompilationArguments
         (Json.Decode.field "sourceFiles" jsonDecodeAppCode)
         (Json.Decode.field "compilationInterfaceElmModuleNamePrefixes" (Json.Decode.list Json.Decode.string))
         (Json.Decode.field "dependencies" (Json.Decode.list jsonDecodeCompilationArgumentsDependency))
+        (Json.Decode.field "rootModuleName" (Json.Decode.list Json.Decode.string))
+        (Json.Decode.field "interfaceToHostRootModuleName" (Json.Decode.list Json.Decode.string))
 
 
 jsonDecodeCompilationArgumentsDependency : Json.Decode.Decoder ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
@@ -237,9 +201,7 @@ main =
         { init = \_ -> ( (), Cmd.none )
         , update =
             \_ stateBefore ->
-                ( [ lowerForSourceFilesSerialized ""
-                  , lowerForSourceFilesAndJsonCodersSerialized ""
-                  , lowerForSourceFilesAndJsonCodersAndElmMakeSerialized ""
+                ( [ lowerSerialized ""
                   ]
                     |> always stateBefore
                 , Cmd.none

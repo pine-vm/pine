@@ -461,3 +461,32 @@ dependencies_encoding_roundtrip =
                             |> Expect.equal (Ok dependency)
             )
         |> Test.describe "Dependency key encoding roundtrip"
+
+
+state_type_name_from_root_elm_module : Test.Test
+state_type_name_from_root_elm_module =
+    [ ( "Without module name qualifier"
+      , """module Backend.Main exposing
+    ( State
+    , interfaceToHost_initState
+    , interfaceToHost_processEvent
+    )
+
+type alias State = {}
+
+interfaceToHost_processEvent : String -> State -> ( State, String )
+interfaceToHost_processEvent =
+    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
+"""
+      , Ok "State"
+      )
+    ]
+        |> List.map
+            (\( testName, moduleText, expectedResult ) ->
+                Test.test testName <|
+                    \() ->
+                        moduleText
+                            |> CompileFullstackApp.stateTypeNameFromRootElmModule
+                            |> Expect.equal expectedResult
+            )
+        |> Test.describe "state type name from root Elm module"

@@ -50,66 +50,10 @@ namespace ElmFullstack
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig,
             Action<string> logWriteLine) =>
-            LoweredElmAppForBackendStateSerializer(
-                originalAppFiles: LoweredElmAppForSourceFilesAndJsonCodersAndElmMake(sourceFiles),
-                interfaceConfig,
-                logWriteLine: logWriteLine);
-
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForBackendStateSerializer(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
-            ElmAppInterfaceConfig interfaceConfig,
-            Action<string> logWriteLine)
-        {
-            var interfaceToHostRootModuleFilePath = InterfaceToHostRootModuleFilePathFromSourceFiles(originalAppFiles);
-
-            if (originalAppFiles.ContainsKey(interfaceToHostRootModuleFilePath))
-            {
-                //  Support integrating applications supplying their own lowered version.
-                return originalAppFiles;
-            }
-
-            var backendMainFilePath = FilePathFromModuleName(interfaceConfig.RootModuleName);
-
-            if (!originalAppFiles.TryGetValue(backendMainFilePath, out var backendMainOriginalFile))
-            {
-                //  App contains no backend.
-                return originalAppFiles;
-            }
-
-            var stateTypeNameInModule =
-                StateTypeNameFromRootElmModule(Encoding.UTF8.GetString(backendMainOriginalFile.ToArray()));
-
-            var initialRootModuleText = InitialRootElmModuleText(
-                interfaceConfig.RootModuleName, stateTypeNameInModule);
-
-            var appFilesWithInitialRootModule =
-                originalAppFiles
-                .SetItem(interfaceToHostRootModuleFilePath, Encoding.UTF8.GetBytes(initialRootModuleText).ToImmutableList());
-
-            var appFilesWithSupportAdded =
-                WithSupportForCodingElmType(
-                    appFilesWithInitialRootModule,
-                    interfaceConfig.RootModuleName + "." + stateTypeNameInModule,
-                    InterfaceToHostRootModuleName,
-                    logWriteLine,
-                    out var functionNames);
-
-            var rootModuleTextWithSupportAdded =
-                Encoding.UTF8.GetString(appFilesWithSupportAdded[interfaceToHostRootModuleFilePath].ToArray());
-
-            var rootModuleText =
-                new[]
-                {
-                    "jsonEncodeDeserializedState = " + functionNames.encodeFunctionName,
-                    "jsonDecodeDeserializedState = " + functionNames.decodeFunctionName
-                }
-                .Aggregate(rootModuleTextWithSupportAdded, (intermediateModuleText, functionToAdd) =>
-                    CompileElm.WithFunctionAdded(intermediateModuleText, functionToAdd));
-
-            return appFilesWithSupportAdded.SetItem(
-                interfaceToHostRootModuleFilePath,
-                Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
-        }
+                AsCompletelyLoweredElmApp(
+                    sourceFiles,
+                    rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
+                    interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> WithSupportForCodingElmType(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles,
@@ -292,14 +236,20 @@ namespace ElmFullstack
                     Encoding.UTF8.GetBytes(interfaceModuleWithSupportingFunctions).ToImmutableList());
         }
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForSourceFilesAndJsonCodersAndElmMake(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles) =>
-            LoweredElmAppForSourceFilesAndJsonCodersAndElmMake(
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+            IImmutableList<string> rootModuleName,
+            IImmutableList<string> interfaceToHostRootModuleName) =>
+            AsCompletelyLoweredElmApp(
                 sourceFiles,
+                rootModuleName,
+                interfaceToHostRootModuleName,
                 ImmutableStack<IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)>>.Empty);
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoweredElmAppForSourceFilesAndJsonCodersAndElmMake(
+        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+            IImmutableList<string> rootModuleName,
+            IImmutableList<string> interfaceToHostRootModuleName,
             IImmutableStack<IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)>> dependenciesStack)
         {
             if (10 < dependenciesStack.Count())
@@ -336,11 +286,13 @@ namespace ElmFullstack
                         sourceFiles = sourceFilesJson,
                         compilationInterfaceElmModuleNamePrefixes = ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes,
                         dependencies = dependenciesJson,
+                        rootModuleName = rootModuleName,
+                        interfaceToHostRootModuleName = interfaceToHostRootModuleName,
                     }
                 );
 
                 var responseJson =
-                    jsEngine.CallFunction("lowerForSourceFilesAndJsonCodersAndElmMakeSerialized", argumentsJson)
+                    jsEngine.CallFunction("lowerSerialized", argumentsJson)
                     ?.ToString();
 
                 var responseStructure =
@@ -417,8 +369,10 @@ namespace ElmFullstack
                         })
                         .ToImmutableList();
 
-                    return LoweredElmAppForSourceFilesAndJsonCodersAndElmMake(
+                    return AsCompletelyLoweredElmApp(
                         sourceFiles: sourceFiles,
+                        rootModuleName,
+                        interfaceToHostRootModuleName,
                         dependenciesStack: dependenciesStack.Push(newDependencies));
                 }
 
@@ -431,86 +385,6 @@ namespace ElmFullstack
 
                 return resultFiles;
             }
-        }
-
-        static Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>> FindFileWithPathMatchingRepresentationInFunctionName(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
-            string filePathRepresentation)
-        {
-            var sourceFilesWithRepresentations =
-                sourceFiles
-                .Select(sourceFilePathAndContent => (sourceFilePathAndContent, filePathRepresentation: functionNameInCompilationInterfaceFromFilePath(sourceFilePathAndContent.Key)))
-                .ToImmutableList();
-
-            var matchingFiles =
-                sourceFilesWithRepresentations
-                .Where(sourceFileAndPathRepresentation => sourceFileAndPathRepresentation.filePathRepresentation == filePathRepresentation)
-                .Select(sourceFileAndPathRepresentation => sourceFileAndPathRepresentation.sourceFilePathAndContent)
-                .ToImmutableList();
-
-            if (matchingFiles.Count < 1)
-            {
-                return Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>>.err(
-                    "Did not find any source file with a path matching the representation '" + filePathRepresentation + "'. Here is a list of the available files:\n" +
-                    string.Join("\n", sourceFilesWithRepresentations.Select(
-                        sourceFileAndRepr => "'" + string.Join("/", sourceFileAndRepr.sourceFilePathAndContent.Key) + "' ('" + sourceFileAndRepr.filePathRepresentation + "')")));
-            }
-
-            if (matchingFiles.Count > 1)
-            {
-                return Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>>.err(
-                    "The file path representation '" + filePathRepresentation +
-                    "' is not unique because it matches " + matchingFiles.Count + " of the source files:" +
-                    string.Join(", ", matchingFiles.Select(matchingFile => "\"" + string.Join("/", matchingFile.Key) + "\"")));
-            }
-
-            return Composition.Result<string, KeyValuePair<IImmutableList<string>, IImmutableList<byte>>>.ok(
-                matchingFiles.Single());
-        }
-
-        static string functionNameInCompilationInterfaceFromFilePath(IImmutableList<string> filePath) =>
-            Regex.Replace(string.Join("/", filePath), "[^a-zA-Z0-9]", "_");
-
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ImportModuleInModule(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
-            string moduleName, IEnumerable<string> moduleToImport)
-        {
-            var moduleFilePath = FilePathFromModuleName(moduleName);
-
-            var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
-
-            var moduleText = CompileElm.WithImportsAdded(moduleTextBefore, ImmutableHashSet.Create(moduleToImport));
-
-            return
-                previousAppFiles
-                .SetItem(moduleFilePath, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
-        }
-
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ReplaceFunctionInModule(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> previousAppFiles,
-            string moduleName, string functionName, string newFunctionText)
-        {
-            var moduleFilePath = FilePathFromModuleName(moduleName);
-
-            var moduleTextBefore = Encoding.UTF8.GetString(previousAppFiles[moduleFilePath].ToArray());
-
-            var moduleText = ReplaceFunctionInModuleText(moduleTextBefore, functionName, newFunctionText);
-
-            return
-                previousAppFiles
-                .SetItem(moduleFilePath, Encoding.UTF8.GetBytes(moduleText).ToImmutableList());
-        }
-
-        static string ReplaceFunctionInModuleText(string moduleText, string functionName, string newFunctionText)
-        {
-            var allFunctions = CompileElm.ParseAllFunctionsFromModule(moduleText).ToImmutableList();
-
-            var originalFunction = allFunctions.FirstOrDefault(fun => fun.functionName == functionName);
-
-            if (originalFunction.functionText == null)
-                throw new NotImplementedException("Did not find function '" + functionName + "' in module text.");
-
-            return moduleText.Replace(originalFunction.functionText, newFunctionText);
         }
 
         static public IImmutableList<string> FilePathFromModuleName(IReadOnlyList<string> moduleName)
@@ -673,14 +547,8 @@ jsonDecodeState =
             var listFunctionToPublish =
                 new[]
                 {
-                    (functionNameInElm: "Main.lowerForSourceFilesSerialized",
-                    publicName: "lowerForSourceFilesSerialized",
-                    arity: 1),
-                    (functionNameInElm: "Main.lowerForSourceFilesAndJsonCodersSerialized",
-                    publicName: "lowerForSourceFilesAndJsonCodersSerialized",
-                    arity: 1),
-                    (functionNameInElm: "Main.lowerForSourceFilesAndJsonCodersAndElmMakeSerialized",
-                    publicName: "lowerForSourceFilesAndJsonCodersAndElmMakeSerialized",
+                    (functionNameInElm: "Main.lowerSerialized",
+                    publicName: "lowerSerialized",
                     arity: 1),
                 };
 
