@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace ElmFullstack.ElmValueCommonJson
 {
@@ -38,5 +40,13 @@ namespace ElmFullstack.ElmValueCommonJson
 
         static public Result<ErrT, OkT> err(ErrT err) =>
             new Result<ErrT, OkT> { Err = ImmutableList.Create(err) };
+
+        public Result<ErrT, NewOkT> map<NewOkT>(Func<OkT, NewOkT> mapOk)
+        {
+            if (0 < Ok?.Count)
+                return Result<ErrT, NewOkT>.ok(mapOk(Ok.First()));
+
+            return Result<ErrT, NewOkT>.err(Err.FirstOrDefault());
+        }
     }
 }

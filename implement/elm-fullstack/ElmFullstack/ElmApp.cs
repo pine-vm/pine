@@ -255,136 +255,145 @@ namespace ElmFullstack
             if (10 < dependenciesStack.Count())
                 throw new Exception("Dependencies stack depth > 10");
 
-            using (var jsEngine = PrepareJsEngineToCompileElmApp())
+            var dependencies =
+                dependenciesStack.SelectMany(frame => frame)
+                .ToImmutableList();
+
+            var responseStructure = ElmAppCompilation(
+                sourceFiles: sourceFiles,
+                rootModuleName: rootModuleName,
+                interfaceToHostRootModuleName: interfaceToHostRootModuleName,
+                dependencies: dependencies);
+
+            if (responseStructure.Ok?.FirstOrDefault() == null)
             {
-                var sourceFilesJson =
-                    sourceFiles
-                    .Select(appCodeFile => new CompilerSerialInterface.AppCodeEntry
-                    {
-                        path = appCodeFile.Key,
-                        content = new CompilerSerialInterface.BytesJson { AsBase64 = Convert.ToBase64String(appCodeFile.Value.ToArray()) },
-                    })
+                var compilationErrors =
+                    responseStructure.Err?.FirstOrDefault();
+
+                if (compilationErrors == null)
+                    throw new Exception("Failed compilation: Protocol error: Missing error descriptions.");
+
+                var compilationErrorsMissingElmMakeDependencies =
+                    compilationErrors
+                    .Where(error => error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
                     .ToImmutableList();
 
-                var dependencies =
-                    dependenciesStack.SelectMany(frame => frame)
+                var otherErrors =
+                    compilationErrors.Except(compilationErrorsMissingElmMakeDependencies)
                     .ToImmutableList();
 
-                var dependenciesJson =
-                    dependencies
-                    .Select(dependency =>
-                    new
-                    {
-                        key = dependency.key,
-                        value = CompilerSerialInterface.BytesJson.AsJson(dependency.value),
-                    })
-                    .ToImmutableList();
-
-                var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
-                    new
-                    {
-                        sourceFiles = sourceFilesJson,
-                        compilationInterfaceElmModuleNamePrefixes = ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes,
-                        dependencies = dependenciesJson,
-                        rootModuleName = rootModuleName,
-                        interfaceToHostRootModuleName = interfaceToHostRootModuleName,
-                    }
-                );
-
-                var responseJson =
-                    jsEngine.CallFunction("lowerSerialized", argumentsJson)
-                    ?.ToString();
-
-                var responseStructure =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(
-                        responseJson);
-
-                if (responseStructure.Ok?.FirstOrDefault() == null)
+                if (0 < otherErrors.Count)
                 {
-                    var compilationErrors =
-                        responseStructure.Err?.FirstOrDefault();
+                    var otherErrorsText =
+                        string.Join("\n", otherErrors.Select(DescribeCompilationError));
 
-                    if (compilationErrors == null)
-                        throw new Exception("Failed compilation: Protocol error: Missing error descriptions.");
-
-                    var compilationErrorsMissingElmMakeDependencies =
-                        compilationErrors
-                        .Where(error => error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
-                        .ToImmutableList();
-
-                    var otherErrors =
-                        compilationErrors.Except(compilationErrorsMissingElmMakeDependencies)
-                        .ToImmutableList();
-
-                    if (0 < otherErrors.Count)
-                    {
-                        var otherErrorsText =
-                            string.Join("\n", otherErrors.Select(DescribeCompilationError));
-
-                        throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText);
-                    }
-
-                    byte[] ElmMake(
-                        IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
-                        IImmutableList<string> pathToFileWithElmEntryPoint,
-                        bool makeJavascript,
-                        bool enableDebug)
-                    {
-                        var elmMakeCommandAppendix =
-                            enableDebug ? "--debug" : null;
-
-                        var fileAsString = ProcessFromElm019Code.CompileElm(
-                            elmCodeFiles,
-                            pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                            outputFileName: "output." + (makeJavascript ? "js" : "html"),
-                            elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                        return Encoding.UTF8.GetBytes(fileAsString);
-                    }
-
-                    var newDependencies =
-                        compilationErrorsMissingElmMakeDependencies
-                        .Select(error =>
-                        {
-                            var dependencyKey =
-                                error.MissingDependencyError.FirstOrDefault();
-
-                            var elmMakeRequest =
-                                dependencyKey.ElmMakeDependency.FirstOrDefault();
-
-                            var elmMakeRequestFiles =
-                                elmMakeRequest.files
-                                .ToImmutableDictionary(
-                                    entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                                    entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
-                                .WithComparers(EnumerableExtension.EqualityComparer<string>());
-
-                            var value = ElmMake(
-                                elmCodeFiles: elmMakeRequestFiles,
-                                pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
-                                makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs?.FirstOrDefault() != null,
-                                enableDebug: elmMakeRequest.enableDebug);
-
-                            return (key: dependencyKey, value: (IImmutableList<byte>)value.ToImmutableList());
-                        })
-                        .ToImmutableList();
-
-                    return AsCompletelyLoweredElmApp(
-                        sourceFiles: sourceFiles,
-                        rootModuleName,
-                        interfaceToHostRootModuleName,
-                        dependenciesStack: dependenciesStack.Push(newDependencies));
+                    throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText);
                 }
 
-                var resultFiles =
-                    responseStructure.Ok?.FirstOrDefault()
-                    .ToImmutableDictionary(
+                byte[] ElmMake(
+                    IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
+                    IImmutableList<string> pathToFileWithElmEntryPoint,
+                    bool makeJavascript,
+                    bool enableDebug)
+                {
+                    var elmMakeCommandAppendix =
+                        enableDebug ? "--debug" : null;
+
+                    var fileAsString = ProcessFromElm019Code.CompileElm(
+                        elmCodeFiles,
+                        pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                        outputFileName: "output." + (makeJavascript ? "js" : "html"),
+                        elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                    return Encoding.UTF8.GetBytes(fileAsString);
+                }
+
+                var newDependencies =
+                    compilationErrorsMissingElmMakeDependencies
+                    .Select(error =>
+                    {
+                        var dependencyKey =
+                            error.MissingDependencyError.FirstOrDefault();
+
+                        var elmMakeRequest =
+                            dependencyKey.ElmMakeDependency.FirstOrDefault();
+
+                        var elmMakeRequestFiles =
+                            elmMakeRequest.files
+                            .ToImmutableDictionary(
+                                entry => (IImmutableList<string>)entry.path.ToImmutableList(),
+                                entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
+                            .WithComparers(EnumerableExtension.EqualityComparer<string>());
+
+                        var value = ElmMake(
+                            elmCodeFiles: elmMakeRequestFiles,
+                            pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
+                            makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs?.FirstOrDefault() != null,
+                            enableDebug: elmMakeRequest.enableDebug);
+
+                        return (key: dependencyKey, value: (IImmutableList<byte>)value.ToImmutableList());
+                    })
+                    .ToImmutableList();
+
+                return AsCompletelyLoweredElmApp(
+                    sourceFiles: sourceFiles,
+                    rootModuleName,
+                    interfaceToHostRootModuleName,
+                    dependenciesStack: dependenciesStack.Push(newDependencies));
+            }
+
+            return responseStructure.Ok?.FirstOrDefault();
+        }
+
+        static ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>> ElmAppCompilation(
+            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+            IImmutableList<string> rootModuleName,
+            IImmutableList<string> interfaceToHostRootModuleName,
+            ImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> dependencies)
+        {
+            var sourceFilesJson =
+                sourceFiles
+                .Select(appCodeFile => new CompilerSerialInterface.AppCodeEntry
+                {
+                    path = appCodeFile.Key,
+                    content = new CompilerSerialInterface.BytesJson { AsBase64 = Convert.ToBase64String(appCodeFile.Value.ToArray()) },
+                })
+                .ToImmutableList();
+
+            var dependenciesJson =
+                dependencies
+                .Select(dependency =>
+                new
+                {
+                    key = dependency.key,
+                    value = CompilerSerialInterface.BytesJson.AsJson(dependency.value),
+                })
+                .ToImmutableList();
+
+            var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+                new
+                {
+                    sourceFiles = sourceFilesJson,
+                    compilationInterfaceElmModuleNamePrefixes = ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes,
+                    dependencies = dependenciesJson,
+                    rootModuleName = rootModuleName,
+                    interfaceToHostRootModuleName = interfaceToHostRootModuleName,
+                }
+            );
+
+            var responseJson =
+                jsEngineToCompileElmApp.Value.CallFunction("lowerSerialized", argumentsJson)
+                ?.ToString();
+
+            var withFilesAsList =
+                Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(responseJson);
+
+            return
+                withFilesAsList.map(files =>
+                    files.ToImmutableDictionary(
                         entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                         entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
-                    .WithComparers(EnumerableExtension.EqualityComparer<string>());
-
-                return resultFiles;
-            }
+                    .WithComparers(EnumerableExtension.EqualityComparer<string>()));
         }
 
         static public IImmutableList<string> FilePathFromModuleName(IReadOnlyList<string> moduleName)
@@ -521,6 +530,7 @@ jsonDecodeState =
         ]
 
 ";
+        static Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> jsEngineToCompileElmApp = new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(PrepareJsEngineToCompileElmApp);
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToCompileElmApp()
         {
