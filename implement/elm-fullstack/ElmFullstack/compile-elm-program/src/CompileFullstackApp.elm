@@ -113,13 +113,19 @@ The integrating software can then perform the ElmMake, insert it into the depend
 -}
 asCompletelyLoweredElmApp : CompilationArguments -> Result (List CompilationError) AppFiles
 asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefixes, dependencies, rootModuleName, interfaceToHostRootModuleName } =
+    let
+        sourceModules =
+            elmModulesDictFromAppFiles sourceFiles
+                |> Dict.map (always Tuple.second)
+    in
     loweredForSourceFiles compilationInterfaceElmModuleNamePrefixes sourceFiles
-        |> Result.andThen (loweredForJsonCoders compilationInterfaceElmModuleNamePrefixes)
+        |> Result.andThen (loweredForJsonCoders { originalSourceModules = sourceModules } compilationInterfaceElmModuleNamePrefixes)
         |> Result.mapError (OtherCompilationError >> List.singleton)
         |> Result.andThen (loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies)
         |> Result.andThen
             (loweredForAppStateSerializer
-                { rootModuleName = rootModuleName
+                { originalSourceModules = sourceModules
+                , rootModuleName = rootModuleName
                 , interfaceToHostRootModuleName = interfaceToHostRootModuleName
                 }
             )
@@ -139,15 +145,19 @@ loweredForSourceFiles compilationInterfaceElmModuleNamePrefixes sourceFiles =
             (Ok sourceFiles)
 
 
-loweredForJsonCoders : List String -> AppFiles -> Result String AppFiles
-loweredForJsonCoders compilationInterfaceElmModuleNamePrefixes sourceFiles =
+loweredForJsonCoders :
+    { originalSourceModules : Dict.Dict String Elm.Syntax.File.File }
+    -> List String
+    -> AppFiles
+    -> Result String AppFiles
+loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFiles =
     compilationInterfaceElmModuleNamePrefixes
         |> listFoldlToAggregateResult
             (\compilationInterfaceElmModuleNamePrefix files ->
                 mapElmModuleWithNameIfExists
                     identity
                     (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonCoders")
-                    mapJsonCodersModuleText
+                    (mapJsonCodersModuleText context)
                     files
             )
             (Ok sourceFiles)
@@ -168,10 +178,13 @@ loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceF
 
 
 loweredForAppStateSerializer :
-    { rootModuleName : List String, interfaceToHostRootModuleName : List String }
+    { rootModuleName : List String
+    , interfaceToHostRootModuleName : List String
+    , originalSourceModules : Dict.Dict String Elm.Syntax.File.File
+    }
     -> AppFiles
     -> Result (List CompilationError) AppFiles
-loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName } sourceFiles =
+loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, originalSourceModules } sourceFiles =
     let
         backendMainFilePath =
             filePathFromElmModuleName (String.join "." rootModuleName)
@@ -195,12 +208,7 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName } s
                         Err [ OtherCompilationError "Failed to map file content to text" ]
 
                     Just backendMainModuleText ->
-                        let
-                            sourceModules =
-                                elmModulesDictFromAppFiles sourceFiles
-                                    |> Dict.map (always Tuple.second)
-                        in
-                        parseAppStateElmTypeAndDependenciesRecursively sourceModules backendMainModuleText
+                        parseAppStateElmTypeAndDependenciesRecursively originalSourceModules backendMainModuleText
                             |> Result.mapError ((++) "Failed to parse state type name: ")
                             |> Result.andThen
                                 (\( stateTypeAnnotation, stateTypeDependencies ) ->
@@ -212,28 +220,25 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName } s
                                                 , stateTypeAnnotation = stateTypeAnnotation
                                                 }
                                     in
-                                    mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes
+                                    mapAppFilesAndModuleTextToSupportJsonCoding
+                                        [ stateTypeAnnotation ]
                                         stateTypeDependencies
                                         ( sourceFiles, initialRootElmModuleText )
                                         |> Result.map
-                                            (\( appFiles, interfaceModuleTextWithSupportingFunctions ) ->
+                                            (\( appFiles, interfaceModuleTextWithSupportingFunctions, generatedModuleName ) ->
                                                 let
-                                                    jsonCodingExpressions =
-                                                        jsonCodingExpressionFromType
-                                                            { encodeValueExpression = jsonEncodeParamName
-                                                            , typeArgLocalName = "type_arg"
-                                                            }
-                                                            ( stateTypeAnnotation, [] )
+                                                    functionsNamesInGeneratedModules =
+                                                        buildJsonCodingFunctionsForTypeAnnotation stateTypeAnnotation
 
                                                     encodeFunction =
-                                                        "jsonEncodeDeserializedState "
-                                                            ++ jsonEncodeParamName
-                                                            ++ " =\n"
-                                                            ++ indentElmCodeLines 1 jsonCodingExpressions.encodeExpression
+                                                        "jsonEncodeDeserializedState =\n"
+                                                            ++ indentElmCodeLines 1
+                                                                (generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.encodeFunction.name)
 
                                                     decodeFunction =
                                                         "jsonDecodeDeserializedState =\n"
-                                                            ++ indentElmCodeLines 1 jsonCodingExpressions.decodeExpression
+                                                            ++ indentElmCodeLines 1
+                                                                (generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.decodeFunction.name)
 
                                                     interfaceModuleText =
                                                         [ interfaceModuleTextWithSupportingFunctions
@@ -434,19 +439,17 @@ functionNameFlagsSeparator =
     "____"
 
 
-mapJsonCodersModuleText : ( AppFiles, String ) -> Result String ( AppFiles, String )
-mapJsonCodersModuleText ( sourceFiles, moduleText ) =
+mapJsonCodersModuleText :
+    { originalSourceModules : Dict.Dict String Elm.Syntax.File.File }
+    -> ( AppFiles, String )
+    -> Result String ( AppFiles, String )
+mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleText ) =
     case parseElmModuleText moduleText of
         Err error ->
             -- TODO: Consolidate branch to parse with `mapSourceFilesModuleText`
             Err ("Failed to parse Elm module text: " ++ parserDeadEndsToString moduleText error)
 
         Ok parsedModule ->
-            let
-                sourceModules =
-                    elmModulesDictFromAppFiles sourceFiles
-                        |> Dict.map (always Tuple.second)
-            in
             parsedModule.declarations
                 -- TODO: Also share the 'map all functions' part with `mapSourceFilesModuleText`
                 |> List.filterMap
@@ -476,7 +479,7 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
                                     Ok functionType ->
                                         case
                                             parseElmTypeAndDependenciesRecursivelyFromAnnotation
-                                                sourceModules
+                                                originalSourceModules
                                                 ( parsedModule, functionType.typeAnnotation )
                                         of
                                             Err error ->
@@ -495,11 +498,12 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
                 |> Result.Extra.combine
                 |> Result.andThen
                     (\functionsToReplace ->
-                        mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes
+                        mapAppFilesAndModuleTextToSupportJsonCoding
+                            (functionsToReplace |> List.map .parsedTypeAnnotation)
                             (functionsToReplace |> List.map .dependencies |> List.foldl Dict.union Dict.empty)
                             ( sourceFiles, moduleText )
                             |> Result.andThen
-                                (\( appFiles, interfaceModuleText ) ->
+                                (\( appFiles, interfaceModuleText, generatedModuleName ) ->
                                     functionsToReplace
                                         |> listFoldlToAggregateResult
                                             (\functionToReplace previousModuleText ->
@@ -507,25 +511,20 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
                                                     functionName =
                                                         functionToReplace.functionName
 
-                                                    jsonCodingExpressions =
-                                                        jsonCodingExpressionFromType
-                                                            { encodeValueExpression = jsonEncodeParamName
-                                                            , typeArgLocalName = "type_arg"
-                                                            }
-                                                            ( functionToReplace.parsedTypeAnnotation, [] )
+                                                    functionsNamesInGeneratedModules =
+                                                        buildJsonCodingFunctionsForTypeAnnotation functionToReplace.parsedTypeAnnotation
 
                                                     newFunction =
-                                                        if functionToReplace.functionType.isDecoder then
-                                                            functionName
-                                                                ++ " =\n"
-                                                                ++ indentElmCodeLines 1 jsonCodingExpressions.decodeExpression
+                                                        functionName
+                                                            ++ " =\n    "
+                                                            ++ generatedModuleName
+                                                            ++ "."
+                                                            ++ (if functionToReplace.functionType.isDecoder then
+                                                                    functionsNamesInGeneratedModules.decodeFunction.name
 
-                                                        else
-                                                            functionName
-                                                                ++ " "
-                                                                ++ jsonEncodeParamName
-                                                                ++ " =\n"
-                                                                ++ indentElmCodeLines 1 jsonCodingExpressions.encodeExpression
+                                                                else
+                                                                    functionsNamesInGeneratedModules.encodeFunction.name
+                                                               )
 
                                                     mapFunctionDeclarationLines originalFunctionTextLines =
                                                         [ originalFunctionTextLines |> List.take 1
@@ -546,18 +545,19 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
                     )
 
 
-mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes :
-    Dict.Dict String ElmCustomTypeStruct
+mapAppFilesAndModuleTextToSupportJsonCoding :
+    List ElmTypeAnnotation
+    -> Dict.Dict String ElmCustomTypeStruct
     -> ( AppFiles, String )
-    -> Result String ( AppFiles, String )
-mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes customTypes ( appFiles, moduleText ) =
+    -> Result String ( AppFiles, String, String )
+mapAppFilesAndModuleTextToSupportJsonCoding typeAnnotationsBeforeDeduplicating customTypes ( appFilesBefore, moduleText ) =
     case parseElmModuleText moduleText of
         Err error ->
             Err ("Failed to parse Elm module text: " ++ parserDeadEndsToString moduleText error)
 
         Ok parsedModule ->
             let
-                emitModuleName =
+                interfaceModuleName =
                     Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
 
                 modulesToImportForCustomTypes =
@@ -579,11 +579,24 @@ mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes customTypes ( appFiles, m
                     , [ "Bytes", "Encode" ]
                     ]
                         ++ modulesToImportForCustomTypes
-                        |> List.filter ((==) emitModuleName >> not)
+                        |> List.filter ((==) interfaceModuleName >> not)
 
                 appFilesAfterExposingCustomTypesInModules =
                     modulesToImportForCustomTypes
-                        |> List.foldl exposeAllInElmModuleInAppFiles appFiles
+                        |> List.foldl exposeAllInElmModuleInAppFiles appFilesBefore
+
+                typeAnnotationsFunctions =
+                    typeAnnotationsBeforeDeduplicating
+                        |> listRemoveDuplicates
+                        |> List.map buildJsonCodingFunctionsForTypeAnnotation
+
+                typeAnnotationsFunctionsForGeneratedModule =
+                    typeAnnotationsFunctions
+                        |> List.concatMap
+                            (\functionsForType ->
+                                [ functionsForType.encodeFunction, functionsForType.decodeFunction ]
+                            )
+                        |> List.map (\function -> { functionName = function.name, functionText = function.text })
 
                 dependenciesFunctions =
                     customTypes
@@ -603,23 +616,89 @@ mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes customTypes ( appFiles, m
                             )
                         |> List.map (\function -> { functionName = function.name, functionText = function.text })
 
-                supportingFunctions =
-                    dependenciesFunctions ++ generalSupportingFunctionsTexts
+                functionsForGeneratedModule =
+                    typeAnnotationsFunctionsForGeneratedModule ++ dependenciesFunctions ++ generalSupportingFunctionsTexts
+
+                generatedModuleTextWithoutModuleDeclaration =
+                    [ modulesToImport |> List.map (String.join "." >> (++) "import ")
+                    , functionsForGeneratedModule |> List.map .functionText
+                    ]
+                        |> List.concat
+                        |> String.join "\n\n"
+
+                generatedModuleHash =
+                    generatedModuleTextWithoutModuleDeclaration
+                        |> SHA256.fromString
+                        |> SHA256.toHex
+
+                generatedModuleName =
+                    (interfaceModuleName |> String.join ".")
+                        ++ ".Generated_"
+                        ++ String.left 8 generatedModuleHash
+
+                generatedModulePath =
+                    filePathFromElmModuleName generatedModuleName
+
+                generatedModuleText =
+                    [ "module " ++ generatedModuleName ++ " exposing (..)"
+                    , generatedModuleTextWithoutModuleDeclaration
+                    ]
+                        |> String.join "\n\n"
+
+                appFiles =
+                    appFilesAfterExposingCustomTypesInModules
+                        |> updateFileContentAtPath
+                            (always (fileContentFromString generatedModuleText))
+                            generatedModulePath
             in
-            supportingFunctions
-                |> listFoldlToAggregateResult
-                    (\supportingFunction ->
-                        addOrUpdateFunctionInElmModuleText
-                            { functionName = supportingFunction.functionName
-                            , mapFunctionLines = always [ supportingFunction.functionText ]
-                            }
-                    )
-                    (listFoldlToAggregateResult
-                        addImportInElmModuleText
-                        (Ok moduleText)
-                        modulesToImport
-                    )
-                |> Result.map (Tuple.pair appFilesAfterExposingCustomTypesInModules)
+            addImportsInElmModuleText
+                ([ String.split "." generatedModuleName ] ++ modulesToImport)
+                moduleText
+                |> Result.map (\moduleTextWithImport -> ( appFiles, moduleTextWithImport, generatedModuleName ))
+
+
+buildJsonCodingFunctionsForTypeAnnotation :
+    ElmTypeAnnotation
+    -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
+buildJsonCodingFunctionsForTypeAnnotation typeAnnotation =
+    let
+        jsonCodingExpressions =
+            jsonCodingExpressionFromType
+                { encodeValueExpression = jsonEncodeParamName
+                , typeArgLocalName = "type_arg"
+                }
+                ( typeAnnotation, [] )
+
+        typeAnnotationText =
+            buildTypeAnnotationText typeAnnotation
+
+        nameCommonPart =
+            typeAnnotationText
+                |> SHA256.fromString
+                |> SHA256.toHex
+                |> String.left 10
+
+        encodeFunctionName =
+            jsonEncodeFunctionNamePrefix ++ nameCommonPart
+
+        decodeFunctionName =
+            jsonDecodeFunctionNamePrefix ++ nameCommonPart
+
+        encodeFunctionText =
+            encodeFunctionName
+                ++ " "
+                ++ jsonEncodeParamName
+                ++ " =\n"
+                ++ indentElmCodeLines 1 jsonCodingExpressions.encodeExpression
+
+        decodeFunctionText =
+            decodeFunctionName
+                ++ " =\n"
+                ++ indentElmCodeLines 1 jsonCodingExpressions.decodeExpression
+    in
+    { encodeFunction = { name = encodeFunctionName, text = encodeFunctionText }
+    , decodeFunction = { name = decodeFunctionName, text = decodeFunctionText }
+    }
 
 
 mapSourceFilesModuleText : ( AppFiles, String ) -> Result String ( AppFiles, String )
@@ -659,7 +738,7 @@ mapSourceFilesModuleText ( sourceFiles, moduleText ) =
                                         ++ replaceFunctionError
                                 )
                     )
-                    (addImportInElmModuleText [ "Base64" ] moduleText)
+                    (addImportsInElmModuleText [ [ "Base64" ] ] moduleText)
                 |> Result.map (Tuple.pair sourceFiles)
 
 
@@ -698,14 +777,49 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleText ) =
                 |> resultCombineConcatenatingErrors
                 |> Result.andThen
                     (\functionsToReplaceFunction ->
+                        let
+                            interfaceModuleName =
+                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
+
+                            generatedModuleTextWithoutModuleDeclaration =
+                                functionsToReplaceFunction
+                                    |> List.map .valueFunctionText
+                                    |> String.join "\n\n"
+
+                            generatedModuleHash =
+                                generatedModuleTextWithoutModuleDeclaration
+                                    |> SHA256.fromString
+                                    |> SHA256.toHex
+
+                            generatedModuleName =
+                                (interfaceModuleName |> String.join ".")
+                                    ++ ".Generated_"
+                                    ++ String.left 8 generatedModuleHash
+
+                            generatedModulePath =
+                                filePathFromElmModuleName generatedModuleName
+
+                            generatedModuleText =
+                                [ "module " ++ generatedModuleName ++ " exposing (..)"
+                                , generatedModuleTextWithoutModuleDeclaration
+                                ]
+                                    |> String.join "\n\n"
+
+                            appFiles =
+                                sourceFiles
+                                    |> updateFileContentAtPath
+                                        (always (fileContentFromString generatedModuleText))
+                                        generatedModulePath
+                        in
                         functionsToReplaceFunction
+                            |> List.map .updateInterfaceModuleText
                             |> listFoldlToAggregateResult
-                                (\replaceFunction previousAggregate -> replaceFunction previousAggregate)
-                                (addImportInElmModuleText [ "Base64" ] moduleText
+                                (\replaceFunction previousAggregate -> replaceFunction { generatedModuleName = generatedModuleName } previousAggregate)
+                                (addImportsInElmModuleText [ [ "Base64" ], String.split "." generatedModuleName ] moduleText
                                     |> Result.mapError (OtherCompilationError >> List.singleton)
                                 )
+                            |> Result.map (Tuple.pair appFiles)
                     )
-                |> Result.map (Tuple.pair sourceFiles)
 
 
 exposeAllInElmModuleInAppFiles : List String -> AppFiles -> AppFiles
@@ -844,50 +958,6 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
                             let
                                 maybeInstantiatedModule =
                                     if instantiatedModuleAlias == [] then
-                                        {-
-                                           if importedModuleAlias == [] then
-                                               parsedModule.imports
-                                                   |> List.map Elm.Syntax.Node.value
-                                                   |> List.filterMap
-                                                       (\moduleImport ->
-                                                           case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
-                                                               Nothing ->
-                                                                   Nothing
-
-                                                               Just importExposing ->
-                                                                   let
-                                                                       containsMatchingExposition =
-                                                                           case importExposing of
-                                                                               Elm.Syntax.Exposing.All _ ->
-                                                                                   -- TODO: Add lookup into that module
-                                                                                   False
-
-                                                                               Elm.Syntax.Exposing.Explicit topLevelExpositions ->
-                                                                                   topLevelExpositions
-                                                                                       |> List.any
-                                                                                           (\topLevelExpose ->
-                                                                                               case Elm.Syntax.Node.value topLevelExpose of
-                                                                                                   Elm.Syntax.Exposing.InfixExpose _ ->
-                                                                                                       False
-
-                                                                                                   Elm.Syntax.Exposing.FunctionExpose _ ->
-                                                                                                       False
-
-                                                                                                   Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasExpose ->
-                                                                                                       typeOrAliasExpose == localName
-
-                                                                                                   Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                                                                                                       typeExpose.name == localName
-                                                                                           )
-                                                                   in
-                                                                   if containsMatchingExposition then
-                                                                       Just ( Elm.Syntax.Node.value moduleImport.moduleName, localName )
-
-                                                                   else
-                                                                       Nothing
-                                                       )
-                                                   |> List.head
-                                        -}
                                         currentModule.imports
                                             |> List.map Elm.Syntax.Node.value
                                             |> List.filterMap
@@ -1920,6 +1990,13 @@ jsonDecodeFunctionNamePrefix =
 elmModulesDictFromAppFiles : AppFiles -> Dict.Dict String ( String, Elm.Syntax.File.File )
 elmModulesDictFromAppFiles =
     Dict.toList
+        >> List.filter
+            (Tuple.first
+                >> List.reverse
+                >> List.head
+                >> Maybe.map (String.toLower >> String.endsWith ".elm")
+                >> Maybe.withDefault False
+            )
         >> List.filterMap (Tuple.second >> stringFromFileContent)
         >> elmModulesDictFromFilesTexts
 
@@ -2036,7 +2113,11 @@ replaceFunctionInSourceFilesModuleText sourceFiles { functionName } moduleText =
             )
 
 
-prepareReplaceFunctionInElmMakeModuleText : List ( DependencyKey, Bytes.Bytes ) -> AppFiles -> { functionName : String } -> Result (List CompilationError) (String -> Result (List CompilationError) String)
+prepareReplaceFunctionInElmMakeModuleText :
+    List ( DependencyKey, Bytes.Bytes )
+    -> AppFiles
+    -> { functionName : String }
+    -> Result (List CompilationError) { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result (List CompilationError) String }
 prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionName } =
     case parseElmMakeModuleFunctionName functionName of
         Err error ->
@@ -2072,30 +2153,43 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionNam
                             Err [ MissingDependencyError dependencyKey ]
 
                         Just ( _, dependencyValue ) ->
+                            let
+                                valueFunctionName =
+                                    "bytes_as_base64_" ++ SHA256.toHex (SHA256.fromBytes dependencyValue)
+
+                                valueFunctionText =
+                                    valueFunctionName
+                                        ++ " =\n"
+                                        ++ indentElmCodeLines 1 (buildBytesElmExpression { encodeAsBase64 = True } dependencyValue)
+                            in
                             Ok
-                                (\moduleText ->
-                                    moduleText
-                                        |> getDeclarationFromFunctionNameAndElmModuleText { functionName = functionName }
-                                        |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
-                                        |> Result.mapError (OtherCompilationError >> List.singleton)
-                                        |> Result.andThen
-                                            (\functionDeclaration ->
-                                                let
-                                                    functionLines =
-                                                        moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
+                                { valueFunctionText = valueFunctionText
+                                , updateInterfaceModuleText =
+                                    \{ generatedModuleName } moduleText ->
+                                        moduleText
+                                            |> getDeclarationFromFunctionNameAndElmModuleText { functionName = functionName }
+                                            |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
+                                            |> Result.mapError (OtherCompilationError >> List.singleton)
+                                            |> Result.andThen
+                                                (\functionDeclaration ->
+                                                    let
+                                                        functionLines =
+                                                            moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
 
-                                                    fileExpression =
-                                                        buildBytesElmExpression { encodeAsBase64 = base64 } dependencyValue
+                                                        fileExpression =
+                                                            buildBytesElmExpressionFromBase64Expression
+                                                                { encodeAsBase64 = base64 }
+                                                                (generatedModuleName ++ "." ++ valueFunctionName)
 
-                                                    newFunctionLines =
-                                                        List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
-                                                in
-                                                addOrUpdateFunctionInElmModuleText
-                                                    { functionName = functionName, mapFunctionLines = always newFunctionLines }
-                                                    moduleText
-                                                    |> Result.mapError (OtherCompilationError >> List.singleton)
-                                            )
-                                )
+                                                        newFunctionLines =
+                                                            List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
+                                                    in
+                                                    addOrUpdateFunctionInElmModuleText
+                                                        { functionName = functionName, mapFunctionLines = always newFunctionLines }
+                                                        moduleText
+                                                        |> Result.mapError (OtherCompilationError >> List.singleton)
+                                                )
+                                }
 
 
 buildBytesElmExpression : { encodeAsBase64 : Bool } -> Bytes.Bytes -> String
@@ -2104,6 +2198,13 @@ buildBytesElmExpression { encodeAsBase64 } bytes =
         base64Expression =
             "\"" ++ (bytes |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64") ++ "\""
     in
+    buildBytesElmExpressionFromBase64Expression
+        { encodeAsBase64 = encodeAsBase64 }
+        base64Expression
+
+
+buildBytesElmExpressionFromBase64Expression : { encodeAsBase64 : Bool } -> String -> String
+buildBytesElmExpressionFromBase64Expression { encodeAsBase64 } base64Expression =
     if encodeAsBase64 then
         base64Expression
 
@@ -2280,8 +2381,8 @@ replaceRangeInText range rangeReplacement originalText =
         |> String.join "\n"
 
 
-addImportInElmModuleText : List String -> String -> Result String String
-addImportInElmModuleText importModuleName moduleText =
+addImportsInElmModuleText : List (List String) -> String -> Result String String
+addImportsInElmModuleText importsModuleName moduleText =
     moduleText
         |> parseAndMapElmModuleText
             (\parsedModule ->
@@ -2295,11 +2396,12 @@ addImportInElmModuleText importModuleName moduleText =
                             |> List.maximum
                             |> Maybe.withDefault (Elm.Syntax.Node.range parsedModule.moduleDefinition).end.row
 
-                    importStatement =
-                        "import " ++ String.join "." importModuleName
+                    importStatementsLines =
+                        importsModuleName
+                            |> List.map (String.join "." >> (++) "import ")
                 in
                 (List.take insertionRow moduleTextLines
-                    ++ [ importStatement ]
+                    ++ importStatementsLines
                     ++ List.drop insertionRow moduleTextLines
                 )
                     |> String.join "\n"
@@ -2561,3 +2663,16 @@ resultCombineConcatenatingErrors =
                             Ok (previousList ++ [ newItem ])
         )
         (Ok [])
+
+
+listRemoveDuplicates : List a -> List a
+listRemoveDuplicates =
+    List.foldr
+        (\item list ->
+            if list |> List.member item then
+                list
+
+            else
+                item :: list
+        )
+        []
