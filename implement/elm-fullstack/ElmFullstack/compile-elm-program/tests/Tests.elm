@@ -1,374 +1,16 @@
 module Tests exposing (..)
 
-import Bytes
 import Bytes.Encode
 import CompileFullstackApp
 import Dict
+import Elm.Syntax.Declaration
+import Elm.Syntax.Module
+import Elm.Syntax.Node
 import Expect
 import Json.Decode
 import Main
+import Result.Extra
 import Test
-
-
-parseElmTypeText : Test.Test
-parseElmTypeText =
-    Test.describe "parse Elm type text"
-        [ Test.test "Simplest instance" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "String"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.InstanceElmType
-                                { typeName = "String", parameters = [] }
-                            )
-                        )
-        , Test.test "Instance with one parameter" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "Maybe Int"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.InstanceElmType
-                                { typeName = "Maybe"
-                                , parameters = [ "Int" ]
-                                }
-                            )
-                        )
-        , Test.test "Instance with two parameters" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "Result String Int"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.InstanceElmType
-                                { typeName = "Result"
-                                , parameters = [ "String", "Int" ]
-                                }
-                            )
-                        )
-        , Test.test "Empty record" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "{ }"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok (CompileFullstackApp.RecordElmType { fields = [] }))
-        , Test.test "Simple record with one field" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "{ field_a : Int }"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "field_a"
-                                      , typeText = "Int"
-                                      , parsedType = CompileFullstackApp.InstanceElmType { typeName = "Int", parameters = [] }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Simple record with two fields" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "{ field_a : Int, field_b : String }"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "field_a"
-                                      , typeText = "Int"
-                                      , parsedType = CompileFullstackApp.InstanceElmType { typeName = "Int", parameters = [] }
-                                      }
-                                    , { name = "field_b"
-                                      , typeText = "String"
-                                      , parsedType = CompileFullstackApp.InstanceElmType { typeName = "String", parameters = [] }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Simple record with three fields" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True "{ field_a : Int, field_b : String, field_c : Int }"
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "field_a"
-                                      , typeText = "Int"
-                                      , parsedType = CompileFullstackApp.InstanceElmType { typeName = "Int", parameters = [] }
-                                      }
-                                    , { name = "field_b"
-                                      , typeText = "String"
-                                      , parsedType = CompileFullstackApp.InstanceElmType { typeName = "String", parameters = [] }
-                                      }
-                                    , { name = "field_c"
-                                      , typeText = "Int"
-                                      , parsedType = CompileFullstackApp.InstanceElmType { typeName = "Int", parameters = [] }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Simple custom type with parameterized tags" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-type SimpleCustomType
-    = TagA
-    | TagB Int
-    | TagC String
-    | TagD String Int""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.CustomElmType
-                                { typeLocalName = "SimpleCustomType"
-                                , parameters = []
-                                , tags =
-                                    [ ( "TagA", [] )
-                                    , ( "TagB", [ "Int" ] )
-                                    , ( "TagC", [ "String" ] )
-                                    , ( "TagD", [ "String", "Int" ] )
-                                    ]
-                                        |> Dict.fromList
-                                }
-                            )
-                        )
-        , Test.test "Empty Tuple" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """(  )""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok (CompileFullstackApp.TupleElmType []))
-        , Test.test "Simple Tuple" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """(Int, String)""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok (CompileFullstackApp.TupleElmType [ "Int", "String" ]))
-        , Test.test "Record type with tuple" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-    { field_tuple : ( Int, String )
-    , field_int : Int
-    }""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "field_tuple"
-                                      , typeText = "( Int, String )"
-                                      , parsedType =
-                                            CompileFullstackApp.TupleElmType [ "Int", "String" ]
-                                      }
-                                    , { name = "field_int"
-                                      , typeText = "Int"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "Int"
-                                                , parameters = []
-                                                }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Nested record type" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-    { field_record : SimpleRecordType
-    , field_custom : SimpleCustomType
-    , field_tuple : ( Int, String )
-    , field_list : List Int
-    }""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "field_record"
-                                      , typeText = "SimpleRecordType"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "SimpleRecordType", parameters = [] }
-                                      }
-                                    , { name = "field_custom"
-                                      , typeText = "SimpleCustomType"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "SimpleCustomType", parameters = [] }
-                                      }
-                                    , { name = "field_tuple"
-                                      , typeText = "( Int, String )"
-                                      , parsedType =
-                                            CompileFullstackApp.TupleElmType [ "Int", "String" ]
-                                      }
-                                    , { name = "field_list"
-                                      , typeText = "List Int"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "List"
-                                                , parameters = [ "Int" ]
-                                                }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Nested record type with inlined record" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-    { field_record : { field_record_a : Int, field_record_b : String }
-    , field_list : List Int
-    }""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "field_record"
-                                      , typeText = "{ field_record_a : Int, field_record_b : String }"
-                                      , parsedType =
-                                            CompileFullstackApp.RecordElmType
-                                                { fields =
-                                                    [ { name = "field_record_a"
-                                                      , typeText = "Int"
-                                                      , parsedType =
-                                                            CompileFullstackApp.InstanceElmType
-                                                                { typeName = "Int"
-                                                                , parameters = []
-                                                                }
-                                                      }
-                                                    , { name = "field_record_b"
-                                                      , typeText = "String"
-                                                      , parsedType =
-                                                            CompileFullstackApp.InstanceElmType
-                                                                { typeName = "String"
-                                                                , parameters = []
-                                                                }
-                                                      }
-                                                    ]
-                                                }
-                                      }
-                                    , { name = "field_list"
-                                      , typeText = "List Int"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "List"
-                                                , parameters = [ "Int" ]
-                                                }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Custom type with type parameter" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-type CustomTypeWithTypeParameter a
-    = CustomTypeWithTypeParameterTag a
-""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.CustomElmType
-                                { typeLocalName = "CustomTypeWithTypeParameter"
-                                , parameters = [ "a" ]
-                                , tags =
-                                    [ ( "CustomTypeWithTypeParameterTag", [ "a" ] ) ]
-                                        |> Dict.fromList
-                                }
-                            )
-                        )
-        , Test.test "Record with instance with tuple" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-    { instance_field : List String
-    , changeBlobs : List ( List String, List BlobChangeSequenceElement )
-    }
-""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "instance_field"
-                                      , typeText = "List String"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "List"
-                                                , parameters = [ "String" ]
-                                                }
-                                      }
-                                    , { name = "changeBlobs"
-                                      , typeText = "List ( List String, List BlobChangeSequenceElement )"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "List"
-                                                , parameters = [ "( List String, List BlobChangeSequenceElement )" ]
-                                                }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "Record ProjectStateDifference from Elm Editor" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-    { removeNodes : List (List String)
-    , changeBlobs : List ( List String, List BlobChangeSequenceElement )
-    }
-""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.RecordElmType
-                                { fields =
-                                    [ { name = "removeNodes"
-                                      , typeText = "List (List String)"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "List"
-                                                , parameters = [ "(List String)" ]
-                                                }
-                                      }
-                                    , { name = "changeBlobs"
-                                      , typeText = "List ( List String, List BlobChangeSequenceElement )"
-                                      , parsedType =
-                                            CompileFullstackApp.InstanceElmType
-                                                { typeName = "List"
-                                                , parameters = [ "( List String, List BlobChangeSequenceElement )" ]
-                                                }
-                                      }
-                                    ]
-                                }
-                            )
-                        )
-        , Test.test "ListDict.Dict" <|
-            \() ->
-                CompileFullstackApp.parseElmTypeText True (String.trim """
-type Dict key value
-    = Dict (List ( key, value ))
-
-""")
-                    |> Result.map Tuple.first
-                    |> Expect.equal
-                        (Ok
-                            (CompileFullstackApp.CustomElmType
-                                { typeLocalName = "Dict"
-                                , parameters = [ "key", "value" ]
-                                , tags =
-                                    [ ( "Dict", [ "(List ( key, value ))" ] )
-                                    ]
-                                        |> Dict.fromList
-                                }
-                            )
-                        )
-        ]
 
 
 parseCompilationInterfaceElmMakeFunctionName : Test.Test
@@ -478,15 +120,848 @@ interfaceToHost_processEvent : String -> State -> ( State, String )
 interfaceToHost_processEvent =
     InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 """
-      , Ok "State"
+      , Ok
+            ( CompileFullstackApp.RecordElmType { fields = [] }
+            , Dict.empty
+            )
       )
     ]
         |> List.map
             (\( testName, moduleText, expectedResult ) ->
                 Test.test testName <|
                     \() ->
-                        moduleText
-                            |> CompileFullstackApp.stateTypeNameFromRootElmModule
+                        let
+                            sourceModules =
+                                [ moduleText ]
+                                    |> CompileFullstackApp.elmModulesDictFromFilesTexts
+                                    |> Dict.map (always Tuple.second)
+                        in
+                        CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
+                            sourceModules
+                            moduleText
                             |> Expect.equal expectedResult
             )
         |> Test.describe "state type name from root Elm module"
+
+
+parse_elm_type_annotation : Test.Test
+parse_elm_type_annotation =
+    [ { testName = "Leaf String"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf, Dict.empty )
+      , rootTypeAnnotationText = "String"
+      }
+    , { testName = "Leaf Int"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf, Dict.empty )
+      , rootTypeAnnotationText = "Int"
+      }
+    , { testName = "Leaf Bool"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf, Dict.empty )
+      , rootTypeAnnotationText = "Bool"
+      }
+    , { testName = "Leaf Float"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.FloatLeaf, Dict.empty )
+      , rootTypeAnnotationText = "Float"
+      }
+    , { testName = "Leaf Bytes"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.BytesLeaf, Dict.empty )
+      , rootTypeAnnotationText = "Bytes.Bytes"
+      }
+    , { testName = "Unit"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.UnitType, Dict.empty )
+      , rootTypeAnnotationText = " () "
+      }
+    , { testName = "Empty Record"
+      , modulesTexts = []
+      , expectedResult = Ok ( CompileFullstackApp.RecordElmType { fields = [] }, Dict.empty )
+      , rootTypeAnnotationText = " {  } "
+      }
+    , { testName = "Record with simple fields"
+      , modulesTexts = []
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.RecordElmType
+                    { fields =
+                        [ ( "a", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
+                        , ( "b", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                        ]
+                    }
+                , Dict.empty
+                )
+      , rootTypeAnnotationText = " { a : Int, b : String } "
+      }
+    , { testName = "Result String Int"
+      , modulesTexts = []
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.InstanceElmType
+                    { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ResultLeaf
+                    , arguments =
+                        [ CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                        , CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                        ]
+                    }
+                , Dict.empty
+                )
+      , rootTypeAnnotationText = " Result String Int "
+      }
+    , { testName = "Alias Int"
+      , modulesTexts =
+            [ [ "module WithAlias exposing (..)"
+              , ""
+              , "type alias OurAlias = Int"
+              ]
+                |> String.join "\n"
+            ]
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                , Dict.empty
+                )
+      , rootTypeAnnotationText = " WithAlias.OurAlias "
+      }
+    , { testName = "Custom type"
+      , modulesTexts =
+            [ [ "module WithCustom exposing (..)"
+              , ""
+              , "type CustomType = TagA | TagB"
+              ]
+                |> String.join "\n"
+            ]
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.CustomElmType "WithCustom.CustomType"
+                , [ ( "WithCustom.CustomType"
+                    , { parameters = []
+                      , tags =
+                            [ ( "TagA", [] )
+                            , ( "TagB", [] )
+                            ]
+                                |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " WithCustom.CustomType "
+      }
+    , { testName = "Custom type with parameterized tags"
+      , modulesTexts =
+            [ [ "module WithCustom exposing (..)"
+              , ""
+              , "type CustomType = TagA String Int | TagB ( Int, String ) | TagC { f0 : Int, f1 : String }"
+              ]
+                |> String.join "\n"
+            ]
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.CustomElmType "WithCustom.CustomType"
+                , [ ( "WithCustom.CustomType"
+                    , { parameters = []
+                      , tags =
+                            [ ( "TagA"
+                              , [ CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                                , CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                                ]
+                              )
+                            , ( "TagB"
+                              , [ CompileFullstackApp.TupleElmType
+                                    [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                                    , CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                                    ]
+                                ]
+                              )
+                            , ( "TagC"
+                              , [ CompileFullstackApp.RecordElmType
+                                    { fields =
+                                        [ ( "f0", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
+                                        , ( "f1", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                                        ]
+                                    }
+                                ]
+                              )
+                            ]
+                                |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " WithCustom.CustomType "
+      }
+    , { testName = "Recursive Custom type"
+      , modulesTexts =
+            [ [ "module WithCustom exposing (..)"
+              , ""
+              , "type RecursiveType = TagTerminate Int | TagRecurse RecursiveType"
+              ]
+                |> String.join "\n"
+            ]
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.CustomElmType "WithCustom.RecursiveType"
+                , [ ( "WithCustom.RecursiveType"
+                    , { parameters = []
+                      , tags =
+                            [ ( "TagTerminate", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
+                            , ( "TagRecurse", [ CompileFullstackApp.CustomElmType "WithCustom.RecursiveType" ] )
+                            ]
+                                |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " WithCustom.RecursiveType "
+      }
+    , { testName = "Custom type instance"
+      , modulesTexts =
+            [ [ "module WithCustom exposing (..)"
+              , ""
+              , "type CustomType a = TagA a | TagB"
+              ]
+                |> String.join "\n"
+            ]
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.InstanceElmType
+                    { instantiated = CompileFullstackApp.CustomElmType "WithCustom.CustomType"
+                    , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+                    }
+                , [ ( "WithCustom.CustomType"
+                    , { parameters = [ "a" ]
+                      , tags =
+                            [ ( "TagA", [ CompileFullstackApp.GenericType "a" ] )
+                            , ( "TagB", [] )
+                            ]
+                                |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " WithCustom.CustomType Int "
+      }
+    , { testName = "Record field List instance"
+      , modulesTexts =
+            [ [ "module Main exposing (..)"
+              , "import OtherModule"
+              , ""
+              , "type alias OurAlias = { field_list : List OtherModule.OurType }"
+              ]
+            , [ "module OtherModule exposing (..)"
+              , ""
+              , "type OurType = TagA"
+              ]
+            ]
+                |> List.map (String.join "\n")
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.RecordElmType
+                    { fields =
+                        [ ( "field_list"
+                          , CompileFullstackApp.InstanceElmType
+                                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
+                                , arguments = [ CompileFullstackApp.CustomElmType "OtherModule.OurType" ]
+                                }
+                          )
+                        ]
+                    }
+                , [ ( "OtherModule.OurType"
+                    , { parameters = []
+                      , tags = [ ( "TagA", [] ) ] |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " Main.OurAlias "
+      }
+    , { testName = "Aliased module import"
+      , modulesTexts =
+            [ [ "module Main exposing (..)"
+              , "import Namespace.SomeModule as AliasedModule"
+              , ""
+              , "type alias OurAlias = List AliasedModule.OurType"
+              ]
+            , [ "module Namespace.SomeModule exposing (..)"
+              , ""
+              , "type OurType = TagA"
+              ]
+            ]
+                |> List.map (String.join "\n")
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.InstanceElmType
+                    { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
+                    , arguments = [ CompileFullstackApp.CustomElmType "Namespace.SomeModule.OurType" ]
+                    }
+                , [ ( "Namespace.SomeModule.OurType"
+                    , { parameters = []
+                      , tags = [ ( "TagA", [] ) ] |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " Main.OurAlias "
+      }
+    , { testName = "Aliased via exposing module import"
+      , modulesTexts =
+            [ """
+module OpaqueCustomType exposing (OpaqueCustomType, constructTagA, constructTagB)
+
+
+type OpaqueCustomType
+    = TagA
+    | TagB Int
+            """
+            , """
+module Structures exposing (..)
+
+import OpaqueCustomType exposing (OpaqueCustomType)
+
+
+type alias MixedRecord =
+    { int : Int
+    , opaqueCustomType : OpaqueCustomType
+    }
+            """
+            ]
+                |> List.map String.trim
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.RecordElmType
+                    { fields =
+                        [ ( "int", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
+                        , ( "opaqueCustomType", CompileFullstackApp.CustomElmType "OpaqueCustomType.OpaqueCustomType" )
+                        ]
+                    }
+                , [ ( "OpaqueCustomType.OpaqueCustomType"
+                    , { parameters = []
+                      , tags =
+                            [ ( "TagA", [] )
+                            , ( "TagB", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
+                            ]
+                                |> Dict.fromList
+                      }
+                    )
+                  ]
+                    |> Dict.fromList
+                )
+      , rootTypeAnnotationText = " Structures.MixedRecord "
+      }
+    ]
+        |> List.map
+            (\{ testName, modulesTexts, expectedResult, rootTypeAnnotationText } ->
+                Test.test testName <|
+                    \() ->
+                        modulesTexts
+                            |> List.map
+                                (\moduleText ->
+                                    moduleText
+                                        |> CompileFullstackApp.parseElmModuleText
+                                        |> Result.mapError
+                                            (\error ->
+                                                "Failed to parse supporting module '"
+                                                    ++ (moduleText
+                                                            |> String.lines
+                                                            |> List.head
+                                                            |> Maybe.withDefault "???"
+                                                       )
+                                                    ++ "': "
+                                                    ++ CompileFullstackApp.parserDeadEndsToString moduleText error
+                                            )
+                                )
+                            |> Result.Extra.combine
+                            |> Result.andThen
+                                (\modules ->
+                                    let
+                                        namedModules =
+                                            modules
+                                                |> List.map
+                                                    (\parsedModule ->
+                                                        ( Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
+                                                        , parsedModule
+                                                        )
+                                                    )
+                                                |> List.map (Tuple.mapFirst (String.join "."))
+                                                |> Dict.fromList
+
+                                        rootModuleImports =
+                                            namedModules
+                                                |> Dict.keys
+                                                |> List.map ((++) "import ")
+
+                                        rootModuleText =
+                                            ("module Root exposing (..)"
+                                                :: ""
+                                                :: rootModuleImports
+                                                ++ [ "declaration : " ++ rootTypeAnnotationText
+                                                   , "declaration = 123"
+                                                   ]
+                                            )
+                                                |> String.join "\n"
+                                    in
+                                    rootModuleText
+                                        |> CompileFullstackApp.parseElmModuleText
+                                        |> Result.mapError (CompileFullstackApp.parserDeadEndsToString rootModuleText)
+                                        |> Result.andThen
+                                            (\rootModule ->
+                                                rootModule.declarations
+                                                    |> List.filterMap
+                                                        (\declaration ->
+                                                            case Elm.Syntax.Node.value declaration of
+                                                                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                                                    Maybe.map Elm.Syntax.Node.value functionDeclaration.signature
+
+                                                                _ ->
+                                                                    Nothing
+                                                        )
+                                                    |> List.filterMap
+                                                        (\functionSignature ->
+                                                            if Elm.Syntax.Node.value functionSignature.name /= "declaration" then
+                                                                Nothing
+
+                                                            else
+                                                                Just (Elm.Syntax.Node.value functionSignature.typeAnnotation)
+                                                        )
+                                                    |> List.head
+                                                    |> Maybe.map Ok
+                                                    |> Maybe.withDefault (Err "Did not find declaration")
+                                                    |> Result.map
+                                                        (\declarationAnnotation ->
+                                                            declarationAnnotation
+                                                                |> Tuple.pair rootModule
+                                                                |> CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation namedModules
+                                                                |> Expect.equal expectedResult
+                                                        )
+                                            )
+                                )
+                            |> Result.Extra.unpack Expect.fail identity
+            )
+        |> Test.describe "parse Elm type annotation"
+
+
+emit_json_coding_expression_from_type : Test.Test
+emit_json_coding_expression_from_type =
+    [ { testName = "Leaf String"
+      , typeAnnotation = CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+      , expectedResult =
+            { encodeExpression = "Json.Encode.string valueToEncode"
+            , decodeExpression = "Json.Decode.string"
+            }
+      }
+    , { testName = "Unit"
+      , typeAnnotation = CompileFullstackApp.UnitType
+      , expectedResult =
+            { encodeExpression = "Json.Encode.list (always (Json.Encode.object [])) []"
+            , decodeExpression = "Json.Decode.succeed ()"
+            }
+      }
+    , { testName = "Empty record"
+      , typeAnnotation = CompileFullstackApp.RecordElmType { fields = [] }
+      , expectedResult =
+            { encodeExpression = "Json.Encode.object []"
+            , decodeExpression = "Json.Decode.succeed {}"
+            }
+      }
+    , { testName = "Record with one primitive field"
+      , typeAnnotation =
+            CompileFullstackApp.RecordElmType
+                { fields = [ ( "field_name", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf ) ] }
+      , expectedResult =
+            { encodeExpression = String.trim """
+Json.Encode.object
+    [ ( "field_name"
+      , Json.Encode.string valueToEncode.field_name
+      )
+    ]"""
+            , decodeExpression = String.trim """
+Json.Decode.succeed (\\field_name -> { field_name = field_name })
+    |> jsonDecode_andMap
+        ( Json.Decode.field "field_name"
+            Json.Decode.string
+        )
+"""
+            }
+      }
+    , { testName = "Record with two primitive fields"
+      , typeAnnotation =
+            CompileFullstackApp.RecordElmType
+                { fields =
+                    [ ( "field_a", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
+                    , ( "field_b", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                    ]
+                }
+      , expectedResult =
+            { encodeExpression = String.trim """
+Json.Encode.object
+    [ ( "field_a"
+      , Json.Encode.int valueToEncode.field_a
+      )
+    , ( "field_b"
+      , Json.Encode.string valueToEncode.field_b
+      )
+    ]"""
+            , decodeExpression = String.trim """
+Json.Decode.succeed (\\field_a field_b -> { field_a = field_a, field_b = field_b })
+    |> jsonDecode_andMap
+        ( Json.Decode.field "field_a"
+            Json.Decode.int
+        )
+    |> jsonDecode_andMap
+        ( Json.Decode.field "field_b"
+            Json.Decode.string
+        )
+"""
+            }
+      }
+    , { testName = "Nested record"
+      , typeAnnotation =
+            CompileFullstackApp.RecordElmType
+                { fields =
+                    [ ( "field_a"
+                      , CompileFullstackApp.RecordElmType
+                            { fields =
+                                [ ( "field_c", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ]
+                            }
+                      )
+                    , ( "field_b", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                    ]
+                }
+      , expectedResult =
+            { encodeExpression = String.trim """
+Json.Encode.object
+    [ ( "field_a"
+      , Json.Encode.object
+            [ ( "field_c"
+              , Json.Encode.int valueToEncode.field_a.field_c
+              )
+            ]
+      )
+    , ( "field_b"
+      , Json.Encode.string valueToEncode.field_b
+      )
+    ]"""
+            , decodeExpression = String.trim """
+Json.Decode.succeed (\\field_a field_b -> { field_a = field_a, field_b = field_b })
+    |> jsonDecode_andMap
+        ( Json.Decode.field "field_a"
+            ( Json.Decode.succeed (\\field_c -> { field_c = field_c })
+                |> jsonDecode_andMap
+                    ( Json.Decode.field "field_c"
+                        Json.Decode.int
+                    )
+            )
+        )
+    |> jsonDecode_andMap
+        ( Json.Decode.field "field_b"
+            Json.Decode.string
+        )
+"""
+            }
+      }
+    , { testName = "Tuple"
+      , typeAnnotation =
+            CompileFullstackApp.TupleElmType
+                [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                , CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                ]
+      , expectedResult =
+            { encodeExpression = String.trim """
+Json.Encode.list identity
+    [ Json.Encode.int ((\\( item_0, item_1 ) -> item_0) valueToEncode)
+    , Json.Encode.string ((\\( item_0, item_1 ) -> item_1) valueToEncode)
+    ]"""
+            , decodeExpression = String.trim """
+Json.Decode.map2 (\\item_0 item_1 -> ( item_0, item_1 ))
+    (Json.Decode.index 0 Json.Decode.int)
+    (Json.Decode.index 1 Json.Decode.string)
+"""
+            }
+      }
+    , { testName = "Triple"
+      , typeAnnotation =
+            CompileFullstackApp.TupleElmType
+                [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                , CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                , CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
+                ]
+      , expectedResult =
+            { encodeExpression = String.trim """
+Json.Encode.list identity
+    [ Json.Encode.int ((\\( item_0, item_1, item_2 ) -> item_0) valueToEncode)
+    , Json.Encode.string ((\\( item_0, item_1, item_2 ) -> item_1) valueToEncode)
+    , Json.Encode.bool ((\\( item_0, item_1, item_2 ) -> item_2) valueToEncode)
+    ]"""
+            , decodeExpression = String.trim """
+Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
+    (Json.Decode.index 0 Json.Decode.int)
+    (Json.Decode.index 1 Json.Decode.string)
+    (Json.Decode.index 2 Json.Decode.bool)
+"""
+            }
+      }
+    , { testName = "List Int"
+      , typeAnnotation =
+            CompileFullstackApp.InstanceElmType
+                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
+                , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+                }
+      , expectedResult =
+            { encodeExpression = "jsonEncode__generic_List (\\type_arg -> Json.Encode.int type_arg) valueToEncode"
+            , decodeExpression = "jsonDecode__generic_List Json.Decode.int"
+            }
+      }
+    , { testName = "Maybe Int"
+      , typeAnnotation =
+            CompileFullstackApp.InstanceElmType
+                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.MaybeLeaf
+                , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+                }
+      , expectedResult =
+            { encodeExpression = "jsonEncode__generic_Maybe (\\type_arg -> Json.Encode.int type_arg) valueToEncode"
+            , decodeExpression = "jsonDecode__generic_Maybe Json.Decode.int"
+            }
+      }
+    , { testName = "Result String Int"
+      , typeAnnotation =
+            CompileFullstackApp.InstanceElmType
+                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ResultLeaf
+                , arguments =
+                    [ CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                    , CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                    ]
+                }
+      , expectedResult =
+            { encodeExpression = "jsonEncode__generic_Result (\\type_arg -> Json.Encode.string type_arg) (\\type_arg -> Json.Encode.int type_arg) valueToEncode"
+            , decodeExpression = "jsonDecode__generic_Result Json.Decode.string Json.Decode.int"
+            }
+      }
+    , { testName = "Instance of generic custom type"
+      , typeAnnotation =
+            CompileFullstackApp.InstanceElmType
+                { instantiated = CompileFullstackApp.CustomElmType "OwnModule.CustomType"
+                , arguments =
+                    [ CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
+                    ]
+                }
+      , expectedResult =
+            { encodeExpression = "jsonEncode_OwnModule_CustomType (\\type_arg -> Json.Encode.bool type_arg) valueToEncode"
+            , decodeExpression = "jsonDecode_OwnModule_CustomType Json.Decode.bool"
+            }
+      }
+    ]
+        |> List.map
+            (\{ testName, typeAnnotation, expectedResult } ->
+                Test.test testName <|
+                    \() ->
+                        ( typeAnnotation, [] )
+                            |> CompileFullstackApp.jsonCodingExpressionFromType
+                                { encodeValueExpression = "valueToEncode", typeArgLocalName = "type_arg" }
+                            |> Expect.equal expectedResult
+            )
+        |> Test.describe "emit json coding expressions from type"
+
+
+emit_json_coding_expression_from_custom_type : Test.Test
+emit_json_coding_expression_from_custom_type =
+    [ { testName = "One tag without parameters"
+      , customTypeName = "ModuleName.CustomType"
+      , customType =
+            { parameters = []
+            , tags = [ ( "TagA", [] ) ] |> Dict.fromList
+            }
+      , expectedResult =
+            { encodeFunction = String.trim """
+jsonEncode_ModuleName_CustomType valueToEncode =
+    case valueToEncode of
+        ModuleName.TagA ->
+            Json.Encode.object [ ( "TagA", Json.Encode.list identity [] ) ]
+"""
+            , decodeFunction = String.trim """
+jsonDecode_ModuleName_CustomType =
+    Json.Decode.oneOf
+        [ Json.Decode.field "TagA" (jsonDecodeSucceedWhenNotNull ModuleName.TagA)
+        ]
+"""
+            }
+      }
+    , { testName = "Recursive type"
+      , customTypeName = "ModuleName.RecursiveType"
+      , customType =
+            { parameters = []
+            , tags =
+                [ ( "TagRecurse", [ CompileFullstackApp.CustomElmType "ModuleName.RecursiveType" ] )
+                , ( "TagTerminate", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
+                ]
+                    |> Dict.fromList
+            }
+      , expectedResult =
+            { encodeFunction = String.trim """
+jsonEncode_ModuleName_RecursiveType valueToEncode =
+    case valueToEncode of
+        ModuleName.TagRecurse tagArgument0 ->
+            Json.Encode.object [ ( "TagRecurse", Json.Encode.list identity [ jsonEncode_ModuleName_RecursiveType tagArgument0 ] ) ]
+        ModuleName.TagTerminate tagArgument0 ->
+            Json.Encode.object [ ( "TagTerminate", Json.Encode.list identity [ Json.Encode.int tagArgument0 ] ) ]
+"""
+            , decodeFunction = String.trim """
+jsonDecode_ModuleName_RecursiveType =
+    Json.Decode.oneOf
+        [ Json.Decode.field "TagRecurse" (Json.Decode.lazy (\\_ -> Json.Decode.map ModuleName.TagRecurse (Json.Decode.index 0 jsonDecode_ModuleName_RecursiveType)))
+        , Json.Decode.field "TagTerminate" (Json.Decode.lazy (\\_ -> Json.Decode.map ModuleName.TagTerminate (Json.Decode.index 0 Json.Decode.int)))
+        ]
+"""
+            }
+      }
+    , { testName = "Tag with generic type instance"
+      , customTypeName = "ModuleName.TypeName"
+      , customType =
+            { parameters = []
+            , tags =
+                [ ( "TagList"
+                  , [ CompileFullstackApp.InstanceElmType
+                        { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
+                        , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+                        }
+                    ]
+                  )
+                ]
+                    |> Dict.fromList
+            }
+      , expectedResult =
+            { encodeFunction = String.trim """
+jsonEncode_ModuleName_TypeName valueToEncode =
+    case valueToEncode of
+        ModuleName.TagList tagArgument0 ->
+            Json.Encode.object [ ( "TagList", Json.Encode.list identity [ jsonEncode__generic_List (\\type_arg -> Json.Encode.int type_arg) tagArgument0 ] ) ]
+"""
+            , decodeFunction = String.trim """
+jsonDecode_ModuleName_TypeName =
+    Json.Decode.oneOf
+        [ Json.Decode.field "TagList" (Json.Decode.lazy (\\_ -> Json.Decode.map ModuleName.TagList (Json.Decode.index 0 (jsonDecode__generic_List Json.Decode.int))))
+        ]
+"""
+            }
+      }
+    , { testName = "One tag with two parameters"
+      , customTypeName = "ModuleName.TypeName"
+      , customType =
+            { parameters = []
+            , tags =
+                [ ( "TagAlpha"
+                  , [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                    , CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
+                    ]
+                  )
+                ]
+                    |> Dict.fromList
+            }
+      , expectedResult =
+            { encodeFunction = String.trim """
+jsonEncode_ModuleName_TypeName valueToEncode =
+    case valueToEncode of
+        ModuleName.TagAlpha tagArgument0 tagArgument1 ->
+            Json.Encode.object [ ( "TagAlpha", Json.Encode.list identity [ Json.Encode.int tagArgument0, Json.Encode.bool tagArgument1 ] ) ]
+"""
+            , decodeFunction = String.trim """
+jsonDecode_ModuleName_TypeName =
+    Json.Decode.oneOf
+        [ Json.Decode.field "TagAlpha" (Json.Decode.lazy (\\_ -> Json.Decode.map2 ModuleName.TagAlpha (Json.Decode.index 0 Json.Decode.int) (Json.Decode.index 1 Json.Decode.bool)))
+        ]
+"""
+            }
+      }
+    , { testName = "One tag with generic parameter"
+      , customTypeName = "ModuleName.TypeName"
+      , customType =
+            { parameters = [ "test" ]
+            , tags =
+                [ ( "TagAlpha"
+                  , [ CompileFullstackApp.GenericType "test"
+                    ]
+                  )
+                ]
+                    |> Dict.fromList
+            }
+      , expectedResult =
+            { encodeFunction = String.trim """
+jsonEncode_ModuleName_TypeName jsonEncode_type_parameter_test valueToEncode =
+    case valueToEncode of
+        ModuleName.TagAlpha tagArgument0 ->
+            Json.Encode.object [ ( "TagAlpha", Json.Encode.list identity [ jsonEncode_type_parameter_test tagArgument0 ] ) ]
+"""
+            , decodeFunction = String.trim """
+jsonDecode_ModuleName_TypeName jsonDecode_type_parameter_test =
+    Json.Decode.oneOf
+        [ Json.Decode.field "TagAlpha" (Json.Decode.lazy (\\_ -> Json.Decode.map ModuleName.TagAlpha (Json.Decode.index 0 jsonDecode_type_parameter_test)))
+        ]
+"""
+            }
+      }
+    , { testName = "ListDict"
+      , customTypeName = "ListDict.Dict"
+      , customType =
+            { parameters = [ "key", "value" ]
+            , tags =
+                [ ( "Dict"
+                  , [ CompileFullstackApp.InstanceElmType
+                        { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
+                        , arguments =
+                            [ CompileFullstackApp.TupleElmType
+                                [ CompileFullstackApp.GenericType "key"
+                                , CompileFullstackApp.GenericType "value"
+                                ]
+                            ]
+                        }
+                    ]
+                  )
+                ]
+                    |> Dict.fromList
+            }
+      , expectedResult =
+            { encodeFunction = String.trim """
+jsonEncode_ListDict_Dict jsonEncode_type_parameter_key jsonEncode_type_parameter_value valueToEncode =
+    case valueToEncode of
+        ListDict.Dict tagArgument0 ->
+            Json.Encode.object [ ( "Dict", Json.Encode.list identity [ jsonEncode__generic_List (\\type_arg -> Json.Encode.list identity
+                [ jsonEncode_type_parameter_key ((\\( item_0, item_1 ) -> item_0) type_arg)
+                , jsonEncode_type_parameter_value ((\\( item_0, item_1 ) -> item_1) type_arg)
+                ]) tagArgument0 ] ) ]
+"""
+            , decodeFunction = String.trim """
+jsonDecode_ListDict_Dict jsonDecode_type_parameter_key jsonDecode_type_parameter_value =
+    Json.Decode.oneOf
+        [ Json.Decode.field "Dict" (Json.Decode.lazy (\\_ -> Json.Decode.map ListDict.Dict (Json.Decode.index 0 (jsonDecode__generic_List (Json.Decode.map2 (\\item_0 item_1 -> ( item_0, item_1 ))
+            (Json.Decode.index 0 jsonDecode_type_parameter_key)
+            (Json.Decode.index 1 jsonDecode_type_parameter_value))))))
+        ]
+"""
+            }
+      }
+    ]
+        |> List.map
+            (\{ testName, customType, customTypeName, expectedResult } ->
+                Test.test testName <|
+                    \() ->
+                        customType
+                            |> CompileFullstackApp.jsonCodingFunctionFromCustomType
+                                { customTypeName = customTypeName
+                                , encodeValueExpression = "valueToEncode"
+                                , typeArgLocalName = "type_arg"
+                                }
+                            |> (\result ->
+                                    { encodeFunction = result.encodeFunction.text
+                                    , decodeFunction = result.decodeFunction.text
+                                    }
+                               )
+                            |> Expect.equal expectedResult
+            )
+        |> Test.describe "emit json coding expressions from custom type"

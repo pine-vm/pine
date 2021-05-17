@@ -3,14 +3,22 @@ module CompileFullstackApp exposing
     , CompilationArguments
     , CompilationError(..)
     , DependencyKey(..)
+    , ElmCustomTypeStruct
     , ElmMakeOutputType(..)
     , ElmMakeRequestStructure
-    , ElmTypeStructure(..)
+    , ElmTypeAnnotation(..)
+    , LeafElmTypeStruct(..)
     , appendLineAndStringInLogFile
     , asCompletelyLoweredElmApp
+    , buildTypeAnnotationText
+    , elmModulesDictFromFilesTexts
+    , jsonCodingExpressionFromType
+    , jsonCodingFunctionFromCustomType
+    , parseAppStateElmTypeAndDependenciesRecursively
     , parseElmMakeModuleFunctionName
-    , parseElmTypeText
-    , stateTypeNameFromRootElmModule
+    , parseElmModuleText
+    , parseElmTypeAndDependenciesRecursivelyFromAnnotation
+    , parserDeadEndsToString
     )
 
 import Base64
@@ -28,12 +36,13 @@ import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.Signature
+import Elm.Syntax.Type
+import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
 import Json.Encode
 import List
 import Maybe
 import Parser
-import Regex
 import Result.Extra
 import SHA256
 import Set
@@ -186,127 +195,128 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName } s
                         Err [ OtherCompilationError "Failed to map file content to text" ]
 
                     Just backendMainModuleText ->
-                        stateTypeNameFromRootElmModule backendMainModuleText
+                        let
+                            sourceModules =
+                                elmModulesDictFromAppFiles sourceFiles
+                                    |> Dict.map (always Tuple.second)
+                        in
+                        parseAppStateElmTypeAndDependenciesRecursively sourceModules backendMainModuleText
                             |> Result.mapError ((++) "Failed to parse state type name: ")
                             |> Result.andThen
-                                (\stateTypeName ->
+                                (\( stateTypeAnnotation, stateTypeDependencies ) ->
                                     let
-                                        stateTypeCanonicalName =
-                                            rootModuleName
-                                                ++ [ stateTypeName ]
-                                                |> String.join "."
-
                                         initialRootElmModuleText =
                                             composeInitialRootElmModuleText
                                                 { interfaceToHostRootModuleName = String.join "." interfaceToHostRootModuleName
                                                 , rootModuleNameBeforeLowering = String.join "." rootModuleName
-                                                , stateTypeNameInRootModuleBeforeLowering = stateTypeName
+                                                , stateTypeAnnotation = stateTypeAnnotation
                                                 }
                                     in
-                                    mapModuleTextToSupportJsonCoding
-                                        { typesToSupportCanonicalNames = Set.singleton stateTypeCanonicalName }
+                                    mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes
+                                        stateTypeDependencies
                                         ( sourceFiles, initialRootElmModuleText )
-                                        |> Result.andThen
-                                            (\appWithSupport ->
-                                                case appWithSupport.typeTextFromTypeName |> Dict.get stateTypeCanonicalName of
-                                                    Nothing ->
-                                                        Err "Failed to look up canonicalTypeText"
+                                        |> Result.map
+                                            (\( appFiles, interfaceModuleTextWithSupportingFunctions ) ->
+                                                let
+                                                    jsonCodingExpressions =
+                                                        jsonCodingExpressionFromType
+                                                            { encodeValueExpression = jsonEncodeParamName
+                                                            , typeArgLocalName = "type_arg"
+                                                            }
+                                                            ( stateTypeAnnotation, [] )
 
-                                                    Just stateTypeCanonicalText ->
-                                                        functionNamesAndTypeParametersFromTypeText stateTypeCanonicalText
-                                                            |> Result.map
-                                                                (\functionNames ->
-                                                                    let
-                                                                        functionsToAdd =
-                                                                            [ "jsonEncodeDeserializedState = " ++ functionNames.encodeFunctionName
-                                                                            , "jsonDecodeDeserializedState = " ++ functionNames.decodeFunctionName
-                                                                            ]
+                                                    encodeFunction =
+                                                        "jsonEncodeDeserializedState "
+                                                            ++ jsonEncodeParamName
+                                                            ++ " =\n"
+                                                            ++ indentElmCodeLines 1 jsonCodingExpressions.encodeExpression
 
-                                                                        interfaceModuleText =
-                                                                            appWithSupport.interfaceModuleText
-                                                                                :: functionsToAdd
-                                                                                |> String.join "\n\n"
-                                                                    in
-                                                                    appWithSupport.appFiles
-                                                                        |> updateFileContentAtPath
-                                                                            (always (fileContentFromString interfaceModuleText))
-                                                                            interfaceToHostRootFilePath
-                                                                )
+                                                    decodeFunction =
+                                                        "jsonDecodeDeserializedState =\n"
+                                                            ++ indentElmCodeLines 1 jsonCodingExpressions.decodeExpression
+
+                                                    interfaceModuleText =
+                                                        [ interfaceModuleTextWithSupportingFunctions
+                                                        , encodeFunction
+                                                        , decodeFunction
+                                                        ]
+                                                            |> String.join "\n\n"
+                                                in
+                                                appFiles
+                                                    |> updateFileContentAtPath
+                                                        (always (fileContentFromString interfaceModuleText))
+                                                        interfaceToHostRootFilePath
                                             )
                                 )
                             |> Result.mapError (OtherCompilationError >> List.singleton)
 
 
-stateTypeNameFromRootElmModule : String -> Result String String
-stateTypeNameFromRootElmModule moduleText =
+parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String Elm.Syntax.File.File -> String -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+parseAppStateElmTypeAndDependenciesRecursively sourceModules moduleText =
     case parseElmModuleText moduleText of
         Err error ->
             Err ("Failed to parse Elm module text: " ++ parserDeadEndsToString moduleText error)
 
         Ok parsedModule ->
-            parsedModule.declarations
-                |> List.filterMap
-                    (\declaration ->
-                        case Elm.Syntax.Node.value declaration of
-                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                if
-                                    Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                                        == elmAppInterfaceConvention.processSerializedEventFunctionName
-                                then
-                                    Just functionDeclaration
+            case stateTypeAnnotationFromRootElmModule parsedModule of
+                Err error ->
+                    Err ("Did not find state type annotation: " ++ error)
 
-                                else
-                                    Nothing
+                Ok stateTypeAnnotation ->
+                    parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                        sourceModules
+                        ( parsedModule, stateTypeAnnotation )
 
-                            _ ->
-                                Nothing
-                    )
-                |> List.head
-                |> Maybe.map
-                    (\functionDeclaration ->
-                        case functionDeclaration.signature of
-                            Nothing ->
-                                Err "Missing function signature"
 
-                            Just functionSignature ->
-                                case Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).typeAnnotation of
-                                    Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ afterFirstArg ->
-                                        case Elm.Syntax.Node.value afterFirstArg of
-                                            Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation secondArgument _ ->
-                                                case Elm.Syntax.Node.value secondArgument of
-                                                    Elm.Syntax.TypeAnnotation.Typed secondArgumentInstantiatedType secondArgumentTypeArgs ->
-                                                        if secondArgumentTypeArgs /= [] then
-                                                            Err "Unexpected type annotation in second argument: secondArgumentTypeArgs not empty"
+stateTypeAnnotationFromRootElmModule : Elm.Syntax.File.File -> Result String Elm.Syntax.TypeAnnotation.TypeAnnotation
+stateTypeAnnotationFromRootElmModule parsedModule =
+    parsedModule.declarations
+        |> List.filterMap
+            (\declaration ->
+                case Elm.Syntax.Node.value declaration of
+                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                        if
+                            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                                == elmAppInterfaceConvention.processSerializedEventFunctionName
+                        then
+                            Just functionDeclaration
 
-                                                        else
-                                                            let
-                                                                ( moduleName, typeLocalName ) =
-                                                                    Elm.Syntax.Node.value secondArgumentInstantiatedType
-                                                            in
-                                                            moduleName
-                                                                ++ [ typeLocalName ]
-                                                                |> String.join "."
-                                                                |> Ok
+                        else
+                            Nothing
 
-                                                    _ ->
-                                                        Err "Unexpected type annotation in second argument: Not typed"
+                    _ ->
+                        Nothing
+            )
+        |> List.head
+        |> Maybe.map
+            (\functionDeclaration ->
+                case functionDeclaration.signature of
+                    Nothing ->
+                        Err "Missing function signature"
 
-                                            _ ->
-                                                Err "Unexpected type annotation in second argument"
+                    Just functionSignature ->
+                        case Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).typeAnnotation of
+                            Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ afterFirstArg ->
+                                case Elm.Syntax.Node.value afterFirstArg of
+                                    Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation secondArgument _ ->
+                                        Ok (Elm.Syntax.Node.value secondArgument)
 
                                     _ ->
-                                        Err "Unexpected type annotation"
-                    )
-                |> Maybe.withDefault (Err "Did not find function with matching name")
+                                        Err "Unexpected type annotation in second argument"
+
+                            _ ->
+                                Err "Unexpected type annotation"
+            )
+        |> Maybe.withDefault (Err "Did not find function with matching name")
 
 
 composeInitialRootElmModuleText :
     { interfaceToHostRootModuleName : String
     , rootModuleNameBeforeLowering : String
-    , stateTypeNameInRootModuleBeforeLowering : String
+    , stateTypeAnnotation : ElmTypeAnnotation
     }
     -> String
-composeInitialRootElmModuleText { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeNameInRootModuleBeforeLowering } =
+composeInitialRootElmModuleText { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation } =
     "module " ++ interfaceToHostRootModuleName ++ """ exposing
     ( State
     , interfaceToHost_deserializeState
@@ -320,7 +330,7 @@ import """ ++ rootModuleNameBeforeLowering ++ """
 import Platform
 
 type alias DeserializedState =
-    """ ++ rootModuleNameBeforeLowering ++ "." ++ stateTypeNameInRootModuleBeforeLowering ++ """
+    (""" ++ buildTypeAnnotationText stateTypeAnnotation ++ """)
 
 
 type State
@@ -432,6 +442,11 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
             Err ("Failed to parse Elm module text: " ++ parserDeadEndsToString moduleText error)
 
         Ok parsedModule ->
+            let
+                sourceModules =
+                    elmModulesDictFromAppFiles sourceFiles
+                        |> Dict.map (always Tuple.second)
+            in
             parsedModule.declarations
                 -- TODO: Also share the 'map all functions' part with `mapSourceFilesModuleText`
                 |> List.filterMap
@@ -459,82 +474,85 @@ mapJsonCodersModuleText ( sourceFiles, moduleText ) =
                                         Err ("Failed parsing json coding function type: " ++ error)
 
                                     Ok functionType ->
-                                        Ok
-                                            { functionName = functionName
-                                            , functionType = functionType
-                                            }
+                                        case
+                                            parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                                                sourceModules
+                                                ( parsedModule, functionType.typeAnnotation )
+                                        of
+                                            Err error ->
+                                                Err ("Failed to parse type annotation: " ++ error)
+
+                                            Ok ( parsedTypeAnnotation, dependencies ) ->
+                                                Ok
+                                                    { functionName = functionName
+                                                    , functionType = functionType
+                                                    , parsedTypeAnnotation = parsedTypeAnnotation
+                                                    , dependencies = dependencies
+                                                    }
                                 )
                                     |> Result.mapError (\error -> "Failed to prepare mapping '" ++ functionName ++ "': " ++ error)
                     )
                 |> Result.Extra.combine
                 |> Result.andThen
                     (\functionsToReplace ->
-                        mapModuleTextToSupportJsonCoding
-                            { typesToSupportCanonicalNames =
-                                functionsToReplace
-                                    |> List.map (.functionType >> .typeCanonicalName)
-                                    |> Set.fromList
-                            }
+                        mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes
+                            (functionsToReplace |> List.map .dependencies |> List.foldl Dict.union Dict.empty)
                             ( sourceFiles, moduleText )
                             |> Result.andThen
-                                (\appWithSupport ->
+                                (\( appFiles, interfaceModuleText ) ->
                                     functionsToReplace
                                         |> listFoldlToAggregateResult
                                             (\functionToReplace previousModuleText ->
-                                                case
-                                                    appWithSupport.typeTextFromTypeName
-                                                        |> Dict.get functionToReplace.functionType.typeCanonicalName
-                                                of
-                                                    Nothing ->
-                                                        Err "Failed to look up canonicalTypeText"
+                                                let
+                                                    functionName =
+                                                        functionToReplace.functionName
 
-                                                    Just canonicalTypeText ->
-                                                        functionNamesAndTypeParametersFromTypeText
-                                                            canonicalTypeText
-                                                            |> Result.andThen
-                                                                (\elmTypeCodingFunctionNames ->
-                                                                    let
-                                                                        functionName =
-                                                                            functionToReplace.functionName
+                                                    jsonCodingExpressions =
+                                                        jsonCodingExpressionFromType
+                                                            { encodeValueExpression = jsonEncodeParamName
+                                                            , typeArgLocalName = "type_arg"
+                                                            }
+                                                            ( functionToReplace.parsedTypeAnnotation, [] )
 
-                                                                        codeTypeExpression =
-                                                                            if functionToReplace.functionType.isDecoder then
-                                                                                elmTypeCodingFunctionNames.decodeFunctionName
+                                                    newFunction =
+                                                        if functionToReplace.functionType.isDecoder then
+                                                            functionName
+                                                                ++ " =\n"
+                                                                ++ indentElmCodeLines 1 jsonCodingExpressions.decodeExpression
 
-                                                                            else
-                                                                                elmTypeCodingFunctionNames.encodeFunctionName
+                                                        else
+                                                            functionName
+                                                                ++ " "
+                                                                ++ jsonEncodeParamName
+                                                                ++ " =\n"
+                                                                ++ indentElmCodeLines 1 jsonCodingExpressions.encodeExpression
 
-                                                                        newFunctionBody =
-                                                                            indentElmCodeLines 1 codeTypeExpression
-
-                                                                        mapFunctionDeclarationLines originalFunctionTextLines =
-                                                                            [ originalFunctionTextLines |> List.take 1
-                                                                            , [ functionName ++ " = ", newFunctionBody ]
-                                                                            ]
-                                                                                |> List.concat
-                                                                    in
-                                                                    addOrUpdateFunctionInElmModuleText
-                                                                        { functionName = functionName
-                                                                        , mapFunctionLines = Maybe.withDefault [] >> mapFunctionDeclarationLines
-                                                                        }
-                                                                        previousModuleText
-                                                                        |> Result.mapError ((++) "Failed to replace function text: ")
-                                                                )
+                                                    mapFunctionDeclarationLines originalFunctionTextLines =
+                                                        [ originalFunctionTextLines |> List.take 1
+                                                        , [ newFunction ]
+                                                        ]
+                                                            |> List.concat
+                                                in
+                                                addOrUpdateFunctionInElmModuleText
+                                                    { functionName = functionName
+                                                    , mapFunctionLines = Maybe.withDefault [] >> mapFunctionDeclarationLines
+                                                    }
+                                                    previousModuleText
+                                                    |> Result.mapError ((++) "Failed to replace function text: ")
                                             )
-                                            (Ok appWithSupport.interfaceModuleText)
-                                        |> Result.map (Tuple.pair appWithSupport.appFiles)
+                                            (Ok interfaceModuleText)
+                                        |> Result.map (Tuple.pair appFiles)
                                 )
                     )
 
 
-mapModuleTextToSupportJsonCoding :
-    { typesToSupportCanonicalNames : Set.Set String }
+mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes :
+    Dict.Dict String ElmCustomTypeStruct
     -> ( AppFiles, String )
-    -> Result String { typeTextFromTypeName : Dict.Dict String String, appFiles : AppFiles, interfaceModuleText : String }
-mapModuleTextToSupportJsonCoding { typesToSupportCanonicalNames } ( sourceFiles, moduleText ) =
+    -> Result String ( AppFiles, String )
+mapAppFilesAndModuleTextToSupportJsonCodingCustomTypes customTypes ( appFiles, moduleText ) =
     case parseElmModuleText moduleText of
         Err error ->
-            -- TODO: Consolidate branch to parse with `mapSourceFilesModuleText`
             Err ("Failed to parse Elm module text: " ++ parserDeadEndsToString moduleText error)
 
         Ok parsedModule ->
@@ -542,141 +560,66 @@ mapModuleTextToSupportJsonCoding { typesToSupportCanonicalNames } ( sourceFiles,
                 emitModuleName =
                     Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
 
-                sourceModules =
-                    elmModulesDictFromAppFiles sourceFiles
+                modulesToImportForCustomTypes =
+                    customTypes
+                        |> Dict.keys
+                        |> List.map moduleNameFromTypeName
+                        |> Set.fromList
+                        |> Set.toList
+                        |> List.map (String.split ".")
+
+                modulesToImport =
+                    [ [ "Base64" ]
+                    , [ "Dict" ]
+                    , [ "Set" ]
+                    , [ "Json", "Decode" ]
+                    , [ "Json", "Encode" ]
+                    , [ "Bytes" ]
+                    , [ "Bytes", "Decode" ]
+                    , [ "Bytes", "Encode" ]
+                    ]
+                        ++ modulesToImportForCustomTypes
+                        |> List.filter ((==) emitModuleName >> not)
+
+                appFilesAfterExposingCustomTypesInModules =
+                    modulesToImportForCustomTypes
+                        |> List.foldl exposeAllInElmModuleInAppFiles appFiles
+
+                dependenciesFunctions =
+                    customTypes
+                        |> Dict.toList
+                        |> List.map
+                            (\( customTypeName, customType ) ->
+                                jsonCodingFunctionFromCustomType
+                                    { customTypeName = customTypeName
+                                    , encodeValueExpression = jsonEncodeParamName
+                                    , typeArgLocalName = "type_arg"
+                                    }
+                                    customType
+                            )
+                        |> List.concatMap
+                            (\functionsForType ->
+                                [ functionsForType.encodeFunction, functionsForType.decodeFunction ]
+                            )
+                        |> List.map (\function -> { functionName = function.name, functionText = function.text })
+
+                supportingFunctions =
+                    dependenciesFunctions ++ generalSupportingFunctionsTexts
             in
-            let
-                getExpressionsAndDependenciesForType : String -> Result String ResolveTypeResult
-                getExpressionsAndDependenciesForType canonicalTypeName =
-                    jsonCodingResolveType
-                        { rootTypeText = canonicalTypeName
-                        , currentModule = ( moduleText, parsedModule )
-                        }
-                        sourceModules
-            in
-            typesToSupportCanonicalNames
-                |> Set.toList
-                |> List.map
-                    (\typeToSupportCanonicalName ->
-                        case getExpressionsAndDependenciesForType typeToSupportCanonicalName of
-                            Err error ->
-                                Err ("Failed to get expressions: " ++ error)
-
-                            Ok elmTypeExpressionsAndDependencies ->
-                                case
-                                    enumerateExpressionsResolvingAllDependencies
-                                        getExpressionsAndDependenciesForType
-                                        (Set.singleton elmTypeExpressionsAndDependencies.canonicalTypeText)
-                                of
-                                    Err error ->
-                                        Err ("Failed to get transitive expressions and dependencies: " ++ error)
-
-                                    Ok functionCodingExpressions ->
-                                        Ok
-                                            { typeCanonicalName = typeToSupportCanonicalName
-                                            , functionCodingExpressions = functionCodingExpressions
-                                            , elmTypeExpressionsAndDependencies = elmTypeExpressionsAndDependencies
-                                            }
+            supportingFunctions
+                |> listFoldlToAggregateResult
+                    (\supportingFunction ->
+                        addOrUpdateFunctionInElmModuleText
+                            { functionName = supportingFunction.functionName
+                            , mapFunctionLines = always [ supportingFunction.functionText ]
+                            }
                     )
-                |> Result.Extra.combine
-                |> Result.andThen
-                    (\parsedTypesToSupport ->
-                        let
-                            typeTextFromTypeName =
-                                parsedTypesToSupport
-                                    |> List.map
-                                        (\parsedTypeToSupport ->
-                                            ( parsedTypeToSupport.typeCanonicalName
-                                            , parsedTypeToSupport.elmTypeExpressionsAndDependencies.canonicalTypeText
-                                            )
-                                        )
-                                    |> Dict.fromList
-
-                            supportingFunctionCodingExpressions =
-                                parsedTypesToSupport
-                                    |> List.concatMap .functionCodingExpressions
-                                    |> List.map (\support -> ( support.elmType, support.expressions ))
-                                    |> Dict.fromList
-
-                            modulesToImportForCustomTypes =
-                                supportingFunctionCodingExpressions
-                                    |> Dict.values
-                                    |> List.map .referencedModules
-                                    |> List.foldl Set.union Set.empty
-                                    |> Set.toList
-                                    |> List.map (String.split ".")
-
-                            modulesToImport =
-                                [ [ "Base64" ]
-                                , [ "Dict" ]
-                                , [ "Set" ]
-                                , [ "Json", "Decode" ]
-                                , [ "Json", "Encode" ]
-                                , [ "Bytes" ]
-                                , [ "Bytes", "Decode" ]
-                                , [ "Bytes", "Encode" ]
-                                ]
-                                    ++ modulesToImportForCustomTypes
-                                    |> List.filter ((==) emitModuleName >> not)
-
-                            appFilesAfterExposingCustomTypesInModules =
-                                modulesToImportForCustomTypes
-                                    |> List.foldl exposeAllInElmModuleInAppFiles sourceFiles
-                        in
-                        supportingFunctionCodingExpressions
-                            |> Dict.toList
-                            |> List.map
-                                (\( supportingCodingType, supportingCodingExpressions ) ->
-                                    buildJsonCodingFunctionTexts
-                                        { typeText = supportingCodingType
-                                        , encodeExpression = supportingCodingExpressions.encodeExpression
-                                        , decodeExpression = supportingCodingExpressions.decodeExpression
-                                        }
-                                )
-                            |> Result.Extra.combine
-                            |> Result.andThen
-                                (\supportingCodingFunctionsBuilds ->
-                                    let
-                                        specificSupportingCodingFunctions =
-                                            supportingCodingFunctionsBuilds
-                                                |> List.concatMap
-                                                    (\buildFunctionResult ->
-                                                        [ { functionName = buildFunctionResult.encodeFunction.name
-                                                          , functionText = buildFunctionResult.encodeFunction.text
-                                                          }
-                                                        , { functionName = buildFunctionResult.decodeFunction.name
-                                                          , functionText = buildFunctionResult.decodeFunction.text
-                                                          }
-                                                        ]
-                                                    )
-
-                                        supportingFunctions =
-                                            specificSupportingCodingFunctions ++ generalSupportingFunctionsTexts
-
-                                        interfaceModuleWithSupportingFunctions =
-                                            supportingFunctions
-                                                |> listFoldlToAggregateResult
-                                                    (\supportingFunction ->
-                                                        addOrUpdateFunctionInElmModuleText
-                                                            { functionName = supportingFunction.functionName
-                                                            , mapFunctionLines = always [ supportingFunction.functionText ]
-                                                            }
-                                                    )
-                                                    (Ok moduleText)
-                                    in
-                                    listFoldlToAggregateResult
-                                        addImportInElmModuleText
-                                        interfaceModuleWithSupportingFunctions
-                                        modulesToImport
-                                        |> Result.map
-                                            (\interfaceModuleText ->
-                                                { interfaceModuleText = interfaceModuleText
-                                                , appFiles = appFilesAfterExposingCustomTypesInModules
-                                                , typeTextFromTypeName = typeTextFromTypeName
-                                                }
-                                            )
-                                )
+                    (listFoldlToAggregateResult
+                        addImportInElmModuleText
+                        (Ok moduleText)
+                        modulesToImport
                     )
+                |> Result.map (Tuple.pair appFilesAfterExposingCustomTypesInModules)
 
 
 mapSourceFilesModuleText : ( AppFiles, String ) -> Result String ( AppFiles, String )
@@ -840,1175 +783,948 @@ updateFileContentAtPath updateFileContent filePath appFiles =
     appFiles |> Dict.insert filePath fileContent
 
 
-buildJsonCodingFunctionTexts :
-    { typeText : String, encodeExpression : String, decodeExpression : String }
-    -> Result String { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
-buildJsonCodingFunctionTexts { typeText, encodeExpression, decodeExpression } =
-    functionNamesAndTypeParametersFromTypeText typeText
-        |> Result.map
-            (\{ encodeFunctionName, decodeFunctionName, typeParametersNames } ->
-                let
-                    annotationsFromTypeList types =
-                        types
-                            |> List.map (\t -> "(" ++ t ++ ")")
-                            |> String.join " -> "
+type ElmTypeAnnotation
+    = CustomElmType String
+    | RecordElmType { fields : List ( String, ElmTypeAnnotation ) }
+    | InstanceElmType { instantiated : ElmTypeAnnotation, arguments : List ElmTypeAnnotation }
+    | TupleElmType (List ElmTypeAnnotation)
+    | LeafElmType LeafElmTypeStruct
+    | GenericType String
+    | UnitType
 
-                    typeParameters =
-                        typeParametersNames
+
+type alias ElmCustomTypeStruct =
+    { parameters : List String
+    , tags : Dict.Dict String (List ElmTypeAnnotation)
+    }
+
+
+type LeafElmTypeStruct
+    = StringLeaf
+    | IntLeaf
+    | BoolLeaf
+    | FloatLeaf
+    | BytesLeaf
+    | ListLeaf
+    | SetLeaf
+    | MaybeLeaf
+    | ResultLeaf
+    | DictLeaf
+
+
+parseElmTypeAndDependenciesRecursivelyFromAnnotation :
+    Dict.Dict String Elm.Syntax.File.File
+    -> ( Elm.Syntax.File.File, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+parseElmTypeAndDependenciesRecursivelyFromAnnotation =
+    parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal { typesToIgnore = Set.empty }
+
+
+parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal :
+    { typesToIgnore : Set.Set String }
+    -> Dict.Dict String Elm.Syntax.File.File
+    -> ( Elm.Syntax.File.File, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( currentModule, typeAnnotation ) =
+    case typeAnnotation of
+        Elm.Syntax.TypeAnnotation.Typed instantiatedNode argumentsNodes ->
+            let
+                ( instantiatedModuleAlias, instantiatedLocalName ) =
+                    Elm.Syntax.Node.value instantiatedNode
+
+                instantiatedResult =
+                    case
+                        parseElmTypeLeavesNames
+                            |> Dict.get (instantiatedModuleAlias ++ [ instantiatedLocalName ] |> String.join ".")
+                    of
+                        Just leaf ->
+                            Ok ( LeafElmType leaf, Dict.empty )
+
+                        Nothing ->
+                            let
+                                maybeInstantiatedModule =
+                                    if instantiatedModuleAlias == [] then
+                                        {-
+                                           if importedModuleAlias == [] then
+                                               parsedModule.imports
+                                                   |> List.map Elm.Syntax.Node.value
+                                                   |> List.filterMap
+                                                       (\moduleImport ->
+                                                           case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
+                                                               Nothing ->
+                                                                   Nothing
+
+                                                               Just importExposing ->
+                                                                   let
+                                                                       containsMatchingExposition =
+                                                                           case importExposing of
+                                                                               Elm.Syntax.Exposing.All _ ->
+                                                                                   -- TODO: Add lookup into that module
+                                                                                   False
+
+                                                                               Elm.Syntax.Exposing.Explicit topLevelExpositions ->
+                                                                                   topLevelExpositions
+                                                                                       |> List.any
+                                                                                           (\topLevelExpose ->
+                                                                                               case Elm.Syntax.Node.value topLevelExpose of
+                                                                                                   Elm.Syntax.Exposing.InfixExpose _ ->
+                                                                                                       False
+
+                                                                                                   Elm.Syntax.Exposing.FunctionExpose _ ->
+                                                                                                       False
+
+                                                                                                   Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasExpose ->
+                                                                                                       typeOrAliasExpose == localName
+
+                                                                                                   Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                                                                                                       typeExpose.name == localName
+                                                                                           )
+                                                                   in
+                                                                   if containsMatchingExposition then
+                                                                       Just ( Elm.Syntax.Node.value moduleImport.moduleName, localName )
+
+                                                                   else
+                                                                       Nothing
+                                                       )
+                                                   |> List.head
+                                        -}
+                                        currentModule.imports
+                                            |> List.map Elm.Syntax.Node.value
+                                            |> List.filterMap
+                                                (\moduleImport ->
+                                                    case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
+                                                        Nothing ->
+                                                            Nothing
+
+                                                        Just importExposing ->
+                                                            let
+                                                                containsMatchingExposition =
+                                                                    case importExposing of
+                                                                        Elm.Syntax.Exposing.All _ ->
+                                                                            -- TODO: Add lookup into that module
+                                                                            False
+
+                                                                        Elm.Syntax.Exposing.Explicit topLevelExpositions ->
+                                                                            topLevelExpositions
+                                                                                |> List.any
+                                                                                    (\topLevelExpose ->
+                                                                                        case Elm.Syntax.Node.value topLevelExpose of
+                                                                                            Elm.Syntax.Exposing.InfixExpose _ ->
+                                                                                                False
+
+                                                                                            Elm.Syntax.Exposing.FunctionExpose _ ->
+                                                                                                False
+
+                                                                                            Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasExpose ->
+                                                                                                typeOrAliasExpose == instantiatedLocalName
+
+                                                                                            Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                                                                                                typeExpose.name == instantiatedLocalName
+                                                                                    )
+                                                            in
+                                                            if containsMatchingExposition then
+                                                                modules |> Dict.get (Elm.Syntax.Node.value moduleImport.moduleName |> String.join ".")
+
+                                                            else
+                                                                Nothing
+                                                )
+                                            |> List.head
+                                            |> Maybe.withDefault currentModule
+                                            |> Just
+
+                                    else
+                                        currentModule.imports
+                                            |> List.map Elm.Syntax.Node.value
+                                            |> List.filter
+                                                (\moduleImport ->
+                                                    moduleImport.moduleAlias
+                                                        |> Maybe.withDefault moduleImport.moduleName
+                                                        |> Elm.Syntax.Node.value
+                                                        |> (==) instantiatedModuleAlias
+                                                )
+                                            |> List.head
+                                            |> Maybe.andThen
+                                                (\matchingImport ->
+                                                    modules |> Dict.get (String.join "." (Elm.Syntax.Node.value matchingImport.moduleName))
+                                                )
+                            in
+                            case maybeInstantiatedModule of
+                                Nothing ->
+                                    Err ("Did not find referenced module '" ++ String.join "." instantiatedModuleAlias ++ "'")
+
+                                Just instantiatedModule ->
+                                    instantiatedModule.declarations
+                                        |> List.map Elm.Syntax.Node.value
+                                        |> List.filterMap
+                                            (\declaration ->
+                                                case declaration of
+                                                    Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
+                                                        if Elm.Syntax.Node.value aliasDeclaration.name /= instantiatedLocalName then
+                                                            Nothing
+
+                                                        else
+                                                            Just (AliasDeclaration aliasDeclaration)
+
+                                                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                                                        if Elm.Syntax.Node.value customTypeDeclaration.name /= instantiatedLocalName then
+                                                            Nothing
+
+                                                        else
+                                                            Just (CustomTypeDeclaration customTypeDeclaration)
+
+                                                    _ ->
+                                                        Nothing
+                                            )
+                                        |> List.head
+                                        |> Maybe.map
+                                            (\declaration ->
+                                                case declaration of
+                                                    AliasDeclaration aliasDeclaration ->
+                                                        case
+                                                            parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
+                                                                stack
+                                                                modules
+                                                                ( instantiatedModule, Elm.Syntax.Node.value aliasDeclaration.typeAnnotation )
+                                                        of
+                                                            Err error ->
+                                                                Err
+                                                                    ("Failed to parse alias '"
+                                                                        ++ Elm.Syntax.Node.value aliasDeclaration.name
+                                                                        ++ "' type annotation: "
+                                                                        ++ error
+                                                                    )
+
+                                                            Ok ( aliasedType, aliasedTypeDeps ) ->
+                                                                Ok ( aliasedType, aliasedTypeDeps )
+
+                                                    CustomTypeDeclaration customTypeDeclaration ->
+                                                        let
+                                                            typeName =
+                                                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value instantiatedModule.moduleDefinition)
+                                                                    ++ [ Elm.Syntax.Node.value customTypeDeclaration.name ]
+                                                                    |> String.join "."
+
+                                                            parameters =
+                                                                customTypeDeclaration.generics
+                                                                    |> List.map Elm.Syntax.Node.value
+                                                        in
+                                                        if stack.typesToIgnore |> Set.member typeName then
+                                                            Ok ( CustomElmType typeName, Dict.empty )
+
+                                                        else
+                                                            customTypeDeclaration.constructors
+                                                                |> List.map Elm.Syntax.Node.value
+                                                                |> List.map
+                                                                    (\constructor ->
+                                                                        constructor.arguments
+                                                                            |> List.map
+                                                                                (\constructorArgument ->
+                                                                                    parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
+                                                                                        { typesToIgnore = stack.typesToIgnore |> Set.insert typeName }
+                                                                                        modules
+                                                                                        ( instantiatedModule, Elm.Syntax.Node.value constructorArgument )
+                                                                                        |> Result.mapError ((++) "Failed to parse argument: ")
+                                                                                )
+                                                                            |> Result.Extra.combine
+                                                                            |> Result.mapError
+                                                                                ((++)
+                                                                                    ("Failed to parse constructor '"
+                                                                                        ++ Elm.Syntax.Node.value constructor.name
+                                                                                        ++ "': "
+                                                                                    )
+                                                                                )
+                                                                            |> Result.map listTupleSecondDictUnion
+                                                                            |> Result.map
+                                                                                (\( argumentsTypes, argumentsDeps ) ->
+                                                                                    ( ( Elm.Syntax.Node.value constructor.name
+                                                                                      , argumentsTypes
+                                                                                      )
+                                                                                    , argumentsDeps
+                                                                                    )
+                                                                                )
+                                                                    )
+                                                                |> Result.Extra.combine
+                                                                |> Result.map listTupleSecondDictUnion
+                                                                |> Result.map
+                                                                    (\( constructors, constructorsDeps ) ->
+                                                                        ( CustomElmType typeName
+                                                                        , constructorsDeps
+                                                                            |> Dict.insert
+                                                                                typeName
+                                                                                { parameters = parameters
+                                                                                , tags = constructors |> Dict.fromList
+                                                                                }
+                                                                        )
+                                                                    )
+                                            )
+                                        |> Maybe.withDefault
+                                            (Err
+                                                ("Did not find declaration of '"
+                                                    ++ instantiatedLocalName
+                                                    ++ "' in module '"
+                                                    ++ String.join "." instantiatedModuleAlias
+                                                    ++ "'"
+                                                )
+                                            )
+            in
+            instantiatedResult
+                |> Result.andThen
+                    (\( instantiatedType, instantiatedDependencies ) ->
+                        argumentsNodes
+                            |> List.map (Elm.Syntax.Node.value >> Tuple.pair currentModule)
+                            |> List.map (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
+                            |> Result.Extra.combine
+                            |> Result.map listTupleSecondDictUnion
+                            |> Result.map
+                                (\( instanceArguments, instanceArgumentsDeps ) ->
+                                    if instanceArguments == [] then
+                                        ( instantiatedType, instantiatedDependencies )
+
+                                    else
+                                        ( InstanceElmType
+                                            { instantiated = instantiatedType
+                                            , arguments = instanceArguments
+                                            }
+                                        , instanceArgumentsDeps |> Dict.union instantiatedDependencies
+                                        )
+                                )
+                    )
+
+        Elm.Syntax.TypeAnnotation.Record fieldsNodes ->
+            fieldsNodes
+                |> List.map Elm.Syntax.Node.value
+                |> List.map
+                    (\( fieldNameNode, fieldAnnotation ) ->
+                        case
+                            parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
+                                stack
+                                modules
+                                ( currentModule, Elm.Syntax.Node.value fieldAnnotation )
+                        of
+                            Err error ->
+                                Err
+                                    ("Failed to parse annotation of field '"
+                                        ++ Elm.Syntax.Node.value fieldNameNode
+                                        ++ "': "
+                                        ++ error
+                                    )
+
+                            Ok ( fieldType, fieldTypeDeps ) ->
+                                Ok ( ( Elm.Syntax.Node.value fieldNameNode, fieldType ), fieldTypeDeps )
+                    )
+                |> Result.Extra.combine
+                |> Result.map listTupleSecondDictUnion
+                |> Result.map
+                    (\( fields, fieldsDependencies ) -> ( RecordElmType { fields = fields }, fieldsDependencies ))
+
+        Elm.Syntax.TypeAnnotation.Tupled tupled ->
+            tupled
+                |> List.map (Elm.Syntax.Node.value >> Tuple.pair currentModule)
+                |> List.map (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
+                |> Result.Extra.combine
+                |> Result.map listTupleSecondDictUnion
+                |> Result.map
+                    (\( items, itemsDependencies ) -> ( TupleElmType items, itemsDependencies ))
+
+        Elm.Syntax.TypeAnnotation.GenericType genericName ->
+            Ok ( GenericType genericName, Dict.empty )
+
+        Elm.Syntax.TypeAnnotation.Unit ->
+            Ok ( UnitType, Dict.empty )
+
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ _ ->
+            Err "FunctionTypeAnnotation not implemented"
+
+        Elm.Syntax.TypeAnnotation.GenericRecord _ _ ->
+            Err "GenericRecord not implemented"
+
+
+jsonCodingExpressionFromType :
+    { encodeValueExpression : String, typeArgLocalName : String }
+    -> ( ElmTypeAnnotation, List ElmTypeAnnotation )
+    -> { encodeExpression : String, decodeExpression : String }
+jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeAnnotation, typeArguments ) =
+    let
+        typeArgumentsExpressions =
+            typeArguments
+                |> List.map
+                    (\typeArgument ->
+                        let
+                            typeArgumentExpressions =
+                                jsonCodingExpressionFromType
+                                    { encodeValueExpression = typeArgLocalName
+                                    , typeArgLocalName = typeArgLocalName ++ "_"
+                                    }
+                                    ( typeArgument, [] )
+
+                            decode =
+                                if String.contains " " typeArgumentExpressions.decodeExpression then
+                                    "(" ++ typeArgumentExpressions.decodeExpression ++ ")"
+
+                                else
+                                    typeArgumentExpressions.decodeExpression
+                        in
+                        { encode =
+                            "(\\"
+                                ++ typeArgLocalName
+                                ++ " -> "
+                                ++ typeArgumentExpressions.encodeExpression
+                                ++ ")"
+                        , decode = decode
+                        }
+                    )
+
+        typeArgumentsEncodeExpressionsText =
+            typeArgumentsExpressions
+                |> List.map .encode
+                |> String.join " "
+
+        typeArgumentsDecodeExpressionsText =
+            typeArgumentsExpressions
+                |> List.map .decode
+                |> String.join " "
+
+        continueWithAtomInJsonCore atomName =
+            { encodeExpression =
+                [ "Json.Encode." ++ atomName
+                , typeArgumentsEncodeExpressionsText
+                , encodeValueExpression
+                ]
+                    |> List.filter (String.isEmpty >> not)
+                    |> String.join " "
+            , decodeExpression =
+                String.trim ("Json.Decode." ++ atomName ++ " " ++ typeArgumentsDecodeExpressionsText)
+            }
+
+        continueWithLocalNameAndCommonPrefix localName =
+            { encodeExpression =
+                [ jsonEncodeFunctionNamePrefix ++ localName
+                , typeArgumentsEncodeExpressionsText
+                , encodeValueExpression
+                ]
+                    |> List.filter (String.isEmpty >> not)
+                    |> String.join " "
+            , decodeExpression =
+                String.trim (jsonDecodeFunctionNamePrefix ++ localName ++ " " ++ typeArgumentsDecodeExpressionsText)
+            }
+    in
+    case typeAnnotation of
+        CustomElmType custom ->
+            let
+                typeNameRepresentation =
+                    jsonCodingFunctionNameCommonPartFromTypeName custom
+            in
+            { encodeExpression =
+                [ jsonEncodeFunctionNamePrefix ++ typeNameRepresentation
+                , typeArgumentsEncodeExpressionsText
+                , encodeValueExpression
+                ]
+                    |> List.filter (String.isEmpty >> not)
+                    |> String.join " "
+            , decodeExpression =
+                String.trim
+                    (jsonDecodeFunctionNamePrefix
+                        ++ typeNameRepresentation
+                        ++ " "
+                        ++ typeArgumentsDecodeExpressionsText
+                    )
+            }
+
+        RecordElmType record ->
+            if record.fields == [] then
+                { encodeExpression = "Json.Encode.object []"
+                , decodeExpression = "Json.Decode.succeed {}"
+                }
+
+            else
+                let
+                    fieldsExpressions =
+                        record.fields
                             |> List.map
-                                (\typeParameterName ->
+                                (\( fieldName, fieldType ) ->
                                     let
-                                        parameterNameCommonPart =
-                                            "type_parameter_" ++ typeParameterName
+                                        fieldExpression =
+                                            jsonCodingExpressionFromType
+                                                { encodeValueExpression = encodeValueExpression ++ "." ++ fieldName
+                                                , typeArgLocalName = typeArgLocalName
+                                                }
+                                                ( fieldType, [] )
                                     in
-                                    { encodeAnnotation = typeParameterName ++ " -> Json.Encode.Value"
-                                    , encodeParameter = jsonEncodeFunctionNamePrefix ++ parameterNameCommonPart
-                                    , decodeAnnotation = "Json.Decode.Decoder " ++ typeParameterName
-                                    , decodeParameter = jsonDecodeFunctionNamePrefix ++ parameterNameCommonPart
+                                    { fieldName = fieldName
+                                    , encode =
+                                        "( \""
+                                            ++ fieldName
+                                            ++ "\"\n  , "
+                                            ++ String.trimLeft (indentElmCodeLines 1 fieldExpression.encodeExpression)
+                                            ++ "\n  )"
+                                    , decode = fieldExpression.decodeExpression
                                     }
                                 )
 
-                    encodeFunction =
-                        encodeFunctionName
-                            ++ " : "
-                            ++ annotationsFromTypeList
-                                ((typeParameters |> List.map .encodeAnnotation) ++ [ typeText, "Json.Encode.Value" ])
-                            ++ "\n"
-                            ++ encodeFunctionName
-                            ++ " "
-                            ++ (typeParameters |> List.map .encodeParameter |> String.join " ")
-                            ++ " "
-                            ++ jsonEncodeParamName
-                            ++ " =\n"
-                            ++ indentElmCodeLines 1 encodeExpression
+                    decodeMap =
+                        "(\\"
+                            ++ (record.fields |> List.map Tuple.first |> String.join " ")
+                            ++ " -> { "
+                            ++ (record.fields
+                                    |> List.map (\( fieldName, _ ) -> fieldName ++ " = " ++ fieldName)
+                                    |> String.join ", "
+                               )
+                            ++ " })"
 
-                    decodeFunction =
-                        decodeFunctionName
-                            ++ " : "
-                            ++ annotationsFromTypeList
-                                ((typeParameters |> List.map .decodeAnnotation) ++ [ "Json.Decode.Decoder (" ++ typeText ++ ")" ])
-                            ++ "\n"
-                            ++ decodeFunctionName
-                            ++ " "
-                            ++ (typeParameters |> List.map .decodeParameter |> String.join " ")
-                            ++ " =\n"
-                            ++ indentElmCodeLines 1 decodeExpression
-                in
-                { encodeFunction = { name = encodeFunctionName, text = encodeFunction }
-                , decodeFunction = { name = decodeFunctionName, text = decodeFunction }
-                }
-            )
-
-
-type alias ResolveTypeResult =
-    { canonicalTypeText : String
-    , canonicalTypeTextWithParameters : String
-    , compileExpressions : () -> Result String { encodeExpression : String, decodeExpression : String, dependencies : Set.Set String }
-    , referencedModules : Set.Set String
-    }
-
-
-type alias ExpressionsForType =
-    { encodeExpression : String
-    , decodeExpression : String
-    , referencedModules : Set.Set String
-    }
-
-
-type ElmTypeStructure
-    = CustomElmType ElmCustomTypeStructure
-    | RecordElmType
-        { fields :
-            List
-                { name : String
-                , typeText : String
-                , parsedType : ElmTypeStructure
-                }
-        }
-    | AliasElmType
-        { aliasLocalName : String
-        , parameters : List String
-        , aliasedText : String
-        }
-    | InstanceElmType
-        { typeName : String
-        , parameters : List String
-        }
-    | TupleElmType (List String)
-
-
-type alias ElmCustomTypeStructure =
-    { typeLocalName : String
-    , parameters : List String
-    , tags : Dict.Dict String (List String)
-    }
-
-
-jsonCodingResolveType :
-    { rootTypeText : String, currentModule : ( String, Elm.Syntax.File.File ) }
-    -> Dict.Dict String ( String, Elm.Syntax.File.File )
-    -> Result String ResolveTypeResult
-jsonCodingResolveType { rootTypeText, currentModule } sourceModules =
-    let
-        ( currentModuleText, currentModuleParsed ) =
-            currentModule
-
-        currentModuleName =
-            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value currentModuleParsed.moduleDefinition)
-
-        currentModuleNameFlat =
-            String.join "." currentModuleName
-
-        sourceModuleNamePrefix =
-            currentModuleNameFlat ++ "."
-
-        resolveLocalTypeText : String -> Result String { canonicalTypeText : String, dependencies : Set.Set String }
-        resolveLocalTypeText typeText =
-            if stringStartsWithLowercaseLetter typeText then
-                Ok { canonicalTypeText = typeText, dependencies = Set.empty }
-
-            else
-                jsonCodingResolveType
-                    { rootTypeText = typeText
-                    , currentModule = currentModule
-                    }
-                    sourceModules
-                    |> Result.map
-                        (\resolved ->
-                            { canonicalTypeText = resolved.canonicalTypeText, dependencies = Set.singleton resolved.canonicalTypeText }
-                        )
-
-        jsonCodingResolveTypeCustomType : ElmCustomTypeStructure -> Result String ResolveTypeResult
-        jsonCodingResolveTypeCustomType customType =
-            let
-                compileExpressions : () -> Result String { encodeExpression : String, decodeExpression : String, dependencies : Set.Set String }
-                compileExpressions _ =
-                    let
-                        tagsResults =
-                            customType.tags
-                                |> Dict.toList
-                                |> List.map
-                                    (\( tagName, tagParameters ) ->
-                                        let
-                                            typeTagCanonicalName =
-                                                sourceModuleNamePrefix ++ tagName
-
-                                            encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax argumentSyntax objectContentSyntax =
-                                                let
-                                                    tagEncodeCase =
-                                                        typeTagCanonicalName ++ " " ++ argumentSyntax ++ " ->"
-
-                                                    tagEncodeExpression =
-                                                        "Json.Encode.object [ ( \"" ++ tagName ++ "\", " ++ objectContentSyntax ++ " ) ]"
-                                                in
-                                                tagEncodeCase ++ "\n" ++ indentElmCodeLines 1 tagEncodeExpression
-
-                                            decodeSyntaxCommonPart =
-                                                "Json.Decode.field \"" ++ tagName ++ "\""
-                                        in
-                                        if tagParameters == [] then
-                                            Ok
-                                                { encodeCase = encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax "" "Json.Encode.list identity []"
-                                                , decodeExpression = decodeSyntaxCommonPart ++ " (Json.Decode.succeed " ++ typeTagCanonicalName ++ ")"
-                                                , dependencies = Set.empty
-                                                }
-
-                                        else
-                                            let
-                                                tagParametersExpressionsResults =
-                                                    tagParameters
-                                                        |> List.map
-                                                            (\tagParameterType ->
-                                                                resolveLocalTypeText tagParameterType
-                                                                    |> Result.andThen
-                                                                        (\tagParameterTypeResolution ->
-                                                                            functionNamesAndTypeParametersFromTypeText tagParameterTypeResolution.canonicalTypeText
-                                                                                |> Result.map
-                                                                                    (\tagParameterTypeFunctionNames ->
-                                                                                        let
-                                                                                            tagParameterEncodeFunction =
-                                                                                                expressionTextForFunctionWithOptionalTypeParameters
-                                                                                                    { functionName = tagParameterTypeFunctionNames.encodeFunctionName
-                                                                                                    , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
-                                                                                                    , typeParametersNames = tagParameterTypeFunctionNames.typeParametersNames
-                                                                                                    }
-
-                                                                                            tagParameterDecodeFunction =
-                                                                                                expressionTextForFunctionWithOptionalTypeParameters
-                                                                                                    { functionName = tagParameterTypeFunctionNames.decodeFunctionName
-                                                                                                    , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
-                                                                                                    , typeParametersNames = tagParameterTypeFunctionNames.typeParametersNames
-                                                                                                    }
-                                                                                        in
-                                                                                        { encodeFunction = tagParameterEncodeFunction
-                                                                                        , decodeFunction = tagParameterDecodeFunction
-                                                                                        , canonicalTypeTextAndDependencies = tagParameterTypeResolution
-                                                                                        }
-                                                                                    )
-                                                                        )
-                                                            )
-                                            in
-                                            case Result.Extra.combine tagParametersExpressionsResults of
-                                                Err error ->
-                                                    Err ("Failed to build tag parameter expression: " ++ error)
-
-                                                Ok tagParametersExpressions ->
-                                                    let
-                                                        tagDecodeExpressionBeforeLazy =
-                                                            "Json.Decode.map"
-                                                                ++ (if List.length tagParametersExpressions == 1 then
-                                                                        ""
-
-                                                                    else
-                                                                        String.fromInt (List.length tagParametersExpressions)
-                                                                   )
-                                                                ++ " "
-                                                                ++ typeTagCanonicalName
-                                                                ++ " "
-                                                                ++ String.join " "
-                                                                    (tagParametersExpressions
-                                                                        |> List.indexedMap
-                                                                            (\tagParamIndex tagParamExpr ->
-                                                                                "(Json.Decode.index " ++ String.fromInt tagParamIndex ++ " " ++ tagParamExpr.decodeFunction ++ ")"
-                                                                            )
-                                                                    )
-
-                                                        tagDecodeExpression =
-                                                            decodeSyntaxCommonPart
-                                                                ++ " (Json.Decode.lazy (\\_ -> "
-                                                                ++ tagDecodeExpressionBeforeLazy
-                                                                ++ " ) )"
-
-                                                        encodeArgumentsAndExpressions =
-                                                            tagParametersExpressions
-                                                                |> List.indexedMap
-                                                                    (\tagParameterIndex tagArgumentExpressions ->
-                                                                        let
-                                                                            argumentName =
-                                                                                "tagArgument" ++ String.fromInt tagParameterIndex
-                                                                        in
-                                                                        { argumentName = argumentName
-                                                                        , encodeExpression = argumentName ++ " |> " ++ tagArgumentExpressions.encodeFunction
-                                                                        }
-                                                                    )
-
-                                                        encodeArgumentSyntax =
-                                                            String.join " " (encodeArgumentsAndExpressions |> List.map .argumentName)
-
-                                                        encodeObjectContentSyntax =
-                                                            "[ "
-                                                                ++ String.join ", " (encodeArgumentsAndExpressions |> List.map .encodeExpression)
-                                                                ++ " ] |> Json.Encode.list identity"
-
-                                                        tagParametersDependencies =
-                                                            tagParametersExpressions
-                                                                |> List.map (.canonicalTypeTextAndDependencies >> .dependencies)
-                                                                |> List.foldl Set.union Set.empty
-                                                    in
-                                                    Ok
-                                                        { encodeCase =
-                                                            encodeCaseSyntaxFromArgumentSyntaxAndObjectContentSyntax
-                                                                encodeArgumentSyntax
-                                                                encodeObjectContentSyntax
-                                                        , decodeExpression = tagDecodeExpression
-                                                        , dependencies = tagParametersDependencies
-                                                        }
-                                    )
-                    in
-                    case Result.Extra.combine tagsResults of
-                        Err error ->
-                            Err ("Failed for tags: " ++ error)
-
-                        Ok tags ->
-                            let
-                                encodeCases =
-                                    String.join "\n\n" (tags |> List.map .encodeCase)
-
-                                encodeExpression =
-                                    "case "
-                                        ++ jsonEncodeParamName
-                                        ++ " of\n"
-                                        ++ indentElmCodeLines 1 encodeCases
-
-                                decodeArrayExpression =
-                                    "[ " ++ String.join "\n, " (tags |> List.map .decodeExpression) ++ "\n]"
-
-                                decodeExpression =
-                                    "Json.Decode.oneOf\n"
-                                        ++ indentElmCodeLines 1 decodeArrayExpression
-
-                                allTagsDependencies =
-                                    tags
-                                        |> List.map .dependencies
-                                        |> List.foldl Set.union Set.empty
-                            in
-                            Ok
-                                { encodeExpression = encodeExpression
-                                , decodeExpression = decodeExpression
-                                , dependencies = allTagsDependencies
-                                }
-
-                canonicalTypeText =
-                    sourceModuleNamePrefix ++ customType.typeLocalName
-
-                canonicalTypeTextWithParameters =
-                    if List.length customType.parameters < 1 then
-                        canonicalTypeText
-
-                    else
-                        "(" ++ canonicalTypeText ++ " " ++ String.join " " customType.parameters ++ ")"
-            in
-            Ok
-                { canonicalTypeText = canonicalTypeText
-                , canonicalTypeTextWithParameters = canonicalTypeTextWithParameters
-                , compileExpressions = compileExpressions
-                , referencedModules = Set.singleton currentModuleNameFlat
-                }
-    in
-    case Dict.get (String.trim rootTypeText) jsonCodeLeafExpressions of
-        Just ( encodeExpression, decodeExpression ) ->
-            Ok
-                { canonicalTypeText = rootTypeText
-                , canonicalTypeTextWithParameters = rootTypeText
-                , compileExpressions =
-                    \() ->
-                        Ok
-                            { encodeExpression = encodeExpression
-                            , decodeExpression = decodeExpression
-                            , dependencies = Set.empty
-                            }
-                , referencedModules = Set.empty
-                }
-
-        Nothing ->
-            case parseElmTypeText True rootTypeText of
-                Err error ->
-                    Err ("Failed to parse Elm type: " ++ error ++ ", type text: '" ++ rootTypeText ++ "'")
-
-                Ok ( rootType, _ ) ->
-                    case rootType of
-                        InstanceElmType instanceElmType ->
-                            if instanceElmType.parameters == [] then
-                                case getCanonicalNameFromImportedNameInModule currentModuleParsed rootTypeText of
-                                    Nothing ->
-                                        case getTypeDefinitionTextFromModuleText instanceElmType.typeName currentModule of
-                                            Nothing ->
-                                                Err
-                                                    ("Failed to get type definition text for local name '"
-                                                        ++ instanceElmType.typeName
-                                                        ++ "' ("
-                                                        ++ rootTypeText
-                                                        ++ ") in module '"
-                                                        ++ currentModuleNameFlat
-                                                        ++ "'"
-                                                    )
-
-                                            Just typeDefinitionText ->
-                                                jsonCodingResolveType
-                                                    { rootTypeText = typeDefinitionText
-                                                    , currentModule = currentModule
-                                                    }
-                                                    sourceModules
-
-                                    Just ( originatingModuleName, nameInImportedModule ) ->
-                                        case sourceModules |> Dict.get (String.join "." originatingModuleName) of
-                                            Nothing ->
-                                                Err ("Failed to find module '" ++ String.join "." originatingModuleName ++ "' in source modules")
-
-                                            Just originatingModule ->
-                                                jsonCodingResolveType
-                                                    { rootTypeText = nameInImportedModule
-                                                    , currentModule = originatingModule
-                                                    }
-                                                    sourceModules
-
-                            else
-                                case
-                                    instanceElmType.parameters
-                                        |> List.map
-                                            (\parameter ->
-                                                jsonCodingResolveType
-                                                    { rootTypeText = parameter
-                                                    , currentModule = currentModule
-                                                    }
-                                                    sourceModules
-                                                    |> Result.andThen
-                                                        (\paramDependencies ->
-                                                            functionNamesAndTypeParametersFromTypeText paramDependencies.canonicalTypeText
-                                                                |> Result.map
-                                                                    (\paramFunctionNames ->
-                                                                        let
-                                                                            encodeFunction =
-                                                                                expressionTextForFunctionWithOptionalTypeParameters
-                                                                                    { functionName = paramFunctionNames.encodeFunctionName
-                                                                                    , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
-                                                                                    , typeParametersNames = paramFunctionNames.typeParametersNames
-                                                                                    }
-
-                                                                            decodeFunction =
-                                                                                expressionTextForFunctionWithOptionalTypeParameters
-                                                                                    { functionName = paramFunctionNames.decodeFunctionName
-                                                                                    , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
-                                                                                    , typeParametersNames = paramFunctionNames.typeParametersNames
-                                                                                    }
-                                                                        in
-                                                                        { encodeFunction = encodeFunction
-                                                                        , decodeFunction = decodeFunction
-                                                                        , dependencies = paramDependencies
-                                                                        }
-                                                                    )
-                                                        )
-                                            )
-                                        |> Result.Extra.combine
-                                of
-                                    Err error ->
-                                        Err ("Failed to map instance parameter: " ++ error)
-
-                                    Ok parameters ->
-                                        let
-                                            continueWithComponents components =
-                                                let
-                                                    parametersTypeTextsForComposition =
-                                                        parameters
-                                                            |> List.map
-                                                                (\param ->
-                                                                    let
-                                                                        needsParentheses =
-                                                                            String.contains " " param.dependencies.canonicalTypeText
-                                                                                && not (param.dependencies.canonicalTypeText |> String.startsWith "(")
-                                                                                && not (param.dependencies.canonicalTypeText |> String.startsWith "{")
-
-                                                                        beforeParentheses =
-                                                                            param.dependencies.canonicalTypeText
-                                                                    in
-                                                                    if needsParentheses then
-                                                                        "(" ++ beforeParentheses ++ ")"
-
-                                                                    else
-                                                                        beforeParentheses
-                                                                )
-
-                                                    canonicalTypeText =
-                                                        components.instantiatedTypeCanonicalName ++ " " ++ String.join " " parametersTypeTextsForComposition
-                                                in
-                                                { canonicalTypeText = canonicalTypeText
-                                                , canonicalTypeTextWithParameters = canonicalTypeText
-                                                , compileExpressions =
-                                                    \() ->
-                                                        Ok
-                                                            { encodeExpression =
-                                                                jsonEncodeFunctionNamePrefix ++ components.instantiatedTypeFunctionNameCommonPart ++ " " ++ String.join " " (parameters |> List.map .encodeFunction) ++ " " ++ jsonEncodeParamName
-                                                            , decodeExpression =
-                                                                jsonDecodeFunctionNamePrefix ++ components.instantiatedTypeFunctionNameCommonPart ++ " " ++ String.join " " (parameters |> List.map .decodeFunction)
-                                                            , dependencies =
-                                                                components.dependenciesFromInstantiatedType
-                                                                    :: (parameters |> List.map (.dependencies >> .canonicalTypeText >> Set.singleton))
-                                                                    |> List.foldl Set.union Set.empty
-                                                            }
-                                                , referencedModules = Set.singleton currentModuleNameFlat
-                                                }
-                                        in
-                                        case instantiationSpecialCases |> Dict.get instanceElmType.typeName of
-                                            Just instantiatedTypeFunctionNameCommonPart ->
-                                                Ok
-                                                    (continueWithComponents
-                                                        { instantiatedTypeCanonicalName = instanceElmType.typeName
-                                                        , instantiatedTypeFunctionNameCommonPart = instantiatedTypeFunctionNameCommonPart
-                                                        , dependenciesFromInstantiatedType = Set.empty
-                                                        }
-                                                    )
-
-                                            Nothing ->
-                                                case
-                                                    jsonCodingResolveType
-                                                        { rootTypeText = instanceElmType.typeName
-                                                        , currentModule = currentModule
-                                                        }
-                                                        sourceModules
-                                                of
-                                                    Err error ->
-                                                        Err ("Failed to resolve instantiated type '" ++ instanceElmType.typeName ++ "': " ++ error)
-
-                                                    Ok instantiatedTypeResolution ->
-                                                        functionNamesAndTypeParametersFromTypeText instantiatedTypeResolution.canonicalTypeText
-                                                            |> Result.map
-                                                                (\instantiatedTypeFunctionNames ->
-                                                                    continueWithComponents
-                                                                        { instantiatedTypeCanonicalName = instantiatedTypeResolution.canonicalTypeText
-                                                                        , instantiatedTypeFunctionNameCommonPart = instantiatedTypeFunctionNames.commonPart
-                                                                        , dependenciesFromInstantiatedType = Set.singleton instantiatedTypeResolution.canonicalTypeText
-                                                                        }
-                                                                )
-
-                        RecordElmType recordType ->
-                            let
-                                fieldsResult =
-                                    recordType.fields
-                                        |> List.map
-                                            (\recordField ->
-                                                resolveLocalTypeText recordField.typeText
-                                                    |> Result.andThen
-                                                        (\fieldTypeResolution ->
-                                                            functionNamesAndTypeParametersFromTypeText fieldTypeResolution.canonicalTypeText
-                                                                |> Result.map
-                                                                    (\fieldFunctionNames ->
-                                                                        let
-                                                                            encodeFunction =
-                                                                                expressionTextForFunctionWithOptionalTypeParameters
-                                                                                    { functionName = fieldFunctionNames.encodeFunctionName
-                                                                                    , typeParametersFunctionsCommonPrefix = jsonEncodeFunctionNamePrefix
-                                                                                    , typeParametersNames = fieldFunctionNames.typeParametersNames
-                                                                                    }
-
-                                                                            decodeFunction =
-                                                                                expressionTextForFunctionWithOptionalTypeParameters
-                                                                                    { functionName = fieldFunctionNames.decodeFunctionName
-                                                                                    , typeParametersFunctionsCommonPrefix = jsonDecodeFunctionNamePrefix
-                                                                                    , typeParametersNames = fieldFunctionNames.typeParametersNames
-                                                                                    }
-
-                                                                            encodeFieldValueExpression =
-                                                                                jsonEncodeParamName ++ "." ++ recordField.name ++ " |> " ++ encodeFunction
-                                                                        in
-                                                                        { fieldName = recordField.name
-                                                                        , fieldCanonicalType = fieldTypeResolution.canonicalTypeText
-                                                                        , encodeExpression = "( \"" ++ recordField.name ++ "\", " ++ encodeFieldValueExpression ++ " )"
-                                                                        , decodeExpression = "|> jsonDecode_andMap ( Json.Decode.field \"" ++ recordField.name ++ "\" " ++ decodeFunction ++ " )"
-                                                                        , dependencies = fieldTypeResolution.dependencies
-                                                                        }
-                                                                    )
-                                                        )
-                                            )
-                                        |> Result.Extra.combine
-                            in
-                            case fieldsResult of
-                                Err error ->
-                                    Err ("Failed to resolve fields: " ++ error)
-
-                                Ok fields ->
+                    decodeFieldsLines =
+                        fieldsExpressions
+                            |> List.map
+                                (\field ->
                                     let
-                                        encodeListExpression =
-                                            "["
-                                                ++ (fields |> List.map .encodeExpression |> String.join ",\n")
-                                                ++ "\n]"
+                                        fieldDecode =
+                                            if field.decode |> String.contains " " then
+                                                "( " ++ field.decode ++ "\n)"
 
-                                        dencodeListExpression =
-                                            fields |> List.map .decodeExpression |> String.join "\n"
+                                            else
+                                                field.decode
 
-                                        allFieldsDependencies =
-                                            fields
-                                                |> List.map .dependencies
-                                                |> List.foldl Set.union Set.empty
-
-                                        encodeExpression =
-                                            "Json.Encode.object\n"
-                                                ++ indentElmCodeLines 1 encodeListExpression
-
-                                        recordFieldsNames =
-                                            recordType.fields |> List.map .name
-
-                                        decodeMapFunction =
-                                            "(\\"
-                                                ++ String.join " " recordFieldsNames
-                                                ++ " -> { "
-                                                ++ String.join ", " (recordFieldsNames |> List.map (\fieldName -> fieldName ++ " = " ++ fieldName))
-                                                ++ " })"
-
-                                        decodeExpression =
-                                            "Json.Decode.succeed "
-                                                ++ decodeMapFunction
-                                                ++ "\n"
-                                                ++ indentElmCodeLines 1 dencodeListExpression
-
-                                        canonicalTypeText =
-                                            "{"
-                                                ++ String.join "," (fields |> List.map (\field -> field.fieldName ++ ":" ++ field.fieldCanonicalType))
-                                                ++ "}"
+                                        fieldMapLines =
+                                            [ "( Json.Decode.field \"" ++ field.fieldName ++ "\""
+                                            , indentElmCodeLines 1 fieldDecode
+                                            , ")"
+                                            ]
                                     in
-                                    Ok
-                                        { canonicalTypeText = canonicalTypeText
-                                        , canonicalTypeTextWithParameters = canonicalTypeText
-                                        , compileExpressions =
-                                            \() ->
-                                                Ok
-                                                    { encodeExpression = encodeExpression
-                                                    , decodeExpression = decodeExpression
-                                                    , dependencies = allFieldsDependencies
-                                                    }
-                                        , referencedModules = Set.singleton currentModuleNameFlat
-                                        }
-
-                        CustomElmType customType ->
-                            jsonCodingResolveTypeCustomType customType
-
-                        TupleElmType tupleElements ->
-                            case tupleElements |> List.map resolveLocalTypeText |> Result.Extra.combine of
-                                Err error ->
-                                    Err ("Failed to resolve tuple element type text: " ++ error)
-
-                                Ok tupleElementsResults ->
-                                    tupleElementsResults
-                                        |> List.map (.canonicalTypeText >> functionNamesAndTypeParametersFromTypeText)
-                                        |> Result.Extra.combine
-                                        |> Result.map
-                                            (\tupleElementsFunctionNames ->
-                                                let
-                                                    allElementsDependencies =
-                                                        tupleElementsResults
-                                                            |> List.map .dependencies
-                                                            |> List.foldl Set.union Set.empty
-
-                                                    tupleElementsCanonicalTypeName =
-                                                        tupleElementsResults |> List.map .canonicalTypeText
-
-                                                    functionNameCommonPart =
-                                                        jsonCodeTupleFunctionNameCommonPart
-                                                            ++ String.fromInt (List.length tupleElements)
-
-                                                    encodeExpression =
-                                                        jsonEncodeFunctionNamePrefix
-                                                            ++ functionNameCommonPart
-                                                            ++ " "
-                                                            ++ (String.join " " (tupleElementsFunctionNames |> List.map .encodeFunctionName) ++ " ")
-                                                            ++ jsonEncodeParamName
-
-                                                    decodeExpression =
-                                                        jsonDecodeFunctionNamePrefix
-                                                            ++ functionNameCommonPart
-                                                            ++ " "
-                                                            ++ String.join " " (tupleElementsFunctionNames |> List.map .decodeFunctionName)
-
-                                                    canonicalTypeText =
-                                                        "(" ++ String.join "," tupleElementsCanonicalTypeName ++ ")"
-                                                in
-                                                { canonicalTypeText = canonicalTypeText
-                                                , canonicalTypeTextWithParameters = canonicalTypeText
-                                                , compileExpressions =
-                                                    \() ->
-                                                        Ok
-                                                            { encodeExpression = encodeExpression
-                                                            , decodeExpression = decodeExpression
-                                                            , dependencies = allElementsDependencies
-                                                            }
-                                                , referencedModules = Set.singleton currentModuleNameFlat
-                                                }
-                                            )
-
-                        AliasElmType parsedAlias ->
-                            jsonCodingResolveType
-                                { rootTypeText = parsedAlias.aliasedText
-                                , currentModule = currentModule
-                                }
-                                sourceModules
-
-
-expressionTextForFunctionWithOptionalTypeParameters :
-    { functionName : String
-    , typeParametersFunctionsCommonPrefix : String
-    , typeParametersNames : List String
-    }
-    -> String
-expressionTextForFunctionWithOptionalTypeParameters { functionName, typeParametersFunctionsCommonPrefix, typeParametersNames } =
-    let
-        needsParentheses =
-            typeParametersNames /= []
-
-        beforeParentheses =
-            functionName
-                ++ " "
-                ++ (typeParametersNames
-                        |> List.map ((++) (typeParametersFunctionsCommonPrefix ++ "type_parameter_"))
-                        |> String.join " "
-                   )
-    in
-    if needsParentheses then
-        "(" ++ beforeParentheses ++ ")"
-
-    else
-        beforeParentheses
-
-
-getTypeDefinitionTextFromModuleText : String -> ( String, Elm.Syntax.File.File ) -> Maybe String
-getTypeDefinitionTextFromModuleText typeNameInModule ( moduleText, parsedModule ) =
-    parsedModule.declarations
-        |> List.filter
-            (\declaration ->
-                case Elm.Syntax.Node.value declaration of
-                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                        Elm.Syntax.Node.value customTypeDeclaration.name == typeNameInModule
-
-                    Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-                        Elm.Syntax.Node.value aliasDeclaration.name == typeNameInModule
-
-                    _ ->
-                        False
-            )
-        |> List.head
-        |> Maybe.map
-            (\declaration ->
-                getTextLinesFromRange (Elm.Syntax.Node.range declaration) moduleText
-                    |> String.join "\n"
-            )
-
-
-getCanonicalNameFromImportedNameInModule : Elm.Syntax.File.File -> String -> Maybe ( List String, String )
-getCanonicalNameFromImportedNameInModule parsedModule nameInModuleBeforeTrimming =
-    let
-        nameInModule =
-            String.trim nameInModuleBeforeTrimming
-
-        importedModuleAlias =
-            nameInModule |> String.split "." |> List.reverse |> List.drop 1 |> List.reverse
-
-        localName =
-            nameInModule |> String.split "." |> List.reverse |> List.head |> Maybe.withDefault nameInModule
-    in
-    if importedModuleAlias == [] then
-        parsedModule.imports
-            |> List.map Elm.Syntax.Node.value
-            |> List.filterMap
-                (\moduleImport ->
-                    case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
-                        Nothing ->
-                            Nothing
-
-                        Just importExposing ->
-                            let
-                                containsMatchingExposition =
-                                    case importExposing of
-                                        Elm.Syntax.Exposing.All _ ->
-                                            -- TODO: Add lookup into that module
-                                            False
-
-                                        Elm.Syntax.Exposing.Explicit topLevelExpositions ->
-                                            topLevelExpositions
-                                                |> List.any
-                                                    (\topLevelExpose ->
-                                                        case Elm.Syntax.Node.value topLevelExpose of
-                                                            Elm.Syntax.Exposing.InfixExpose _ ->
-                                                                False
-
-                                                            Elm.Syntax.Exposing.FunctionExpose _ ->
-                                                                False
-
-                                                            Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasExpose ->
-                                                                typeOrAliasExpose == localName
-
-                                                            Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                                                                typeExpose.name == localName
-                                                    )
-                            in
-                            if containsMatchingExposition then
-                                Just ( Elm.Syntax.Node.value moduleImport.moduleName, localName )
-
-                            else
-                                Nothing
-                )
-            |> List.head
-
-    else
-        case
-            parsedModule.imports
-                |> List.map Elm.Syntax.Node.value
-                |> List.filter
-                    (\moduleImport ->
-                        moduleImport.moduleAlias
-                            |> Maybe.withDefault moduleImport.moduleName
-                            |> Elm.Syntax.Node.value
-                            |> (==) importedModuleAlias
-                    )
-                |> List.head
-        of
-            Nothing ->
-                Just ( importedModuleAlias, localName )
-
-            Just matchingImport ->
-                Just ( Elm.Syntax.Node.value matchingImport.moduleName, localName )
-
-
-{-| TODO: Test simplify by reusing parsed representation in parseElmTypeText.
--}
-parseElmTypeText : Bool -> String -> Result String ( ElmTypeStructure, String )
-parseElmTypeText canBeInstance typeTextBeforeTrimming =
-    let
-        typeText =
-            String.trim typeTextBeforeTrimming
-
-        typeDefinitionTextLines =
-            String.lines typeText
-                |> List.filter (String.trim >> String.isEmpty >> not)
-    in
-    case
-        typeDefinitionTextLines
-            |> List.head
-            |> Maybe.map (String.split " " >> List.map String.trim)
-    of
-        Just ("type" :: "alias" :: aliasName :: parametersAndAssignmentSymbol) ->
-            case List.reverse parametersAndAssignmentSymbol of
-                "=" :: parametersReversed ->
-                    Ok
-                        ( AliasElmType
-                            { aliasLocalName = aliasName
-                            , parameters = List.reverse parametersReversed
-                            , aliasedText = typeDefinitionTextLines |> List.drop 1 |> String.join "\n"
-                            }
-                        , ""
-                        )
-
-                _ ->
-                    Err ("Unexpected text after alias: '" ++ typeText ++ "'")
-
-        Just ("type" :: customTypeName :: parameters) ->
-            -- Assume: Custom type tags are all on their own line.
-            let
-                tagsResults =
-                    typeDefinitionTextLines
-                        |> List.drop 1
-                        |> List.map
-                            (\tagLine ->
-                                let
-                                    ( _, textAfterTagSeparator ) =
-                                        parseRegexPattern { regexPattern = "(\\||\\=)" } (String.trim tagLine)
-
-                                    ( tagName, textAfterTagName ) =
-                                        parseRegexPattern { regexPattern = "[^\\s]+" } (String.trim textAfterTagSeparator)
-
-                                    parseTags remainingText =
-                                        if remainingText == "" then
-                                            Ok []
-
-                                        else
-                                            parseElmTypeText False remainingText
-                                                |> Result.andThen
-                                                    (\( _, remainingAfterCurrentParam ) ->
-                                                        let
-                                                            paramText =
-                                                                remainingText
-                                                                    |> String.left (String.length remainingText - String.length remainingAfterCurrentParam)
-                                                                    |> String.trim
-                                                        in
-                                                        parseTags (String.trim remainingAfterCurrentParam)
-                                                            |> Result.map (\followingParams -> paramText :: followingParams)
-                                                    )
-                                in
-                                case parseTags (String.trim textAfterTagName) of
-                                    Err error ->
-                                        Err ("Failed to parse custom type params: " ++ error)
-
-                                    Ok params ->
-                                        Ok ( tagName, params )
-                            )
-            in
-            case Result.Extra.combine tagsResults of
-                Err error ->
-                    Err ("Failed to parse tags: " ++ error)
-
-                Ok tags ->
-                    Ok
-                        ( CustomElmType
-                            { typeLocalName = customTypeName
-                            , parameters = parameters
-                            , tags = Dict.fromList tags
-                            }
-                        , ""
-                        )
-
-        _ ->
-            case typeText |> String.toList |> List.head of
-                Nothing ->
-                    Err "Type text is empty"
-
-                Just '(' ->
-                    let
-                        parseElements : String -> Result String ( List { typeText : String, parsedType : ElmTypeStructure }, String )
-                        parseElements remainingElementsText =
-                            if String.startsWith ")" remainingElementsText then
-                                Ok ( [], String.dropLeft 1 remainingElementsText )
-
-                            else if remainingElementsText == "" then
-                                Err "Missing tuple/instance termination token."
-
-                            else
-                                case parseElmTypeText True remainingElementsText of
-                                    Err error ->
-                                        Err ("Failed to parse tuple element type: " ++ error)
-
-                                    Ok ( fieldType, restAfterElementType ) ->
-                                        let
-                                            restAfterElementTypeTrimmed =
-                                                String.trimLeft restAfterElementType
-
-                                            elementTypeTextLength =
-                                                String.length remainingElementsText - String.length restAfterElementType
-
-                                            currentElement =
-                                                { parsedType = fieldType
-                                                , typeText =
-                                                    remainingElementsText
-                                                        |> String.left elementTypeTextLength
-                                                        |> String.trim
-                                                }
-
-                                            continueForText textForRemainingElements =
-                                                parseElements (String.trimLeft textForRemainingElements)
-                                                    |> Result.map
-                                                        (\( followingElements, remainingAfterElements ) ->
-                                                            ( currentElement :: followingElements
-                                                            , remainingAfterElements
-                                                            )
-                                                        )
-                                        in
-                                        case restAfterElementTypeTrimmed |> String.toList |> List.head of
-                                            Nothing ->
-                                                Err "Missing tuple/instance termination token."
-
-                                            Just ',' ->
-                                                continueForText (String.dropLeft 1 restAfterElementTypeTrimmed)
-
-                                            Just ')' ->
-                                                continueForText restAfterElementTypeTrimmed
-
-                                            Just otherChar ->
-                                                Err ("Unexpected char in tuple/instance: '" ++ String.fromChar otherChar ++ "'")
-                    in
-                    parseElements (String.trimLeft (String.dropLeft 1 typeText))
-                        |> Result.andThen
-                            (\( elements, remainingAfterFields ) ->
-                                case elements of
-                                    [ singleElement ] ->
-                                        case parseElmTypeText True singleElement.typeText of
-                                            Err error ->
-                                                Err ("Failed switching from parens to instance: " ++ error)
-
-                                            Ok ( parsedInstance, _ ) ->
-                                                Ok ( parsedInstance, remainingAfterFields )
-
-                                    _ ->
-                                        Ok ( TupleElmType (List.map .typeText elements), remainingAfterFields )
-                            )
-
-                Just '{' ->
-                    let
-                        parseFields : String -> Result String ( List { name : String, typeText : String, parsedType : ElmTypeStructure }, String )
-                        parseFields remainingFieldsText =
-                            if String.startsWith "}" remainingFieldsText then
-                                Ok ( [], String.dropLeft 1 remainingFieldsText )
-
-                            else if remainingFieldsText == "" then
-                                Err ("Missing record termination token in '" ++ typeText ++ "'")
-
-                            else
-                                let
-                                    ( fieldName, restAfterFieldName ) =
-                                        parseFieldName remainingFieldsText
-
-                                    ( _, restAfterFieldColon ) =
-                                        parseRegexPattern { regexPattern = "^\\s*:\\s*" }
-                                            restAfterFieldName
-                                in
-                                case parseElmTypeText True restAfterFieldColon of
-                                    Err error ->
-                                        Err ("Failed to parse field type: " ++ error)
-
-                                    Ok ( fieldType, restAfterFieldType ) ->
-                                        let
-                                            fieldTypeTextLength =
-                                                String.length restAfterFieldColon - String.length restAfterFieldType
-
-                                            ( _, restAfterFieldSeparator ) =
-                                                parseRegexPattern { regexPattern = "^\\s*,\\s*" }
-                                                    restAfterFieldType
-                                        in
-                                        parseFields (String.trimLeft restAfterFieldSeparator)
-                                            |> Result.map
-                                                (\( followingFields, remainingAfterFields ) ->
-                                                    ( { name = fieldName
-                                                      , parsedType = fieldType
-                                                      , typeText = restAfterFieldColon |> String.left fieldTypeTextLength |> String.trim
-                                                      }
-                                                        :: followingFields
-                                                    , remainingAfterFields
-                                                    )
-                                                )
-                    in
-                    parseFields (String.trimLeft (String.dropLeft 1 typeText))
-                        |> Result.map
-                            (\( fields, remainingAfterFields ) ->
-                                ( RecordElmType { fields = fields }, remainingAfterFields )
-                            )
-
-                Just _ ->
-                    let
-                        nameInInstanceRegexPattern =
-                            "^[\\w\\d_\\.]+"
-
-                        ( firstName, restAfterFirstName ) =
-                            parseRegexPattern { regexPattern = nameInInstanceRegexPattern }
-                                typeText
-
-                        parseParameters remainingParametersText =
-                            if String.length remainingParametersText < 1 then
-                                Ok ( [], remainingParametersText )
-
-                            else if
-                                String.startsWith "[" remainingParametersText
-                                    || String.startsWith "(" remainingParametersText
-                                    || String.startsWith "{" remainingParametersText
-                            then
-                                case parseElmTypeText True remainingParametersText of
-                                    Err error ->
-                                        Err ("Failed to parse instance parameter: " ++ error)
-
-                                    Ok ( currentParameterType, remainingAfterCurrentParameter ) ->
-                                        let
-                                            parameterTypeTextLength =
-                                                String.length remainingParametersText - String.length remainingAfterCurrentParameter
-
-                                            parameterTypeText =
-                                                remainingParametersText |> String.left parameterTypeTextLength
-                                        in
-                                        parseParameters (String.trimLeft remainingAfterCurrentParameter)
-                                            |> Result.map
-                                                (\( followingParameters, lastRemaining ) ->
-                                                    ( parameterTypeText :: followingParameters
-                                                    , lastRemaining
-                                                    )
-                                                )
-
-                            else
-                                let
-                                    ( parameterName, restAfterParameterName ) =
-                                        parseRegexPattern
-                                            { regexPattern = nameInInstanceRegexPattern }
-                                            remainingParametersText
-                                in
-                                if parameterName == "" then
-                                    Ok ( [], restAfterParameterName )
-
-                                else
-                                    case parseElmTypeText False remainingParametersText of
-                                        Err error ->
-                                            Err ("Failed to parse instance parameter: " ++ error)
-
-                                        Ok ( currentParameterType, remainingAfterCurrentParameter ) ->
-                                            let
-                                                parameterTypeTextLength =
-                                                    String.length remainingParametersText - String.length remainingAfterCurrentParameter
-
-                                                parameterTypeText =
-                                                    remainingParametersText |> String.left parameterTypeTextLength
-                                            in
-                                            parseParameters (String.trimLeft remainingAfterCurrentParameter)
-                                                |> Result.map
-                                                    (\( followingParameters, lastRemaining ) ->
-                                                        ( parameterTypeText :: followingParameters
-                                                        , lastRemaining
-                                                        )
-                                                    )
-                    in
-                    if not canBeInstance then
-                        Ok ( InstanceElmType { typeName = firstName, parameters = [] }, restAfterFirstName )
-
-                    else
-                        parseParameters (String.trimLeft restAfterFirstName)
-                            |> Result.map
-                                (\( parameters, remainingAfterParameters ) ->
-                                    ( InstanceElmType { typeName = firstName, parameters = parameters }
-                                    , remainingAfterParameters
-                                    )
+                                    "|> jsonDecode_andMap\n"
+                                        ++ (fieldMapLines |> String.join "\n" |> indentElmCodeLines 1)
                                 )
 
+                    encodeListExpression =
+                        "[ "
+                            ++ (fieldsExpressions |> List.map .encode |> String.join "\n, ")
+                            ++ "\n]"
+                in
+                { encodeExpression =
+                    [ "Json.Encode.object"
+                    , indentElmCodeLines 1 encodeListExpression
+                    ]
+                        |> String.join "\n"
+                , decodeExpression =
+                    "Json.Decode.succeed "
+                        ++ decodeMap
+                        ++ "\n"
+                        ++ (decodeFieldsLines |> String.join "\n" |> indentElmCodeLines 1)
+                }
 
-parseFieldName : String -> ( String, String )
-parseFieldName =
-    parseRegexPattern { regexPattern = "[\\w\\d_]+" }
+        InstanceElmType instance ->
+            jsonCodingExpressionFromType
+                { encodeValueExpression = encodeValueExpression, typeArgLocalName = typeArgLocalName }
+                ( instance.instantiated, instance.arguments )
+
+        TupleElmType tuple ->
+            let
+                itemsNames =
+                    List.range 0 (List.length tuple - 1)
+                        |> List.map (String.fromInt >> (++) "item_")
+
+                decodeMap =
+                    "(\\" ++ (itemsNames |> String.join " ") ++ " -> ( " ++ (itemsNames |> String.join ", ") ++ " ))"
+
+                getItemFunctionFromIndex itemIndex =
+                    "(\\( " ++ (itemsNames |> String.join ", ") ++ " ) -> item_" ++ String.fromInt itemIndex ++ ")"
+
+                itemsExpressions =
+                    tuple
+                        |> List.indexedMap
+                            (\i itemType ->
+                                let
+                                    localName =
+                                        "item_" ++ String.fromInt i
+
+                                    getItemFunction =
+                                        getItemFunctionFromIndex i
+
+                                    itemExpression =
+                                        jsonCodingExpressionFromType
+                                            { encodeValueExpression =
+                                                "("
+                                                    ++ getItemFunction
+                                                    ++ " "
+                                                    ++ encodeValueExpression
+                                                    ++ ")"
+                                            , typeArgLocalName = typeArgLocalName
+                                            }
+                                            ( itemType, [] )
+
+                                    itemDecodeExpr =
+                                        if String.contains " " itemExpression.decodeExpression then
+                                            "(" ++ itemExpression.decodeExpression ++ ")"
+
+                                        else
+                                            itemExpression.decodeExpression
+                                in
+                                { localName = localName
+                                , encode = itemExpression.encodeExpression
+                                , decode = "(Json.Decode.index " ++ String.fromInt i ++ " " ++ itemDecodeExpr ++ ")"
+                                }
+                            )
+
+                encodeListExpression =
+                    "[ "
+                        ++ (itemsExpressions |> List.map .encode |> String.join "\n, ")
+                        ++ "\n]"
+            in
+            { encodeExpression =
+                "Json.Encode.list identity\n"
+                    ++ indentElmCodeLines 1 encodeListExpression
+            , decodeExpression =
+                "Json.Decode.map"
+                    ++ String.fromInt (List.length tuple)
+                    ++ " "
+                    ++ decodeMap
+                    ++ "\n"
+                    ++ (itemsExpressions |> List.map .decode |> String.join "\n" |> indentElmCodeLines 1)
+            }
+
+        GenericType name ->
+            let
+                functionsNames =
+                    jsonCodingFunctionNameFromTypeParameterName name
+            in
+            { encodeExpression = functionsNames.encodeName ++ " " ++ encodeValueExpression
+            , decodeExpression = functionsNames.decodeName
+            }
+
+        UnitType ->
+            { encodeExpression = "Json.Encode.list (always (Json.Encode.object [])) []"
+            , decodeExpression = "Json.Decode.succeed ()"
+            }
+
+        LeafElmType leaf ->
+            case leaf of
+                StringLeaf ->
+                    continueWithAtomInJsonCore "string"
+
+                IntLeaf ->
+                    continueWithAtomInJsonCore "int"
+
+                BoolLeaf ->
+                    continueWithAtomInJsonCore "bool"
+
+                FloatLeaf ->
+                    continueWithAtomInJsonCore "float"
+
+                BytesLeaf ->
+                    { encodeExpression = "json_encode_Bytes " ++ encodeValueExpression
+                    , decodeExpression = "json_decode_Bytes"
+                    }
+
+                ListLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonCodeListFunctionNameCommonPart
+
+                SetLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonCodeSetFunctionNameCommonPart
+
+                ResultLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonCodeResultFunctionNameCommonPart
+
+                MaybeLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonCodeMaybeFunctionNameCommonPart
+
+                DictLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonCodeDictFunctionNameCommonPart
 
 
-parseRegexPattern : { regexPattern : String } -> String -> ( String, String )
-parseRegexPattern { regexPattern } originalString =
-    case Regex.fromString regexPattern of
-        Nothing ->
-            ( "", originalString )
+jsonCodingFunctionFromCustomType :
+    { customTypeName : String, encodeValueExpression : String, typeArgLocalName : String }
+    -> ElmCustomTypeStruct
+    -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
+jsonCodingFunctionFromCustomType { customTypeName, encodeValueExpression, typeArgLocalName } customType =
+    let
+        encodeParametersText =
+            customType.parameters
+                |> List.map (jsonCodingFunctionNameFromTypeParameterName >> .encodeName)
+                |> String.join " "
 
-        Just regex ->
-            case Regex.find regex originalString of
-                [] ->
-                    ( "", originalString )
+        decodeParametersText =
+            customType.parameters
+                |> List.map (jsonCodingFunctionNameFromTypeParameterName >> .decodeName)
+                |> String.join " "
 
-                firstMatch :: _ ->
-                    ( firstMatch.match
-                    , originalString |> String.dropLeft (firstMatch.index + String.length firstMatch.match)
+        moduleName =
+            moduleNameFromTypeName customTypeName
+
+        typeNameRepresentation =
+            jsonCodingFunctionNameCommonPartFromTypeName customTypeName
+
+        tagsExpressions =
+            customType.tags
+                |> Dict.toList
+                |> List.sortBy Tuple.first
+                |> List.map
+                    (\( tagName, tagParameters ) ->
+                        let
+                            tagParametersExpressions =
+                                tagParameters
+                                    |> List.indexedMap
+                                        (\i tagParamType ->
+                                            let
+                                                argumentLocalName =
+                                                    "tagArgument" ++ String.fromInt i
+
+                                                tagParamExpr =
+                                                    jsonCodingExpressionFromType
+                                                        { encodeValueExpression = argumentLocalName
+                                                        , typeArgLocalName = typeArgLocalName
+                                                        }
+                                                        ( tagParamType, [] )
+                                            in
+                                            { localName = argumentLocalName
+                                            , encode = tagParamExpr.encodeExpression
+                                            , decode = tagParamExpr.decodeExpression
+                                            }
+                                        )
+
+                            decodeInField =
+                                if tagParametersExpressions == [] then
+                                    "jsonDecodeSucceedWhenNotNull " ++ moduleName ++ "." ++ tagName
+
+                                else
+                                    "Json.Decode.lazy (\\_ -> Json.Decode.map"
+                                        ++ (if List.length tagParametersExpressions == 1 then
+                                                ""
+
+                                            else
+                                                String.fromInt (List.length tagParametersExpressions)
+                                           )
+                                        ++ " "
+                                        ++ moduleName
+                                        ++ "."
+                                        ++ tagName
+                                        ++ " "
+                                        ++ (tagParametersExpressions
+                                                |> List.indexedMap
+                                                    (\i tagParamExpr ->
+                                                        let
+                                                            tagParamDecodeExpr =
+                                                                if String.contains " " tagParamExpr.decode then
+                                                                    "(" ++ tagParamExpr.decode ++ ")"
+
+                                                                else
+                                                                    tagParamExpr.decode
+                                                        in
+                                                        "(Json.Decode.index "
+                                                            ++ String.fromInt i
+                                                            ++ " "
+                                                            ++ tagParamDecodeExpr
+                                                            ++ ")"
+                                                    )
+                                                |> String.join " "
+                                           )
+                                        ++ ")"
+
+                            encodeArguments =
+                                tagParametersExpressions
+                                    |> List.map .localName
+                                    |> String.join " "
+
+                            encodeFirstLine =
+                                [ moduleName ++ "." ++ tagName
+                                , encodeArguments
+                                , "->"
+                                ]
+                                    |> List.filter (String.isEmpty >> not)
+                                    |> String.join " "
+
+                            encodeSecondLine =
+                                "Json.Encode.object [ ( \""
+                                    ++ tagName
+                                    ++ "\", Json.Encode.list identity ["
+                                    ++ (if tagParametersExpressions == [] then
+                                            ""
+
+                                        else
+                                            " " ++ (tagParametersExpressions |> List.map .encode |> String.join ", ") ++ " "
+                                       )
+                                    ++ "] ) ]"
+                        in
+                        { encode =
+                            [ encodeFirstLine
+                            , indentElmCodeLines 1 encodeSecondLine
+                            ]
+                                |> String.join "\n"
+                        , decode = "Json.Decode.field \"" ++ tagName ++ "\" (" ++ decodeInField ++ ")"
+                        }
                     )
 
+        encodeListExpression =
+            tagsExpressions |> List.map .encode |> String.join "\n"
 
-enumerateExpressionsResolvingAllDependencies : (String -> Result String ResolveTypeResult) -> Set.Set String -> Result String (List { elmType : String, expressions : ExpressionsForType })
-enumerateExpressionsResolvingAllDependencies =
-    enumerateExpressionsResolvingAllDependenciesIgnoringTypes { typesToIgnore = Set.empty }
+        encodeExpression =
+            [ "case " ++ encodeValueExpression ++ " of"
+            , indentElmCodeLines 1 encodeListExpression
+            ]
+                |> String.join "\n"
+
+        decodeListExpression =
+            "[ "
+                ++ (tagsExpressions |> List.map .decode |> String.join "\n, ")
+                ++ "\n]"
+
+        decodeExpression =
+            [ "Json.Decode.oneOf"
+            , indentElmCodeLines 1 decodeListExpression
+            ]
+                |> String.join "\n"
+
+        encodeFunctionName =
+            jsonEncodeFunctionNamePrefix ++ typeNameRepresentation
+
+        decodeFunctionName =
+            jsonDecodeFunctionNamePrefix ++ typeNameRepresentation
+    in
+    { encodeFunction =
+        { name = encodeFunctionName
+        , text =
+            [ [ encodeFunctionName
+              , encodeParametersText
+              , encodeValueExpression
+              , "="
+              ]
+                |> List.filter (String.isEmpty >> not)
+                |> String.join " "
+            , indentElmCodeLines 1 encodeExpression
+            ]
+                |> String.join "\n"
+        }
+    , decodeFunction =
+        { name = decodeFunctionName
+        , text =
+            [ [ decodeFunctionName
+              , decodeParametersText
+              , "="
+              ]
+                |> List.filter (String.isEmpty >> not)
+                |> String.join " "
+            , indentElmCodeLines 1 decodeExpression
+            ]
+                |> String.join "\n"
+        }
+    }
 
 
-enumerateExpressionsResolvingAllDependenciesIgnoringTypes : { typesToIgnore : Set.Set String } -> (String -> Result String ResolveTypeResult) -> Set.Set String -> Result String (List { elmType : String, expressions : ExpressionsForType })
-enumerateExpressionsResolvingAllDependenciesIgnoringTypes { typesToIgnore } getExpressionsAndDependenciesForType rootTypes =
-    Set.diff rootTypes typesToIgnore
-        |> Set.toList
-        |> List.map
-            (\rootType ->
-                case getExpressionsAndDependenciesForType rootType of
-                    Err error ->
-                        Err error
+jsonCodingFunctionNameFromTypeParameterName : String -> { encodeName : String, decodeName : String }
+jsonCodingFunctionNameFromTypeParameterName paramName =
+    { encodeName = jsonEncodeFunctionNamePrefix ++ "type_parameter_" ++ paramName
+    , decodeName = jsonDecodeFunctionNamePrefix ++ "type_parameter_" ++ paramName
+    }
 
-                    Ok expressionsAndDependenciesAndCanonicalName ->
-                        case expressionsAndDependenciesAndCanonicalName.compileExpressions () of
-                            Err error ->
-                                Err ("Failed to compile expressions: " ++ error)
 
-                            Ok expressionsAndDependencies ->
-                                case
-                                    enumerateExpressionsResolvingAllDependenciesIgnoringTypes
-                                        { typesToIgnore = Set.union (Set.singleton rootType) typesToIgnore }
-                                        getExpressionsAndDependenciesForType
-                                        expressionsAndDependencies.dependencies
-                                of
-                                    Err error ->
-                                        Err ("Failed to get dependency expression: " ++ error)
+jsonCodingFunctionNameCommonPartFromTypeName : String -> String
+jsonCodingFunctionNameCommonPartFromTypeName =
+    String.toList
+        >> List.map
+            (\char ->
+                if Char.isAlphaNum char then
+                    char
 
-                                    Ok dependenciesItems ->
-                                        Ok
-                                            ({ elmType = expressionsAndDependenciesAndCanonicalName.canonicalTypeTextWithParameters
-                                             , expressions =
-                                                { encodeExpression = expressionsAndDependencies.encodeExpression
-                                                , decodeExpression = expressionsAndDependencies.decodeExpression
-                                                , referencedModules = expressionsAndDependenciesAndCanonicalName.referencedModules
-                                                }
-                                             }
-                                                :: dependenciesItems
-                                            )
+                else
+                    '_'
             )
-        |> Result.Extra.combine
-        |> Result.map List.concat
+        >> String.fromList
 
 
-jsonCodeLeafExpressions : Dict.Dict String ( String, String )
-jsonCodeLeafExpressions =
-    [ ( "String", ( "Json.Encode.string " ++ jsonEncodeParamName, "Json.Decode.string" ) )
-    , ( "Int", ( "Json.Encode.int " ++ jsonEncodeParamName, "Json.Decode.int" ) )
-    , ( "Bool", ( "Json.Encode.bool " ++ jsonEncodeParamName, "Json.Decode.bool" ) )
-    , ( "Float", ( "Json.Encode.float " ++ jsonEncodeParamName, "Json.Decode.float" ) )
-    , ( "()", ( "Json.Encode.list (always (Json.Encode.object [])) []", "Json.Decode.succeed ()" ) )
-    , ( "{}", ( "Json.Encode.object []", "Json.Decode.succeed {}" ) )
-    , ( "Bytes.Bytes", ( "json_encode_Bytes " ++ jsonEncodeParamName, "json_decode_Bytes" ) )
+moduleNameFromTypeName : String -> String
+moduleNameFromTypeName =
+    String.split "."
+        >> List.reverse
+        >> List.drop 1
+        >> List.reverse
+        >> String.join "."
+
+
+buildTypeAnnotationText : ElmTypeAnnotation -> String
+buildTypeAnnotationText typeAnnotation =
+    case typeAnnotation of
+        CustomElmType custom ->
+            custom
+
+        RecordElmType { fields } ->
+            "{ "
+                ++ (fields |> List.map (\( fieldName, fieldType ) -> fieldName ++ " : " ++ buildTypeAnnotationText fieldType) |> String.join ", ")
+                ++ " }"
+
+        InstanceElmType instance ->
+            "( "
+                ++ (instance.instantiated
+                        :: instance.arguments
+                        |> List.map buildTypeAnnotationText
+                        |> String.join " "
+                   )
+                ++ " )"
+
+        TupleElmType tuple ->
+            "(" ++ (tuple |> List.map buildTypeAnnotationText |> String.join ", ") ++ ")"
+
+        GenericType name ->
+            name
+
+        UnitType ->
+            "()"
+
+        LeafElmType leaf ->
+            case leaf of
+                StringLeaf ->
+                    "String"
+
+                IntLeaf ->
+                    "Int"
+
+                BoolLeaf ->
+                    "Bool"
+
+                FloatLeaf ->
+                    "Float"
+
+                BytesLeaf ->
+                    "Bytes.Bytes"
+
+                ListLeaf ->
+                    "List"
+
+                SetLeaf ->
+                    "Set.Set"
+
+                ResultLeaf ->
+                    "Result"
+
+                MaybeLeaf ->
+                    "Maybe"
+
+                DictLeaf ->
+                    "Dict.Dict"
+
+
+parseElmTypeLeavesNames : Dict.Dict String LeafElmTypeStruct
+parseElmTypeLeavesNames =
+    [ ( "String", StringLeaf )
+    , ( "Int", IntLeaf )
+    , ( "Bool", BoolLeaf )
+    , ( "Float", FloatLeaf )
+    , ( "Bytes.Bytes", BytesLeaf )
+    , ( "List", ListLeaf )
+    , ( "Set.Set", SetLeaf )
+    , ( "Result", ResultLeaf )
+    , ( "Maybe", MaybeLeaf )
+    , ( "Dict.Dict", DictLeaf )
     ]
         |> Dict.fromList
 
 
-instantiationSpecialCases : Dict.Dict String String
-instantiationSpecialCases =
-    [ ( "List", jsonCodeListFunctionNameCommonPart )
-    , ( "Set.Set", jsonCodeSetFunctionNameCommonPart )
-    , ( "Maybe", jsonCodeMaybeFunctionNameCommonPart )
-    , ( "Result", jsonCodeResultFunctionNameCommonPart )
-    , ( "Dict.Dict", jsonCodeDictFunctionNameCommonPart )
-    ]
-        |> Dict.fromList
+listTupleSecondDictUnion : List ( a, Dict.Dict comparable v ) -> ( List a, Dict.Dict comparable v )
+listTupleSecondDictUnion list =
+    ( list |> List.map Tuple.first
+    , list |> List.map Tuple.second |> List.foldl Dict.union Dict.empty
+    )
+
+
+type Declaration
+    = AliasDeclaration Elm.Syntax.TypeAlias.TypeAlias
+    | CustomTypeDeclaration Elm.Syntax.Type.Type
 
 
 generalSupportingFunctionsTexts : List { functionName : String, functionText : String }
@@ -2058,6 +1774,20 @@ json_decode_Bytes =
                 (Base64.toBytes >> Maybe.map Json.Decode.succeed >> Maybe.withDefault (Json.Decode.fail "Failed to decode base64."))
         )
               """
+             }
+           , { functionName = "jsonDecodeSucceedWhenNotNull"
+             , functionText = """
+jsonDecodeSucceedWhenNotNull : a -> Json.Decode.Decoder a
+jsonDecodeSucceedWhenNotNull valueIfNotNull =
+    Json.Decode.value
+        |> Json.Decode.andThen
+            (\\asValue ->
+                if asValue == Json.Encode.null then
+                    Json.Decode.fail "Is null."
+
+                else
+                    Json.Decode.succeed valueIfNotNull
+            )"""
              }
            ]
 
@@ -2177,121 +1907,6 @@ jsonEncodeParamName =
     "valueToEncode"
 
 
-functionNamesAndTypeParametersFromTypeText :
-    String
-    ->
-        Result
-            String
-            { encodeFunctionName : String
-            , decodeFunctionName : String
-            , commonPart : String
-            , typeParametersNames : List String
-            }
-functionNamesAndTypeParametersFromTypeText typeText =
-    parseForTypeParameters typeText
-        |> Result.map
-            (\( typeTextMinusTypeParameters, typeParametersNames ) ->
-                let
-                    rootTypeTextHash =
-                        SHA256.fromString typeTextMinusTypeParameters
-
-                    functionNameCommonPart =
-                        if stringStartsWithLowercaseLetter (String.trim typeTextMinusTypeParameters) then
-                            "type_parameter_" ++ String.trim typeTextMinusTypeParameters
-
-                        else
-                            -- TODO: Implement nicer names
-                            "anonymous_" ++ String.left 10 (SHA256.toHex rootTypeTextHash)
-                in
-                { encodeFunctionName = jsonEncodeFunctionNamePrefix ++ functionNameCommonPart
-                , decodeFunctionName = jsonDecodeFunctionNamePrefix ++ functionNameCommonPart
-                , commonPart = functionNameCommonPart
-                , typeParametersNames = typeParametersNames
-                }
-            )
-
-
-parseForTypeParameters : String -> Result String ( String, List String )
-parseForTypeParameters typeText =
-    case Regex.fromString "^\\((.+?)((\\s+[a-z][^\\s]*){1,})\\)$" of
-        Nothing ->
-            Err "Failed to build regex in parseForTypeParameters"
-
-        Just regex ->
-            case Regex.find regex (String.trim typeText) of
-                firstMatch :: _ ->
-                    case firstMatch.submatches of
-                        (Just instancedTypeName) :: _ ->
-                            Ok
-                                ( String.trim instancedTypeName
-                                , String.trim firstMatch.match
-                                    |> String.dropRight 1
-                                    |> String.dropLeft (firstMatch.index + String.length instancedTypeName + 1)
-                                    |> String.split " "
-                                    |> List.map String.trim
-                                    |> List.filter (String.isEmpty >> not)
-                                )
-
-                        _ ->
-                            Err ("Unexpected structure in regex match (" ++ String.fromInt (List.length firstMatch.submatches) ++ " submatches)")
-
-                _ ->
-                    parseElmTypeText True typeText
-                        |> Result.andThen
-                            (\( parsedType, _ ) ->
-                                case parsedType of
-                                    InstanceElmType instanceType ->
-                                        instanceType.parameters
-                                            |> List.map enumerateAllTypeNamesFromTypeText
-                                            |> Result.Extra.combine
-                                            |> Result.map List.concat
-                                            |> Result.map
-                                                (\typesNames -> ( typeText, typesNames |> List.filter stringStartsWithLowercaseLetter ))
-
-                                    _ ->
-                                        enumerateAllTypeNamesFromTypeText typeText
-                                            |> Result.map
-                                                (\typesNames ->
-                                                    ( typeText, typesNames |> List.filter stringStartsWithLowercaseLetter )
-                                                )
-                            )
-
-
-enumerateAllTypeNamesFromTypeText : String -> Result String (List String)
-enumerateAllTypeNamesFromTypeText typeText =
-    parseElmTypeText True typeText
-        |> Result.andThen
-            (\( parsedType, remainingString ) ->
-                if String.trim remainingString /= "" then
-                    Err ("Unexpected remaining string after parsing type: '" ++ remainingString ++ "'.")
-
-                else
-                    case parsedType of
-                        InstanceElmType instanceType ->
-                            instanceType.parameters
-                                |> List.map enumerateAllTypeNamesFromTypeText
-                                |> Result.Extra.combine
-                                |> Result.map List.concat
-                                |> Result.map (List.filter stringStartsWithLowercaseLetter)
-                                |> Result.map ((::) instanceType.typeName)
-
-                        TupleElmType tupleType ->
-                            tupleType
-                                |> List.map enumerateAllTypeNamesFromTypeText
-                                |> Result.Extra.combine
-                                |> Result.map List.concat
-
-                        RecordElmType recordType ->
-                            recordType.fields
-                                |> List.map (.typeText >> enumerateAllTypeNamesFromTypeText)
-                                |> Result.Extra.combine
-                                |> Result.map List.concat
-
-                        _ ->
-                            Err ("enumerateAllTypeNamesFromTypeText not implemeted for type '" ++ typeText ++ "'")
-            )
-
-
 jsonEncodeFunctionNamePrefix : String
 jsonEncodeFunctionNamePrefix =
     "jsonEncode_"
@@ -2303,26 +1918,33 @@ jsonDecodeFunctionNamePrefix =
 
 
 elmModulesDictFromAppFiles : AppFiles -> Dict.Dict String ( String, Elm.Syntax.File.File )
-elmModulesDictFromAppFiles appFiles =
-    appFiles
-        |> Dict.toList
-        |> List.filterMap (Tuple.second >> stringFromFileContent)
-        |> List.filterMap
-            (\fileText ->
-                case parseElmModuleText fileText of
-                    Err _ ->
-                        Nothing
-
-                    Ok elmFile ->
-                        Just
-                            ( String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition))
-                            , ( fileText, elmFile )
-                            )
-            )
-        |> Dict.fromList
+elmModulesDictFromAppFiles =
+    Dict.toList
+        >> List.filterMap (Tuple.second >> stringFromFileContent)
+        >> elmModulesDictFromFilesTexts
 
 
-parseJsonCodingFunctionType : String -> Elm.Syntax.Signature.Signature -> Result String { typeCanonicalName : String, isDecoder : Bool }
+elmModulesDictFromFilesTexts : List String -> Dict.Dict String ( String, Elm.Syntax.File.File )
+elmModulesDictFromFilesTexts =
+    List.filterMap
+        (\fileText ->
+            case parseElmModuleText fileText of
+                Err _ ->
+                    Nothing
+
+                Ok elmFile ->
+                    Just
+                        ( String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition))
+                        , ( fileText, elmFile )
+                        )
+        )
+        >> Dict.fromList
+
+
+parseJsonCodingFunctionType :
+    String
+    -> Elm.Syntax.Signature.Signature
+    -> Result String { typeCanonicalName : String, isDecoder : Bool, typeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation }
 parseJsonCodingFunctionType moduleText signature =
     let
         errorValue detail =
@@ -2351,6 +1973,7 @@ parseJsonCodingFunctionType moduleText signature =
                                     moduleText
                                     |> String.join " "
                             , isDecoder = True
+                            , typeAnnotation = Elm.Syntax.Node.value singleTypeArgument
                             }
 
                     _ ->
@@ -2370,6 +1993,7 @@ parseJsonCodingFunctionType moduleText signature =
                                     moduleText
                                     |> String.join " "
                             , isDecoder = False
+                            , typeAnnotation = Elm.Syntax.Node.value leftType
                             }
 
                 _ ->
