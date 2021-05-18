@@ -130,16 +130,33 @@ interfaceToHost_processEvent =
             (\( testName, moduleText, expectedResult ) ->
                 Test.test testName <|
                     \() ->
-                        let
-                            sourceModules =
-                                [ moduleText ]
-                                    |> CompileFullstackApp.elmModulesDictFromFilesTexts
-                                    |> Dict.map (always Tuple.second)
-                        in
-                        CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
-                            sourceModules
-                            moduleText
-                            |> Expect.equal expectedResult
+                        moduleText
+                            |> CompileFullstackApp.parseElmModuleText
+                            |> Result.mapError
+                                (\error ->
+                                    "Failed to parse supporting module '"
+                                        ++ (moduleText
+                                                |> String.lines
+                                                |> List.head
+                                                |> Maybe.withDefault "???"
+                                           )
+                                        ++ "': "
+                                        ++ CompileFullstackApp.parserDeadEndsToString moduleText error
+                                )
+                            |> Result.map
+                                (\parsedModule ->
+                                    let
+                                        sourceModules =
+                                            [ moduleText ]
+                                                |> CompileFullstackApp.elmModulesDictFromFilesTexts
+                                                |> Dict.map (always Tuple.second)
+                                    in
+                                    CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
+                                        sourceModules
+                                        parsedModule
+                                        |> Expect.equal expectedResult
+                                )
+                            |> Result.Extra.unpack Expect.fail identity
             )
         |> Test.describe "state type name from root Elm module"
 

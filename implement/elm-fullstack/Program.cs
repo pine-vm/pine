@@ -398,8 +398,6 @@ namespace elm_fullstack
                         ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TreeToFlatDictionaryWithPathComparer(
                             loadFromPathResult.Ok.tree);
 
-                    var compilationLog = new List<string>();
-
                     string compilationException = null;
                     Composition.TreeWithStringPath compiledTree = null;
 
@@ -407,8 +405,7 @@ namespace elm_fullstack
                     {
                         var loweredAppFiles = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
-                            ElmFullstack.ElmAppInterfaceConfig.Default,
-                            compilationLog.Add);
+                            ElmFullstack.ElmAppInterfaceConfig.Default);
 
                         compiledTree =
                             Composition.SortedTreeFromSetOfBlobsWithStringPath(loweredAppFiles);
@@ -455,7 +452,6 @@ namespace elm_fullstack
                         sourceCompositionId = sourceCompositionId,
                         sourceSummary = sourceSummary,
                         compilationException = compilationException,
-                        compilationLog = compilationLog.ToImmutableList(),
                         compilationTimeSpentMilli = (int)compilationTimeSpentMilli,
                         compiledCompositionId = compiledCompositionId,
                     };

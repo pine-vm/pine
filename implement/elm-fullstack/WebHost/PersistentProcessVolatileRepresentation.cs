@@ -80,27 +80,23 @@ namespace ElmFullstack.WebHost.PersistentProcess
         }
 
         static public (IDisposableProcessWithStringInterface process,
-            (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts,
-            IReadOnlyList<string> log)
+            (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
             ProcessFromWebAppConfig(
             Composition.TreeWithStringPath appConfig,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
-            var log = new List<string>();
-
             var sourceFiles = TreeToFlatDictionaryWithPathComparer(appConfig);
 
             var loweredAppFiles = ElmApp.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
-                ElmAppInterfaceConfig.Default,
-                log.Add);
+                ElmAppInterfaceConfig.Default);
 
             var processFromLoweredElmApp =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 loweredAppFiles,
                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
-            return (processFromLoweredElmApp.process, processFromLoweredElmApp.buildArtifacts, log);
+            return (processFromLoweredElmApp.process, processFromLoweredElmApp.buildArtifacts);
         }
 
         static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> TreeToFlatDictionaryWithPathComparer(
@@ -271,7 +267,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
                     if (compositionLogRecord.reduction != null)
                     {
-                        var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun), _) =
+                        var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun)) =
                             ProcessFromWebAppConfig(
                                 compositionLogRecord.reduction.Value.appConfigAsTree,
                                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
@@ -410,7 +406,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
                 var prepareMigrateResult =
                     PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig);
 
-                var (newElmAppProcess, buildArtifacts, _) =
+                var (newElmAppProcess, buildArtifacts) =
                     ProcessFromWebAppConfig(
                         appConfig,
                         overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
@@ -453,7 +449,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
             {
                 var appConfig = compositionEvent.DeployAppConfigAndInitElmAppState;
 
-                var (newElmAppProcess, buildArtifacts, _) =
+                var (newElmAppProcess, buildArtifacts) =
                     ProcessFromWebAppConfig(
                         appConfig,
                         overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
@@ -586,129 +582,17 @@ namespace ElmFullstack.WebHost.PersistentProcess
             var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
             var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
 
-            appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var migrateElmAppInterfaceModuleOriginalFile);
-
-            if (migrateElmAppInterfaceModuleOriginalFile == null)
+            if (!appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var _))
                 return new Result<string, Func<string, Result<string, string>>>
                 {
                     Err = "Did not find interface module at '" + string.Join("/", pathToInterfaceModuleFile) + "'",
                 };
 
-            var migrateElmAppInterfaceModuleOriginalText =
-                Encoding.UTF8.GetString(migrateElmAppInterfaceModuleOriginalFile.ToArray());
-
-            var migrateFunctionTypeAnnotation =
-                CompileElm.TypeAnnotationFromFunctionName(MigrateElmFunctionNameInModule, migrateElmAppInterfaceModuleOriginalText);
-
-            if (migrateFunctionTypeAnnotation == null)
-                return new Result<string, Func<string, Result<string, string>>>
-                {
-                    Err = "Did not find type annotation for function '" + MigrateElmFunctionNameInModule + "'"
-                };
-
-            var typeAnnotationMatch = Regex.Match(migrateFunctionTypeAnnotation, @"^\s*([\w\d_\.]+)\s*->\s*([\w\d_\.]+)\s*$");
-
-            if (!typeAnnotationMatch.Success)
-                return new Result<string, Func<string, Result<string, string>>>
-                {
-                    Err = "Type annotation did not match expected pattern: '" + migrateFunctionTypeAnnotation + "'"
-                };
-
-            var inputTypeText = typeAnnotationMatch.Groups[1].Value;
-            var returnTypeText = typeAnnotationMatch.Groups[2].Value;
-
-            var inputTypeCanonicalName =
-                inputTypeText.Contains(".") ?
-                inputTypeText :
-                MigrationElmAppInterfaceModuleName + "." + inputTypeText;
-
-            var returnTypeCanonicalName =
-                returnTypeText.Contains(".") ?
-                returnTypeText :
-                MigrationElmAppInterfaceModuleName + "." + returnTypeText;
-
-            var compilationRootModuleInitialText = @"
-module " + MigrationElmAppCompilationRootModuleName + @" exposing(decodeMigrateAndEncodeAndSerializeResult, main)
-
-import " + MigrationElmAppInterfaceModuleName + @"
-import Json.Decode
-import Json.Encode
-
-
-decodeMigrateAndEncode : String -> Result String String
-decodeMigrateAndEncode =
-    Json.Decode.decodeString jsonDecodeBackendState
-        >> Result.map (" + MigrationElmAppInterfaceModuleName + "." + MigrateElmFunctionNameInModule + @" >> jsonEncodeBackendState >> Json.Encode.encode 0)
-        >> Result.mapError Json.Decode.errorToString
-
-
-decodeMigrateAndEncodeAndSerializeResult : String -> String
-decodeMigrateAndEncodeAndSerializeResult =
-    decodeMigrateAndEncode
-        >> jsonEncodeResult Json.Encode.string Json.Encode.string
-        >> Json.Encode.encode 0
-
-
-jsonEncodeResult : (err -> Json.Encode.Value) -> (ok -> Json.Encode.Value) -> Result err ok -> Json.Encode.Value
-jsonEncodeResult encodeErr encodeOk valueToEncode =
-    case valueToEncode of
-        Err valueToEncodeError ->
-            [ ( ""Err"", [ valueToEncodeError ] |> Json.Encode.list encodeErr ) ] |> Json.Encode.object
-
-        Ok valueToEncodeOk ->
-            [ ( ""Ok"", [ valueToEncodeOk ] |> Json.Encode.list encodeOk ) ] |> Json.Encode.object
-
-
-main : Program Int {} String
-main =
-    Platform.worker
-        { init = \_ -> ( {}, Cmd.none )
-        , update =
-            \_ _ ->
-                ( decodeMigrateAndEncodeAndSerializeResult |> always {}, Cmd.none )
-        , subscriptions = \_ -> Sub.none
-        }
-";
-            var compileCodingFunctionsLogLines = new System.Collections.Generic.List<string>();
-
             try
             {
-                var migrateElmAppFilesBeforeAddingCodingSupport =
-                    appConfigFiles.SetItem(
-                        pathToCompilationRootModuleFile,
-                        Encoding.UTF8.GetBytes(compilationRootModuleInitialText).ToImmutableList());
-
-                var appFilesWithInputCodingFunctions =
-                    ElmApp.WithSupportForCodingElmType(
-                        migrateElmAppFilesBeforeAddingCodingSupport,
-                        inputTypeCanonicalName,
-                        MigrationElmAppCompilationRootModuleName,
-                        compileCodingFunctionsLogLines.Add,
-                        out var inputTypeFunctionNames);
-
-                var appFilesWithCodingFunctions =
-                    ElmApp.WithSupportForCodingElmType(
-                        appFilesWithInputCodingFunctions,
-                        returnTypeCanonicalName,
-                        MigrationElmAppCompilationRootModuleName,
-                        compileCodingFunctionsLogLines.Add,
-                        out var returnTypeFunctionNames);
-
-                var rootModuleTextWithSupportAdded =
-                    Encoding.UTF8.GetString(appFilesWithCodingFunctions[pathToCompilationRootModuleFile].ToArray());
-
-                var rootModuleText =
-                    new[]
-                    {
-                        "jsonDecodeBackendState = " + inputTypeFunctionNames.decodeFunctionName,
-                        "jsonEncodeBackendState = " + returnTypeFunctionNames.encodeFunctionName
-                    }
-                    .Aggregate(rootModuleTextWithSupportAdded, (intermediateModuleText, functionToAdd) =>
-                        CompileElm.WithFunctionAdded(intermediateModuleText, functionToAdd));
-
-                var migrateElmAppFiles = appFilesWithCodingFunctions.SetItem(
-                    pathToCompilationRootModuleFile,
-                    Encoding.UTF8.GetBytes(rootModuleText).ToImmutableList());
+                var migrateElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                    sourceFiles: appConfigFiles,
+                    interfaceConfig: ElmAppInterfaceConfig.Default);
 
                 var javascriptFromElmMake = ElmFullstack.ProcessFromElm019Code.CompileElmToJavascript(
                     migrateElmAppFiles,
@@ -783,7 +667,7 @@ main =
             {
                 return new Result<string, Func<string, Result<string, string>>>
                 {
-                    Err = "Failed with exception:\n" + e.ToString() + "\ncompileCodingFunctionsLogLines:\n" + String.Join("\n", compileCodingFunctionsLogLines)
+                    Err = "Failed with exception:\n" + e.ToString()
                 };
             }
         }
