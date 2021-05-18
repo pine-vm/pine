@@ -47,7 +47,7 @@ namespace elm_fullstack
 
             app.Command("run-server", runServerCmd =>
             {
-                runServerCmd.Description = "Run a web server supporting administration of an Elm-fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
+                runServerCmd.Description = "Run a web server supporting administration of an Elm Fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
                 runServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var adminUrlsDefault = "http://*:4000";
@@ -231,7 +231,7 @@ namespace elm_fullstack
 
             app.Command("deploy-app", deployAppCmd =>
             {
-                deployAppCmd.Description = "Deploy an app to an Elm-fullstack process. By default, migrates from the previous app state using the `migrate` function in the Elm app code.";
+                deployAppCmd.Description = "Deploy an app to an Elm Fullstack process. By default, migrates from the previous app state using the `migrate` function in the Elm app code.";
                 deployAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);

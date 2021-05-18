@@ -1,24 +1,24 @@
-# How to Configure and Deploy an Elm-Fullstack App
+# How to Configure and Deploy an Elm Fullstack App
 
 In this guide, I use the `elm-fs` command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-fullstack/elm-fullstack/releases
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-03-15/elm-fullstack-bin-50feeb958ba1bbbe8b30a727e9801b3a52c4f037-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-03-15/elm-fullstack-bin-50feeb958ba1bbbe8b30a727e9801b3a52c4f037-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-18/elm-fullstack-bin-da02778622717516ba999c8a770d0f523cf41fe1-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-18/elm-fullstack-bin-da02778622717516ba999c8a770d0f523cf41fe1-linux-x64.zip
 
 To register the elm-fs executable on your systems PATH environment variable, run the `elm-fs  install` command.
 
 ## Running a Server and Deploying an App
 
-To deploy an Elm-fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm-fullstack tooling can deploy these together.
+To deploy an Elm Fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/bca07197d8753ad6584de71cf25d58ce6991fe77/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/bca07197d8753ad6584de71cf25d58ce6991fe77/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -26,21 +26,21 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition 0a748dfed56d1f88c51e604d35dd8fdde95bc4accfb9557e11359c60316f9413 from 'https://github.com/elm-fullstack/elm-fullstack/tree/bca07197d8753ad6584de71cf25d58ce6991fe77/implement/example-apps/docker-image-default-app'.
+Loaded source composition bbe8d770f36138b6085aa6cc32a506e97264ac1b8d4db123893e723e4ca178e1 from 'https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to restore the process state.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
-      Restored the process state in 4 seconds.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
+      Restored the process state in 6 seconds.
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Completed building the process volatile representation.
-info: Kalmit.PersistentProcess.WebHost.StartupPublicApp[0]
+info: ElmFullstack.WebHost.StartupPublicApp[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
@@ -49,7 +49,7 @@ When this server has completed starting, we can see the deployed app at http://l
 
 ## App Code Structure Conventions
 
-This section covers the conventions for structuring the app code so that we can deploy it to an Elm-fullstack process. The [example apps](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
+This section covers the conventions for structuring the app code so that we can deploy it to an Elm Fullstack process. The [example apps](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
 
 ### `Backend.Main` Elm Module
 
@@ -66,7 +66,7 @@ processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.App
 
 Analogous to the update function in a front-end Elm app, this function returns the new state of the back-end app as the first element in the tuple.
 
-### `ElmFullstackCompilerInterface.ElmMake` Elm Module
+### `CompilationInterface.ElmMake` Elm Module
 
 The `ElmMake` module provides an interface to run the `elm make` command and use the resulting file value in our Elm app.
 For each name in this module, the full-stack compiler replaces the value with the output from `elm  make`.
@@ -75,19 +75,19 @@ Using the name in the Elm module, we specify the source file name and optional f
 Here is an example that depends on the source file located at path `src/FrontendWeb/Main.elm`:
 
 ```Elm
-module ElmFullstackCompilerInterface.ElmMake exposing (..)
+module CompilationInterface.ElmMake exposing (..)
 
 
 elm_make____src_FrontendWeb_Main_elm : Bytes.Bytes
 elm_make____src_FrontendWeb_Main_elm =
-    "The Elm-fullstack compiler replaces this value."
+    "The compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 
 
 elm_make__debug____src_FrontendWeb_Main_elm : Bytes.Bytes
 elm_make__debug____src_FrontendWeb_Main_elm =
-    "The Elm-fullstack compiler replaces this value."
+    "The compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 ```
@@ -97,10 +97,10 @@ We can also get the value encoded as a base64 string instead of `Bytes.Bytes`, b
 ```Elm
 elm_make__base64____src_FrontendWeb_Main_elm : String
 elm_make__base64____src_FrontendWeb_Main_elm =
-    "The Elm-fullstack compiler replaces this value."
+    "The compiler replaces this value."
 ```
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L50) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L50) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -111,14 +111,14 @@ Backend apps often use the output from `elm make` send the frontend to web brows
                 |> Maybe.withDefault False
         then
             { statusCode = 200
-            , bodyAsBase64 = Just ElmFullstackCompilerInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
+            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
             , headersToAdd = []
             }
 
         else
 ```
 
-### `ElmFullstackCompilerInterface.GenerateJsonCoders` Elm Module
+### `CompilationInterface.GenerateJsonCoders` Elm Module
 
 This module provides automatically generated JSON encoders and decoders for Elm types.
 
@@ -129,7 +129,7 @@ In this module, we can freely choose the names for functions, as we only need ty
 ```Elm
 jsonEncodeMessageToClient : FrontendBackendInterface.MessageToClient -> Json.Encode.Value
 jsonEncodeMessageToClient =
-    always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
+    always (Json.Encode.string "The compiler replaces this value.")
 ```
 
 To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
@@ -137,32 +137,32 @@ To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
 ```Elm
 jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
 jsonDecodeMessageToClient =
-    Json.Decode.fail "The Elm-fullstack compiler replaces this function."
+    Json.Decode.fail "The compiler replaces this value."
 ```
 
-### `ElmFullstackCompilerInterface.SourceFiles` Elm Module
+### `CompilationInterface.SourceFiles` Elm Module
 
 This module provides access to the app source code files.
 
 By adding a name to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/rich-chat-room/src/ElmFullstackCompilerInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/rich-chat-room/src/CompilationInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
 ```Elm
 file____readme_md : Bytes.Bytes
 file____readme_md =
-    "The Elm-fullstack compiler replaces this value."
+    "The compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 ```
 
 To map the source file path to a name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
 
-| file path                        | Name in the Elm module                   |
-| -------------------------------- | --------------------------               |
-| `readme.md`                      | `file____readme_md`                      |
-| `static/readme.md`               | `file____static_readme_md`               |
-| `static/command-from-player.mp3` | `file____static_command_from_player_mp3` |
+| file path                         | Name in the Elm module                    |
+| --------------------------------  | --------------------------                |
+| `readme.md`                       | `file____readme_md`                       |
+| `static/readme.md`                | `file____static_readme_md`                |
+| `static/chat.message-added.0.mp3` | `file____static_chat_message_added_0_mp3` |
 
 The compilation will fail if this module contains a name that matches more than one or none of the source files.
 
@@ -185,7 +185,7 @@ migrate backendState =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/323c78378c93beeef08d176bd7a1011efa20a189/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/MigrateBackendState.elm
 
 ### `elm-fullstack.json`
 
@@ -199,7 +199,7 @@ At the beginning of this guide, we ran a server and deployed an app in a single 
 When running a server, we want to configure two aspects: The location where to persist the process state, and the password to access the admin interface.
 On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the file system.
 
-Here is a complete command to run a server that maintains the persistence of the Elm-fullstack process:
+Here is a complete command to run a server that maintains the persistence of the Elm Fullstack process:
 
 ```cmd
 elm-fs  run-server  --process-store-directory-path=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
@@ -209,13 +209,13 @@ When running this command, you will get an output like this:
 
 ```text
 Starting the web server with the admin interface...
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to restore the process state.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Found no composition record, default to initial state.
-info: Kalmit.PersistentProcess.WebHost.StartupAdminInterface[0]
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Completed building the process volatile representation.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
@@ -233,7 +233,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to Elm-fullstack version 2021-03-15.
+Welcome to the Elm Fullstack admin interface version 2021-05-18.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -246,7 +246,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/c66a7ec746fa6eb4b769f2914c53f3c7b3fb4a33/implement/example-apps/docker-image-default-app  --init-elm-app-state
+elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app  --init-elm-app-state
 ```
 
 The `--init-elm-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.

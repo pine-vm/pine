@@ -14,10 +14,10 @@ The framework supports:
 Use this command to run a server and deploy an example app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/557b615e028682f1b45121fe73bf7b4455a6f13b/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app
 ```
 
-For a guide on configuration options, structuring your Elm app code, deploying, migrating, etc., see [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+For a guide on configuration options, structuring your Elm app code, deploying, migrating, etc., see [How to Configure and Deploy an Elm Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
 
 ## Releases / Artifacts
 
@@ -33,7 +33,7 @@ If you prefer deploying using docker, use the `elmfullstack/elm-fullstack` image
 docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test" elmfullstack/elm-fullstack
 ```
 
-To learn more about these artifacts' interfaces, see [How to Configure and Deploy an Elm-Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+To learn more about these artifacts' interfaces, see [How to Configure and Deploy an Elm Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
 
 ## Building from Source
 
