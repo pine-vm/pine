@@ -472,7 +472,7 @@ mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleText ) =
                                     functionName =
                                         Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).name
                                 in
-                                (case parseJsonCodingFunctionType moduleText (Elm.Syntax.Node.value functionSignature) of
+                                (case parseJsonCodingFunctionType (Elm.Syntax.Node.value functionSignature) of
                                     Err error ->
                                         Err ("Failed parsing json coding function type: " ++ error)
 
@@ -703,6 +703,15 @@ buildJsonCodingFunctionsForTypeAnnotation typeAnnotation =
 
 mapSourceFilesModuleText : ( AppFiles, String ) -> Result String ( AppFiles, String )
 mapSourceFilesModuleText ( sourceFiles, moduleText ) =
+    let
+        mapErrorStringForFunctionDeclaration functionDeclaration =
+            let
+                functionName =
+                    Elm.Syntax.Node.value
+                        (Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration).declaration).name
+            in
+            (++) ("Failed to replace function '" ++ functionName ++ "': ")
+    in
     case parseElmModuleText moduleText of
         Err error ->
             -- TODO: Consolidate branch to parse with `mapJsonCodersModuleText`
@@ -712,34 +721,61 @@ mapSourceFilesModuleText ( sourceFiles, moduleText ) =
             parsedModule.declarations
                 -- TODO: Also share the 'map all functions' part with `mapJsonCodersModuleText`
                 -- Remember: The module to interface with git services will probably use similar functionality.
-                |> List.filterMap
-                    (\declaration ->
-                        case Elm.Syntax.Node.value declaration of
-                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                Just
-                                    (Elm.Syntax.Node.value
-                                        (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                                    )
-
-                            _ ->
-                                Nothing
-                    )
-                |> listFoldlToAggregateResult
-                    (\functionName previousAggregate ->
-                        replaceFunctionInSourceFilesModuleText
+                |> List.filterMap declarationWithRangeAsFunctionDeclaration
+                |> List.map
+                    (\functionDeclaration ->
+                        prepareReplaceFunctionInSourceFilesModuleText
                             sourceFiles
-                            { functionName = functionName }
-                            previousAggregate
-                            |> Result.mapError
-                                (\replaceFunctionError ->
-                                    "Failed to replace function '"
-                                        ++ functionName
-                                        ++ "': "
-                                        ++ replaceFunctionError
-                                )
+                            functionDeclaration
+                            |> Result.mapError (mapErrorStringForFunctionDeclaration functionDeclaration)
+                            |> Result.map (Tuple.pair functionDeclaration)
                     )
-                    (addImportsInElmModuleText [ [ "Base64" ] ] moduleText)
-                |> Result.map (Tuple.pair sourceFiles)
+                |> Result.Extra.combine
+                |> Result.andThen
+                    (\preparedFunctions ->
+                        let
+                            interfaceModuleName =
+                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
+
+                            generatedModuleTextWithoutModuleDeclaration =
+                                preparedFunctions
+                                    |> List.map (Tuple.second >> .valueFunctionText)
+                                    |> String.join "\n\n"
+
+                            generatedModuleHash =
+                                generatedModuleTextWithoutModuleDeclaration
+                                    |> SHA256.fromString
+                                    |> SHA256.toHex
+
+                            generatedModuleName =
+                                (interfaceModuleName |> String.join ".")
+                                    ++ ".Generated_"
+                                    ++ String.left 8 generatedModuleHash
+
+                            generatedModulePath =
+                                filePathFromElmModuleName generatedModuleName
+
+                            generatedModuleText =
+                                [ "module " ++ generatedModuleName ++ " exposing (..)"
+                                , generatedModuleTextWithoutModuleDeclaration
+                                ]
+                                    |> String.join "\n\n"
+
+                            appFiles =
+                                sourceFiles
+                                    |> updateFileContentAtPath
+                                        (always (fileContentFromString generatedModuleText))
+                                        generatedModulePath
+                        in
+                        preparedFunctions
+                            |> listFoldlToAggregateResult
+                                (\( functionDeclaration, replaceFunction ) previousAggregate ->
+                                    replaceFunction.updateInterfaceModuleText { generatedModuleName = generatedModuleName } previousAggregate
+                                        |> Result.mapError (mapErrorStringForFunctionDeclaration functionDeclaration)
+                                )
+                                (addImportsInElmModuleText [ [ "Base64" ], String.split "." generatedModuleName ] moduleText)
+                            |> Result.map (Tuple.pair appFiles)
+                    )
 
 
 mapElmMakeModuleText :
@@ -755,25 +791,8 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleText ) =
         Ok parsedModule ->
             parsedModule.declarations
                 -- TODO: Also share the 'map all functions' part with `mapJsonCodersModuleText`
-                |> List.filterMap
-                    (\declaration ->
-                        case Elm.Syntax.Node.value declaration of
-                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                Just functionDeclaration
-
-                            _ ->
-                                Nothing
-                    )
-                |> List.map
-                    (\functionDeclaration ->
-                        prepareReplaceFunctionInElmMakeModuleText
-                            dependencies
-                            sourceFiles
-                            { functionName =
-                                Elm.Syntax.Node.value
-                                    (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                            }
-                    )
+                |> List.filterMap declarationWithRangeAsFunctionDeclaration
+                |> List.map (prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles)
                 |> resultCombineConcatenatingErrors
                 |> Result.andThen
                     (\functionsToReplaceFunction ->
@@ -2019,10 +2038,9 @@ elmModulesDictFromFilesTexts =
 
 
 parseJsonCodingFunctionType :
-    String
-    -> Elm.Syntax.Signature.Signature
-    -> Result String { typeCanonicalName : String, isDecoder : Bool, typeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation }
-parseJsonCodingFunctionType moduleText signature =
+    Elm.Syntax.Signature.Signature
+    -> Result String { isDecoder : Bool, typeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation }
+parseJsonCodingFunctionType signature =
     let
         errorValue detail =
             Err
@@ -2044,12 +2062,7 @@ parseJsonCodingFunctionType moduleText signature =
                 case typeArguments of
                     [ singleTypeArgument ] ->
                         Ok
-                            { typeCanonicalName =
-                                getTextLinesFromRange
-                                    (Elm.Syntax.Node.range singleTypeArgument)
-                                    moduleText
-                                    |> String.join " "
-                            , isDecoder = True
+                            { isDecoder = True
                             , typeAnnotation = Elm.Syntax.Node.value singleTypeArgument
                             }
 
@@ -2064,12 +2077,7 @@ parseJsonCodingFunctionType moduleText signature =
 
                     else
                         Ok
-                            { typeCanonicalName =
-                                getTextLinesFromRange
-                                    (Elm.Syntax.Node.range leftType)
-                                    moduleText
-                                    |> String.join " "
-                            , isDecoder = False
+                            { isDecoder = False
                             , typeAnnotation = Elm.Syntax.Node.value leftType
                             }
 
@@ -2080,45 +2088,67 @@ parseJsonCodingFunctionType moduleText signature =
             errorValue ""
 
 
-replaceFunctionInSourceFilesModuleText : AppFiles -> { functionName : String } -> String -> Result String String
-replaceFunctionInSourceFilesModuleText sourceFiles { functionName } moduleText =
-    moduleText
-        |> getDeclarationFromFunctionNameAndElmModuleText { functionName = functionName }
-        |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
-        |> Result.andThen
-            (\functionDeclaration ->
-                case parseSourceFileFunctionName functionName of
-                    Err error ->
-                        Err ("Failed to parse function name: " ++ error)
+prepareReplaceFunctionInSourceFilesModuleText :
+    AppFiles
+    -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
+    -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result String String }
+prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclaration =
+    let
+        functionName =
+            Elm.Syntax.Node.value
+                (Elm.Syntax.Node.value (Elm.Syntax.Node.value originalFunctionDeclaration).declaration).name
+    in
+    case parseSourceFileFunctionName functionName of
+        Err error ->
+            Err ("Failed to parse function name: " ++ error)
 
-                    Ok { filePathRepresentation, base64 } ->
-                        case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
-                            Err error ->
-                                Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
+        Ok { filePathRepresentation, base64 } ->
+            case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
+                Err error ->
+                    Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
-                            Ok ( _, fileContent ) ->
+                Ok ( _, fileContent ) ->
+                    let
+                        valueFunctionName =
+                            "bytes_as_base64_" ++ SHA256.toHex (SHA256.fromBytes fileContent)
+
+                        valueFunctionText =
+                            valueFunctionName
+                                ++ " =\n"
+                                ++ indentElmCodeLines 1 (buildBytesElmExpression { encodeAsBase64 = True } fileContent)
+                    in
+                    Ok
+                        { valueFunctionText = valueFunctionText
+                        , updateInterfaceModuleText =
+                            \{ generatedModuleName } moduleText ->
                                 let
-                                    functionLines =
-                                        moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
-
                                     fileExpression =
-                                        buildBytesElmExpression { encodeAsBase64 = base64 } fileContent
+                                        buildBytesElmExpressionFromBase64Expression
+                                            { encodeAsBase64 = base64 }
+                                            (generatedModuleName ++ "." ++ valueFunctionName)
 
-                                    newFunctionLines =
-                                        List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
+                                    buildNewFunctionLines previousFunctionLines =
+                                        List.take 2 previousFunctionLines ++ [ indentElmCodeLines 1 fileExpression ]
                                 in
                                 addOrUpdateFunctionInElmModuleText
-                                    { functionName = functionName, mapFunctionLines = always newFunctionLines }
+                                    { functionName = functionName
+                                    , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
+                                    }
                                     moduleText
-            )
+                        }
 
 
 prepareReplaceFunctionInElmMakeModuleText :
     List ( DependencyKey, Bytes.Bytes )
     -> AppFiles
-    -> { functionName : String }
+    -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
     -> Result (List CompilationError) { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result (List CompilationError) String }
-prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionName } =
+prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunctionDeclaration =
+    let
+        functionName =
+            Elm.Syntax.Node.value
+                (Elm.Syntax.Node.value (Elm.Syntax.Node.value originalFunctionDeclaration).declaration).name
+    in
     case parseElmMakeModuleFunctionName functionName of
         Err error ->
             Err [ OtherCompilationError ("Failed to parse function name: " ++ error) ]
@@ -2166,29 +2196,19 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles { functionNam
                                 { valueFunctionText = valueFunctionText
                                 , updateInterfaceModuleText =
                                     \{ generatedModuleName } moduleText ->
-                                        moduleText
-                                            |> getDeclarationFromFunctionNameAndElmModuleText { functionName = functionName }
-                                            |> Result.andThen (Maybe.map Ok >> Maybe.withDefault (Err ("Did not find the function '" ++ functionName ++ "'")))
+                                        let
+                                            fileExpression =
+                                                buildBytesElmExpressionFromBase64Expression
+                                                    { encodeAsBase64 = base64 }
+                                                    (generatedModuleName ++ "." ++ valueFunctionName)
+
+                                            buildNewFunctionLines previousFunctionLines =
+                                                List.take 2 previousFunctionLines ++ [ indentElmCodeLines 1 fileExpression ]
+                                        in
+                                        addOrUpdateFunctionInElmModuleText
+                                            { functionName = functionName, mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines }
+                                            moduleText
                                             |> Result.mapError (OtherCompilationError >> List.singleton)
-                                            |> Result.andThen
-                                                (\functionDeclaration ->
-                                                    let
-                                                        functionLines =
-                                                            moduleText |> getTextLinesFromRange (Elm.Syntax.Node.range functionDeclaration)
-
-                                                        fileExpression =
-                                                            buildBytesElmExpressionFromBase64Expression
-                                                                { encodeAsBase64 = base64 }
-                                                                (generatedModuleName ++ "." ++ valueFunctionName)
-
-                                                        newFunctionLines =
-                                                            List.take 2 functionLines ++ [ indentElmCodeLines 1 fileExpression ]
-                                                    in
-                                                    addOrUpdateFunctionInElmModuleText
-                                                        { functionName = functionName, mapFunctionLines = always newFunctionLines }
-                                                        moduleText
-                                                        |> Result.mapError (OtherCompilationError >> List.singleton)
-                                                )
                                 }
 
 
@@ -2227,31 +2247,14 @@ includeFilePathInElmMakeRequest path =
                 || String.endsWith ".elm" fileName
 
 
-getDeclarationFromFunctionNameAndElmModuleText : { functionName : String } -> String -> Result String (Maybe (Elm.Syntax.Node.Node Elm.Syntax.Expression.Function))
-getDeclarationFromFunctionNameAndElmModuleText { functionName } =
-    parseAndMapElmModuleText
-        (\parsedModule ->
-            parsedModule.declarations
-                |> List.filterMap
-                    (\declaration ->
-                        case Elm.Syntax.Node.value declaration of
-                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                Just (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration) functionDeclaration)
+declarationWithRangeAsFunctionDeclaration : Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.Expression.Function)
+declarationWithRangeAsFunctionDeclaration declaration =
+    case Elm.Syntax.Node.value declaration of
+        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+            Just (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration) functionDeclaration)
 
-                            _ ->
-                                Nothing
-                    )
-                |> List.filter
-                    (Elm.Syntax.Node.value
-                        >> .declaration
-                        >> Elm.Syntax.Node.value
-                        >> .name
-                        >> Elm.Syntax.Node.value
-                        >> (==) functionName
-                    )
-                |> List.head
-                |> Ok
-        )
+        _ ->
+            Nothing
 
 
 getTextLinesFromRange : Elm.Syntax.Range.Range -> String -> List String
