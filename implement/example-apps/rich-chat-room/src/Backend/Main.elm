@@ -10,11 +10,11 @@ import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
+import CompilationInterface.ElmMake
+import CompilationInterface.GenerateJsonCoders as GenerateJsonCoders
+import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
-import ElmFullstackCompilerInterface.ElmMake
-import ElmFullstackCompilerInterface.GenerateJsonCoders as GenerateJsonCoders
-import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
@@ -176,10 +176,10 @@ processEventHttpRequest httpRequestEvent stateBefore =
                             , bodyAsBase64 =
                                 Just
                                     (if enableInspector then
-                                        ElmFullstackCompilerInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
+                                        CompilationInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
 
                                      else
-                                        ElmFullstackCompilerInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
+                                        CompilationInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
                                     )
                             , headersToAdd = []
                             }
@@ -291,7 +291,7 @@ processEventHttpRequest httpRequestEvent stateBefore =
 
 availableStaticContent : Dict.Dict String Bytes.Bytes
 availableStaticContent =
-    [ ElmFullstackCompilerInterface.SourceFiles.file____static_chat_message_added_0_mp3 ]
+    [ CompilationInterface.SourceFiles.file____static_chat_message_added_0_mp3 ]
         |> List.map (\content -> ( content |> FrontendBackendInterface.staticContentFileName, content ))
         |> Dict.fromList
 

@@ -1,4 +1,4 @@
-module ElmFullstackCompilerInterface.GenerateJsonCoders exposing
+module CompilationInterface.GenerateJsonCoders exposing
     ( decodeMixedRecord
     , encodeMixedRecord
     , testsValueToInterface
@@ -11,14 +11,14 @@ import Structures
 
 encodeMixedRecord : Structures.MixedRecord -> Json.Encode.Value
 encodeMixedRecord =
-    always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
+    always (Json.Encode.string "The compiler replaces this function.")
 
 
 decodeMixedRecord : Json.Decode.Decoder Structures.MixedRecord
 decodeMixedRecord =
-    Json.Decode.fail "The Elm-fullstack compiler replaces this function."
+    Json.Decode.fail "The compiler replaces this function."
 
 
 testsValueToInterface : List { testName : String, expected : String, derived : String } -> Json.Encode.Value
 testsValueToInterface =
-    always (Json.Encode.string "The Elm-fullstack compiler replaces this function.")
+    always (Json.Encode.string "The compiler replaces this function.")

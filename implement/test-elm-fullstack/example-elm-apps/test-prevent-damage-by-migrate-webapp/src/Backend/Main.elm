@@ -10,7 +10,7 @@ import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
-import ElmFullstackCompilerInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonCoders
 import Json.Decode
 import Json.Encode
 
@@ -33,7 +33,7 @@ processEvent hostEvent stateBefore =
                             ( stateBefore
                             , 200
                             , stateBefore
-                                |> ElmFullstackCompilerInterface.GenerateJsonCoders.encodeBackendState
+                                |> CompilationInterface.GenerateJsonCoders.encodeBackendState
                                 |> Json.Encode.encode 0
                             )
 
@@ -42,7 +42,7 @@ processEvent hostEvent stateBefore =
                                 httpRequestEvent.request.bodyAsBase64
                                     |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                                     |> Maybe.withDefault "Missing HTTP body"
-                                    |> Json.Decode.decodeString ElmFullstackCompilerInterface.GenerateJsonCoders.decodeBackendState
+                                    |> Json.Decode.decodeString CompilationInterface.GenerateJsonCoders.decodeBackendState
                             of
                                 Err decodeErr ->
                                     ( stateBefore

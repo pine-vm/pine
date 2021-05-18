@@ -4,7 +4,7 @@ import Base64
 import Bytes
 import Bytes.Encode
 import Common
-import ElmFullstackCompilerInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonCoders
 import Flate
 import Json.Decode
 import Json.Encode
@@ -195,7 +195,7 @@ jsonEncodeProjectStateDescription projectStateDescription =
         LiteralProjectState literalProjectState ->
             Json.Encode.object
                 [ ( "version_2020_12"
-                  , ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12 literalProjectState
+                  , CompilationInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12 literalProjectState
                   )
                 ]
 
@@ -205,7 +205,7 @@ jsonEncodeProjectStateDescription projectStateDescription =
         DiffProjectState diffProjectState ->
             Json.Encode.object
                 [ ( "version_2021_01"
-                  , ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeProjectState_2021_01 diffProjectState
+                  , CompilationInterface.GenerateJsonCoders.jsonEncodeProjectState_2021_01 diffProjectState
                   )
                 ]
 
@@ -214,10 +214,10 @@ jsonDecodeProjectStateDescription : Json.Decode.Decoder ProjectStateDescriptionI
 jsonDecodeProjectStateDescription =
     Json.Decode.oneOf
         [ Json.Decode.field "version_2020_12"
-            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
+            CompilationInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
             |> Json.Decode.map LiteralProjectState
         , Json.Decode.field "version_2021_01"
-            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeProjectState_2021_01
+            CompilationInterface.GenerateJsonCoders.jsonDecodeProjectState_2021_01
             |> Json.Decode.map DiffProjectState
         ]
 

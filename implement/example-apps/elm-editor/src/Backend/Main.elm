@@ -10,9 +10,9 @@ import Backend.VolatileHost as VolatileHost
 import Base64
 import Bytes.Encode
 import Common
+import CompilationInterface.ElmMake
+import CompilationInterface.SourceFiles
 import Dict
-import ElmFullstackCompilerInterface.ElmMake
-import ElmFullstackCompilerInterface.SourceFiles
 import Flate
 import MonacoHtml
 import Set
@@ -146,10 +146,10 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                             [ httpResponseOkWithBodyAsBase64
                                 (Just
                                     (if debug then
-                                        ElmFullstackCompilerInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm
+                                        CompilationInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm
 
                                      else
-                                        ElmFullstackCompilerInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
+                                        CompilationInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
                                     )
                                 )
                                 staticContentHttpHeaders
@@ -168,7 +168,7 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
                             [ httpResponseOkWithBodyAsBase64
-                                (ElmFullstackCompilerInterface.SourceFiles.file____src_monarch_js |> Base64.fromBytes)
+                                (CompilationInterface.SourceFiles.file____src_monarch_js |> Base64.fromBytes)
                                 staticContentHttpHeaders
                             ]
                     )
@@ -435,7 +435,7 @@ frontendHtmlDocument { debug } =
   <meta charset="UTF-8">
   <title>Elm Editor</title>
   <link rel="icon" href="data:image/svg+xml;base64,"""
-        ++ (ElmFullstackCompilerInterface.SourceFiles.file____static_favicon_svg |> Base64.fromBytes |> Maybe.withDefault "Failed to encode as base64")
+        ++ (CompilationInterface.SourceFiles.file____static_favicon_svg |> Base64.fromBytes |> Maybe.withDefault "Failed to encode as base64")
         ++ """">
   <script type="text/javascript" src="""
         ++ elmMadeScriptFileName

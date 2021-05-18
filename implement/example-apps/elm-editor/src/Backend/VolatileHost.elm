@@ -4,7 +4,7 @@ module Backend.VolatileHost exposing
     , volatileHostScript
     )
 
-import ElmFullstackCompilerInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonCoders
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
@@ -20,12 +20,12 @@ type alias ResponseStructure =
 
 jsonDecodeResponseStructure : Json.Decode.Decoder ResponseStructure
 jsonDecodeResponseStructure =
-    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeResponseStructure
+    CompilationInterface.GenerateJsonCoders.jsonDecodeResponseStructure
 
 
 jsonEncodeRequestStructure : RequestStructure -> Json.Encode.Value
 jsonEncodeRequestStructure =
-    ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestStructure
+    CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure
 
 
 requestToVolatileHost : RequestStructure -> String

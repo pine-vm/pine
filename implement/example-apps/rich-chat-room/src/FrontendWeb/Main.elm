@@ -5,10 +5,10 @@ import Browser.Dom
 import Browser.Navigation as Navigation
 import Bytes
 import Bytes.Decode
+import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
-import ElmFullstackCompilerInterface.GenerateJsonCoders
-import ElmFullstackCompilerInterface.SourceFiles
 import FrontendBackendInterface
 import FrontendWeb.PlayAudio as PlayAudio
 import FrontendWeb.Visuals as Visuals exposing (HtmlStyle, htmlAttributesStyles)
@@ -105,12 +105,12 @@ requestToBackendCmd : FrontendBackendInterface.RequestFromUser -> Cmd Event
 requestToBackendCmd request =
     let
         jsonDecoder =
-            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageToClient
+            CompilationInterface.GenerateJsonCoders.jsonDecodeMessageToClient
                 |> Json.Decode.map (\messageFromBackend -> { originatingRequest = request, messageFromBackend = messageFromBackend })
     in
     Http.post
         { url = Url.Builder.relative (FrontendBackendInterface.ApiRoute |> FrontendBackendInterface.urlPathFromRoute) []
-        , body = Http.jsonBody (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestFromUser)
+        , body = Http.jsonBody (request |> CompilationInterface.GenerateJsonCoders.jsonEncodeRequestFromUser)
         , expect = Http.expectJson RequestToBackendResult jsonDecoder
         }
 
@@ -274,7 +274,7 @@ updateForSoundEffects { stateBeforeEvent } stateBefore =
                     |> PlayAudio.startPlayback
                         { sourceUrl =
                             Url.Builder.relative
-                                (ElmFullstackCompilerInterface.SourceFiles.file____static_chat_message_added_0_mp3
+                                (CompilationInterface.SourceFiles.file____static_chat_message_added_0_mp3
                                     |> FrontendBackendInterface.staticContentFileName
                                     |> FrontendBackendInterface.StaticContentRoute
                                     |> FrontendBackendInterface.urlPathFromRoute
@@ -617,7 +617,7 @@ view state =
 
 appDescriptionHtml : Html.Html a
 appDescriptionHtml =
-    ElmFullstackCompilerInterface.SourceFiles.file____readme_md
+    CompilationInterface.SourceFiles.file____readme_md
         |> decodeBytesToString
         |> Maybe.withDefault "Failed to decode file content to string"
         |> Markdown.Parser.parse
@@ -841,7 +841,7 @@ viewDialogEventOrigin viewConfiguration state origin =
             [ viewPlayerLink viewConfiguration { userId = fromOriginUser.userId } ] |> Html.span []
 
         Conversation.FromSystem ->
-            [ "\u{1F916} System" |> Html.text ] |> Html.span []
+            [ "🤖 System" |> Html.text ] |> Html.span []
 
 
 viewPlayerLink : ViewConfiguration -> { userId : Int } -> Html.Html event

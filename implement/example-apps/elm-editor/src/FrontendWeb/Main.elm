@@ -8,6 +8,8 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import Common
+import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.SourceFiles
 import Element
 import Element.Background
 import Element.Border
@@ -15,8 +17,6 @@ import Element.Events
 import Element.Font
 import Element.Input
 import Element.Region
-import ElmFullstackCompilerInterface.GenerateJsonCoders
-import ElmFullstackCompilerInterface.SourceFiles
 import ElmMakeExecutableFile
 import FrontendBackendInterface
 import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
@@ -578,7 +578,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
         MonacoEditorEvent monacoEditorEvent ->
             case
                 monacoEditorEvent
-                    |> Json.Decode.decodeValue ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
+                    |> Json.Decode.decodeValue CompilationInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
             of
                 Err decodeError ->
                     ( { stateBefore | decodeMessageFromMonacoEditorError = Just decodeError }, Cmd.none )
@@ -1010,14 +1010,14 @@ requestToApiCmd :
 requestToApiCmd request jsonDecoderSpecialization eventConstructor =
     let
         jsonDecoder =
-            ElmFullstackCompilerInterface.GenerateJsonCoders.jsonDecodeResponseStructure
+            CompilationInterface.GenerateJsonCoders.jsonDecodeResponseStructure
                 |> Json.Decode.andThen jsonDecoderSpecialization
     in
     Http.post
         { url = Url.Builder.absolute [ "api" ] []
         , body =
             Http.jsonBody
-                (request |> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
+                (request |> CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
         , expect = Http.expectJson (\response -> eventConstructor response) jsonDecoder
         }
 
@@ -2308,21 +2308,21 @@ titlebarMenuEntryLabel menuEntry =
 setTextInMonacoEditorCmd : String -> Cmd WorkspaceEventStructure
 setTextInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetValue
-        >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd WorkspaceEventStructure
 revealPositionInCenterInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.RevealPositionInCenter
-        >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 setModelMarkersInMonacoEditorCmd : List FrontendWeb.MonacoEditor.EditorMarker -> Cmd WorkspaceEventStructure
 setModelMarkersInMonacoEditorCmd =
     FrontendWeb.MonacoEditor.SetModelMarkers
-        >> ElmFullstackCompilerInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
@@ -2344,12 +2344,12 @@ defaultProject =
     { fileTree =
         ProjectState.TreeNode
             [ ( "elm.json"
-              , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_elm_json
+              , ProjectState.BlobNode CompilationInterface.SourceFiles.file____default_app_elm_json
               )
             , ( "src"
               , ProjectState.TreeNode
                     [ ( "Main.elm"
-                      , ProjectState.BlobNode ElmFullstackCompilerInterface.SourceFiles.file____default_app_src_Main_elm
+                      , ProjectState.BlobNode CompilationInterface.SourceFiles.file____default_app_src_Main_elm
                       )
                     ]
               )

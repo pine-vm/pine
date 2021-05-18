@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import ElmFullstackCompilerInterface.GenerateJsonCoders as GenerateJsonCoders
+import CompilationInterface.GenerateJsonCoders as GenerateJsonCoders
 import Json.Decode
 import Json.Encode
 import OpaqueCustomType

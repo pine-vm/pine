@@ -6,7 +6,7 @@ module Backend.Main exposing
 
 import Backend.InterfaceToHost as InterfaceToHost
 import Base64
-import ElmFullstackCompilerInterface.SourceFiles
+import CompilationInterface.SourceFiles
 
 
 type alias State =
@@ -27,7 +27,7 @@ processEvent hostEvent stateBefore =
 
                     else
                         { statusCode = 200
-                        , bodyAsBase64 = ElmFullstackCompilerInterface.SourceFiles.file____static_content_demo_file_mp3 |> Base64.fromBytes
+                        , bodyAsBase64 = CompilationInterface.SourceFiles.file____static_content_demo_file_mp3 |> Base64.fromBytes
                         , headersToAdd =
                             [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                             ]
