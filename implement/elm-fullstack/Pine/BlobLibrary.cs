@@ -68,6 +68,9 @@ namespace Pine
 
             byte[] tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
             {
+                if (httpResponse.StatusCode == HttpStatusCode.NotFound)
+                    return null;
+
                 if (!httpResponse.IsSuccessStatusCode)
                 {
                     throw new Exception(

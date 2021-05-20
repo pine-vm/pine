@@ -1229,6 +1229,23 @@ namespace test_elm_fullstack
             }
         }
 
+        [TestMethod]
+        public void Volatile_host_from_local_blob()
+        {
+            var appSourceFiles = TestSetup.GetElmAppFromExampleName("volatile-host-from-local-blob");
+
+            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
+            using var server = testSetup.StartWebHost();
+            using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
+            var httpResponse = publicAppClient.GetAsync("").Result;
+
+            var responseContent =
+                httpResponse.Content.ReadAsStringAsync().Result;
+
+            Assert.AreEqual("value from local assembly", responseContent);
+        }
+
         class FileStoreFromDelegates : IFileStore
         {
             readonly Action<IImmutableList<string>, byte[]> setFileContent;

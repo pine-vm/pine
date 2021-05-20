@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Linq;
 using FluffySpoon.AspNet.LetsEncrypt;
 using Microsoft.AspNetCore.Builder;
@@ -107,6 +108,23 @@ namespace ElmFullstack.WebHost
             InterfaceToHost.NotifyWhenArrivedAtTimeRequestStructure nextTimeToNotify = null;
             var nextTimeToNotifyLock = new object();
 
+            byte[] getBlobWithSHA256(byte[] sha256)
+            {
+                var matchFromSourceComposition =
+                    webAppAndElmAppConfig?.SourceComposition == null ? null :
+                    Composition.FindComponentByHash(webAppAndElmAppConfig.SourceComposition, sha256);
+
+                if(matchFromSourceComposition != null)
+                {
+                    if (matchFromSourceComposition.BlobContent == null)
+                        throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
+
+                    return matchFromSourceComposition.BlobContent.ToArray();
+                }
+
+                return BlobLibrary.GetBlobWithSHA256(sha256);
+            }
+
             InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
                 performProcessTaskRequestToVolatileHost(
                 InterfaceToHost.Task.RequestToVolatileHostStructure requestToVolatileHost)
@@ -145,7 +163,7 @@ namespace ElmFullstack.WebHost
                 {
                     try
                     {
-                        var volatileHost = new VolatileHost(BlobLibrary.GetBlobWithSHA256, task?.CreateVolatileHost.script);
+                        var volatileHost = new VolatileHost(getBlobWithSHA256, task?.CreateVolatileHost.script);
 
                         var volatileHostId = System.Threading.Interlocked.Increment(ref createVolatileHostAttempts).ToString();
 
@@ -461,5 +479,7 @@ namespace ElmFullstack.WebHost
         public WebAppConfigurationJsonStructure WebAppConfiguration;
 
         public Func<string, string> ProcessEventInElmApp;
+
+        public Composition.Component SourceComposition;
     }
 }

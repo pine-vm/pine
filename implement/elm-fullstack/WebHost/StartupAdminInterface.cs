@@ -228,6 +228,7 @@ namespace ElmFullstack.WebHost
                                                 return elmEventResponse;
                                             }
                                         },
+                                        SourceComposition = processVolatileRepresentation.lastAppConfig.Value.appConfigComponent,
                                     });
                             })
                             .Build();

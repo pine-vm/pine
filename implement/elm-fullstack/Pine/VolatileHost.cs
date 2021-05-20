@@ -203,14 +203,15 @@ namespace Pine
 
                     if (sha256Match.Success)
                     {
-                        var hash = Pine.CommonConversion.ByteArrayFromStringBase16(sha256Match.Groups[1].Value);
+                        var hash = CommonConversion.ByteArrayFromStringBase16(sha256Match.Groups[1].Value);
 
                         var assembly = getFileFromHashSHA256?.Invoke(hash);
 
                         if (assembly == null)
                             return new ImmutableArray<PortableExecutableReference>();
 
-                        if (!Pine.CommonConversion.HashSHA256(assembly).SequenceEqual(hash))
+                        if (!Composition.GetHash(Composition.Component.Blob(assembly)).SequenceEqual(hash) &&
+                            !CommonConversion.HashSHA256(assembly).SequenceEqual(hash))
                             return new ImmutableArray<PortableExecutableReference>();
 
                         var assemblyMetadata = AssemblyMetadata.CreateFromImage(assembly);

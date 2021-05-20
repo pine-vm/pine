@@ -553,6 +553,25 @@ namespace Pine
         static public byte[] GetHash(TreeWithStringPath component) =>
             CommonConversion.HashSHA256(GetSerialRepresentation(FromTreeWithStringPath(component)));
 
+        static public Component FindComponentByHash(Component component, byte[] hash)
+        {
+            if (GetHash(component).SequenceEqual(hash))
+                return component;
+
+            if (component?.ListContent != null)
+            {
+                foreach (var item in component.ListContent)
+                {
+                    var matchInItem = FindComponentByHash(item, hash);
+
+                    if (matchInItem != null)
+                        return matchInItem;
+                }
+            }
+
+            return null;
+        }
+
         public class Result<ErrT, OkT> : IEquatable<Result<ErrT, OkT>>
         {
             public ErrT Err;
