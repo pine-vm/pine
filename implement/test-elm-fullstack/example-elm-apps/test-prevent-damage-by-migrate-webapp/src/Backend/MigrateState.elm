@@ -1,4 +1,4 @@
-module MigrateBackendState exposing (BackendState, migrate)
+module Backend.MigrateState exposing (BackendState, migrate)
 
 {-| Use a `BackendState` record that does not exactly match the BackendState type of the web app:
 The `maybeString` field has a different type.

@@ -74,14 +74,14 @@ elmAppInterfaceConvention =
     }
 
 
-appStateMigrationInterfaceModuleName : String
-appStateMigrationInterfaceModuleName =
-    "MigrateBackendState"
+appStateMigrationInterfaceModulesNames : List String
+appStateMigrationInterfaceModulesNames =
+    [ "Backend.MigrateState", "MigrateBackendState" ]
 
 
 appStateMigrationRootModuleName : String
 appStateMigrationRootModuleName =
-    appStateMigrationInterfaceModuleName ++ "Root"
+    "Backend.MigrateState_Root"
 
 
 appStateMigrationInterfaceFunctionName : String
@@ -268,7 +268,14 @@ loweredForAppStateMigration { originalSourceModules } sourceFiles =
         interfaceToHostRootFilePath =
             filePathFromElmModuleName appStateMigrationRootModuleName
     in
-    case Dict.get appStateMigrationInterfaceModuleName originalSourceModules of
+    case
+        appStateMigrationInterfaceModulesNames
+            |> List.filterMap
+                (\appStateMigrationInterfaceModuleName ->
+                    Dict.get appStateMigrationInterfaceModuleName originalSourceModules
+                )
+            |> List.head
+    of
         Nothing ->
             -- App contains no migrate module.
             Ok sourceFiles
@@ -284,6 +291,9 @@ loweredForAppStateMigration { originalSourceModules } sourceFiles =
                     |> Result.map
                         (\( ( inputType, returnType ), stateTypeDependencies ) ->
                             let
+                                migrateModuleName =
+                                    Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value originalInterfaceModule.moduleDefinition)
+
                                 ( appFiles, { generatedModuleName, modulesToImport } ) =
                                     mapAppFilesToSupportJsonCoding
                                         { generatedModuleNamePrefix = String.split "." appStateMigrationRootModuleName }
@@ -299,7 +309,8 @@ loweredForAppStateMigration { originalSourceModules } sourceFiles =
 
                                 rootElmModuleText =
                                     composeStateMigrationModuleText
-                                        { generatedModuleName = generatedModuleName
+                                        { migrateModuleName = String.join "." migrateModuleName
+                                        , generatedModuleName = generatedModuleName
                                         , decodeOrigTypeFunctionName = inputTypeNamesInGeneratedModules.decodeFunction.name
                                         , encodeDestTypeFunctionName = returnTypeNamesInGeneratedModules.encodeFunction.name
                                         , modulesToImport = modulesToImport
@@ -547,17 +558,18 @@ jsonDecodeState =
 
 
 composeStateMigrationModuleText :
-    { generatedModuleName : String
+    { migrateModuleName : String
+    , generatedModuleName : String
     , decodeOrigTypeFunctionName : String
     , encodeDestTypeFunctionName : String
     , modulesToImport : List (List String)
     }
     -> String
-composeStateMigrationModuleText { generatedModuleName, decodeOrigTypeFunctionName, encodeDestTypeFunctionName, modulesToImport } =
+composeStateMigrationModuleText { migrateModuleName, generatedModuleName, decodeOrigTypeFunctionName, encodeDestTypeFunctionName, modulesToImport } =
     String.trimLeft """
 module """ ++ appStateMigrationRootModuleName ++ """ exposing (decodeMigrateAndEncodeAndSerializeResult, main)
 
-import """ ++ appStateMigrationInterfaceModuleName ++ """
+import """ ++ migrateModuleName ++ """
 import """ ++ generatedModuleName ++ """
 """ ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> String.join "\n") ++ """
 import Json.Decode
@@ -567,7 +579,7 @@ import Json.Encode
 decodeMigrateAndEncode : String -> Result String String
 decodeMigrateAndEncode =
     Json.Decode.decodeString """ ++ generatedModuleName ++ "." ++ decodeOrigTypeFunctionName ++ """
-        >> Result.map (""" ++ appStateMigrationInterfaceModuleName ++ "." ++ appStateMigrationInterfaceFunctionName ++ """ >>  """ ++ generatedModuleName ++ "." ++ encodeDestTypeFunctionName ++ """ >> Json.Encode.encode 0)
+        >> Result.map (""" ++ migrateModuleName ++ "." ++ appStateMigrationInterfaceFunctionName ++ """ >>  """ ++ generatedModuleName ++ "." ++ encodeDestTypeFunctionName ++ """ >> Json.Encode.encode 0)
         >> Result.mapError Json.Decode.errorToString
 
 

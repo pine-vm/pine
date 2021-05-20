@@ -1,4 +1,4 @@
-module MigrateBackendState exposing (migrate)
+module Backend.MigrateState exposing (migrate)
 
 import Backend.Main
 

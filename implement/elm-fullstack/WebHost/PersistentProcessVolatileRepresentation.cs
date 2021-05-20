@@ -32,9 +32,11 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
     public class PersistentProcessVolatileRepresentation : IPersistentProcess, IDisposable
     {
-        static public string MigrationElmAppInterfaceModuleName => "MigrateBackendState";
+        static public string MigrationElmAppInterfaceModuleName => "Backend.MigrateState";
 
-        static public string MigrationElmAppCompilationRootModuleName => MigrationElmAppInterfaceModuleName + "Root";
+        static public string Old_MigrationElmAppInterfaceModuleName => "MigrateBackendState";
+
+        static public string MigrationElmAppCompilationRootModuleName => MigrationElmAppInterfaceModuleName + "_Root";
 
         static public string MigrateElmFunctionNameInModule => "migrate";
 
@@ -582,7 +584,8 @@ namespace ElmFullstack.WebHost.PersistentProcess
             var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
             var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
 
-            if (!appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var _))
+            if (!appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var _) &&
+                !appConfigFiles.TryGetValue(ElmApp.FilePathFromModuleName(Old_MigrationElmAppInterfaceModuleName), out var _))
                 return new Result<string, Func<string, Result<string, string>>>
                 {
                     Err = "Did not find interface module at '" + string.Join("/", pathToInterfaceModuleFile) + "'",
