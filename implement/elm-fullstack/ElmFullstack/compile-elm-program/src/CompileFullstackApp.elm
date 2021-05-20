@@ -571,7 +571,7 @@ module """ ++ appStateMigrationRootModuleName ++ """ exposing (decodeMigrateAndE
 
 import """ ++ migrateModuleName ++ """
 import """ ++ generatedModuleName ++ """
-""" ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> String.join "\n") ++ """
+""" ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> List.sort |> String.join "\n") ++ """
 import Json.Decode
 import Json.Encode
 
@@ -808,11 +808,12 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
             typeAnnotationsFunctionsForGeneratedModule ++ dependenciesFunctions ++ generalSupportingFunctionsTexts
 
         generatedModuleTextWithoutModuleDeclaration =
-            [ modulesToImport |> List.map (String.join "." >> (++) "import ")
+            [ [ modulesToImport |> List.map (String.join "." >> (++) "import ") |> List.sort |> String.join "\n" ]
             , functionsForGeneratedModule |> List.map .functionText
             ]
                 |> List.concat
-                |> String.join "\n\n"
+                |> List.map String.trim
+                |> String.join "\n\n\n"
 
         generatedModuleHash =
             generatedModuleTextWithoutModuleDeclaration
