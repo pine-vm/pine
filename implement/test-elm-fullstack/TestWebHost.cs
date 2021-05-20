@@ -116,20 +116,29 @@ namespace test_elm_fullstack
             var webAppSource =
                 Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
 
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource))
+            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource);
+            using var server = testSetup.StartWebHost();
+            using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
             {
-                using (var server = testSetup.StartWebHost())
-                {
-                    using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
-                    {
-                        var httpResponse = publicAppClient.GetAsync("").Result;
+                var httpResponse = publicAppClient.GetAsync("bytes").Result;
 
-                        var responseContent =
-                            httpResponse.Content.ReadAsByteArrayAsync().Result;
+                Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
 
-                        CollectionAssert.AreEqual(staticContent, responseContent);
-                    }
-                }
+                var responseContent =
+                    httpResponse.Content.ReadAsByteArrayAsync().Result;
+
+                CollectionAssert.AreEqual(staticContent, responseContent);
+            }
+
+            {
+                var httpResponse = publicAppClient.GetAsync("utf8").Result;
+
+                Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+
+                var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                Assert.AreEqual("A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'", responseContent);
             }
         }
 

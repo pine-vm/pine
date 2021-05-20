@@ -3,8 +3,6 @@ module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 import Browser
 import Browser.Dom
 import Browser.Navigation as Navigation
-import Bytes
-import Bytes.Decode
 import CompilationInterface.GenerateJsonCoders
 import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
@@ -617,9 +615,7 @@ view state =
 
 appDescriptionHtml : Html.Html a
 appDescriptionHtml =
-    CompilationInterface.SourceFiles.file____readme_md
-        |> decodeBytesToString
-        |> Maybe.withDefault "Failed to decode file content to string"
+    CompilationInterface.SourceFiles.file__utf8____readme_md
         |> Markdown.Parser.parse
         |> Result.map
             (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer
@@ -627,11 +623,6 @@ appDescriptionHtml =
             )
         |> Result.withDefault [ "Failed to parse markdown" |> Html.text ]
         |> Html.div []
-
-
-decodeBytesToString : Bytes.Bytes -> Maybe String
-decodeBytesToString bytes =
-    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
 
 
 getCurrentUserName : ViewConfiguration -> State -> Maybe String

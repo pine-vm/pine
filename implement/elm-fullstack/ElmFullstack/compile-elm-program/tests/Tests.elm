@@ -17,27 +17,30 @@ parseCompilationInterfaceElmMakeFunctionName : Test.Test
 parseCompilationInterfaceElmMakeFunctionName =
     [ ( "elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm"
       , Ok
-            { filePathRepresentation = "src_FrontendWeb_Main_elm"
-            , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
-            , enableDebug = True
-            , base64 = True
-            }
+            ( "src_FrontendWeb_Main_elm"
+            , { outputType = CompileFullstackApp.ElmMakeOutputTypeJs
+              , enableDebug = True
+              , encoding = Just CompileFullstackApp.Base64Encoding
+              }
+            )
       )
     , ( "elm_make__javascript__base64____src_FrontendWeb_Main_elm"
       , Ok
-            { filePathRepresentation = "src_FrontendWeb_Main_elm"
-            , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
-            , enableDebug = False
-            , base64 = True
-            }
+            ( "src_FrontendWeb_Main_elm"
+            , { outputType = CompileFullstackApp.ElmMakeOutputTypeJs
+              , enableDebug = False
+              , encoding = Just CompileFullstackApp.Base64Encoding
+              }
+            )
       )
     , ( "elm_make__debug__base64____src_FrontendWeb_Main_elm"
       , Ok
-            { filePathRepresentation = "src_FrontendWeb_Main_elm"
-            , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
-            , enableDebug = True
-            , base64 = True
-            }
+            ( "src_FrontendWeb_Main_elm"
+            , { outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+              , enableDebug = True
+              , encoding = Just CompileFullstackApp.Base64Encoding
+              }
+            )
       )
     ]
         |> List.map

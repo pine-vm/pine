@@ -7,6 +7,7 @@ module CompileFullstackApp exposing
     , ElmMakeOutputType(..)
     , ElmMakeRequestStructure
     , ElmTypeAnnotation(..)
+    , InterfaceBlobEncoding(..)
     , LeafElmTypeStruct(..)
     , appendLineAndStringInLogFile
     , asCompletelyLoweredElmApp
@@ -110,17 +111,30 @@ type alias ElmMakeRequestStructure =
     }
 
 
-type alias ParseElmMakeFileNameResult =
-    { filePathRepresentation : String
-    , outputType : ElmMakeOutputType
+type alias InterfaceElmMakeFunctionConfig =
+    { outputType : ElmMakeOutputType
     , enableDebug : Bool
-    , base64 : Bool
+    , encoding : Maybe InterfaceBlobEncoding
     }
 
 
 type ElmMakeOutputType
     = ElmMakeOutputTypeHtml
     | ElmMakeOutputTypeJs
+
+
+type InterfaceBlobEncoding
+    = Base64Encoding
+    | Utf8Encoding
+
+
+type InterfaceValueConversion
+    = FromBase64ToBytes
+
+
+type alias InterfaceSourceFilesFunctionConfig =
+    { encoding : Maybe InterfaceBlobEncoding
+    }
 
 
 {-| This function returns an Err if the needed dependencies for ElmMake are not yet in the arguments.
@@ -1024,9 +1038,8 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleText ) =
                             |> List.map .updateInterfaceModuleText
                             |> listFoldlToAggregateResult
                                 (\replaceFunction previousAggregate -> replaceFunction { generatedModuleName = generatedModuleName } previousAggregate)
-                                (addImportsInElmModuleText [ [ "Base64" ], String.split "." generatedModuleName ] moduleText
-                                    |> Result.mapError (OtherCompilationError >> List.singleton)
-                                )
+                                (addImportsInElmModuleText [ [ "Base64" ], String.split "." generatedModuleName ] moduleText)
+                            |> Result.mapError (OtherCompilationError >> List.singleton)
                             |> Result.map (Tuple.pair appFiles)
                     )
 
@@ -2292,47 +2305,55 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclar
         Err error ->
             Err ("Failed to parse function name: " ++ error)
 
-        Ok { filePathRepresentation, base64 } ->
+        Ok ( filePathRepresentation, config ) ->
             case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
                 Err error ->
                     Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
                 Ok ( _, fileContent ) ->
-                    let
-                        valueFunctionName =
-                            "bytes_as_base64_" ++ SHA256.toHex (SHA256.fromBytes fileContent)
-
-                        valueFunctionText =
-                            valueFunctionName
-                                ++ " =\n"
-                                ++ indentElmCodeLines 1 (buildBytesElmExpression { encodeAsBase64 = True } fileContent)
-                    in
-                    Ok
-                        { valueFunctionText = valueFunctionText
-                        , updateInterfaceModuleText =
-                            \{ generatedModuleName } moduleText ->
+                    baseStringExpressionAndConversion config.encoding fileContent
+                        |> Result.map
+                            (\( expression, conversion ) ->
                                 let
-                                    fileExpression =
-                                        buildBytesElmExpressionFromBase64Expression
-                                            { encodeAsBase64 = base64 }
-                                            (generatedModuleName ++ "." ++ valueFunctionName)
+                                    valueFunctionName =
+                                        [ "file_as"
+                                        , expression.encodingName
+                                        , SHA256.toHex (SHA256.fromBytes fileContent)
+                                        ]
+                                            |> String.join "_"
 
-                                    buildNewFunctionLines previousFunctionLines =
-                                        List.take 2 previousFunctionLines ++ [ indentElmCodeLines 1 fileExpression ]
+                                    valueFunctionText =
+                                        valueFunctionName
+                                            ++ " =\n"
+                                            ++ indentElmCodeLines 1 expression.expression
                                 in
-                                addOrUpdateFunctionInElmModuleText
-                                    { functionName = functionName
-                                    , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
-                                    }
-                                    moduleText
-                        }
+                                { valueFunctionText = valueFunctionText
+                                , updateInterfaceModuleText =
+                                    \{ generatedModuleName } moduleText ->
+                                        let
+                                            fileExpression =
+                                                buildElmExpressionFromStringExpression
+                                                    conversion
+                                                    (generatedModuleName ++ "." ++ valueFunctionName)
+
+                                            buildNewFunctionLines previousFunctionLines =
+                                                List.take 2 previousFunctionLines
+                                                    ++ [ indentElmCodeLines 1 fileExpression ]
+                                        in
+                                        addOrUpdateFunctionInElmModuleText
+                                            { functionName = functionName
+                                            , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
+                                            }
+                                            moduleText
+                                }
+                            )
 
 
 prepareReplaceFunctionInElmMakeModuleText :
     List ( DependencyKey, Bytes.Bytes )
     -> AppFiles
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
-    -> Result (List CompilationError) { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result (List CompilationError) String }
+    -> Result (List CompilationError) { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result String String }
 prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunctionDeclaration =
     let
         functionName =
@@ -2343,7 +2364,7 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunct
         Err error ->
             Err [ OtherCompilationError ("Failed to parse function name: " ++ error) ]
 
-        Ok { filePathRepresentation, base64, outputType, enableDebug } ->
+        Ok ( filePathRepresentation, { encoding, outputType, enableDebug } ) ->
             case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
                 Err error ->
                     Err [ OtherCompilationError ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error) ]
@@ -2373,57 +2394,103 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunct
                             Err [ MissingDependencyError dependencyKey ]
 
                         Just ( _, dependencyValue ) ->
-                            let
-                                valueFunctionName =
-                                    "bytes_as_base64_" ++ SHA256.toHex (SHA256.fromBytes dependencyValue)
-
-                                valueFunctionText =
-                                    valueFunctionName
-                                        ++ " =\n"
-                                        ++ indentElmCodeLines 1 (buildBytesElmExpression { encodeAsBase64 = True } dependencyValue)
-                            in
-                            Ok
-                                { valueFunctionText = valueFunctionText
-                                , updateInterfaceModuleText =
-                                    \{ generatedModuleName } moduleText ->
+                            baseStringExpressionAndConversion encoding dependencyValue
+                                |> Result.map
+                                    (\( expression, conversion ) ->
                                         let
-                                            fileExpression =
-                                                buildBytesElmExpressionFromBase64Expression
-                                                    { encodeAsBase64 = base64 }
-                                                    (generatedModuleName ++ "." ++ valueFunctionName)
+                                            valueFunctionName =
+                                                [ "file_as"
+                                                , expression.encodingName
+                                                , SHA256.toHex (SHA256.fromBytes dependencyValue)
+                                                ]
+                                                    |> String.join "_"
 
-                                            buildNewFunctionLines previousFunctionLines =
-                                                List.take 2 previousFunctionLines ++ [ indentElmCodeLines 1 fileExpression ]
+                                            valueFunctionText =
+                                                valueFunctionName
+                                                    ++ " =\n"
+                                                    ++ indentElmCodeLines 1 expression.expression
                                         in
-                                        addOrUpdateFunctionInElmModuleText
-                                            { functionName = functionName, mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines }
-                                            moduleText
-                                            |> Result.mapError (OtherCompilationError >> List.singleton)
-                                }
+                                        { valueFunctionText = valueFunctionText
+                                        , updateInterfaceModuleText =
+                                            \{ generatedModuleName } moduleText ->
+                                                let
+                                                    fileExpression =
+                                                        buildElmExpressionFromStringExpression
+                                                            conversion
+                                                            (generatedModuleName ++ "." ++ valueFunctionName)
+
+                                                    buildNewFunctionLines previousFunctionLines =
+                                                        List.take 2 previousFunctionLines
+                                                            ++ [ indentElmCodeLines 1 fileExpression ]
+                                                in
+                                                addOrUpdateFunctionInElmModuleText
+                                                    { functionName = functionName, mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines }
+                                                    moduleText
+                                        }
+                                    )
+                                |> Result.mapError (OtherCompilationError >> List.singleton)
 
 
-buildBytesElmExpression : { encodeAsBase64 : Bool } -> Bytes.Bytes -> String
-buildBytesElmExpression { encodeAsBase64 } bytes =
+baseStringExpressionAndConversion :
+    Maybe InterfaceBlobEncoding
+    -> Bytes.Bytes
+    -> Result String ( { expression : String, encodingName : String }, Maybe InterfaceValueConversion )
+baseStringExpressionAndConversion encoding blob =
     let
-        base64Expression =
-            "\"" ++ (bytes |> Base64.fromBytes |> Maybe.withDefault "Error encoding to base64") ++ "\""
+        continueWithBase64AndConversion conversion =
+            buildBase64ElmExpression blob
+                |> Result.map (\expr -> ( { expression = expr, encodingName = "base64" }, conversion ))
     in
-    buildBytesElmExpressionFromBase64Expression
-        { encodeAsBase64 = encodeAsBase64 }
-        base64Expression
+    case encoding of
+        Nothing ->
+            continueWithBase64AndConversion (Just FromBase64ToBytes)
+
+        Just Base64Encoding ->
+            continueWithBase64AndConversion Nothing
+
+        Just Utf8Encoding ->
+            case Bytes.Decode.decode (Bytes.Decode.string (Bytes.width blob)) blob of
+                Nothing ->
+                    Err "Failed to decode blob as UTF8"
+
+                Just asUtf8 ->
+                    Ok ( { expression = stringExpressionFromString asUtf8, encodingName = "utf8" }, Nothing )
 
 
-buildBytesElmExpressionFromBase64Expression : { encodeAsBase64 : Bool } -> String -> String
-buildBytesElmExpressionFromBase64Expression { encodeAsBase64 } base64Expression =
-    if encodeAsBase64 then
-        base64Expression
+buildBase64ElmExpression : Bytes.Bytes -> Result String String
+buildBase64ElmExpression bytes =
+    case Base64.fromBytes bytes of
+        Nothing ->
+            Err "Error encoding to base64"
 
-    else
-        [ base64Expression
-        , "|> Base64.toBytes"
-        , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
-        ]
-            |> String.join "\n"
+        Just asBase64 ->
+            Ok (stringExpressionFromString asBase64)
+
+
+stringExpressionFromString : String -> String
+stringExpressionFromString string =
+    "\""
+        ++ (string
+                |> String.replace "\\" "\\\\"
+                |> String.replace "\n" "\\n"
+                |> String.replace "\u{000D}" "\\r"
+                |> String.replace "\"" "\\\""
+           )
+        ++ "\""
+
+
+buildElmExpressionFromStringExpression : Maybe InterfaceValueConversion -> String -> String
+buildElmExpressionFromStringExpression conversion stringExpression =
+    case conversion of
+        Nothing ->
+            stringExpression
+
+        Just FromBase64ToBytes ->
+            [ stringExpression
+            , "|> Base64.toBytes"
+            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
+            ]
+                |> String.join "\n"
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
@@ -2638,32 +2705,68 @@ mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCod
                             )
 
 
-parseSourceFileFunctionName : String -> Result String { filePathRepresentation : String, base64 : Bool }
+parseSourceFileFunctionName : String -> Result String ( String, InterfaceSourceFilesFunctionConfig )
 parseSourceFileFunctionName functionName =
     parseFlagsAndPathPatternFromFunctionName sourceFileFunctionNameStart functionName
-        |> Result.map
+        |> Result.andThen
             (\( flags, filePathRepresentation ) ->
-                { filePathRepresentation = filePathRepresentation
-                , base64 = flags |> List.member "base64"
-                }
+                flags
+                    |> parseInterfaceFunctionFlags parseSourceFileFunctionFlag { encoding = Nothing }
+                    |> Result.map (Tuple.pair filePathRepresentation)
             )
 
 
-parseElmMakeModuleFunctionName : String -> Result String ParseElmMakeFileNameResult
+parseSourceFileFunctionFlag : String -> InterfaceSourceFilesFunctionConfig -> Result String InterfaceSourceFilesFunctionConfig
+parseSourceFileFunctionFlag flag config =
+    case String.toLower flag of
+        "base64" ->
+            Ok { config | encoding = Just Base64Encoding }
+
+        "utf8" ->
+            Ok { config | encoding = Just Utf8Encoding }
+
+        _ ->
+            Err "Unknown flag"
+
+
+parseElmMakeModuleFunctionName : String -> Result String ( String, InterfaceElmMakeFunctionConfig )
 parseElmMakeModuleFunctionName functionName =
     parseFlagsAndPathPatternFromFunctionName elmMakeFunctionNameStart functionName
-        |> Result.map
+        |> Result.andThen
             (\( flags, filePathRepresentation ) ->
-                { filePathRepresentation = filePathRepresentation
-                , outputType =
-                    if flags |> List.member "javascript" then
-                        ElmMakeOutputTypeJs
+                flags
+                    |> parseInterfaceFunctionFlags parseElmMakeFunctionFlag
+                        { outputType = ElmMakeOutputTypeHtml, enableDebug = False, encoding = Nothing }
+                    |> Result.map (Tuple.pair filePathRepresentation)
+            )
 
-                    else
-                        ElmMakeOutputTypeHtml
-                , base64 = flags |> List.member "base64"
-                , enableDebug = flags |> List.member "debug"
-                }
+
+parseElmMakeFunctionFlag : String -> InterfaceElmMakeFunctionConfig -> Result String InterfaceElmMakeFunctionConfig
+parseElmMakeFunctionFlag flag config =
+    case String.toLower flag of
+        "base64" ->
+            Ok { config | encoding = Just Base64Encoding }
+
+        "utf8" ->
+            Ok { config | encoding = Just Utf8Encoding }
+
+        "javascript" ->
+            Ok { config | outputType = ElmMakeOutputTypeJs }
+
+        "debug" ->
+            Ok { config | enableDebug = True }
+
+        _ ->
+            Err "Unknown flag"
+
+
+parseInterfaceFunctionFlags : (String -> aggregate -> Result String aggregate) -> aggregate -> List String -> Result String aggregate
+parseInterfaceFunctionFlags parseFlag =
+    Ok
+        >> listFoldlToAggregateResult
+            (\flag ->
+                parseFlag flag
+                    >> Result.mapError ((++) ("Error parsing flag '" ++ flag ++ "': "))
             )
 
 

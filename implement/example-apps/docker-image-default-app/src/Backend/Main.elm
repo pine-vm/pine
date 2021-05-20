@@ -8,8 +8,8 @@ module Backend.Main exposing
 import Backend.InterfaceToHost as InterfaceToHost
 import Base64
 import Bytes.Encode
-import Common
 import CompilationInterface.ElmMake
+import CompilationInterface.SourceFiles
 import Url
 
 
@@ -50,7 +50,7 @@ processEvent hostEvent stateBefore =
                     else
                         { statusCode = 200
                         , bodyAsBase64 =
-                            [ Common.guideMarkdown
+                            [ CompilationInterface.SourceFiles.file__utf8____readme_md
                             , ""
                             , "This backend process received " ++ (state.httpRequestsCount |> String.fromInt) ++ " HTTP requests."
                             ]

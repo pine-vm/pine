@@ -2,7 +2,7 @@ module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
 
 import Browser
 import Browser.Navigation as Navigation
-import Common
+import CompilationInterface.SourceFiles
 import Html
 import Html.Attributes as HA
 import Html.Events
@@ -212,7 +212,7 @@ view state =
 
 viewGuide : Html.Html event
 viewGuide =
-    Common.guideMarkdown
+    CompilationInterface.SourceFiles.file__utf8____readme_md
         |> Markdown.Parser.parse
         |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
         |> Result.andThen (Markdown.Parser.render Markdown.Parser.defaultHtmlRenderer)
