@@ -18,6 +18,9 @@ jobs:
     runs-on: ${{ matrix.environment }}
 
     steps:
+    - name: Avoid git mutating files on checkout
+      run: |
+        git config --global core.autocrlf false
     - uses: actions/checkout@v1
     - uses: actions/setup-dotnet@v1
       with:
