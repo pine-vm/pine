@@ -214,7 +214,7 @@ decodeTaskResult =
             |> Json.Decode.map CreateVolatileHostResponse
         , Json.Decode.field "RequestToVolatileHostResponse" (decodeResult decodeRequestToVolatileHostError decodeRequestToVolatileHostComplete)
             |> Json.Decode.map RequestToVolatileHostResponse
-        , Json.Decode.field "CompleteWithoutResult" (Json.Decode.succeed CompleteWithoutResult)
+        , Json.Decode.field "CompleteWithoutResult" (jsonDecodeSucceedWhenNotNull CompleteWithoutResult)
         ]
 
 
@@ -241,7 +241,7 @@ decodeRequestToVolatileHostComplete =
 decodeRequestToVolatileHostError : Json.Decode.Decoder RequestToVolatileHostError
 decodeRequestToVolatileHostError =
     Json.Decode.oneOf
-        [ Json.Decode.field "HostNotFound" (Json.Decode.succeed HostNotFound)
+        [ Json.Decode.field "HostNotFound" (jsonDecodeSucceedWhenNotNull HostNotFound)
         ]
 
 
@@ -389,3 +389,16 @@ decodeResult errorDecoder okDecoder =
         [ Json.Decode.field "Err" errorDecoder |> Json.Decode.map Err
         , Json.Decode.field "Ok" okDecoder |> Json.Decode.map Ok
         ]
+
+
+jsonDecodeSucceedWhenNotNull : a -> Json.Decode.Decoder a
+jsonDecodeSucceedWhenNotNull valueIfNotNull =
+    Json.Decode.value
+        |> Json.Decode.andThen
+            (\asValue ->
+                if asValue == Json.Encode.null then
+                    Json.Decode.fail "Is null."
+
+                else
+                    Json.Decode.succeed valueIfNotNull
+            )
