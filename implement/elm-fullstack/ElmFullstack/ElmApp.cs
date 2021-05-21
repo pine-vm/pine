@@ -27,13 +27,7 @@ namespace ElmFullstack
 
         public const string DeserializeStateFunctionName = "interfaceToHost_deserializeState";
 
-        static public string ElmMakeInterfaceModuleName => "ElmFullstackCompilerInterface.ElmMake";
-
-        static public string GenerateJsonCodersInterfaceModuleName => "ElmFullstackCompilerInterface.GenerateJsonCoders";
-
         static public IImmutableList<string> CompilationInterfaceModuleNamePrefixes => ImmutableList.Create("ElmFullstackCompilerInterface", "CompilationInterface");
-
-        static public string FrontendWebElmModuleName => "FrontendWeb.Main";
     }
 
     public class ElmApp
