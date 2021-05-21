@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using ElmFullstack.WebHost.ProcessStoreSupportingMigrations;
 using Newtonsoft.Json;
 using Pine;
@@ -89,7 +88,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
         {
             var sourceFiles = TreeToFlatDictionaryWithPathComparer(appConfig);
 
-            var loweredAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+            var (loweredAppFiles, _) = ElmApp.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default);
 
@@ -593,7 +592,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
             try
             {
-                var migrateElmAppFiles = ElmApp.AsCompletelyLoweredElmApp(
+                var (migrateElmAppFiles, _) = ElmApp.AsCompletelyLoweredElmApp(
                     sourceFiles: appConfigFiles,
                     interfaceConfig: ElmAppInterfaceConfig.Default);
 

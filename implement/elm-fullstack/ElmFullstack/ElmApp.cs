@@ -45,7 +45,7 @@ namespace ElmFullstack
                 entry => entry.fileContent,
                 EnumerableExtension.Comparer<IImmutableList<string>>());
 
-        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
+        static public (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig) =>
                 AsCompletelyLoweredElmApp(
@@ -53,7 +53,7 @@ namespace ElmFullstack
                     rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
                     interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
+        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName) =>
@@ -61,79 +61,110 @@ namespace ElmFullstack
                 sourceFiles,
                 rootModuleName,
                 interfaceToHostRootModuleName,
-                ImmutableStack<IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)>>.Empty);
+                ImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> discoveredDependencies, CompilationIterationReport previousIterationsReports)>.Empty);
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> AsCompletelyLoweredElmApp(
+        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
-            IImmutableStack<IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)>> dependenciesStack)
+            IImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> discoveredDependencies, CompilationIterationReport iterationReport)> stack)
         {
-            if (10 < dependenciesStack.Count())
-                throw new Exception("Dependencies stack depth > 10");
+            if (10 < stack.Count())
+                throw new Exception("Iteration stack depth > 10");
+
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var dependencies =
-                dependenciesStack.SelectMany(frame => frame)
+                stack.SelectMany(frame => frame.discoveredDependencies)
                 .ToImmutableList();
 
-            var responseStructure = ElmAppCompilation(
+            var (compilationResult, compilationReport) = ElmAppCompilation(
                 sourceFiles: sourceFiles,
                 rootModuleName: rootModuleName,
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                 dependencies: dependencies);
 
-            if (responseStructure.Ok?.FirstOrDefault() == null)
+            var compilationSuccess = compilationResult.Ok?.FirstOrDefault();
+
+            var currentIterationReport = new CompilationIterationReport
             {
-                var compilationErrors =
-                    responseStructure.Err?.FirstOrDefault();
+                compilation = compilationReport,
+            };
 
-                if (compilationErrors == null)
-                    throw new Exception("Failed compilation: Protocol error: Missing error descriptions.");
+            if (compilationSuccess != null)
+            {
+                currentIterationReport.totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds;
 
-                var compilationErrorsMissingElmMakeDependencies =
-                    compilationErrors
-                    .Where(error => error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
-                    .ToImmutableList();
+                return (compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport));
+            }
 
-                var otherErrors =
-                    compilationErrors.Except(compilationErrorsMissingElmMakeDependencies)
-                    .ToImmutableList();
+            var compilationErrors =
+                compilationResult.Err?.FirstOrDefault();
 
-                if (0 < otherErrors.Count)
+            if (compilationErrors == null)
+                throw new Exception("Failed compilation: Protocol error: Missing error descriptions.");
+
+            var compilationErrorsMissingElmMakeDependencies =
+                compilationErrors
+                .Where(error => error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
+                .ToImmutableList();
+
+            var otherErrors =
+                compilationErrors.Except(compilationErrorsMissingElmMakeDependencies)
+                .ToImmutableList();
+
+            if (0 < otherErrors.Count)
+            {
+                var otherErrorsText =
+                    string.Join("\n", otherErrors.Select(DescribeCompilationError));
+
+                throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText);
+            }
+
+            byte[] ElmMake(
+                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
+                IImmutableList<string> pathToFileWithElmEntryPoint,
+                bool makeJavascript,
+                bool enableDebug)
+            {
+                var elmMakeCommandAppendix =
+                    enableDebug ? "--debug" : null;
+
+                var fileAsString = ProcessFromElm019Code.CompileElm(
+                    elmCodeFiles,
+                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                    outputFileName: "output." + (makeJavascript ? "js" : "html"),
+                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                return Encoding.UTF8.GetBytes(fileAsString);
+            }
+
+            var newDependencies =
+                compilationErrorsMissingElmMakeDependencies
+                .Select(error =>
                 {
-                    var otherErrorsText =
-                        string.Join("\n", otherErrors.Select(DescribeCompilationError));
+                    var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                    throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText);
-                }
+                    var dependencyKey =
+                        error.MissingDependencyError.FirstOrDefault();
 
-                byte[] ElmMake(
-                    IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
-                    IImmutableList<string> pathToFileWithElmEntryPoint,
-                    bool makeJavascript,
-                    bool enableDebug)
-                {
-                    var elmMakeCommandAppendix =
-                        enableDebug ? "--debug" : null;
+                    var elmMakeRequest =
+                        dependencyKey.ElmMakeDependency.FirstOrDefault();
 
-                    var fileAsString = ProcessFromElm019Code.CompileElm(
-                        elmCodeFiles,
-                        pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                        outputFileName: "output." + (makeJavascript ? "js" : "html"),
-                        elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                    return Encoding.UTF8.GetBytes(fileAsString);
-                }
-
-                var newDependencies =
-                    compilationErrorsMissingElmMakeDependencies
-                    .Select(error =>
+                    var dependencyReport = new CompilationIterationDependencyReport
                     {
-                        var dependencyKey =
-                            error.MissingDependencyError.FirstOrDefault();
+                    };
 
-                        var elmMakeRequest =
-                            dependencyKey.ElmMakeDependency.FirstOrDefault();
+                    CompilationIterationDependencyReport completeDependencyReport()
+                    {
+                        dependencyReport.totalTimeSpentMilli = (int)dependencyTotalStopwatch.ElapsedMilliseconds;
+
+                        return dependencyReport;
+                    };
+
+                    if (elmMakeRequest != null)
+                    {
+                        dependencyReport.dependencyKeySummary = "ElmMake";
 
                         var elmMakeRequestFiles =
                             elmMakeRequest.files
@@ -148,26 +179,38 @@ namespace ElmFullstack
                             makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs?.FirstOrDefault() != null,
                             enableDebug: elmMakeRequest.enableDebug);
 
-                        return (key: dependencyKey, value: (IImmutableList<byte>)value.ToImmutableList());
-                    })
-                    .ToImmutableList();
+                        return (
+                            (key: dependencyKey, value: (IImmutableList<byte>)value.ToImmutableList()),
+                            completeDependencyReport());
+                    }
 
-                return AsCompletelyLoweredElmApp(
-                    sourceFiles: sourceFiles,
-                    rootModuleName,
-                    interfaceToHostRootModuleName,
-                    dependenciesStack: dependenciesStack.Push(newDependencies));
-            }
+                    throw new Exception("Unknown type of dependency: " + DescribeCompilationError(error));
+                })
+                .ToImmutableList();
 
-            return responseStructure.Ok?.FirstOrDefault();
+            currentIterationReport.dependenciesReports = newDependencies.Select(depAndReport => depAndReport.Item2).ToImmutableList();
+
+            currentIterationReport.totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds;
+
+            var newStackFrame =
+                (newDependencies.Select(depAndReport => depAndReport.Item1).ToImmutableList(), currentIterationReport);
+
+            return AsCompletelyLoweredElmApp(
+                sourceFiles: sourceFiles,
+                rootModuleName,
+                interfaceToHostRootModuleName,
+                stack: stack.Push(newStackFrame));
         }
 
-        static ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>> ElmAppCompilation(
+        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>>, CompilationIterationCompilationReport report) ElmAppCompilation(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
             ImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> dependencies)
         {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             var sourceFilesJson =
                 sourceFiles
                 .Select(appCodeFile => new CompilerSerialInterface.AppCodeEntry
@@ -198,19 +241,44 @@ namespace ElmFullstack
                 }
             );
 
+            serializeStopwatch.Stop();
+
+            var prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var jsEngine = jsEngineToCompileElmApp.Value;
+
+            prepareJsEngineStopwatch.Stop();
+
+            var inJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             var responseJson =
-                jsEngineToCompileElmApp.Value.CallFunction("lowerSerialized", argumentsJson)
+                jsEngine.CallFunction("lowerSerialized", argumentsJson)
                 ?.ToString();
+
+            inJsEngineStopwatch.Stop();
+
+            var deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var withFilesAsList =
                 Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(responseJson);
 
-            return
+            var mappedResult =
                 withFilesAsList.map(files =>
                     files.ToImmutableDictionary(
                         entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                         entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
                     .WithComparers(EnumerableExtension.EqualityComparer<string>()));
+
+            return
+                (mappedResult,
+                new CompilationIterationCompilationReport
+                {
+                    serializeTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds,
+                    prepareJsEngineTimeSpentMilli = (int)prepareJsEngineStopwatch.ElapsedMilliseconds,
+                    inJsEngineTimeSpentMilli = (int)inJsEngineStopwatch.ElapsedMilliseconds,
+                    deserializeTimeSpentMilli = (int)deserializeStopwatch.ElapsedMilliseconds,
+                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
+                });
         }
 
         static public IImmutableList<string> FilePathFromModuleName(IReadOnlyList<string> moduleName)
@@ -286,6 +354,35 @@ namespace ElmFullstack
 
         static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError) =>
             Newtonsoft.Json.JsonConvert.SerializeObject(compilationError, Newtonsoft.Json.Formatting.Indented);
+
+        public class CompilationIterationReport
+        {
+            public CompilationIterationCompilationReport compilation;
+
+            public IReadOnlyList<CompilationIterationDependencyReport> dependenciesReports;
+
+            public int totalTimeSpentMilli;
+        }
+
+        public class CompilationIterationCompilationReport
+        {
+            public int serializeTimeSpentMilli;
+
+            public int prepareJsEngineTimeSpentMilli;
+
+            public int inJsEngineTimeSpentMilli;
+
+            public int deserializeTimeSpentMilli;
+
+            public int totalTimeSpentMilli;
+        }
+
+        public class CompilationIterationDependencyReport
+        {
+            public string dependencyKeySummary;
+
+            public int totalTimeSpentMilli;
+        }
     }
 
     namespace CompilerSerialInterface

@@ -23,7 +23,7 @@ namespace test_elm_fullstack
             return
                 ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                     sourceFiles: TestSetup.GetElmAppFromDirectoryPath(directoryPath),
-                    ElmAppInterfaceConfig.Default);
+                    ElmAppInterfaceConfig.Default).compiledAppFiles;
         }
 
         /*

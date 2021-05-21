@@ -97,7 +97,7 @@ namespace test_elm_fullstack
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> originalAppFiles) =>
                 ElmApp.AsCompletelyLoweredElmApp(
                     sourceFiles: originalAppFiles,
-                    ElmAppInterfaceConfig.Default);
+                    ElmAppInterfaceConfig.Default).compiledAppFiles;
 
         static public IProcessStoreReader EmptyProcessStoreReader() =>
             new ProcessStoreReaderFromDelegates

@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-05-20";
+        static public string AppVersionId => "2021-05-21";
 
         static int Main(string[] args)
         {
@@ -400,15 +400,18 @@ namespace elm_fullstack
 
                     string compilationException = null;
                     Composition.TreeWithStringPath compiledTree = null;
+                    IImmutableList<ElmFullstack.ElmApp.CompilationIterationReport> compilationIterationsReports = null;
 
                     try
                     {
-                        var loweredAppFiles = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
+                        var compilationResult = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
                             ElmFullstack.ElmAppInterfaceConfig.Default);
 
+                        compilationIterationsReports = compilationResult.iterationsReports;
+
                         compiledTree =
-                            Composition.SortedTreeFromSetOfBlobsWithStringPath(loweredAppFiles);
+                            Composition.SortedTreeFromSetOfBlobsWithStringPath(compilationResult.compiledAppFiles);
                     }
                     catch (Exception e)
                     {
@@ -448,9 +451,11 @@ namespace elm_fullstack
 
                     var compileReport = new CompileAppReport
                     {
+                        engineVersion = AppVersionId,
                         sourcePath = sourcePath,
                         sourceCompositionId = sourceCompositionId,
                         sourceSummary = sourceSummary,
+                        compilationIterationsReports = compilationIterationsReports,
                         compilationException = compilationException,
                         compilationTimeSpentMilli = (int)compilationTimeSpentMilli,
                         compiledCompositionId = compiledCompositionId,
@@ -653,6 +658,8 @@ namespace elm_fullstack
 
         public class CompileAppReport
         {
+            public string engineVersion;
+
             public string beginTime;
 
             public string sourcePath;
@@ -661,7 +668,7 @@ namespace elm_fullstack
 
             public SourceSummaryStructure sourceSummary;
 
-            public IReadOnlyList<string> compilationLog;
+            public IImmutableList<ElmFullstack.ElmApp.CompilationIterationReport> compilationIterationsReports;
 
             public string compilationException;
 
