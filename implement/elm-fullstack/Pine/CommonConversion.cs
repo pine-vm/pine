@@ -16,59 +16,55 @@ namespace Pine
 
         static public byte[] HashSHA256(byte[] input)
         {
-            using (var hasher = new SHA256Managed())
-                return hasher.ComputeHash(input);
+            using var hasher = new SHA256Managed();
+
+            return hasher.ComputeHash(input);
         }
 
         static public byte[] CompressGzip(byte[] original)
         {
-            using (var compressedStream = new System.IO.MemoryStream())
-            {
-                using (var compressStream = new System.IO.Compression.GZipStream(
-                    compressedStream, System.IO.Compression.CompressionMode.Compress))
-                {
-                    compressStream.Write(original);
-                    compressStream.Flush();
-                    return compressedStream.ToArray();
-                }
-            }
+            using var compressedStream = new System.IO.MemoryStream();
+
+            using var compressStream = new System.IO.Compression.GZipStream(
+                compressedStream, System.IO.Compression.CompressionMode.Compress);
+
+            compressStream.Write(original);
+            compressStream.Flush();
+            return compressedStream.ToArray();
         }
 
         static public byte[] DecompressGzip(byte[] compressed)
         {
-            using (var decompressStream = new System.IO.Compression.GZipStream(
-                new System.IO.MemoryStream(compressed), System.IO.Compression.CompressionMode.Decompress))
-            {
-                var decompressedStream = new System.IO.MemoryStream();
-                decompressStream.CopyTo(decompressedStream);
-                return decompressedStream.ToArray();
-            }
+            using var decompressStream = new System.IO.Compression.GZipStream(
+                new System.IO.MemoryStream(compressed), System.IO.Compression.CompressionMode.Decompress);
+
+            var decompressedStream = new System.IO.MemoryStream();
+            decompressStream.CopyTo(decompressedStream);
+            return decompressedStream.ToArray();
         }
 
         static public byte[] Deflate(byte[] input)
         {
-            using (var deflatedStream = new System.IO.MemoryStream())
-            using (var compressor = new System.IO.Compression.DeflateStream(
-                deflatedStream, System.IO.Compression.CompressionMode.Compress))
-            {
-                compressor.Write(input, 0, input.Length);
-                compressor.Close();
-                return deflatedStream.ToArray();
-            }
+            using var deflatedStream = new System.IO.MemoryStream();
+
+            using var compressor = new System.IO.Compression.DeflateStream(
+                deflatedStream, System.IO.Compression.CompressionMode.Compress);
+
+            compressor.Write(input, 0, input.Length);
+            compressor.Close();
+            return deflatedStream.ToArray();
         }
 
         static public byte[] Inflate(byte[] input)
         {
-            using (var inflatedStream = new System.IO.MemoryStream())
-            {
-                using (var deflateStream = new System.IO.Compression.DeflateStream(
-                    new System.IO.MemoryStream(input), System.IO.Compression.CompressionMode.Decompress))
-                {
-                    deflateStream.CopyTo(inflatedStream);
+            using var inflatedStream = new System.IO.MemoryStream();
 
-                    return inflatedStream.ToArray();
-                }
-            }
+            using var deflateStream = new System.IO.Compression.DeflateStream(
+                new System.IO.MemoryStream(input), System.IO.Compression.CompressionMode.Decompress);
+
+            deflateStream.CopyTo(inflatedStream);
+
+            return inflatedStream.ToArray();
         }
 
         static public string TimeStringViewForReport(DateTimeOffset time) =>

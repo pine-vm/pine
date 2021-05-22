@@ -86,25 +86,18 @@ namespace ElmFullstack.WebHost.PersistentProcess
             Composition.TreeWithStringPath appConfig,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {
-            var sourceFiles = TreeToFlatDictionaryWithPathComparer(appConfig);
+            var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(appConfig);
 
             var (loweredAppFiles, _) = ElmApp.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default);
 
-            var processFromLoweredElmApp =
+            var (process, buildArtifacts) =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 loweredAppFiles,
                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
-            return (processFromLoweredElmApp.process, processFromLoweredElmApp.buildArtifacts);
-        }
-
-        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> TreeToFlatDictionaryWithPathComparer(
-            Composition.TreeWithStringPath tree)
-        {
-            return
-                ElmApp.ToFlatDictionaryWithPathComparer(tree.EnumerateBlobsTransitive());
+            return (process, buildArtifacts);
         }
 
         PersistentProcessVolatileRepresentation(
@@ -223,7 +216,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
                 logger?.Invoke("Found no composition record, default to initial state.");
 
                 return new PersistentProcessVolatileRepresentation(
-                    lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    lastCompositionLogRecordHashBase16: CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16,
                     lastAppConfig: null,
                     lastElmAppVolatileProcess: null,
                     lastSetElmAppStateResult: null);
@@ -248,7 +241,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
                 compositionLogRecords.FirstOrDefault();
 
             if (firstCompositionLogRecord.reduction == null &&
-                firstCompositionLogRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+                firstCompositionLogRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
             {
                 throw new Exception("Failed to get sufficient history: Composition log record points to parent " + firstCompositionLogRecord.compositionRecord.parentHashBase16);
             }
@@ -381,7 +374,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
                 var resultingElmAppState = processBefore.lastElmAppVolatileProcess.GetSerializedState();
 
                 var lastSetElmAppStateResult =
-                    applyCommonFormattingToJson(resultingElmAppState) == applyCommonFormattingToJson(projectedElmAppState)
+                    ApplyCommonFormattingToJson(resultingElmAppState) == ApplyCommonFormattingToJson(projectedElmAppState)
                     ?
                     new Result<string, string>
                     {
@@ -578,7 +571,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
             Composition.TreeWithStringPath destinationAppConfigTree)
         {
             var appConfigFiles =
-                ElmApp.ToFlatDictionaryWithPathComparer(destinationAppConfigTree.EnumerateBlobsTransitive());
+                Composition.TreeToFlatDictionaryWithPathComparer(destinationAppConfigTree);
 
             var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
             var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
@@ -647,7 +640,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
                         var resultingState = testProcess.GetSerializedState();
 
-                        if (applyCommonFormattingToJson(resultingState) != applyCommonFormattingToJson(elmAppStateMigratedSerialized))
+                        if (ApplyCommonFormattingToJson(resultingState) != ApplyCommonFormattingToJson(elmAppStateMigratedSerialized))
                             return new Result<string, string>
                             {
                                 Err = "Failed to load the migrated serialized state with the destination public app configuration. resulting State:\n" + resultingState
@@ -709,7 +702,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
             }
         }
 
-        static string applyCommonFormattingToJson(string originalJson)
+        static string ApplyCommonFormattingToJson(string originalJson)
         {
             try
             {
@@ -738,7 +731,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
                 report.lockTimeSpentMilli = (int)lockStopwatch.ElapsedMilliseconds;
 
-                if (lastCompositionLogRecordHashBase16 == CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+                if (lastCompositionLogRecordHashBase16 == CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
                     return (null, report);
 
                 var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();

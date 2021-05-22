@@ -18,7 +18,7 @@ namespace Pine
                 }
 
                 return Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)>.ok(
-                    (tree: loadFromGitHost.Success.tree, comesFromLocalFilesystem: false));
+                    (loadFromGitHost.Success.tree, comesFromLocalFilesystem: false));
             }
             else
             {

@@ -362,12 +362,9 @@ namespace ElmFullstack.WebHost
 
                                 var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
 
-                                var appConfigFilesNamesAndContents =
-                                    appConfigTree.EnumerateBlobsTransitive();
-
                                 var appConfigZipArchive =
                                     ZipArchive.ZipArchiveFromEntries(
-                                        ElmApp.ToFlatDictionaryWithPathComparer(appConfigFilesNamesAndContents));
+                                        Composition.TreeToFlatDictionaryWithPathComparer(appConfigTree));
 
                                 context.Response.StatusCode = 200;
                                 context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
@@ -466,7 +463,7 @@ namespace ElmFullstack.WebHost
                                     ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
                                     .Select(filePathAndContent =>
                                         (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
-                                        , content: filePathAndContent.content))
+                                        , filePathAndContent.content))
                                     .ToImmutableList();
 
                                 lock (avoidConcurrencyLock)
@@ -753,7 +750,7 @@ namespace ElmFullstack.WebHost
             "<a href='" + url + "'>" + url + "</a>";
 
         static string HtmlFromLines(params string[] lines) =>
-            String.Join("<br>\n", lines);
+            string.Join("<br>\n", lines);
 
         static string HtmlToDescribeApiRoute(ApiRoute apiRoute) =>
             LinkHtmlElementFromUrl(apiRoute.path) +

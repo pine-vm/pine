@@ -650,5 +650,16 @@ namespace Pine
 
             public int GetHashCode(IReadOnlyList<byte> obj) => obj.Count;
         }
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> TreeToFlatDictionaryWithPathComparer(
+            TreeWithStringPath tree) =>
+            ToFlatDictionaryWithPathComparer(tree.EnumerateBlobsTransitive());
+
+        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ToFlatDictionaryWithPathComparer(
+            IEnumerable<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> filesBeforeSorting) =>
+            filesBeforeSorting.ToImmutableSortedDictionary(
+                entry => entry.filePath,
+                entry => entry.fileContent,
+                EnumerableExtension.Comparer<IImmutableList<string>>());
     }
 }

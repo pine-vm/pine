@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Linq;
 using FluffySpoon.AspNet.LetsEncrypt;
 using Microsoft.AspNetCore.Builder;
@@ -18,7 +17,7 @@ namespace ElmFullstack.WebHost
     {
         private readonly ILogger<StartupPublicApp> _logger;
 
-        static TimeSpan notifyTimeHasArrivedMaximumDistance => TimeSpan.FromSeconds(10);
+        static TimeSpan NotifyTimeHasArrivedMaximumDistance => TimeSpan.FromSeconds(10);
 
         public StartupPublicApp(ILogger<StartupPublicApp> logger)
         {
@@ -114,7 +113,7 @@ namespace ElmFullstack.WebHost
                     webAppAndElmAppConfig?.SourceComposition == null ? null :
                     Composition.FindComponentByHash(webAppAndElmAppConfig.SourceComposition, sha256);
 
-                if(matchFromSourceComposition != null)
+                if (matchFromSourceComposition != null)
                 {
                     if (matchFromSourceComposition.BlobContent == null)
                         throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
@@ -348,11 +347,8 @@ namespace ElmFullstack.WebHost
                         }
                     }
 
-                    if (lastAppEventTimeHasArrived.HasValue
-                        ?
-                        notifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value)
-                        :
-                        true)
+                    if (!lastAppEventTimeHasArrived.HasValue ||
+                        NotifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value))
                     {
                         processEventTimeHasArrived();
                     }
@@ -448,7 +444,7 @@ namespace ElmFullstack.WebHost
                 });
         }
 
-        static Newtonsoft.Json.JsonSerializerSettings jsonSerializerSettings = new Newtonsoft.Json.JsonSerializerSettings
+        static readonly Newtonsoft.Json.JsonSerializerSettings jsonSerializerSettings = new Newtonsoft.Json.JsonSerializerSettings
         {
             DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
         };

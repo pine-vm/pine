@@ -20,13 +20,11 @@ namespace test_elm_fullstack
         {
             var elmApp = TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromExampleName("echo"));
 
-            using (var process = ElmFullstack.ProcessFromElm019Code.ProcessFromElmCodeFiles(
-                elmCodeFiles: elmApp).process)
-            {
-                var response = process.ProcessEvent("Hello!");
+            using var process = ProcessFromElm019Code.ProcessFromElmCodeFiles(elmCodeFiles: elmApp).process;
 
-                Assert.AreEqual("Echo from Elm:Hello!", response);
-            }
+            var response = process.ProcessEvent("Hello!");
+
+            Assert.AreEqual("Echo from Elm:Hello!", response);
         }
 
         [TestMethod]
@@ -108,12 +106,11 @@ namespace test_elm_fullstack
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
             {
-                using (var processInstance = InstantiatePersistentProcess())
-                {
-                    var processResponse = processInstance.ProcessEvent(serializedEvent);
+                using var processInstance = InstantiatePersistentProcess();
 
-                    Assert.AreEqual(expectedResponse, processResponse, false, "process response");
-                }
+                var processResponse = processInstance.ProcessEvent(serializedEvent);
+
+                Assert.AreEqual(expectedResponse, processResponse, false, "process response");
             }
 
             Directory.Delete(testDirectory, true);
@@ -153,16 +150,15 @@ namespace test_elm_fullstack
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
             {
-                using (var processInstance = InstantiatePersistentProcess())
-                {
-                    var (processResponses, compositionRecord) = processInstance.ProcessEvents(new[] { serializedEvent });
+                using var processInstance = InstantiatePersistentProcess();
 
-                    var processResponse = processResponses.Single();
+                var (processResponses, compositionRecord) = processInstance.ProcessEvents(new[] { serializedEvent });
 
-                    processStoreCompositions.Add(compositionRecord.serializedCompositionRecord);
+                var processResponse = processResponses.Single();
 
-                    Assert.AreEqual(expectedResponse, processResponse, false, "process response");
-                }
+                processStoreCompositions.Add(compositionRecord.serializedCompositionRecord);
+
+                Assert.AreEqual(expectedResponse, processResponse, false, "process response");
             }
         }
 
@@ -215,17 +211,16 @@ namespace test_elm_fullstack
 
                 foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
                 {
-                    using (var processInstance = InstantiatePersistentProcess())
-                    {
-                        var (processResponses, compositionRecord) = processInstance.ProcessEvents(new[] { serializedEvent });
+                    using var processInstance = InstantiatePersistentProcess();
 
-                        var processResponse = processResponses.Single();
+                    var (processResponses, compositionRecord) = processInstance.ProcessEvents(new[] { serializedEvent });
 
-                        processStoreCompositions.Add(compositionRecord.serializedCompositionRecord);
-                        lastEventReductionRecord = processInstance.ReductionRecordForCurrentState();
+                    var processResponse = processResponses.Single();
 
-                        Assert.AreEqual(expectedResponse, processResponse, false, "process response");
-                    }
+                    processStoreCompositions.Add(compositionRecord.serializedCompositionRecord);
+                    lastEventReductionRecord = processInstance.ReductionRecordForCurrentState();
+
+                    Assert.AreEqual(expectedResponse, processResponse, false, "process response");
                 }
 
                 reductionRecordAvailableFromStore = lastEventReductionRecord;
@@ -324,25 +319,23 @@ namespace test_elm_fullstack
             Func<ElmFullstack.IDisposableProcessWithStringInterface> buildNewProcessInstance,
             IEnumerable<(string serializedEvent, string expectedResponse)> eventsAndExpectedResponses)
         {
-            using (var baseProcess = buildNewProcessInstance())
+            using var baseProcess = buildNewProcessInstance();
+
+            foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
             {
-                foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponses)
-                {
-                    var iterationInitialState = baseProcess.GetSerializedState();
+                var iterationInitialState = baseProcess.GetSerializedState();
 
-                    var baseProcessResponse = baseProcess.ProcessEvent(serializedEvent);
+                var baseProcessResponse = baseProcess.ProcessEvent(serializedEvent);
 
-                    Assert.AreEqual(expectedResponse.ToString(), baseProcessResponse, false, "primary process response");
+                Assert.AreEqual(expectedResponse.ToString(), baseProcessResponse, false, "primary process response");
 
-                    using (var restoredProcess = buildNewProcessInstance())
-                    {
-                        restoredProcess.SetSerializedState(iterationInitialState);
+                using var restoredProcess = buildNewProcessInstance();
 
-                        var restoredProcessResponse = restoredProcess.ProcessEvent(serializedEvent);
+                restoredProcess.SetSerializedState(iterationInitialState);
 
-                        Assert.AreEqual(expectedResponse.ToString(), restoredProcessResponse, false, "restored process response");
-                    }
-                }
+                var restoredProcessResponse = restoredProcess.ProcessEvent(serializedEvent);
+
+                Assert.AreEqual(expectedResponse.ToString(), restoredProcessResponse, false, "restored process response");
             }
         }
     }

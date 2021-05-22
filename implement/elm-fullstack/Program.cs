@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-05-21";
+        static public string AppVersionId => "2021-05-22";
 
         static int Main(string[] args)
         {
@@ -185,9 +185,8 @@ namespace elm_fullstack
                             throw new Exception("Attempt to deploy app config failed: " + testDeployResult.Err);
                         }
 
-                        foreach (var projectedFilePathAndContent in testDeployResult.Ok.projectedFiles)
-                            processStoreFileStore.SetFileContent(
-                                projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+                        foreach (var (filePath, fileContent) in testDeployResult.Ok.projectedFiles)
+                            processStoreFileStore.SetFileContent(filePath, fileContent);
                     }
 
                     var webHostBuilder =
@@ -244,14 +243,14 @@ namespace elm_fullstack
                     var (site, sitePassword) = getSiteAndPasswordFromOptions();
 
                     var deployReport =
-                        deployApp(
+                        DeployApp(
                             sourcePath: fromOption.Value(),
                             site: site,
                             siteDefaultPassword: sitePassword,
                             initElmAppState: initElmAppStateOption.HasValue(),
                             promptForPasswordOnConsole: true);
 
-                    writeReportToFileInReportDirectory(
+                    WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "deploy-app.json");
                 });
@@ -271,13 +270,13 @@ namespace elm_fullstack
                     var (site, sitePassword) = siteAndPasswordFromCmd();
 
                     var attemptReport =
-                        setElmAppState(
+                        SetElmAppState(
                             site: site,
                             siteDefaultPassword: sitePassword,
                             sourcePath: fromOption.Value(),
                             promptForPasswordOnConsole: true);
 
-                    writeReportToFileInReportDirectory(
+                    WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "set-elm-app-state.json");
                 });
@@ -295,12 +294,12 @@ namespace elm_fullstack
                     var (site, sitePassword) = siteAndPasswordFromCmd();
 
                     var report =
-                        truncateProcessHistory(
+                        TruncateProcessHistory(
                             site: site,
                             siteDefaultPassword: sitePassword,
                             promptForPasswordOnConsole: true);
 
-                    writeReportToFileInReportDirectory(
+                    WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "truncate-process-history.json");
                 });
@@ -325,14 +324,14 @@ namespace elm_fullstack
 
                     Console.WriteLine("Begin reading process history from '" + site + "' ...");
 
-                    var restoreResult =
-                        readFilesForRestoreProcessFromAdminInterface(site, sitePassword);
+                    var (files, lastCompositionLogRecordHashBase16) =
+                        ReadFilesForRestoreProcessFromAdminInterface(site, sitePassword);
 
-                    Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + site + "'.");
+                    Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + site + "'.");
 
-                    var zipArchive = ZipArchive.ZipArchiveFromEntries(restoreResult.files);
+                    var zipArchive = ZipArchive.ZipArchiveFromEntries(files);
 
-                    var fileName = "process-" + restoreResult.lastCompositionLogRecordHashBase16 + ".zip";
+                    var fileName = "process-" + lastCompositionLogRecordHashBase16 + ".zip";
                     var filePath = Path.Combine(Environment.CurrentDirectory, fileName);
 
                     File.WriteAllBytes(filePath, zipArchive);
@@ -388,15 +387,14 @@ namespace elm_fullstack
 
                     var sourceComposition = Composition.FromTreeWithStringPath(loadFromPathResult.Ok.tree);
 
-                    var (sourceCompositionId, sourceSummary) = compileSourceSummary(loadFromPathResult.Ok.tree);
+                    var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadFromPathResult.Ok.tree);
 
                     Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'. Starting to compile...");
 
                     var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var sourceFiles =
-                        ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TreeToFlatDictionaryWithPathComparer(
-                            loadFromPathResult.Ok.tree);
+                        Composition.TreeToFlatDictionaryWithPathComparer(loadFromPathResult.Ok.tree);
 
                     string compilationException = null;
                     Composition.TreeWithStringPath compiledTree = null;
@@ -404,14 +402,14 @@ namespace elm_fullstack
 
                     try
                     {
-                        var compilationResult = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
+                        var (compiledAppFiles, iterationsReports) = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
                             ElmFullstack.ElmAppInterfaceConfig.Default);
 
-                        compilationIterationsReports = compilationResult.iterationsReports;
+                        compilationIterationsReports = iterationsReports;
 
                         compiledTree =
-                            Composition.SortedTreeFromSetOfBlobsWithStringPath(compilationResult.compiledAppFiles);
+                            Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
                     }
                     catch (Exception e)
                     {
@@ -434,8 +432,7 @@ namespace elm_fullstack
                     if (compiledTree != null)
                     {
                         var compiledFiles =
-                            ElmFullstack.ElmApp.ToFlatDictionaryWithPathComparer(
-                                compiledTree.EnumerateBlobsTransitive().ToImmutableList());
+                            Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
 
                         var compiledCompositionArchive =
                             ZipArchive.ZipArchiveFromEntries(compiledFiles);
@@ -461,7 +458,7 @@ namespace elm_fullstack
                         compiledCompositionId = compiledCompositionId,
                     };
 
-                    writeReportToFileInReportDirectory(
+                    WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "compile-app.json");
                 });
@@ -511,37 +508,36 @@ namespace elm_fullstack
                             throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
                     }
 
-                    using (var interactiveSession = new ElmInteractive.InteractiveSession(appCodeTree: contextAppCodeTree))
+                    using var interactiveSession = new ElmInteractive.InteractiveSession(appCodeTree: contextAppCodeTree);
+
+                    while (true)
                     {
-                        while (true)
+                        var submission = ReadLine.Read("> ");
+
+                        if (!(0 < submission?.Trim()?.Length))
+                            continue;
+
+                        var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                        var evalResult =
+                            interactiveSession.SubmitAndGetResultingValue(submission);
+
+                        evalStopwatch.Stop();
+
+                        if (evalResult.Ok == null)
                         {
-                            var submission = ReadLine.Read("> ");
-
-                            if (!(0 < submission?.Trim()?.Length))
-                                continue;
-
-                            var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                            var evalResult =
-                                interactiveSession.SubmitAndGetResultingValue(submission);
-
-                            evalStopwatch.Stop();
-
-                            if (evalResult.Ok == null)
-                            {
-                                Console.WriteLine("Failed to evaluate: " + evalResult.Err);
-                                continue;
-                            }
-
-                            if (enableInspectionOption.HasValue())
-                            {
-                                Console.WriteLine(
-                                    "Evaluation took " +
-                                    evalStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms.");
-                            }
-
-                            Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
+                            Console.WriteLine("Failed to evaluate: " + evalResult.Err);
+                            continue;
                         }
+
+                        if (enableInspectionOption.HasValue())
+                        {
+                            Console.WriteLine(
+                                "Evaluation took " +
+                                evalStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms.");
+                        }
+
+                        Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
                     }
                 });
             });
@@ -623,7 +619,7 @@ namespace elm_fullstack
         }
 
         static public string ElmMakeHomeDirectoryPath =>
-            System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
+            Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
 
         static public void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
         {
@@ -643,13 +639,13 @@ namespace elm_fullstack
             DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
         }
 
-        static (string compositionId, SourceSummaryStructure summary) compileSourceSummary(Composition.TreeWithStringPath sourceTree)
+        static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(Composition.TreeWithStringPath sourceTree)
         {
             var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceTree));
 
             var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
-            return (compositionId: compositionId, summary: new SourceSummaryStructure
+            return (compositionId, summary: new SourceSummaryStructure
             {
                 numberOfFiles = allBlobs.Count,
                 totalSizeOfFilesContents = allBlobs.Select(blob => blob.blobContent.Count).Sum(),
@@ -716,7 +712,7 @@ namespace elm_fullstack
             }
         }
 
-        static public DeployAppReport deployApp(
+        static public DeployAppReport DeployApp(
             string sourcePath,
             string site,
             string siteDefaultPassword,
@@ -733,7 +729,7 @@ namespace elm_fullstack
                 ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                     sourcePath: sourcePath);
 
-            var (sourceCompositionId, sourceSummary) = compileSourceSummary(buildResult.sourceTree);
+            var (sourceCompositionId, sourceSummary) = CompileSourceSummary(buildResult.sourceTree);
 
             var appConfigZipArchive = buildResult.configZipArchive;
 
@@ -741,9 +737,9 @@ namespace elm_fullstack
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
 
             var filteredSourceCompositionId =
-                Pine.CommonConversion.StringBase16FromByteArray(
+                CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        Pine.ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
+                        ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
             Console.WriteLine(
                 "Built app config " + filteredSourceCompositionId + " from " + sourceCompositionId + ".");
@@ -831,15 +827,15 @@ namespace elm_fullstack
                             appConfigValueInFile: appConfigValueInFile,
                             initElmAppState: initElmAppState);
 
-                    var attemptDeployReport =
+                    var (statusCode, responseReport) =
                         ElmFullstack.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
                             compositionLogEvent,
                             processStoreFileStore);
 
                     responseFromServer = new DeployAppReport.ResponseFromServerStruct
                     {
-                        statusCode = attemptDeployReport.statusCode,
-                        body = attemptDeployReport.responseReport,
+                        statusCode = statusCode,
+                        body = responseReport,
                     };
                 }
             }
@@ -872,41 +868,39 @@ namespace elm_fullstack
             System.Net.Http.HttpRequestMessage buildRequest() =>
                 AddUserAgentHeader(buildRequestBeforeAddingCommonHeaders());
 
-            using (var httpClient = new System.Net.Http.HttpClient())
+            using var httpClient = new System.Net.Http.HttpClient();
+
+            httpClient.Timeout = TimeSpan.FromMinutes(4);
+
+            void setHttpClientPassword(string password)
             {
-                httpClient.Timeout = TimeSpan.FromMinutes(4);
-
-                void setHttpClientPassword(string password)
-                {
-                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                        "Basic",
-                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                            ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(password))));
-                }
-
-                setHttpClientPassword(defaultPassword);
-
-                var httpResponse = await httpClient.SendAsync(buildRequest());
-
-                string enteredPassword = null;
-
-                if (promptForPasswordOnConsole &&
-                    httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
-                     httpResponse.Headers.WwwAuthenticate.Any())
-                {
-                    Console.WriteLine("The server at '" + httpResponse.RequestMessage.RequestUri.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
-
-                    enteredPassword = ReadLine.ReadPassword("> ").Trim();
-
-                    Console.WriteLine("I retry using this password...");
-
-                    setHttpClientPassword(enteredPassword);
-
-                    httpResponse = await httpClient.SendAsync(buildRequest());
-                }
-
-                return (httpResponse, enteredPassword);
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(password))));
             }
+
+            setHttpClientPassword(defaultPassword);
+
+            var httpResponse = await httpClient.SendAsync(buildRequest());
+
+            string enteredPassword = null;
+
+            if (promptForPasswordOnConsole &&
+                httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
+                 httpResponse.Headers.WwwAuthenticate.Any())
+            {
+                Console.WriteLine("The server at '" + httpResponse.RequestMessage.RequestUri.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
+
+                enteredPassword = ReadLine.ReadPassword("> ").Trim();
+
+                Console.WriteLine("I retry using this password...");
+
+                setHttpClientPassword(enteredPassword);
+
+                httpResponse = await httpClient.SendAsync(buildRequest());
+            }
+
+            return (httpResponse, enteredPassword);
         }
 
         class SetElmAppStateReport
@@ -931,7 +925,7 @@ namespace elm_fullstack
             }
         }
 
-        static SetElmAppStateReport setElmAppState(
+        static SetElmAppStateReport SetElmAppState(
             string site,
             string siteDefaultPassword,
             string sourcePath,
@@ -1017,7 +1011,7 @@ namespace elm_fullstack
             }
         }
 
-        static TruncateProcessHistoryReport truncateProcessHistory(
+        static TruncateProcessHistoryReport TruncateProcessHistory(
             string site,
             string siteDefaultPassword,
             bool promptForPasswordOnConsole)
@@ -1069,39 +1063,37 @@ namespace elm_fullstack
             };
         }
 
-        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16) readFilesForRestoreProcessFromAdminInterface(
+        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
             string sourceAdminInterface,
             string sourceAdminPassword)
         {
-            using (var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) })
+            using var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) };
+
+            sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
+                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sourceAdminPassword))));
+
+            var processHistoryFileStoreRemoteReader = new DelegatingFileStoreReader
             {
-                sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Basic",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(sourceAdminPassword))));
-
-                var processHistoryFileStoreRemoteReader = new Pine.DelegatingFileStoreReader
+                GetFileContentDelegate = filePath =>
                 {
-                    GetFileContentDelegate = filePath =>
-                    {
-                        var httpRequestPath =
-                            ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
-                            string.Join("/", filePath);
+                    var httpRequestPath =
+                        ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                        string.Join("/", filePath);
 
-                        var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
+                    var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
-                        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                            return null;
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        return null;
 
-                        if (!response.IsSuccessStatusCode)
-                            throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
+                    if (!response.IsSuccessStatusCode)
+                        throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
 
-                        return response.Content.ReadAsByteArrayAsync().Result;
-                    }
-                };
+                    return response.Content.ReadAsByteArrayAsync().Result;
+                }
+            };
 
-                return ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
-            }
+            return ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
         }
 
         static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
@@ -1111,13 +1103,13 @@ namespace elm_fullstack
             {
                 Console.WriteLine("Begin reading process history from '" + sourcePath + "' ...");
 
-                var restoreResult = readFilesForRestoreProcessFromAdminInterface(
+                var (files, lastCompositionLogRecordHashBase16) = ReadFilesForRestoreProcessFromAdminInterface(
                     sourceAdminInterface: sourcePath,
                     sourceAdminPassword: sourcePassword);
 
-                Console.WriteLine("Completed reading files to restore process " + restoreResult.lastCompositionLogRecordHashBase16 + ". Read " + restoreResult.files.Count + " files from '" + sourcePath + "'.");
+                Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + sourcePath + "'.");
 
-                return restoreResult.files;
+                return files;
             }
 
             var archive = File.ReadAllBytes(sourcePath);
@@ -1125,12 +1117,12 @@ namespace elm_fullstack
             var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
 
             return
-                ElmFullstack.ElmApp.ToFlatDictionaryWithPathComparer(
+                Composition.ToFlatDictionaryWithPathComparer(
                     Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
                     .EnumerateBlobsTransitive());
         }
 
-        static public void replicateProcessAndLogToConsole(
+        static public void ReplicateProcessAndLogToConsole(
             string site,
             string sitePassword,
             string sourcePath,
@@ -1147,31 +1139,29 @@ namespace elm_fullstack
 
             var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
 
-            using (var httpClient = new System.Net.Http.HttpClient())
-            {
-                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Basic",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                        ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(sitePassword))));
+            using var httpClient = new System.Net.Http.HttpClient();
 
-                var deployAddress =
-                    site.TrimEnd('/') +
-                    ElmFullstack.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
+            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
+                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sitePassword))));
 
-                Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
+            var deployAddress =
+                site.TrimEnd('/') +
+                ElmFullstack.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
 
-                var httpContent = new System.Net.Http.ByteArrayContent(processHistoryZipArchive);
+            Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
 
-                httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
-                httpContent.Headers.ContentDisposition =
-                    new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = processHistoryComponentHashBase16 + ".zip" };
+            var httpContent = new System.Net.Http.ByteArrayContent(processHistoryZipArchive);
 
-                var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
+            httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+            httpContent.Headers.ContentDisposition =
+                new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = processHistoryComponentHashBase16 + ".zip" };
 
-                Console.WriteLine(
-                    "Server response: " + httpResponse.StatusCode + "\n" +
-                     httpResponse.Content.ReadAsStringAsync().Result);
-            }
+            var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
+
+            Console.WriteLine(
+                "Server response: " + httpResponse.StatusCode + "\n" +
+                 httpResponse.Content.ReadAsStringAsync().Result);
         }
 
         static (string commandName, bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)
@@ -1208,7 +1198,7 @@ namespace elm_fullstack
 
             var executableIsRegisteredOnPath =
                 (getCurrentValueOfEnvironmentVariable() ?? "")
-                .Split(System.IO.Path.PathSeparator).Contains(executableDirectoryPath);
+                .Split(Path.PathSeparator).Contains(executableDirectoryPath);
 
             return (commandName, executableIsRegisteredOnPath, registerExecutableForCurrentUser);
         }
@@ -1227,9 +1217,9 @@ namespace elm_fullstack
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
 
             var webAppConfigFileId =
-                Pine.CommonConversion.StringBase16FromByteArray(
+                CommonConversion.StringBase16FromByteArray(
                     Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        Pine.ZipArchive.EntriesFromZipArchive(configZipArchive)))));
+                        ZipArchive.EntriesFromZipArchive(configZipArchive)))));
 
             Console.WriteLine(
                 "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
@@ -1253,7 +1243,7 @@ namespace elm_fullstack
 
         static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-fullstack-tool", "report");
 
-        static void writeReportToFileInReportDirectory(string reportContent, string reportKind)
+        static void WriteReportToFileInReportDirectory(string reportContent, string reportKind)
         {
             var fileName = CommonConversion.TimeStringViewForReport(programStartTime) + "_" + reportKind;
 

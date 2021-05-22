@@ -50,9 +50,9 @@ namespace ElmFullstack
         {
             javascriptEngine = ConstructJsEngine();
 
-            var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
+            javascriptEngine.Evaluate(javascriptPreparedToRun);
 
-            var resetAppStateResult = javascriptEngine.Evaluate(
+            javascriptEngine.Evaluate(
                 ProcessFromElm019Code.appStateJsVarName + " = " + ProcessFromElm019Code.initStateJsFunctionPublishedSymbol + ";");
         }
 
@@ -108,13 +108,6 @@ namespace ElmFullstack
 
             return jsReturnValue?.ToString();
         }
-
-        string EvaluateInJsEngineAndReturnResultAsString(string expressionJavascript)
-        {
-            var evalResult = javascriptEngine.Evaluate(expressionJavascript);
-
-            return evalResult?.ToString();
-        }
     }
 
     public class ProcessFromElm019Code
@@ -124,7 +117,7 @@ namespace ElmFullstack
             ProcessFromElmCodeFiles(
             IReadOnlyCollection<(IImmutableList<string>, IImmutableList<byte>)> elmCodeFiles,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null) =>
-            ProcessFromElmCodeFiles(ElmApp.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
+            ProcessFromElmCodeFiles(Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
 
         static public (IDisposableProcessWithStringInterface process,
             (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
@@ -443,8 +436,8 @@ namespace ElmFullstack
             var paramNameList = Enumerable.Range(0, arity).Select(paramIndex => "param_" + paramIndex).ToList();
 
             return
-                "(" + String.Join(",", paramNameList) + ") => " + functionToCallName +
-                String.Join("", paramNameList.Select(paramName => "(" + paramName + ")"));
+                "(" + string.Join(",", paramNameList) + ") => " + functionToCallName +
+                string.Join("", paramNameList.Select(paramName => "(" + paramName + ")"));
         }
 
         static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>

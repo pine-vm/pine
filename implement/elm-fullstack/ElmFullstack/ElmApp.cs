@@ -32,13 +32,6 @@ namespace ElmFullstack
 
     public class ElmApp
     {
-        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ToFlatDictionaryWithPathComparer(
-            IEnumerable<(IImmutableList<string> filePath, IImmutableList<byte> fileContent)> filesBeforeSorting) =>
-            filesBeforeSorting.ToImmutableSortedDictionary(
-                entry => entry.filePath,
-                entry => entry.fileContent,
-                EnumerableExtension.Comparer<IImmutableList<string>>());
-
         static public (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig) =>
@@ -296,7 +289,7 @@ namespace ElmFullstack
 
             var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
 
-            var initAppResult = javascriptEngine.Evaluate(javascript);
+            javascriptEngine.Evaluate(javascript);
 
             return javascriptEngine;
         }
@@ -335,15 +328,12 @@ namespace ElmFullstack
 
         static byte[] GetManifestResourceStreamContent(string name)
         {
-            using (var stream = typeof(ElmApp).Assembly.GetManifestResourceStream(name))
-            {
-                using (var memoryStream = new System.IO.MemoryStream())
-                {
-                    stream.CopyTo(memoryStream);
+            using var stream = typeof(ElmApp).Assembly.GetManifestResourceStream(name);
+            using var memoryStream = new System.IO.MemoryStream();
 
-                    return memoryStream.ToArray();
-                }
-            }
+            stream.CopyTo(memoryStream);
+
+            return memoryStream.ToArray();
         }
 
         static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError) =>

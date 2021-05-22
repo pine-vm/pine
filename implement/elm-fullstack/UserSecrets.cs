@@ -8,14 +8,14 @@ namespace elm_fullstack
 {
     static public class UserSecrets
     {
-        static string fileStoreDirectory =>
+        static string FileStoreDirectory =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "elm-fullstack", "user-secrets");
 
-        static IFileStore fileStore => new FileStoreFromSystemIOFile(fileStoreDirectory);
+        static IFileStore FileStore => new FileStoreFromSystemIOFile(FileStoreDirectory);
 
         static public void StorePasswordForSite(string site, string password)
         {
-            fileStore.SetFileContent(
+            FileStore.SetFileContent(
                 ImmutableList.Create(System.Web.HttpUtility.UrlEncode(site.TrimEnd('/'))), Encoding.UTF8.GetBytes(password));
         }
 
@@ -25,7 +25,7 @@ namespace elm_fullstack
                 return null;
 
             var fileContent =
-                fileStore.GetFileContent(ImmutableList.Create(System.Web.HttpUtility.UrlEncode(site.TrimEnd('/'))));
+                FileStore.GetFileContent(ImmutableList.Create(System.Web.HttpUtility.UrlEncode(site.TrimEnd('/'))));
 
             if (fileContent == null)
                 return null;

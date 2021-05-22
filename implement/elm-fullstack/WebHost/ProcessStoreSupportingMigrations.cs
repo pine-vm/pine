@@ -38,7 +38,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
             var parentHashBase16 =
                 originalStoreLastCompositionRecord == null
                 ?
-                CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16
+                CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16
                 :
                 CompositionLogRecordInFile.HashBase16FromCompositionRecord(originalStoreLastCompositionRecord);
 
@@ -77,7 +77,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
                 ListFilesInDirectoryDelegate = originalFileStore.ListFilesInDirectory,
             };
 
-            return (parentHashBase16: parentHashBase16, projectedFiles: projectedFiles, projectedReader: projectedFileStoreReader);
+            return (parentHashBase16, projectedFiles, projectedReader: projectedFileStoreReader);
         }
 
         static public IProcessStoreReader EmptyProcessStoreReader()
@@ -134,7 +134,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
     public class CompositionLogRecordInFile
     {
-        static public string compositionLogFirstRecordParentHashBase16 => null;
+        static public string CompositionLogFirstRecordParentHashBase16 => null;
 
         static public string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
             CommonConversion.StringBase16FromByteArray(Composition.GetHash(Composition.Component.Blob(compositionRecord)));
@@ -233,16 +233,16 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
     {
         protected IFileStoreReader fileStore;
 
-        protected IFileStoreReader literalElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
+        protected IFileStoreReader LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
         //  Plain Pine component.
-        protected IFileStoreReader componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
+        protected IFileStoreReader ComponentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
 
-        protected IFileStoreReader deflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
+        protected IFileStoreReader DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
-        protected IFileStoreReader deflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
+        protected IFileStoreReader DeflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
 
-        protected IFileStoreReader provisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
+        protected IFileStoreReader ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
         public ProcessStoreReaderInFileStore(IFileStoreReader fileStore)
         {
@@ -258,14 +258,14 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
                 GetFilePathForComponentInComponentFileStore(componentHashBase16);
 
             var originalFile =
-                literalElementFileStore.GetFileContent(filePath) ??
-                componentFileStore.GetFileContent(filePath);
+                LiteralElementFileStore.GetFileContent(filePath) ??
+                ComponentFileStore.GetFileContent(filePath);
 
             if (originalFile == null)
             {
                 var deflatedFile =
-                    deflatedLiteralElementFileStore.GetFileContent(filePath) ??
-                    deflatedComponentFileStore.GetFileContent(filePath);
+                    DeflatedLiteralElementFileStore.GetFileContent(filePath) ??
+                    DeflatedComponentFileStore.GetFileContent(filePath);
 
                 if (deflatedFile != null)
                     return CommonConversion.Inflate(deflatedFile);
@@ -297,7 +297,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
         {
             var filePath = ImmutableList.Create(reducedCompositionHash);
 
-            var fileContent = provisionalReductionFileStore.GetFileContent(filePath);
+            var fileContent = ProvisionalReductionFileStore.GetFileContent(filePath);
 
             if (fileContent == null)
                 return null;
@@ -332,7 +332,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
         }
 
         public IEnumerable<string> ReductionsFilesNames() =>
-            provisionalReductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
+            ProvisionalReductionFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
             .Select(Enumerable.Last);
 
         public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse()
@@ -344,7 +344,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
             var nextHashBase16 = CommonConversion.StringBase16FromByteArray(compositionHeadHash);
 
-            while (nextHashBase16 != CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16)
+            while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
             {
                 var compositionRecordComponent = LoadComponent(nextHashBase16);
 
@@ -375,20 +375,20 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
     public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
     {
-        static int tryDeflateSizeThreshold => 10_000;
+        static int TryDeflateSizeThreshold => 10_000;
 
         protected IFileStoreWriter fileStore;
 
-        protected IFileStoreWriter literalElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
+        protected IFileStoreWriter LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
         //  Plain Kalmit component.
-        protected IFileStoreWriter componentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
+        protected IFileStoreWriter ComponentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
 
-        protected IFileStoreWriter deflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
+        protected IFileStoreWriter DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
-        protected IFileStoreWriter deflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
+        protected IFileStoreWriter DeflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
 
-        protected IFileStoreWriter provisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
+        protected IFileStoreWriter ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
         public ProcessStoreWriterInFileStore(IFileStoreWriter fileStore)
         {
@@ -410,7 +410,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
             var filePath = ImmutableList.Create(fileName);
 
-            provisionalReductionFileStore.SetFileContent(
+            ProvisionalReductionFileStore.SetFileContent(
                 filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(reductionRecord, recordSerializationSettings)));
         }
 
@@ -429,13 +429,13 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
             void storeSelf()
             {
-                if (tryDeflateSizeThreshold <= serialRepresentation.Length)
+                if (TryDeflateSizeThreshold <= serialRepresentation.Length)
                 {
                     var deflated = CommonConversion.Deflate(serialRepresentation);
 
                     if (deflated.Length * 10 < serialRepresentation.Length * 8)
                     {
-                        deflatedLiteralElementFileStore.SetFileContent(
+                        DeflatedLiteralElementFileStore.SetFileContent(
                             GetFilePathForComponentInComponentFileStore(hashBase16),
                             deflated);
 
@@ -443,7 +443,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
                     }
                 }
 
-                literalElementFileStore.SetFileContent(
+                LiteralElementFileStore.SetFileContent(
                     GetFilePathForComponentInComponentFileStore(hashBase16),
                     serialRepresentation);
             }

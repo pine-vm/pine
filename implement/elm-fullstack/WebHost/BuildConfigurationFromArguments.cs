@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using Pine;
 
@@ -42,10 +41,7 @@ namespace ElmFullstack.WebHost
             var configZipArchive =
                 BuildConfigurationZipArchive(sourceComposition: filteredSourceComposition);
 
-            return
-                (sourceTree: sourceTree,
-                filteredSourceCompositionId: filteredSourceCompositionId,
-                configZipArchive: configZipArchive);
+            return (sourceTree, filteredSourceCompositionId, configZipArchive);
         }
 
         static public Composition.TreeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
@@ -84,26 +80,9 @@ namespace ElmFullstack.WebHost
                 throw new Exception("Failed to map source to tree.");
 
             var sourceFiles =
-                ElmApp.ToFlatDictionaryWithPathComparer(
-                    parseSourceAsTree.Ok.EnumerateBlobsTransitive());
+                Composition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree.Ok);
 
             return ZipArchive.ZipArchiveFromEntries(sourceFiles);
-        }
-
-        static string FindDirectoryUpwardContainingElmJson(string searchBeginDirectory)
-        {
-            var currentDirectory = searchBeginDirectory;
-
-            while (true)
-            {
-                if (!(0 < currentDirectory?.Length))
-                    return null;
-
-                if (File.Exists(Path.Combine(currentDirectory, "elm.json")))
-                    return currentDirectory;
-
-                currentDirectory = Path.GetDirectoryName(currentDirectory);
-            }
         }
     }
 }

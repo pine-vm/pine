@@ -63,10 +63,7 @@ namespace Pine
 
         public FileStoreFromSystemIOFile(string directoryPath)
         {
-            if (directoryPath == null)
-                throw new ArgumentNullException(nameof(directoryPath));
-
-            this.directoryPath = directoryPath;
+            this.directoryPath = directoryPath ?? throw new ArgumentNullException(nameof(directoryPath));
         }
 
         string CombinePath(IImmutableList<string> path)
@@ -113,10 +110,9 @@ namespace Pine
 
             EnsureDirectoryExists(directoryPath);
 
-            using (var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write))
-            {
-                fileStream.Write(fileContent);
-            }
+            using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write);
+
+            fileStream.Write(fileContent);
         }
 
         public byte[] GetFileContent(IImmutableList<string> path)

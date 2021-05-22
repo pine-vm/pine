@@ -155,7 +155,7 @@ namespace test_elm_fullstack
 
                 var compositionRecord = new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
                 {
-                    parentHashBase16 = ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.compositionLogFirstRecordParentHashBase16,
+                    parentHashBase16 = ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16,
                     compositionEvent = compositionLogEvent
                 };
 

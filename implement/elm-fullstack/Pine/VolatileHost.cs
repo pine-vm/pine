@@ -19,7 +19,7 @@ namespace Pine
 
         readonly MetadataReferenceResolver metadataResolver;
 
-        Func<byte[], byte[]> getFileFromHashSHA256;
+        readonly Func<byte[], byte[]> getFileFromHashSHA256;
 
         public VolatileHost(
             Func<byte[], byte[]> getFileFromHashSHA256,
@@ -77,10 +77,10 @@ namespace Pine
 
         public RunResult ProcessRequest(string request)
         {
-            return RunScript(requestExpression(request));
+            return RunScript(RequestExpression(request));
         }
 
-        static string requestExpression(string request)
+        static string RequestExpression(string request)
         {
             return "InterfaceToHost_Request(\"" + request.Replace(@"\", @"\\").Replace("\"", "\\\"") + "\")";
         }

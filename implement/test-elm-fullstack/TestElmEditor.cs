@@ -50,46 +50,41 @@ a =
     in
     b + c
 ";
-            using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource))
-            {
-                using (var server = testSetup.StartWebHost())
+            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource);
+            using var server = testSetup.StartWebHost();
+            using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
+            var formatRequest =
+                new ElmEditorApi.ElmEditorApiRequestStructure
                 {
-                    using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
-                    {
-                        var formatRequest =
-                            new ElmEditorApi.ElmEditorApiRequestStructure
-                            {
-                                FormatElmModuleTextRequest = ImmutableList.Create(elmModuleTextBeforeFormatting)
-                            };
+                    FormatElmModuleTextRequest = ImmutableList.Create(elmModuleTextBeforeFormatting)
+                };
 
-                        var httpResponse =
-                            publicAppClient
-                            .PostAsync("/api", new StringContent(JsonConvert.SerializeObject(formatRequest))).Result;
+            var httpResponse =
+                publicAppClient
+                .PostAsync("/api", new StringContent(JsonConvert.SerializeObject(formatRequest))).Result;
 
-                        var responseContentAsString =
-                            httpResponse.Content.ReadAsStringAsync().Result;
+            var responseContentAsString =
+                httpResponse.Content.ReadAsStringAsync().Result;
 
-                        Assert.AreEqual(
-                            HttpStatusCode.OK,
-                            httpResponse.StatusCode,
-                            "Response status code should be OK.\nresponseContentAsString:\n" + responseContentAsString);
+            Assert.AreEqual(
+                HttpStatusCode.OK,
+                httpResponse.StatusCode,
+                "Response status code should be OK.\nresponseContentAsString:\n" + responseContentAsString);
 
-                        var responseStructure =
-                            JsonConvert.DeserializeObject<ElmEditorApi.ElmEditorApiResponseStructure>(responseContentAsString);
+            var responseStructure =
+                JsonConvert.DeserializeObject<ElmEditorApi.ElmEditorApiResponseStructure>(responseContentAsString);
 
-                        Assert.IsNull(
-                            responseStructure.ErrorResponse,
-                            "responseStructure.ErrorResponse should be null.\n" + responseStructure.ErrorResponse);
+            Assert.IsNull(
+                responseStructure.ErrorResponse,
+                "responseStructure.ErrorResponse should be null.\n" + responseStructure.ErrorResponse);
 
-                        Assert.AreEqual(
-                            NormalizeStringTestingElmFormat(expectedElmModuleTextAfterFormatting),
-                            NormalizeStringTestingElmFormat(responseStructure
-                                ?.FormatElmModuleTextResponse?.FirstOrDefault()
-                                ?.formattedText.Just?.FirstOrDefault()),
-                            "Response content");
-                    }
-                }
-            }
+            Assert.AreEqual(
+                NormalizeStringTestingElmFormat(expectedElmModuleTextAfterFormatting),
+                NormalizeStringTestingElmFormat(responseStructure
+                    ?.FormatElmModuleTextResponse?.FirstOrDefault()
+                    ?.formattedText.Just?.FirstOrDefault()),
+                "Response content");
         }
     }
 

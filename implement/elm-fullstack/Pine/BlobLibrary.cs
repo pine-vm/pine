@@ -11,9 +11,9 @@ namespace Pine
     {
         static public Func<Func<byte[], byte[]>, Func<byte[], byte[]>> OverrideGetBlobWithSHA256;
 
-        static string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
+        static readonly string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
 
-        static string containerUrl => "https://kalmit.blob.core.windows.net/blob-library";
+        static string ContainerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 
         static public byte[] GetBlobWithSHA256(byte[] sha256)
         {
@@ -58,10 +58,10 @@ namespace Pine
             { }
 
             string url(bool useUppercaseForHash) =>
-                containerUrl + "/" + sha256DirectoryName + "/" +
+                ContainerUrl + "/" + sha256DirectoryName + "/" +
                 (useUppercaseForHash ? fileName.ToUpperInvariant() : fileName);
 
-            var handler = new HttpClientHandler()
+            var handler = new HttpClientHandler
             {
                 AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip
             };

@@ -49,10 +49,10 @@ namespace Pine
                 {
                     var entry = fclZipArchive.CreateEntry(entryName, compressionLevel);
                     entry.LastWriteTime = lastWriteTime;
-                    using (var entryStream = entry.Open())
-                    {
-                        entryStream.Write(entryContent, 0, entryContent.Length);
-                    }
+
+                    using var entryStream = entry.Open();
+
+                    entryStream.Write(entryContent, 0, entryContent.Length);
                 }
             }
 
@@ -66,20 +66,19 @@ namespace Pine
 
         static public IEnumerable<(string name, byte[] content)> EntriesFromZipArchive(byte[] zipArchive)
         {
-            using (var fclZipArchive = new System.IO.Compression.ZipArchive(new MemoryStream(zipArchive), System.IO.Compression.ZipArchiveMode.Read))
+            using var fclZipArchive = new System.IO.Compression.ZipArchive(new MemoryStream(zipArchive), System.IO.Compression.ZipArchiveMode.Read);
+
+            foreach (var entry in fclZipArchive.Entries)
             {
-                foreach (var entry in fclZipArchive.Entries)
+                var entryContent = new byte[entry.Length];
+
+                using (var entryStream = entry.Open())
                 {
-                    var entryContent = new byte[entry.Length];
-
-                    using (var entryStream = entry.Open())
-                    {
-                        if (entryStream.Read(entryContent, 0, entryContent.Length) != entryContent.Length)
-                            throw new NotImplementedException();
-                    }
-
-                    yield return (entry.FullName, entryContent);
+                    if (entryStream.Read(entryContent, 0, entryContent.Length) != entryContent.Length)
+                        throw new NotImplementedException();
                 }
+
+                yield return (entry.FullName, entryContent);
             }
         }
     }

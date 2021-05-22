@@ -17,14 +17,13 @@ namespace elm_fullstack.ElmInteractive
             string submission,
             IReadOnlyList<string> previousLocalSubmissions = null)
         {
-            using (var jsEngine = PrepareJsEngineToEvaluateElm())
-            {
-                return EvaluateSubmissionAndGetResultingValue(
-                    jsEngine,
-                    appCodeTree: appCodeTree,
-                    submission: submission,
-                    previousLocalSubmissions: previousLocalSubmissions);
-            }
+            using var jsEngine = PrepareJsEngineToEvaluateElm();
+
+            return EvaluateSubmissionAndGetResultingValue(
+                jsEngine,
+                appCodeTree: appCodeTree,
+                submission: submission,
+                previousLocalSubmissions: previousLocalSubmissions);
         }
 
         static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
@@ -36,7 +35,7 @@ namespace elm_fullstack.ElmInteractive
             var modulesTexts =
                 appCodeTree == null ? null
                 :
-                ElmApp.ToFlatDictionaryWithPathComparer(appCodeTree.EnumerateBlobsTransitive())
+                TreeToFlatDictionaryWithPathComparer(appCodeTree)
                 .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
                 .WhereNotNull()
                 .ToImmutableList();
@@ -94,7 +93,7 @@ namespace elm_fullstack.ElmInteractive
 
             var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
 
-            var initAppResult = javascriptEngine.Evaluate(javascriptPreparedToRun);
+            javascriptEngine.Evaluate(javascriptPreparedToRun);
 
             return javascriptEngine;
         }
@@ -109,15 +108,12 @@ namespace elm_fullstack.ElmInteractive
 
         static byte[] GetManifestResourceStreamContent(string name)
         {
-            using (var stream = typeof(ElmInteractive).Assembly.GetManifestResourceStream(name))
-            {
-                using (var memoryStream = new MemoryStream())
-                {
-                    stream.CopyTo(memoryStream);
+            using var stream = typeof(ElmInteractive).Assembly.GetManifestResourceStream(name);
+            using var memoryStream = new MemoryStream();
 
-                    return memoryStream.ToArray();
-                }
-            }
+            stream.CopyTo(memoryStream);
+
+            return memoryStream.ToArray();
         }
 
         class EvaluateSubmissionResponseStructure

@@ -73,7 +73,7 @@ namespace test_elm_fullstack
             var loadedFilesNamesAndHashes =
                 loadedFilesNamesAndContents
                 .Select(fileNameAndContent =>
-                    (fileName: fileNameAndContent.fileName,
+                    (fileNameAndContent.fileName,
                         fileHash: Pine.CommonConversion.StringBase16FromByteArray(
                             Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
                 .ToImmutableList();
