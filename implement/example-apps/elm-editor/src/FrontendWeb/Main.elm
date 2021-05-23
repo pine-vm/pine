@@ -115,7 +115,7 @@ type Event
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
-    | UserInputSaveProject (Maybe { createDiffIfBaseAvailable : Bool })
+    | UserInputGetLinkToProject (Maybe { createDiffIfBaseAvailable : Bool })
     | UserInputLoadedZipArchiveFile File.File
     | UserInputLoadedZipArchiveBytes Bytes.Bytes
     | UserInputImportProjectFromZipArchive UserInputImportFromZipArchiveEventStructure
@@ -158,7 +158,7 @@ type PopupState
 
 
 type DialogState
-    = SaveOrShareDialog SaveOrShareDialogState
+    = GetLinkToProjectDialog GetLinkToProjectDialogState
     | LoadFromGitDialog LoadFromGitDialogState
     | ExportToZipArchiveDialog
     | ImportFromZipArchiveDialog ImportFromZipArchiveDialogState
@@ -168,7 +168,7 @@ type TitlebarMenuEntry
     = ProjectMenuEntry
 
 
-type alias SaveOrShareDialogState =
+type alias GetLinkToProjectDialogState =
     { urlToProject : Maybe String }
 
 
@@ -280,14 +280,14 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputSaveProject maybeGenerateLink ->
+        UserInputGetLinkToProject maybeGenerateLink ->
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
                     let
                         dialogBefore =
                             (case stateBefore.popup of
-                                Just (ModalDialog (SaveOrShareDialog saveOrShareDialog)) ->
-                                    Just saveOrShareDialog
+                                Just (ModalDialog (GetLinkToProjectDialog getLinkDialog)) ->
+                                    Just getLinkDialog
 
                                 _ ->
                                     Nothing
@@ -330,7 +330,7 @@ update event stateBefore =
                                     , Navigation.replaceUrl stateBefore.navigationKey url
                                     )
                     in
-                    ( { stateBefore | popup = Just (ModalDialog (SaveOrShareDialog dialog)) }, cmd )
+                    ( { stateBefore | popup = Just (ModalDialog (GetLinkToProjectDialog dialog)) }, cmd )
 
                 _ ->
                     ( stateBefore, Cmd.none )
@@ -1380,10 +1380,10 @@ view state =
                 Just (TitlebarMenu _ _) ->
                     []
 
-                Just (ModalDialog (SaveOrShareDialog saveOrShareDialog)) ->
+                Just (ModalDialog (GetLinkToProjectDialog dialog)) ->
                     case state.workspace of
                         WorkspaceOk workingState ->
-                            viewSaveOrShareDialog saveOrShareDialog workingState.fileTree
+                            viewGetLinkToProjectDialog dialog workingState.fileTree
                                 |> popupWindowElementAttributesFromAttributes
 
                         _ ->
@@ -1593,18 +1593,9 @@ type alias PopupWindowAttributes event =
     }
 
 
-viewSaveOrShareDialog : SaveOrShareDialogState -> ProjectState.FileTreeNode -> PopupWindowAttributes Event
-viewSaveOrShareDialog saveOrShareDialog projectState =
+viewGetLinkToProjectDialog : GetLinkToProjectDialogState -> ProjectState.FileTreeNode -> PopupWindowAttributes Event
+viewGetLinkToProjectDialog dialogState projectState =
     let
-        projectSummaryElement =
-            projectSummaryElementForSaveOrExportDialog projectState
-
-        buttonGenerateUrl =
-            buttonElement
-                { label = "Generate link to project"
-                , onPress = Just (UserInputSaveProject (Just { createDiffIfBaseAvailable = True }))
-                }
-
         linkElementFromUrl urlToProject =
             let
                 maybeDependencyUrl =
@@ -1643,10 +1634,16 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
                         |> Maybe.withDefault []
 
                 linkDescriptionLines =
-                    Element.paragraph [] [ Element.text ("Length of this link URL: " ++ String.fromInt (String.length urlToProject)) ]
+                    Element.paragraph [] [ Element.text ("Length of this link: " ++ String.fromInt (String.length urlToProject)) ]
                         :: dependenciesDescriptionLines
             in
-            [ Element.html (htmlOfferingTextToCopy urlToProject)
+            [ linkElementWithWrappedLabel
+                { url = urlToProject, labelText = urlToProject }
+                |> Element.el
+                    [ Element.height (Element.px 100)
+                    , Element.scrollbarY
+                    , Element.Font.size ((defaultFontSize * 4) // 5)
+                    ]
             , linkDescriptionLines
                 |> Element.textColumn [ Element.Font.size ((defaultFontSize * 4) // 5), Element.padding defaultFontSize ]
             ]
@@ -1655,28 +1652,63 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
                     , Element.width Element.fill
                     ]
 
-        urlElement =
-            case saveOrShareDialog.urlToProject of
+        buttonGenerateLinkOrResultElement =
+            case dialogState.urlToProject of
                 Nothing ->
-                    linkElementFromUrl ""
-                        |> Element.el [ elementTransparent True ]
+                    buttonElement
+                        { label = "Generate link to project"
+                        , onPress = Just (UserInputGetLinkToProject (Just { createDiffIfBaseAvailable = True }))
+                        }
+                        |> Element.el [ Element.centerX ]
 
                 Just urlToProject ->
                     linkElementFromUrl urlToProject
     in
-    { title = "Save or Share Project"
+    { title = "Get Link to Project for Bookmarking or Sharing"
     , guideParagraphItems =
-        [ Element.text "Get a link that you or others can later use to load the project's current state into the editor again." ]
+        [ Element.text "Get a link that you can later use to load the project's current state into the editor again. This link is a fast way to share your project state with other people." ]
     , contentElement =
-        [ projectSummaryElement
-        , buttonGenerateUrl |> Element.el [ Element.centerX ]
-        , urlElement |> Element.el [ Element.width Element.fill ]
+        [ projectSummaryElementForDialog projectState
+        , buttonGenerateLinkOrResultElement |> Element.el [ Element.width Element.fill ]
         ]
             |> Element.column
                 [ Element.spacing defaultFontSize
                 , Element.width Element.fill
                 ]
     }
+
+
+linkElementWithWrappedLabel : { url : String, labelText : String } -> Element.Element e
+linkElementWithWrappedLabel { url, labelText } =
+    [ Element.html
+        (Html.node "style"
+            []
+            [ Html.text """
+a:link {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:visited {
+  color: inherit;
+}
+
+a:hover {
+  color: inherit;
+  text-decoration: underline;
+}"""
+            ]
+        )
+    , Element.html
+        (Html.a
+            [ HA.href url
+            , HA.style "overflow-wrap" "anywhere"
+            , HA.style "white-space" "pre-wrap"
+            ]
+            [ Html.text labelText ]
+        )
+    ]
+        |> Element.column []
 
 
 viewLoadFromGitDialog : LoadFromGitDialogState -> PopupWindowAttributes Event
@@ -1739,9 +1771,6 @@ viewLoadFromGitDialog dialogState =
 viewExportToZipArchiveDialog : ProjectState.FileTreeNode -> PopupWindowAttributes Event
 viewExportToZipArchiveDialog projectState =
     let
-        projectSummaryElement =
-            projectSummaryElementForSaveOrExportDialog projectState
-
         buttonDownloadArchive =
             buttonElement
                 { label = "Download Archive"
@@ -1752,7 +1781,7 @@ viewExportToZipArchiveDialog projectState =
     , guideParagraphItems =
         [ Element.text "Download a zip archive containing all files in your project. You can also use this archive with the 'Import from Zip Archive' function to load the project's state into the editor again." ]
     , contentElement =
-        [ projectSummaryElement
+        [ projectSummaryElementForDialog projectState
         , buttonDownloadArchive |> Element.el [ Element.centerX ]
         ]
             |> Element.column
@@ -1804,8 +1833,8 @@ elementToDisplayLoadFromGitError loadError =
         |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
 
 
-projectSummaryElementForSaveOrExportDialog : ProjectState.FileTreeNode -> Element.Element e
-projectSummaryElementForSaveOrExportDialog projectState =
+projectSummaryElementForDialog : ProjectState.FileTreeNode -> Element.Element e
+projectSummaryElementForDialog projectState =
     let
         projectFiles =
             projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
@@ -2435,8 +2464,8 @@ titlebarMenuEntryDropdownContent state menuEntry =
                         "📂 Import From Zip Archive"
                         True
                     , titlebarMenuEntry
-                        (UserInputSaveProject Nothing)
-                        "💾 Save Project"
+                        (UserInputGetLinkToProject Nothing)
+                        "💾 Get Link for Bookmarking or Sharing"
                         canSaveProject
                     , titlebarMenuEntry
                         (UserInputExportProjectToZipArchive { sendDownloadCmd = False })
@@ -2576,21 +2605,6 @@ stringFromFileContent bytes =
 fileContentFromString : String -> Bytes.Bytes
 fileContentFromString =
     Bytes.Encode.string >> Bytes.Encode.encode
-
-
-htmlOfferingTextToCopy : String -> Html.Html event
-htmlOfferingTextToCopy text =
-    Html.input
-        [ HA.type_ "text"
-        , HA.value text
-        , HA.readonly True
-        , HA.style "width" "100%"
-        , HA.style "padding" "0.4em"
-        , HA.style "font-family" "inherit"
-        , HA.style "color" "inherit"
-        , HA.style "background" "inherit"
-        ]
-        []
 
 
 describeHttpError : Http.Error -> String
