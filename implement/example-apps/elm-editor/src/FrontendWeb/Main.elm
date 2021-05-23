@@ -21,6 +21,9 @@ import ElmMakeExecutableFile
 import File
 import File.Download
 import File.Select
+import FontAwesome.Icon
+import FontAwesome.Solid
+import FontAwesome.Styles
 import FrontendBackendInterface
 import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
 import FrontendWeb.MonacoEditor
@@ -1407,7 +1410,8 @@ view state =
                         |> popupWindowElementAttributesFromAttributes
 
         body =
-            [ titlebar
+            [ Element.html FontAwesome.Styles.css
+            , titlebar
             , [ activityBar, mainContent ]
                 |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
             ]
@@ -1588,6 +1592,7 @@ toggleEnlargedPaneButton state pane =
 
 type alias PopupWindowAttributes event =
     { title : String
+    , titleIcon : Maybe FontAwesome.Icon.Icon
     , guideParagraphItems : List (Element.Element event)
     , contentElement : Element.Element event
     }
@@ -1665,6 +1670,7 @@ viewGetLinkToProjectDialog dialogState projectState =
                     linkElementFromUrl urlToProject
     in
     { title = "Get Link to Project for Bookmarking or Sharing"
+    , titleIcon = Just FontAwesome.Solid.bookmark
     , guideParagraphItems =
         [ Element.text "Get a link that you can later use to load the project's current state into the editor again. This link is a fast way to share your project state with other people." ]
     , contentElement =
@@ -1752,6 +1758,7 @@ viewLoadFromGitDialog dialogState =
             "https://github.com/onlinegamemaker/making-online-games/tree/fd35d23d89a50014097e64d362f1a991a8af206f/games-program-codes/simple-snake"
     in
     { title = "Load Project from Git Repository"
+    , titleIcon = Just FontAwesome.Solid.cloudDownloadAlt
     , guideParagraphItems =
         [ Element.text "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: "
         , linkElementFromUrlAndTextLabel { url = exampleUrl, labelText = exampleUrl }
@@ -1778,6 +1785,7 @@ viewExportToZipArchiveDialog projectState =
                 }
     in
     { title = "Export Project to Zip Archive"
+    , titleIcon = Just FontAwesome.Solid.fileExport
     , guideParagraphItems =
         [ Element.text "Download a zip archive containing all files in your project. You can also use this archive with the 'Import from Zip Archive' function to load the project's state into the editor again." ]
     , contentElement =
@@ -1811,6 +1819,7 @@ viewImportFromZipArchiveDialog dialogState =
                 |> Maybe.withDefault Element.none
     in
     { title = "Import Project from Zip Archive"
+    , titleIcon = Just FontAwesome.Solid.fileImport
     , guideParagraphItems =
         [ Element.text "Load project files from a zip archive. Here you can select a zip archive file from your system to load as the project state." ]
     , contentElement =
@@ -1956,8 +1965,13 @@ activityBar =
 
 
 popupWindowElementAttributesFromAttributes : PopupWindowAttributes Event -> List (Element.Attribute Event)
-popupWindowElementAttributesFromAttributes { title, guideParagraphItems, contentElement } =
-    [ [ title |> Element.text |> Element.el (headingAttributes 3)
+popupWindowElementAttributesFromAttributes { title, titleIcon, guideParagraphItems, contentElement } =
+    [ [ [ titleIcon
+            |> Maybe.map (FontAwesome.Icon.present >> FontAwesome.Icon.view >> Element.html >> Element.el [])
+            |> Maybe.withDefault Element.none
+        , title |> Element.text
+        ]
+            |> Element.row (Element.spacing defaultFontSize :: headingAttributes 3)
       , guideParagraphItems |> Element.paragraph [ elementFontSizePercent 80 ]
       , contentElement
       ]
@@ -2457,19 +2471,23 @@ titlebarMenuEntryDropdownContent state menuEntry =
                 ProjectMenuEntry ->
                     [ titlebarMenuEntry
                         (UserInputLoadFromGit LoadFromGitOpenDialog)
-                        "📂 Load From Git Repository"
+                        (Just FontAwesome.Solid.cloudDownloadAlt)
+                        "Load From Git Repository"
                         True
                     , titlebarMenuEntry
                         (UserInputImportProjectFromZipArchive ImportFromZipArchiveOpenDialog)
-                        "📂 Import From Zip Archive"
+                        (Just FontAwesome.Solid.fileImport)
+                        "Import From Zip Archive"
                         True
                     , titlebarMenuEntry
                         (UserInputGetLinkToProject Nothing)
-                        "💾 Get Link for Bookmarking or Sharing"
+                        (Just FontAwesome.Solid.bookmark)
+                        "Get Link for Bookmarking or Sharing"
                         canSaveProject
                     , titlebarMenuEntry
                         (UserInputExportProjectToZipArchive { sendDownloadCmd = False })
-                        "💾 Export To Zip Archive"
+                        (Just FontAwesome.Solid.fileExport)
+                        "Export To Zip Archive"
                         canSaveProject
                     ]
     in
@@ -2485,8 +2503,8 @@ titlebarMenuEntryDropdownContent state menuEntry =
             ]
 
 
-titlebarMenuEntry : Event -> String -> Bool -> Element.Element Event
-titlebarMenuEntry onPressEventIfEnabled label isEnabled =
+titlebarMenuEntry : Event -> Maybe FontAwesome.Icon.Icon -> String -> Bool -> Element.Element Event
+titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
     let
         mouseOverAttributes =
             if isEnabled then
@@ -2500,7 +2518,16 @@ titlebarMenuEntry onPressEventIfEnabled label isEnabled =
         , Element.paddingXY defaultFontSize 4
         ]
         { label =
-            Element.text label
+            [ maybeIcon
+                |> Maybe.map
+                    (FontAwesome.Icon.present
+                        >> FontAwesome.Icon.view
+                        >> Element.html
+                        >> Element.el [ Element.centerX ]
+                    )
+                |> Maybe.withDefault Element.none
+                |> Element.el [ Element.width (Element.px (defaultFontSize * 6 // 5)) ]
+            , Element.text label
                 |> Element.el
                     [ Element.alpha
                         (if isEnabled then
@@ -2510,6 +2537,8 @@ titlebarMenuEntry onPressEventIfEnabled label isEnabled =
                             0.5
                         )
                     ]
+            ]
+                |> Element.row [ Element.spacing (defaultFontSize // 2) ]
         , onPress =
             if isEnabled then
                 Just onPressEventIfEnabled
