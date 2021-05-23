@@ -18,6 +18,9 @@ import Element.Font
 import Element.Input
 import Element.Region
 import ElmMakeExecutableFile
+import File
+import File.Download
+import File.Select
 import FrontendBackendInterface
 import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
 import FrontendWeb.MonacoEditor
@@ -36,9 +39,12 @@ import ProjectState
 import ProjectState_2021_01
 import Result.Extra
 import String.Extra
+import Task
 import Time
 import Url
 import Url.Builder
+import Zip
+import Zip.Entry
 
 
 port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
@@ -103,12 +109,17 @@ type alias ElmMakeResultStructure =
 type Event
     = TimeHasArrived Time.Posix
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
+    | UserInputLoadOrImportTakeProjectStateEvent ProjectState.FileTreeNode
     | UserInputClosePopup
     | BackendLoadFromGitResultEvent String (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
     | UserInputSaveProject (Maybe { createDiffIfBaseAvailable : Bool })
+    | UserInputLoadedZipArchiveFile File.File
+    | UserInputLoadedZipArchiveBytes Bytes.Bytes
+    | UserInputImportProjectFromZipArchive UserInputImportFromZipArchiveEventStructure
+    | UserInputExportProjectToZipArchive { sendDownloadCmd : Bool }
     | UserInputToggleTitleBarMenu TitlebarMenuEntry
     | UserInputMouseOverTitleBarMenu (Maybe TitlebarMenuEntry)
     | UserInputKeyDownEvent Keyboard.Event.KeyboardEvent
@@ -134,7 +145,11 @@ type UserInputLoadFromGitEventStructure
     = LoadFromGitOpenDialog
     | LoadFromGitEnterUrlEvent { urlIntoGitRepository : String }
     | LoadFromGitBeginRequestEvent { urlIntoGitRepository : String }
-    | LoadFromGitTakeResultAsProjectStateEvent
+
+
+type UserInputImportFromZipArchiveEventStructure
+    = ImportFromZipArchiveOpenDialog
+    | ImportFromZipArchiveSelectFile
 
 
 type PopupState
@@ -145,6 +160,8 @@ type PopupState
 type DialogState
     = SaveOrShareDialog SaveOrShareDialogState
     | LoadFromGitDialog LoadFromGitDialogState
+    | ExportToZipArchiveDialog
+    | ImportFromZipArchiveDialog ImportFromZipArchiveDialogState
 
 
 type TitlebarMenuEntry
@@ -159,6 +176,11 @@ type alias LoadFromGitDialogState =
     { urlIntoGitRepository : String
     , requestTime : Maybe Time.Posix
     , loadCompositionResult : Maybe (Result Http.Error { fileTree : ProjectState.FileTreeNode, compositionIdCache : String })
+    }
+
+
+type alias ImportFromZipArchiveDialogState =
+    { loadCompositionResult : Maybe (Result String { fileTree : ProjectState.FileTreeNode, compositionIdCache : String })
     }
 
 
@@ -367,25 +389,86 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputLoadFromGit LoadFromGitTakeResultAsProjectStateEvent ->
-            case stateBefore.popup of
-                Just (ModalDialog (LoadFromGitDialog dialogStateBefore)) ->
-                    case dialogStateBefore.loadCompositionResult of
-                        Just (Ok loadOk) ->
-                            ( { stateBefore
-                                | popup = Nothing
-                                , workspace =
-                                    { fileTree = loadOk.fileTree
-                                    , filePathOpenedInEditor = Nothing
-                                    }
-                                        |> initWorkspaceFromFileTreeAndFileSelection
-                                        |> WorkspaceOk
-                              }
-                            , Cmd.none
-                            )
+        UserInputLoadOrImportTakeProjectStateEvent fileTree ->
+            ( { stateBefore
+                | popup = Nothing
+                , workspace =
+                    { fileTree = fileTree
+                    , filePathOpenedInEditor = Nothing
+                    }
+                        |> initWorkspaceFromFileTreeAndFileSelection
+                        |> WorkspaceOk
+              }
+            , Cmd.none
+            )
 
-                        _ ->
-                            ( stateBefore, Cmd.none )
+        UserInputExportProjectToZipArchive { sendDownloadCmd } ->
+            case stateBefore.workspace of
+                WorkspaceOk workingState ->
+                    let
+                        cmd =
+                            if sendDownloadCmd then
+                                let
+                                    projectStateHash =
+                                        FrontendWeb.ProjectStateInUrl.projectStateCompositionHash workingState.fileTree
+                                in
+                                workingState.fileTree
+                                    |> buildZipArchiveFromFileTree
+                                    |> Zip.toBytes
+                                    |> File.Download.bytes
+                                        ("elm-app-" ++ projectStateHash ++ ".zip")
+                                        "application/zip"
+
+                            else
+                                Cmd.none
+                    in
+                    ( { stateBefore | popup = Just (ModalDialog ExportToZipArchiveDialog) }, cmd )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
+
+        UserInputImportProjectFromZipArchive ImportFromZipArchiveOpenDialog ->
+            ( { stateBefore
+                | popup = Just (ModalDialog (ImportFromZipArchiveDialog { loadCompositionResult = Nothing }))
+              }
+            , Cmd.none
+            )
+
+        UserInputImportProjectFromZipArchive ImportFromZipArchiveSelectFile ->
+            ( stateBefore
+            , File.Select.file [ "application/zip" ] UserInputLoadedZipArchiveFile
+            )
+
+        UserInputLoadedZipArchiveFile file ->
+            ( stateBefore
+            , file |> File.toBytes |> Task.perform UserInputLoadedZipArchiveBytes
+            )
+
+        UserInputLoadedZipArchiveBytes bytes ->
+            case stateBefore.popup of
+                Just (ModalDialog (ImportFromZipArchiveDialog _)) ->
+                    let
+                        loadCompositionResult =
+                            bytes
+                                |> Zip.fromBytes
+                                |> Maybe.map extractFileTreeFromZipArchive
+                                |> Maybe.withDefault (Err "Failed to decode this file as zip archive")
+                                |> Result.map
+                                    (\fileTree ->
+                                        { fileTree = fileTree
+                                        , compositionIdCache = FrontendWeb.ProjectStateInUrl.projectStateCompositionHash fileTree
+                                        }
+                                    )
+                    in
+                    ( { stateBefore
+                        | popup =
+                            Just
+                                (ModalDialog
+                                    (ImportFromZipArchiveDialog { loadCompositionResult = Just loadCompositionResult })
+                                )
+                      }
+                    , Cmd.none
+                    )
 
                 _ ->
                     ( stateBefore, Cmd.none )
@@ -1025,13 +1108,6 @@ requestToApiCmd request jsonDecoderSpecialization eventConstructor =
 view : State -> Browser.Document Event
 view state =
     let
-        elementToDisplayLoadFromGitError loadError =
-            [ describeErrorLoadingContentsFromGit loadError
-                |> String.left 500
-                |> Element.text
-            ]
-                |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
-
         mainContentFromLoadingFromLink { linkUrl, progressOrResultElement, expectedCompositionHash } =
             [ Element.text "Loading project from "
             , linkElementFromUrlAndTextLabel
@@ -1314,90 +1390,21 @@ view state =
                             []
 
                 Just (ModalDialog (LoadFromGitDialog dialogState)) ->
-                    let
-                        urlInputElement =
-                            Element.Input.text
-                                [ Element.Background.color backgroundColor ]
-                                { onChange = \url -> UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository = url })
-                                , text = dialogState.urlIntoGitRepository
-                                , placeholder = Just (Element.Input.placeholder [] (Element.text "URL to tree in git repository"))
-                                , label = Element.Input.labelAbove [] (Element.text "URL to tree in git repository")
-                                }
+                    viewLoadFromGitDialog dialogState
+                        |> popupWindowElementAttributesFromAttributes
 
-                        offerBeginLoading =
-                            (dialogState.urlIntoGitRepository /= "")
-                                && (dialogState.requestTime == Nothing)
-                                && (dialogState.loadCompositionResult == Nothing)
+                Just (ModalDialog ExportToZipArchiveDialog) ->
+                    case state.workspace of
+                        WorkspaceOk workingState ->
+                            viewExportToZipArchiveDialog workingState.fileTree
+                                |> popupWindowElementAttributesFromAttributes
 
-                        sendRequestButton =
-                            buttonElement
-                                { label = "Begin Loading"
-                                , onPress =
-                                    Just
-                                        (UserInputLoadFromGit
-                                            (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
-                                        )
-                                }
-                                |> Element.el [ Element.centerX, elementTransparent (not offerBeginLoading) ]
+                        _ ->
+                            []
 
-                        resultElement =
-                            case dialogState.loadCompositionResult of
-                                Nothing ->
-                                    Element.none
-
-                                Just (Err loadError) ->
-                                    elementToDisplayLoadFromGitError loadError
-
-                                Just (Ok loadOk) ->
-                                    [ [ ("Loaded composition "
-                                            ++ loadOk.compositionIdCache
-                                            ++ " containing "
-                                            ++ (loadOk.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
-                                            ++ " files:"
-                                        )
-                                            |> Element.text
-                                      ]
-                                        |> Element.paragraph []
-                                    , viewFileTree
-                                        { selectEventFromNode = always (always Nothing)
-                                        , iconFromFileName = iconFromFileName
-                                        }
-                                        (sortFileTreeForExplorerView loadOk.fileTree)
-                                        |> Element.el
-                                            [ Element.scrollbars
-                                            , Element.width Element.fill
-                                            , Element.height (Element.px 200)
-                                            , Element.padding defaultFontSize
-                                            , Element.Border.width 1
-                                            , Element.Border.color (Element.rgba 1 1 1 0.5)
-                                            ]
-                                    , buttonElement
-                                        { label = "Set these files as project state"
-                                        , onPress = Just (UserInputLoadFromGit LoadFromGitTakeResultAsProjectStateEvent)
-                                        }
-                                        |> Element.el [ Element.centerX ]
-                                    ]
-                                        |> Element.column [ Element.spacing (defaultFontSize // 2) ]
-
-                        exampleUrl =
-                            "https://github.com/onlinegamemaker/making-online-games/tree/fd35d23d89a50014097e64d362f1a991a8af206f/games-program-codes/simple-snake"
-                    in
-                    popupWindowElementAttributesFromAttributes
-                        { title = "Load Project from Git Repository"
-                        , guideParagraphItems =
-                            [ Element.text "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: "
-                            , linkElementFromUrlAndTextLabel { url = exampleUrl, labelText = exampleUrl }
-                            ]
-                        , contentElement =
-                            [ urlInputElement
-                            , sendRequestButton
-                            , resultElement
-                            ]
-                                |> Element.column
-                                    [ Element.width Element.fill
-                                    , Element.spacing defaultFontSize
-                                    ]
-                        }
+                Just (ModalDialog (ImportFromZipArchiveDialog dialogState)) ->
+                    viewImportFromZipArchiveDialog dialogState
+                        |> popupWindowElementAttributesFromAttributes
 
         body =
             [ titlebar
@@ -1589,19 +1596,8 @@ type alias PopupWindowAttributes event =
 viewSaveOrShareDialog : SaveOrShareDialogState -> ProjectState.FileTreeNode -> PopupWindowAttributes Event
 viewSaveOrShareDialog saveOrShareDialog projectState =
     let
-        projectFiles =
-            projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
-
         projectSummaryElement =
-            [ ("This project contains "
-                ++ (projectFiles |> List.length |> String.fromInt)
-                ++ " files with an aggregate size of "
-                ++ (projectFiles |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
-                ++ " bytes."
-              )
-                |> Element.text
-            ]
-                |> Element.paragraph []
+            projectSummaryElementForSaveOrExportDialog projectState
 
         buttonGenerateUrl =
             buttonElement
@@ -1681,6 +1677,190 @@ viewSaveOrShareDialog saveOrShareDialog projectState =
                 , Element.width Element.fill
                 ]
     }
+
+
+viewLoadFromGitDialog : LoadFromGitDialogState -> PopupWindowAttributes Event
+viewLoadFromGitDialog dialogState =
+    let
+        urlInputElement =
+            Element.Input.text
+                [ Element.Background.color backgroundColor ]
+                { onChange = \url -> UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository = url })
+                , text = dialogState.urlIntoGitRepository
+                , placeholder = Just (Element.Input.placeholder [] (Element.text "URL to tree in git repository"))
+                , label = Element.Input.labelAbove [] (Element.text "URL to tree in git repository")
+                }
+
+        offerBeginLoading =
+            (dialogState.urlIntoGitRepository /= "")
+                && (dialogState.requestTime == Nothing)
+                && (dialogState.loadCompositionResult == Nothing)
+
+        sendRequestButton =
+            buttonElement
+                { label = "Begin Loading"
+                , onPress =
+                    Just
+                        (UserInputLoadFromGit
+                            (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
+                        )
+                }
+                |> Element.el [ Element.centerX, elementTransparent (not offerBeginLoading) ]
+
+        resultElement =
+            dialogState.loadCompositionResult
+                |> Maybe.map
+                    (viewLoadOrImportDialogResultElement
+                        elementToDisplayLoadFromGitError
+                        UserInputLoadOrImportTakeProjectStateEvent
+                    )
+                |> Maybe.withDefault Element.none
+
+        exampleUrl =
+            "https://github.com/onlinegamemaker/making-online-games/tree/fd35d23d89a50014097e64d362f1a991a8af206f/games-program-codes/simple-snake"
+    in
+    { title = "Load Project from Git Repository"
+    , guideParagraphItems =
+        [ Element.text "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: "
+        , linkElementFromUrlAndTextLabel { url = exampleUrl, labelText = exampleUrl }
+        ]
+    , contentElement =
+        [ urlInputElement
+        , sendRequestButton
+        , resultElement
+        ]
+            |> Element.column
+                [ Element.width Element.fill
+                , Element.spacing defaultFontSize
+                ]
+    }
+
+
+viewExportToZipArchiveDialog : ProjectState.FileTreeNode -> PopupWindowAttributes Event
+viewExportToZipArchiveDialog projectState =
+    let
+        projectSummaryElement =
+            projectSummaryElementForSaveOrExportDialog projectState
+
+        buttonDownloadArchive =
+            buttonElement
+                { label = "Download Archive"
+                , onPress = Just (UserInputExportProjectToZipArchive { sendDownloadCmd = True })
+                }
+    in
+    { title = "Export Project to Zip Archive"
+    , guideParagraphItems =
+        [ Element.text "Download a zip archive containing all files in your project. You can also use this archive with the 'Import from Zip Archive' function to load the project's state into the editor again." ]
+    , contentElement =
+        [ projectSummaryElement
+        , buttonDownloadArchive |> Element.el [ Element.centerX ]
+        ]
+            |> Element.column
+                [ Element.spacing defaultFontSize
+                , Element.width Element.fill
+                ]
+    }
+
+
+viewImportFromZipArchiveDialog : ImportFromZipArchiveDialogState -> PopupWindowAttributes Event
+viewImportFromZipArchiveDialog dialogState =
+    let
+        selectFileButton =
+            buttonElement
+                { label = "Select zip archive file"
+                , onPress = Just (UserInputImportProjectFromZipArchive ImportFromZipArchiveSelectFile)
+                }
+                |> Element.el [ Element.centerX ]
+
+        resultElement =
+            dialogState.loadCompositionResult
+                |> Maybe.map
+                    (viewLoadOrImportDialogResultElement
+                        (Element.text >> List.singleton >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ])
+                        UserInputLoadOrImportTakeProjectStateEvent
+                    )
+                |> Maybe.withDefault Element.none
+    in
+    { title = "Import Project from Zip Archive"
+    , guideParagraphItems =
+        [ Element.text "Load project files from a zip archive. Here you can select a zip archive file from your system to load as the project state." ]
+    , contentElement =
+        [ selectFileButton
+        , resultElement
+        ]
+            |> Element.column
+                [ Element.width Element.fill
+                , Element.spacing defaultFontSize
+                ]
+    }
+
+
+elementToDisplayLoadFromGitError : Http.Error -> Element.Element msg
+elementToDisplayLoadFromGitError loadError =
+    [ describeErrorLoadingContentsFromGit loadError
+        |> String.left 500
+        |> Element.text
+    ]
+        |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
+
+
+projectSummaryElementForSaveOrExportDialog : ProjectState.FileTreeNode -> Element.Element e
+projectSummaryElementForSaveOrExportDialog projectState =
+    let
+        projectFiles =
+            projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
+    in
+    [ ("This project contains "
+        ++ (projectFiles |> List.length |> String.fromInt)
+        ++ " files with an aggregate size of "
+        ++ (projectFiles |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
+        ++ " bytes."
+      )
+        |> Element.text
+    ]
+        |> Element.paragraph []
+
+
+viewLoadOrImportDialogResultElement :
+    (err -> Element.Element e)
+    -> (ProjectState.FileTreeNode -> e)
+    -> Result err { fileTree : ProjectState.FileTreeNode, compositionIdCache : String }
+    -> Element.Element e
+viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCompositionResult =
+    case loadCompositionResult of
+        Err loadError ->
+            elementToDisplayFromError loadError
+
+        Ok loadOk ->
+            [ [ ("Loaded composition "
+                    ++ loadOk.compositionIdCache
+                    ++ " containing "
+                    ++ (loadOk.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
+                    ++ " files:"
+                )
+                    |> Element.text
+              ]
+                |> Element.paragraph []
+            , viewFileTree
+                { selectEventFromNode = always (always Nothing)
+                , iconFromFileName = iconFromFileName
+                }
+                (sortFileTreeForExplorerView loadOk.fileTree)
+                |> Element.el
+                    [ Element.scrollbars
+                    , Element.width Element.fill
+                    , Element.height (Element.px 200)
+                    , Element.padding defaultFontSize
+                    , Element.Border.width 1
+                    , Element.Border.color (Element.rgba 1 1 1 0.5)
+                    ]
+            , buttonElement
+                { label = "Set these files as project state"
+                , onPress = Just (commitEvent loadOk.fileTree)
+                }
+                |> Element.el [ Element.centerX ]
+            ]
+                |> Element.column [ Element.spacing (defaultFontSize // 2) ]
 
 
 describeErrorLoadingContentsFromGit : Http.Error -> String
@@ -2246,8 +2426,22 @@ titlebarMenuEntryDropdownContent state menuEntry =
         menuEntries =
             case menuEntry of
                 ProjectMenuEntry ->
-                    [ titlebarMenuEntry (UserInputSaveProject Nothing) "💾 Save Project" canSaveProject
-                    , titlebarMenuEntry (UserInputLoadFromGit LoadFromGitOpenDialog) "📂 Load From Git Repository" True
+                    [ titlebarMenuEntry
+                        (UserInputLoadFromGit LoadFromGitOpenDialog)
+                        "📂 Load From Git Repository"
+                        True
+                    , titlebarMenuEntry
+                        (UserInputImportProjectFromZipArchive ImportFromZipArchiveOpenDialog)
+                        "📂 Import From Zip Archive"
+                        True
+                    , titlebarMenuEntry
+                        (UserInputSaveProject Nothing)
+                        "💾 Save Project"
+                        canSaveProject
+                    , titlebarMenuEntry
+                        (UserInputExportProjectToZipArchive { sendDownloadCmd = False })
+                        "💾 Export To Zip Archive"
+                        canSaveProject
                     ]
     in
     menuEntries
@@ -2526,3 +2720,37 @@ isOutsideParentWithId parentId =
         -- fallback if all previous decoders failed
         , Json.Decode.succeed True
         ]
+
+
+buildZipArchiveFromFileTree : ProjectState.FileTreeNode -> Zip.Zip
+buildZipArchiveFromFileTree =
+    ProjectState.flatListOfBlobsFromFileTreeNode
+        >> List.map
+            (\( path, blobContent ) ->
+                blobContent
+                    |> Zip.Entry.store
+                        { path = String.join "/" path
+                        , lastModified = ( Time.utc, Time.millisToPosix 0 )
+                        , comment = Nothing
+                        }
+            )
+        >> Zip.fromEntries
+
+
+extractFileTreeFromZipArchive : Zip.Zip -> Result String ProjectState.FileTreeNode
+extractFileTreeFromZipArchive =
+    Zip.entries
+        >> List.map
+            (\entry ->
+                case Zip.Entry.toBytes entry of
+                    Err _ ->
+                        Err ("Failed to extract entry '" ++ Zip.Entry.path entry ++ "'")
+
+                    Ok entryBytes ->
+                        Ok
+                            ( entry |> Zip.Entry.path |> String.split "/" |> List.concatMap (String.split "\\")
+                            , entryBytes
+                            )
+            )
+        >> Result.Extra.combine
+        >> Result.map ProjectState.sortedFileTreeFromListOfBlobs
