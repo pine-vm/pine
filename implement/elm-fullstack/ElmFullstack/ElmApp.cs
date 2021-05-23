@@ -163,7 +163,7 @@ namespace ElmFullstack
                         var value = ElmMake(
                             elmCodeFiles: elmMakeRequestFiles,
                             pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
-                            makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs?.FirstOrDefault() != null,
+                            makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
                             enableDebug: elmMakeRequest.enableDebug);
 
                         return (
