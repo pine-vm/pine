@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-05-23";
+        static public string AppVersionId => "2021-05-25";
 
         static int Main(string[] args)
         {
@@ -23,16 +23,15 @@ namespace elm_fullstack
             var app = new CommandLineApplication
             {
                 Name = "elm-fs",
-                Description = "Welcome to Elm Fullstack! This tool helps you build and run full stack web applications using the Elm programming language.\nTo get help or report an issue, see the project website at http://elm-fullstack.org/",
+                Description = "Elm Fullstack - full-stack web apps made simple.\nTo get help or report an issue, see https://github.com/elm-fullstack/elm-fullstack/discussions",
             };
 
-            app.HelpOption(inherited: true);
             app.HelpTextGenerator =
                 new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false };
 
             app.VersionOption(template: "-v|--version", shortFormVersion: "version " + AppVersionId);
 
-            app.Command("install", installCmd =>
+            var installCmd = app.Command("install", installCmd =>
             {
                 var (commandName, _, registerExecutableDirectoryOnPath) = CheckIfExecutableIsRegisteredOnPath();
 
@@ -45,9 +44,194 @@ namespace elm_fullstack
                 });
             });
 
+            var runServerCmd = AddRunServerCmd(app);
+
+            var deployAppCmd = AddDeployAppCmd(app);
+            var setAppStateCmd = AddSetAppStateCmd(app);
+            var archiveProcessCmd = AddArchiveProcessCmd(app);
+            var truncateProcessHistoryCmd = AddTruncateProcessHistoryCmd(app);
+
+            var compileAppCmd = AddCompileAppCmd(app);
+            var enterInteractiveCmd = AddInteractiveCmd(app);
+            var describeCmd = AddDescribeCmd(app);
+
+            app.Command("user-secrets", userSecretsCmd =>
+            {
+                userSecretsCmd.Description = "Manage passwords for accessing the admin interfaces of servers.";
+                userSecretsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+                userSecretsCmd.Command("store", storeCmd =>
+                {
+                    storeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+                    var siteArgument = storeCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+                    var passwordArgument = storeCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+
+                    storeCmd.OnExecute(() =>
+                    {
+                        UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
+                    });
+                });
+
+                userSecretsCmd.OnExecute(() =>
+                {
+                    Console.WriteLine("Please specify a subcommand.");
+                    userSecretsCmd.ShowHelp();
+
+                    return 1;
+                });
+            });
+
+            var helpCmd = app.Command("help", helpCmd =>
+            {
+                helpCmd.Description = "Explain available commands and how to use the command-line interface.";
+                helpCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+                var allOption = helpCmd.Option("--all", "List all commands", CommandOptionType.NoValue);
+
+                allOption.ShortName = "a";
+
+                var setupGroupCommands =
+                    CheckIfExecutableIsRegisteredOnPath().executableIsRegisteredOnPath
+                    ?
+                    new CommandLineApplication[0] :
+                    new[]
+                    {
+                        installCmd,
+                    };
+
+                var commonCmdGroups = new[]
+                {
+                    new
+                    {
+                        title = "Set up your development environment",
+                        commands = setupGroupCommands,
+                    },
+                    new
+                    {
+                        title = "operate servers and maintain production systems",
+                        commands = new[]
+                        {
+                            runServerCmd,
+                            deployAppCmd,
+                            setAppStateCmd,
+                            archiveProcessCmd,
+                            truncateProcessHistoryCmd,
+                        }
+                    },
+                    new
+                    {
+                        title = "develop and learn",
+                        commands = new[]
+                        {
+                            compileAppCmd,
+                            enterInteractiveCmd,
+                            describeCmd,
+                        }
+                    },
+                }
+                .Where(group => 0 < group.commands.Length)
+                .Select(group => new
+                {
+                    group.title,
+                    commands = group.commands.Select(cmd =>
+                    new
+                    {
+                        nameColumn = cmd.FullName ?? cmd.Name,
+                        descriptionColumn = cmd.Description,
+                    }).ToImmutableList(),
+                });
+
+                foreach (var appCmd in app.Commands)
+                {
+                    var cmdPrimaryName = appCmd.Names.FirstOrDefault();
+
+                    helpCmd.Command(cmdPrimaryName, helpForAppCmd =>
+                    {
+                        foreach (var additionalName in appCmd.Names.Except(new[] { cmdPrimaryName }))
+                            helpForAppCmd.AddName(additionalName);
+
+                        CommandExtension.ConfigureHelpCommandForCommand(helpForAppCmd, appCmd);
+                    });
+                }
+
+                helpCmd.OnExecute(() =>
+                {
+                    if (allOption.HasValue())
+                    {
+                        app.ShowHelp();
+
+                        return 0;
+                    }
+
+                    var longestCmdNameLength =
+                        commonCmdGroups.SelectMany(group => group.commands)
+                        .Max(cmd => cmd.nameColumn.Length);
+
+                    var cmdDescriptionIndent = longestCmdNameLength + 4;
+
+                    var groupsTexts =
+                        commonCmdGroups
+                        .Select(group =>
+                            group.title + "\n" +
+                            string.Join("\n", group.commands.Select(cmd =>
+                            "   " +
+                            cmd.nameColumn + new string(' ', cmdDescriptionIndent - cmd.nameColumn.Length) +
+                            cmd.descriptionColumn)));
+
+                    var elmFsCommandName = CheckIfExecutableIsRegisteredOnPath().commandName;
+
+                    var overviewText =
+                        string.Join("\n\n", new[]
+                        {
+                            app.Description,
+                            "Usage: " + elmFsCommandName + " [command] [options]",
+                            "These are common Elm-fs commands used in various situations:",
+                            string.Join("\n\n", groupsTexts),
+                            "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.",
+                        });
+
+                    Console.WriteLine(overviewText);
+
+                    return 0;
+                });
+            });
+
+            app.OnExecute(() =>
+            {
+                helpCmd.Execute();
+
+                return 0;
+            });
+
+            int executeAndGuideInCaseOfException()
+            {
+                try
+                {
+                    return app.Execute(args);
+                }
+                catch (CommandParsingException ex)
+                {
+                    var message = ex.Message;
+
+                    if (ex is UnrecognizedCommandParsingException uex && uex.NearestMatches.Any())
+                    {
+                        message = message?.TrimEnd() + "\nDid you mean '" + uex.NearestMatches.FirstOrDefault() + "'?";
+                    }
+
+                    DotNetConsoleWriteProblemCausingAbort(message);
+
+                    return 430;
+                }
+            }
+
+            return executeAndGuideInCaseOfException();
+        }
+
+        static CommandLineApplication AddRunServerCmd(CommandLineApplication app) =>
             app.Command("run-server", runServerCmd =>
             {
-                runServerCmd.Description = "Run a web server supporting administration of an Elm Fullstack process via HTTP. This HTTP interface supports deployments, migrations, etc.";
+                runServerCmd.Description = "Run a server with a web-based admin interface. This admin interface supports deployments, migrations, etc.";
                 runServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var adminUrlsDefault = "http://*:4000";
@@ -114,11 +298,11 @@ namespace elm_fullstack
                                     return file.Key.Skip(path.Count).ToImmutableList();
                                 }).WhereNotNull(),
                             GetFileContentDelegate = path =>
-                                {
-                                    files.TryGetValue(path, out var fileContent);
+                            {
+                                files.TryGetValue(path, out var fileContent);
 
-                                    return fileContent;
-                                }
+                                return fileContent;
+                            }
                         };
 
                         processStoreFileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
@@ -208,32 +392,19 @@ namespace elm_fullstack
 
                     Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
 
-                    Microsoft.AspNetCore.Hosting.WebHostExtensions.WaitForShutdown(webHost);
+                    WebHostExtensions.WaitForShutdown(webHost);
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(runServerCmd);
             });
 
-            Func<(string site, string sitePassword)> siteAndSitePasswordOptionsOnCommand(CommandLineApplication cmd)
-            {
-                var siteOption = cmd.Option("--site", "Site where to apply the changes. Can be an URL to the admin interface of a server or a path in the local file system.", CommandOptionType.SingleValue).IsRequired();
-                var sitePasswordOption = cmd.Option("--site-password", "Password to access the site where to apply the changes.", CommandOptionType.SingleValue);
-
-                return () =>
-                {
-                    var site = siteOption.Value();
-
-                    var sitePassword =
-                        sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
-
-                    return (site, sitePassword);
-                };
-            }
-
+        static CommandLineApplication AddDeployAppCmd(CommandLineApplication app) =>
             app.Command("deploy-app", deployAppCmd =>
             {
-                deployAppCmd.Description = "Deploy an app to an Elm Fullstack process. By default, migrates from the previous app state using the `migrate` function in the Elm app code.";
+                deployAppCmd.Description = "Deploy an app to an Elm Fullstack process. Deployment implies migration from the previous app state if not specified otherwise.";
                 deployAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var getSiteAndPasswordFromOptions = siteAndSitePasswordOptionsOnCommand(deployAppCmd);
+                var getSiteAndPasswordFromOptions = SiteAndSitePasswordOptionsOnCommand(deployAppCmd);
                 var fromOption = deployAppCmd.Option("--from", "Path to the app to deploy.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
                 var initElmAppStateOption = deployAppCmd.Option("--init-elm-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
@@ -254,14 +425,17 @@ namespace elm_fullstack
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "deploy-app.json");
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(deployAppCmd);
             });
 
-            app.Command("set-elm-app-state", setElmAppStateCmd =>
+        static CommandLineApplication AddSetAppStateCmd(CommandLineApplication app) =>
+            app.Command("set-app-state", setElmAppStateCmd =>
             {
                 setElmAppStateCmd.Description = "Set the state of a backend Elm app.";
                 setElmAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
+                var siteAndPasswordFromCmd = SiteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
 
                 var fromOption = setElmAppStateCmd.Option("--from", "Path to the serialized state representation to load.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
 
@@ -278,39 +452,19 @@ namespace elm_fullstack
 
                     WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
-                        reportKind: "set-elm-app-state.json");
+                        reportKind: "set-app-state.json");
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(setElmAppStateCmd);
             });
 
-            app.Command("truncate-process-history", truncateProcessHistoryCmd =>
-            {
-                truncateProcessHistoryCmd.Description = "Remove parts of the process history that are not needed to restore the process.";
-                truncateProcessHistoryCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
-
-                truncateProcessHistoryCmd.OnExecute(() =>
-                {
-                    var (site, sitePassword) = siteAndPasswordFromCmd();
-
-                    var report =
-                        TruncateProcessHistory(
-                            site: site,
-                            siteDefaultPassword: sitePassword,
-                            promptForPasswordOnConsole: true);
-
-                    WriteReportToFileInReportDirectory(
-                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
-                        reportKind: "truncate-process-history.json");
-                });
-            });
-
+        static CommandLineApplication AddArchiveProcessCmd(CommandLineApplication app) =>
             app.Command("archive-process", archiveProcessCmd =>
             {
-                archiveProcessCmd.Description = "Copy the files needed to restore the process and store those in a zip-archive.";
+                archiveProcessCmd.Description = "Copy all files needed to restore or replicate a process and store them in a zip archive.";
                 archiveProcessCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var siteAndPasswordFromCmd = siteAndSitePasswordOptionsOnCommand(archiveProcessCmd);
+                var siteAndPasswordFromCmd = SiteAndSitePasswordOptionsOnCommand(archiveProcessCmd);
 
                 archiveProcessCmd.OnExecute(() =>
                 {
@@ -338,35 +492,37 @@ namespace elm_fullstack
 
                     Console.WriteLine("Saved process archive to file '" + filePath + "'.");
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(archiveProcessCmd);
             });
 
-            app.Command("user-secrets", userSecretsCmd =>
+        static CommandLineApplication AddTruncateProcessHistoryCmd(CommandLineApplication app) =>
+            app.Command("truncate-process-history", truncateProcessHistoryCmd =>
             {
-                userSecretsCmd.Description = "Manage passwords for accessing the admin interfaces of servers.";
-                userSecretsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                truncateProcessHistoryCmd.Description = "Remove parts of the process history that are not needed to restore the process.";
+                truncateProcessHistoryCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                userSecretsCmd.Command("store", storeCmd =>
+                var siteAndPasswordFromCmd = SiteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
+
+                truncateProcessHistoryCmd.OnExecute(() =>
                 {
-                    storeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                    var (site, sitePassword) = siteAndPasswordFromCmd();
 
-                    var siteArgument = storeCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
-                    var passwordArgument = storeCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
+                    var report =
+                        TruncateProcessHistory(
+                            site: site,
+                            siteDefaultPassword: sitePassword,
+                            promptForPasswordOnConsole: true);
 
-                    storeCmd.OnExecute(() =>
-                    {
-                        UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
-                    });
+                    WriteReportToFileInReportDirectory(
+                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
+                        reportKind: "truncate-process-history.json");
                 });
 
-                userSecretsCmd.OnExecute(() =>
-                {
-                    Console.WriteLine("Please specify a subcommand.");
-                    userSecretsCmd.ShowHelp();
-
-                    return 1;
-                });
+                CommandExtension.AddHelpCommandOnCommand(truncateProcessHistoryCmd);
             });
 
+        static CommandLineApplication AddCompileAppCmd(CommandLineApplication app) =>
             app.Command("compile-app", compileAppCmd =>
             {
                 compileAppCmd.Description = "Compile app source code the same way as would be done when deploying.";
@@ -462,8 +618,11 @@ namespace elm_fullstack
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "compile-app.json");
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(compileAppCmd);
             });
 
+        static CommandLineApplication AddInteractiveCmd(CommandLineApplication app) =>
             app.Command("interactive", enterInteractiveCmd =>
             {
                 enterInteractiveCmd.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
@@ -540,21 +699,24 @@ namespace elm_fullstack
                         Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
                     }
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(enterInteractiveCmd);
             });
 
+        static CommandLineApplication AddDescribeCmd(CommandLineApplication app) =>
             app.Command("describe", describeCmd =>
             {
-                describeCmd.Description = "Describe an artifact.";
+                describeCmd.Description = "Describe the artifact at the given path. Valid paths can be URLs into git repositories or in the local file system.";
                 describeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var sourceParameter =
+                var sourcePathParameter =
                     describeCmd
-                    .Argument("source", "Path to the artifact. This can be a local directory or a URL.")
+                    .Argument("source-path", "Path to the artifact. This can be a local directory or a URL.")
                     .IsRequired(allowEmptyStrings: false, errorMessage: "The source argument is missing. From where should I load the artifact?");
 
                 describeCmd.OnExecute(() =>
                 {
-                    var sourcePath = sourceParameter.Value;
+                    var sourcePath = sourcePathParameter.Value;
 
                     var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
 
@@ -586,36 +748,24 @@ namespace elm_fullstack
 
                     return 0;
                 });
+
+                CommandExtension.AddHelpCommandOnCommand(describeCmd);
             });
 
-            app.OnExecute(() =>
+        static Func<(string site, string sitePassword)> SiteAndSitePasswordOptionsOnCommand(CommandLineApplication cmd)
+        {
+            var siteOption = cmd.Option("--site", "Site where to apply the changes. Can be an URL to the admin interface of a server or a path in the local file system.", CommandOptionType.SingleValue).IsRequired();
+            var sitePasswordOption = cmd.Option("--site-password", "Password to access the site where to apply the changes.", CommandOptionType.SingleValue);
+
+            return () =>
             {
-                Console.WriteLine("Please specify a subcommand.");
-                app.ShowHelp();
+                var site = siteOption.Value();
 
-                return 1;
-            });
+                var sitePassword =
+                    sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
 
-            int executeAndGuideInCaseOfException()
-            {
-                try
-                {
-                    return app.Execute(args);
-                }
-                catch (CommandParsingException ex)
-                {
-                    DotNetConsoleWriteProblemCausingAbort(ex.Message);
-
-                    if (ex is UnrecognizedCommandParsingException uex && uex.NearestMatches.Any())
-                    {
-                        DotNetConsoleWriteProblemCausingAbort("\nDid you mean '" + uex.NearestMatches.FirstOrDefault() + "'?");
-                    }
-
-                    return 430;
-                }
-            }
-
-            return executeAndGuideInCaseOfException();
+                return (site, sitePassword);
+            };
         }
 
         static public string ElmMakeHomeDirectoryPath =>
@@ -1192,8 +1342,8 @@ namespace elm_fullstack
                 //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
                 Console.WriteLine(
-                "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-                "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+        "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+        "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
             });
 
             var executableIsRegisteredOnPath =
