@@ -265,13 +265,15 @@ namespace ElmFullstack.WebHost
                     {
                         context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
 
+                        context.Response.Headers.Add("X-Powered-By", "Elm Fullstack " + elm_fullstack.Program.AppVersionId);
+
                         AuthenticationHeaderValue.TryParse(
                             requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
 
                         if (!(0 < adminPassword?.Length))
                         {
                             context.Response.StatusCode = 403;
-                            await context.Response.WriteAsync("Forbidden");
+                            await context.Response.WriteAsync("The admin interface is not available because the admin password is not yet configured.");
                             return;
                         }
 
