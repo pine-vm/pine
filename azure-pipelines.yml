@@ -11,7 +11,7 @@ steps:
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk' # Options: runtime, sdk
-    version: '3.1.407' 
+    version: '3.1.409' 
 
 - script: dotnet --version
 

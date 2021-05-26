@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v1
     - uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: '3.1.407'
+        dotnet-version: '3.1.409'
     - name: Try use dotnet core 3
       run: dotnet --info
     - uses: actions/checkout@v1
