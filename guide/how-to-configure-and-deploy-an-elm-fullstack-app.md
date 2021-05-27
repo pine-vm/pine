@@ -4,8 +4,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-18/elm-fullstack-bin-da02778622717516ba999c8a770d0f523cf41fe1-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-18/elm-fullstack-bin-da02778622717516ba999c8a770d0f523cf41fe1-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-27/elm-fullstack-bin-289b468ee441567ea57dd964e8a74c2c0a690e2b-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-27/elm-fullstack-bin-289b468ee441567ea57dd964e8a74c2c0a690e2b-linux-x64.zip
 
 To register the elm-fs executable on your systems PATH environment variable, run the `elm-fs  install` command.
 
@@ -13,12 +13,12 @@ To register the elm-fs executable on your systems PATH environment variable, run
 
 To deploy an Elm Fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -26,7 +26,7 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition bbe8d770f36138b6085aa6cc32a506e97264ac1b8d4db123893e723e4ca178e1 from 'https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app'.
+Loaded source composition 46e5c927796a8a33f12a56e82aff40599c3fa4b4c0a2c7bbee903f499d4da8b3 from 'https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -233,7 +233,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-05-18.
+Welcome to the Elm Fullstack admin interface version 2021-05-27.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -246,10 +246,10 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app  --init-elm-app-state
+elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app  --init-app-state
 ```
 
-The `--init-elm-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
+The `--init-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
 
 Since the server requires us to authenticate for deployment, we will get this prompt when running the command from above:
 
