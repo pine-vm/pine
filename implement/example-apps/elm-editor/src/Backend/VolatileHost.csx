@@ -11,8 +11,8 @@
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
 #r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
-// from elm-fullstack-separate-assemblies-50feeb958ba1bbbe8b30a727e9801b3a52c4f037-linux-x64.zip
-#r "sha256:a391898aa89282ed0f4a1ff38f7320623d4f748b74000fe5ecb056f8a06fb2a1"
+// from elm-fullstack-separate-assemblies-640005d544d2fed0b015349dea2fa37364e42404-linux-x64.zip
+#r "sha256:2537dcc633e5f823899a374a8d1511977c0d59f6881325375daeccbe96af0981"
 
 using System;
 using System.Collections.Generic;
@@ -97,6 +97,8 @@ public class LoadCompositionResponseStructure
     public string compositionId;
 
     public IReadOnlyList<FileWithPath> filesAsFlatList;
+
+    public string urlInCommit;
 }
 
 
@@ -149,18 +151,18 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
             };
         }
 
-        var loadFromPathResult = Kalmit.LoadFromPath.LoadTreeFromPath(sourcePath);
+        var loadFromGitResult = Pine.LoadFromGitHubOrGitLab.LoadFromUrl(sourcePath);
 
-        if (loadFromPathResult?.Ok == null)
+        if (loadFromGitResult?.Success == null)
         {
             return new ResponseStructure
             {
                 ErrorResponse = ImmutableList.Create(
-                    "Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err)
+                    "Failed to load from path '" + sourcePath + "': " + loadFromGitResult?.Error)
             };
         }
 
-        if (loadFromPathResult?.Ok.tree == null)
+        if (loadFromGitResult?.Success?.tree == null)
         {
             return new ResponseStructure
             {
@@ -168,12 +170,12 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
             };
         }
 
-        var composition = Kalmit.Composition.FromTreeWithStringPath(loadFromPathResult?.Ok.tree);
+        var composition = Pine.Composition.FromTreeWithStringPath(loadFromGitResult.Success.tree);
 
-        var compositionId = Kalmit.CommonConversion.StringBase16FromByteArray(Kalmit.Composition.GetHash(composition));
+        var compositionId = Pine.CommonConversion.StringBase16FromByteArray(Pine.Composition.GetHash(composition));
 
         var blobs =
-            loadFromPathResult?.Ok.tree.EnumerateBlobsTransitive()
+            loadFromGitResult.Success.tree.EnumerateBlobsTransitive()
             .ToImmutableList();
 
         ResponseStructure responseErrorExceedingLimit(string limitName)
@@ -223,6 +225,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                 {
                     compositionId = compositionId,
                     filesAsFlatList = filesAsFlatList,
+                    urlInCommit = loadFromGitResult.Success.urlInCommit,
                 })
         };
     }
@@ -254,10 +257,10 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var commandLineArguments = commandLineCommonArguments + " --output=" + elmMakeOutputFileName;
     var reportJsonCommandLineArguments = commandLineCommonArguments + " --report=json";
 
-    (Kalmit.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
+    (Pine.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
     {
         return
-            Kalmit.ExecutableFile.ExecuteFileWithArguments(
+            Pine.ExecutableFile.ExecuteFileWithArguments(
                 environmentFiles,
                 GetElmExecutableFile,
                 arguments,
@@ -341,10 +344,10 @@ string MakePlatformSpecificPath(IReadOnlyList<string> path) =>
     string.Join(System.IO.Path.DirectorySeparatorChar.ToString(), path);
 
 static public byte[] GetElmExecutableFile =>
-    Kalmit.CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
+    Pine.CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
 
 static public byte[] GetElmExecutableFileCompressedGzip =>
-    Kalmit.BlobLibrary.GetBlobWithSHA256(Kalmit.CommonConversion.ByteArrayFromStringBase16(
+    Pine.BlobLibrary.GetBlobWithSHA256(Pine.CommonConversion.ByteArrayFromStringBase16(
         System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)
         ?
         /*
@@ -368,7 +371,7 @@ static public string GetElmHomeDirectory()
     elmHomeDirectory =
         overrideElmMakeHomeDirectory ??
         elmHomeDirectory ??
-        System.IO.Path.Combine(Kalmit.Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
+        System.IO.Path.Combine(Pine.Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
 
     System.IO.Directory.CreateDirectory(elmHomeDirectory);
     return elmHomeDirectory;
@@ -383,7 +386,7 @@ static public class ElmFormat
         var elmModuleFilePath = ImmutableList.Create(elmModuleFileName);
 
         var elmFormatResult =
-            Kalmit.ExecutableFile.ExecuteFileWithArguments(
+            Pine.ExecutableFile.ExecuteFileWithArguments(
                 ImmutableList.Create(
                     ((IImmutableList<string>)elmModuleFilePath, (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText).ToImmutableList())),
                 GetElmFormatExecutableFile,
@@ -413,10 +416,10 @@ static public class ElmFormat
     }
 
     static public byte[] GetElmFormatExecutableFile =>
-        Kalmit.CommonConversion.DecompressGzip(GetElmFormatExecutableFileCompressedGzip);
+        Pine.CommonConversion.DecompressGzip(GetElmFormatExecutableFileCompressedGzip);
 
     static public byte[] GetElmFormatExecutableFileCompressedGzip =>
-        Kalmit.BlobLibrary.GetBlobWithSHA256(Kalmit.CommonConversion.ByteArrayFromStringBase16(
+        Pine.BlobLibrary.GetBlobWithSHA256(Pine.CommonConversion.ByteArrayFromStringBase16(
             System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)
             ?
             /*

@@ -38,6 +38,7 @@ type alias FormatElmModuleTextResponseStructure =
 type alias LoadCompositionResponseStructure =
     { compositionId : String
     , filesAsFlatList : List FileWithPath
+    , urlInCommit : String
     }
 
 

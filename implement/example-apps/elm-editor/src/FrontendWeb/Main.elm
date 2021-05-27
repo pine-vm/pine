@@ -70,7 +70,7 @@ type alias State =
     , time : Time.Posix
     , workspace : WorkspaceStateStructure
     , popup : Maybe PopupState
-    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error ProjectState.FileTreeNode )
+    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error BackendLoadFromGitOkWithCache )
     }
 
 
@@ -178,12 +178,19 @@ type alias GetLinkToProjectDialogState =
 type alias LoadFromGitDialogState =
     { urlIntoGitRepository : String
     , requestTime : Maybe Time.Posix
-    , loadCompositionResult : Maybe (Result Http.Error { fileTree : ProjectState.FileTreeNode, compositionIdCache : String })
+    , loadCompositionResult : Maybe (Result Http.Error BackendLoadFromGitOkWithCache)
     }
 
 
 type alias ImportFromZipArchiveDialogState =
     { loadCompositionResult : Maybe (Result String { fileTree : ProjectState.FileTreeNode, compositionIdCache : String })
+    }
+
+
+type alias BackendLoadFromGitOkWithCache =
+    { urlInCommit : String
+    , compositionIdCache : String
+    , fileTree : ProjectState.FileTreeNode
     }
 
 
@@ -309,17 +316,8 @@ update event stateBefore =
                                                 Nothing
 
                                             else
-                                                case stateBefore.lastBackendLoadFromGitResult of
-                                                    Nothing ->
-                                                        Nothing
-
-                                                    Just ( loadFromGitUrl, loadFromGitResult ) ->
-                                                        case loadFromGitResult of
-                                                            Err _ ->
-                                                                Nothing
-
-                                                            Ok loadFromGitOk ->
-                                                                Just ( loadFromGitUrl, loadFromGitOk )
+                                                stateBefore.lastBackendLoadFromGitResult
+                                                    |> Maybe.andThen (Tuple.second >> Result.toMaybe)
 
                                         url =
                                             stateBefore.url
@@ -859,12 +857,13 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
                     (\loadOk ->
                         { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
                         , compositionIdCache = loadOk.compositionId
+                        , urlInCommit = loadOk.urlInCommit
                         }
                     )
 
         stateBefore =
             { stateBeforeRememberingResult
-                | lastBackendLoadFromGitResult = Just ( urlIntoGitRepository, resultWithFileTreeAndCache |> Result.map .fileTree )
+                | lastBackendLoadFromGitResult = Just ( urlIntoGitRepository, resultWithFileTreeAndCache )
             }
     in
     case stateBefore.popup of
@@ -1862,7 +1861,7 @@ projectSummaryElementForDialog projectState =
 viewLoadOrImportDialogResultElement :
     (err -> Element.Element e)
     -> (ProjectState.FileTreeNode -> e)
-    -> Result err { fileTree : ProjectState.FileTreeNode, compositionIdCache : String }
+    -> Result err { r | fileTree : ProjectState.FileTreeNode, compositionIdCache : String }
     -> Element.Element e
 viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCompositionResult =
     case loadCompositionResult of

@@ -45,7 +45,7 @@ filePathToOpenQueryParameterName =
     "file-path-to-open"
 
 
-setProjectStateInUrl : ProjectState.FileTreeNode -> Maybe ( String, ProjectState.FileTreeNode ) -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
+setProjectStateInUrl : ProjectState.FileTreeNode -> Maybe { r | urlInCommit : String, fileTree : ProjectState.FileTreeNode } -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
 setProjectStateInUrl projectState maybeProjectStateBase optionalParameters url =
     let
         projectStateDescription =
@@ -53,21 +53,21 @@ setProjectStateInUrl projectState maybeProjectStateBase optionalParameters url =
                 Nothing ->
                     LiteralProjectState projectState
 
-                Just ( projectStateBaseLink, projectStateBaseFileTree ) ->
-                    if projectStateCompositionHash projectState == projectStateCompositionHash projectStateBaseFileTree then
-                        LinkProjectState projectStateBaseLink
+                Just projectStateBase ->
+                    if projectStateCompositionHash projectState == projectStateCompositionHash projectStateBase.fileTree then
+                        LinkProjectState projectStateBase.urlInCommit
 
                     else
                         case
                             ProjectState.searchProjectStateDifference_2021_01
                                 projectState
-                                { baseComposition = projectStateBaseFileTree }
+                                { baseComposition = projectStateBase.fileTree }
                         of
                             Err _ ->
                                 LiteralProjectState projectState
 
                             Ok diffModel ->
-                                DiffProjectState { base = projectStateBaseLink, differenceFromBase = diffModel }
+                                DiffProjectState { base = projectStateBase.urlInCommit, differenceFromBase = diffModel }
 
         ( projectStateString, applyCompression ) =
             case projectStateDescription of
