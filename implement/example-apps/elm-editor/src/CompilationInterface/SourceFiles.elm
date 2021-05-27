@@ -30,3 +30,8 @@ file____static_favicon_svg =
     "The compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
+
+
+file__utf8____src_Backend_VolatileHost_csx : String
+file__utf8____src_Backend_VolatileHost_csx =
+    "The compiler replaces this value."
