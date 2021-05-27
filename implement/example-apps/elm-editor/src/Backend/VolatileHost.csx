@@ -11,8 +11,8 @@
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
 #r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
-// from elm-fullstack-separate-assemblies-640005d544d2fed0b015349dea2fa37364e42404-linux-x64.zip
-#r "sha256:2537dcc633e5f823899a374a8d1511977c0d59f6881325375daeccbe96af0981"
+// from elm-fullstack-separate-assemblies-289b468ee441567ea57dd964e8a74c2c0a690e2b-linux-x64.zip
+#r "sha256:cae11397edf179c7c59608270c6bad6c6834d345427083e9b0fc7268ccfe3d45"
 
 using System;
 using System.Collections.Generic;
@@ -242,7 +242,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
         elmMakeRequest.files
         .ToImmutableDictionary(
             file => (IImmutableList<string>)file.path.ToImmutableList(),
-            file => (IImmutableList<byte>)Convert.FromBase64String(file.contentBase64).ToImmutableList());
+            file => (IReadOnlyList<byte>)Convert.FromBase64String(file.contentBase64));
 
     var environmentFiles =
         elmCodeFiles.Select(file => (path: file.Key, content: file.Value)).ToImmutableList();
@@ -257,7 +257,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var commandLineArguments = commandLineCommonArguments + " --output=" + elmMakeOutputFileName;
     var reportJsonCommandLineArguments = commandLineCommonArguments + " --report=json";
 
-    (Pine.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
+    (Pine.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
     {
         return
             Pine.ExecutableFile.ExecuteFileWithArguments(
@@ -388,7 +388,7 @@ static public class ElmFormat
         var elmFormatResult =
             Pine.ExecutableFile.ExecuteFileWithArguments(
                 ImmutableList.Create(
-                    ((IImmutableList<string>)elmModuleFilePath, (IImmutableList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText).ToImmutableList())),
+                    ((IImmutableList<string>)elmModuleFilePath, (IReadOnlyList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText))),
                 GetElmFormatExecutableFile,
                 " " + elmModuleFileName + " --yes",
                 environmentStrings: null);
