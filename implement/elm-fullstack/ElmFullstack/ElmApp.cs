@@ -32,29 +32,29 @@ namespace ElmFullstack
 
     public class ElmApp
     {
-        static public (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+        static public (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig) =>
                 AsCompletelyLoweredElmApp(
                     sourceFiles,
                     rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
                     interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
-        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
                 rootModuleName,
                 interfaceToHostRootModuleName,
-                ImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> discoveredDependencies, CompilationIterationReport previousIterationsReports)>.Empty);
+                ImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies, CompilationIterationReport previousIterationsReports)>.Empty);
 
-        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
-            IImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> discoveredDependencies, CompilationIterationReport iterationReport)> stack)
+            IImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies, CompilationIterationReport iterationReport)> stack)
         {
             if (10 < stack.Count())
                 throw new Exception("Iteration stack depth > 10");
@@ -109,7 +109,7 @@ namespace ElmFullstack
             }
 
             byte[] ElmMake(
-                IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmCodeFiles,
+                IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
                 IImmutableList<string> pathToFileWithElmEntryPoint,
                 bool makeJavascript,
                 bool enableDebug)
@@ -157,7 +157,7 @@ namespace ElmFullstack
                             elmMakeRequest.files
                             .ToImmutableDictionary(
                                 entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                                entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
+                                entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
                             .WithComparers(EnumerableExtension.EqualityComparer<string>());
 
                         var value = ElmMake(
@@ -167,7 +167,7 @@ namespace ElmFullstack
                             enableDebug: elmMakeRequest.enableDebug);
 
                         return (
-                            (key: dependencyKey, value: (IImmutableList<byte>)value.ToImmutableList()),
+                            (key: dependencyKey, (IReadOnlyList<byte>)value),
                             completeDependencyReport());
                     }
 
@@ -189,11 +189,11 @@ namespace ElmFullstack
                 stack: stack.Push(newStackFrame));
         }
 
-        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>>, CompilationIterationCompilationReport report) ElmAppCompilation(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> sourceFiles,
+        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, CompilationIterationCompilationReport report) ElmAppCompilation(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
-            ImmutableList<(CompilerSerialInterface.DependencyKey key, IImmutableList<byte> value)> dependencies)
+            ImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> dependencies)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -253,7 +253,7 @@ namespace ElmFullstack
                 withFilesAsList.map(files =>
                     files.ToImmutableDictionary(
                         entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                        entry => (IImmutableList<byte>)Convert.FromBase64String(entry.content.AsBase64).ToImmutableList())
+                        entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
                     .WithComparers(EnumerableExtension.EqualityComparer<string>()));
 
             return
@@ -319,12 +319,12 @@ namespace ElmFullstack
                     listFunctionToPublish);
         }
 
-        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> CompileElmProgramAppCodeFiles() =>
-            ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty
+        static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> CompileElmProgramAppCodeFiles() =>
+            ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
-            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.elm.json").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "CompileFullstackApp.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.CompileFullstackApp.elm").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.Main.elm").ToImmutableList());
+            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.elm.json"))
+            .SetItem(ImmutableList.Create("src", "CompileFullstackApp.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.CompileFullstackApp.elm"))
+            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.Main.elm"));
 
         static byte[] GetManifestResourceStreamContent(string name)
         {
@@ -412,8 +412,8 @@ namespace ElmFullstack
         {
             public string AsBase64;
 
-            static public BytesJson AsJson(IImmutableList<byte> bytes) =>
-                new CompilerSerialInterface.BytesJson { AsBase64 = Convert.ToBase64String(bytes.ToArray()) };
+            static public BytesJson AsJson(IReadOnlyList<byte> bytes) =>
+                new BytesJson { AsBase64 = Convert.ToBase64String(bytes as byte[] ?? bytes.ToArray()) };
         }
     }
 }

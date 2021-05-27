@@ -31,7 +31,7 @@ namespace Pine
                 compressionLevel);
 
         static public byte[] ZipArchiveFromEntries(
-            IReadOnlyDictionary<IImmutableList<string>, IImmutableList<byte>> entries,
+            IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> entries,
             System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
             ZipArchiveFromEntries(
                 entries.ToImmutableDictionary(entry => entry.Key, entry => entry.Value.ToArray()),

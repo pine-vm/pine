@@ -192,14 +192,12 @@ namespace Pine
                 {
                     if (gitObject is Tree gitTree)
                     {
-                        return new Composition.TreeWithStringPath
-                        {
-                            TreeContent =
+                        return Composition.TreeWithStringPath.Tree(
+                            treeContent:
                                 gitTree.Select(treeEntry =>
                                     (treeEntry.Name,
                                     convertToLiteralNodeObjectRecursive(treeEntry.Target)))
-                                .ToImmutableList(),
-                        };
+                                .ToImmutableList());
                     }
 
                     if (gitObject is Blob gitBlob)
@@ -223,10 +221,7 @@ namespace Pine
                         if (loadedBlobSHA1Base16Lower != expectedSHA)
                             throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                        return new Composition.TreeWithStringPath
-                        {
-                            BlobContent = memoryStream.ToArray().ToImmutableList(),
-                        };
+                        return Composition.TreeWithStringPath.Blob(blobContent: memoryStream.ToArray());
                     }
 
                     throw new Exception("Unexpected kind of git object: " + gitObject.GetType() + ", " + gitObject.Id);
@@ -359,7 +354,7 @@ namespace Pine
 
             public (string hash, CommitContent content) firstParentCommitWithSameTree;
 
-            public IImmutableList<byte> AsBlob => tree?.BlobContent;
+            public IReadOnlyList<byte> AsBlob => tree?.BlobContent;
         }
 
         public class CommitContent

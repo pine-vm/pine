@@ -98,13 +98,13 @@ namespace elm_fullstack.ElmInteractive
             return javascriptEngine;
         }
 
-        static public IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> ParseElmSyntaxAppCodeFiles() =>
-            ImmutableDictionary<IImmutableList<string>, IImmutableList<byte>>.Empty
+        static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> ParseElmSyntaxAppCodeFiles() =>
+            ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
-            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.elm.json").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "Pine.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Pine.elm").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "ElmInteractive.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.ElmInteractive.elm").ToImmutableList())
-            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Main.elm").ToImmutableList());
+            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.elm.json"))
+            .SetItem(ImmutableList.Create("src", "Pine.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Pine.elm"))
+            .SetItem(ImmutableList.Create("src", "ElmInteractive.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.ElmInteractive.elm"))
+            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Main.elm"));
 
         static byte[] GetManifestResourceStreamContent(string name)
         {

@@ -278,7 +278,7 @@ namespace elm_fullstack
                     {
                         Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
-                        var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, byte[]>(EnumerableExtension.EqualityComparer<string>());
+                        var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
                         var fileStoreWriter = new DelegatingFileStoreWriter
                         {
@@ -743,7 +743,7 @@ namespace elm_fullstack
                         ("a tree containing " + blobs.Count + " blobs:\n" +
                         string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path))))
                         :
-                        "a blob containing " + loadFromPathResult?.Ok.tree.BlobContent.Count + " bytes";
+                        "a blob containing " + loadFromPathResult?.Ok.tree.BlobContent.Length + " bytes";
 
                     Console.WriteLine(
                         "Composition " + compositionId + " is " + compositionDescription);
@@ -1239,7 +1239,7 @@ namespace elm_fullstack
             };
         }
 
-        static (IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
+        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
             string sourceAdminInterface,
             string sourceAdminPassword)
         {
@@ -1272,7 +1272,7 @@ namespace elm_fullstack
             return ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
         }
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
+        static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
             string sourcePath, string sourcePassword)
         {
             if (Regex.IsMatch(sourcePath, "http(|s)://", RegexOptions.IgnoreCase))

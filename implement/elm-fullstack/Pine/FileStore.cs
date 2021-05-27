@@ -8,28 +8,28 @@ namespace Pine
 {
     public interface IFileStoreReader
     {
-        byte[] GetFileContent(IImmutableList<string> path);
+        IReadOnlyList<byte> GetFileContent(IImmutableList<string> path);
 
         IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath);
     }
 
     public interface IFileStoreWriter
     {
-        void SetFileContent(IImmutableList<string> path, byte[] fileContent);
+        void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent);
 
         // TODO: Simplify IFileStoreWriter: Do we still need AppendFileContent there?
-        void AppendFileContent(IImmutableList<string> path, byte[] fileContent);
+        void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent);
 
         void DeleteFile(IImmutableList<string> path);
     }
 
     public class DelegatingFileStoreReader : IFileStoreReader
     {
-        public Func<IImmutableList<string>, byte[]> GetFileContentDelegate;
+        public Func<IImmutableList<string>, IReadOnlyList<byte>> GetFileContentDelegate;
 
         public Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> ListFilesInDirectoryDelegate;
 
-        public byte[] GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
+        public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
 
         public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
             ListFilesInDirectoryDelegate(directoryPath);
@@ -37,19 +37,19 @@ namespace Pine
 
     public class DelegatingFileStoreWriter : IFileStoreWriter
     {
-        public Action<(IImmutableList<string> path, byte[] fileContent)> AppendFileContentDelegate;
+        public Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> AppendFileContentDelegate;
 
         public Action<IImmutableList<string>> DeleteFileDelegate;
 
-        public Action<(IImmutableList<string> path, byte[] fileContent)> SetFileContentDelegate;
+        public Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> SetFileContentDelegate;
 
-        public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
+        public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
             AppendFileContentDelegate((path, fileContent));
 
         public void DeleteFile(IImmutableList<string> path) =>
             DeleteFileDelegate(path);
 
-        public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
+        public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
             SetFileContentDelegate((path, fileContent));
     }
 
@@ -91,7 +91,7 @@ namespace Pine
                 Directory.CreateDirectory(directoryPath);
         }
 
-        public void SetFileContent(IImmutableList<string> path, byte[] fileContent)
+        public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent)
         {
             var filePath = CombinePath(path);
 
@@ -99,10 +99,10 @@ namespace Pine
 
             EnsureDirectoryExists(directoryPath);
 
-            File.WriteAllBytes(filePath, fileContent);
+            File.WriteAllBytes(filePath, fileContent as byte[] ?? fileContent.ToArray());
         }
 
-        public void AppendFileContent(IImmutableList<string> path, byte[] fileContent)
+        public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent)
         {
             var filePath = CombinePath(path);
 
@@ -112,10 +112,10 @@ namespace Pine
 
             using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write);
 
-            fileStream.Write(fileContent);
+            fileStream.Write(fileContent as byte[] ?? fileContent.ToArray());
         }
 
-        public byte[] GetFileContent(IImmutableList<string> path)
+        public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path)
         {
             var filePath = CombinePath(path);
 
@@ -161,16 +161,16 @@ namespace Pine
             this.reader = reader;
         }
 
-        public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
+        public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
             writer.AppendFileContent(path, fileContent);
 
         public void DeleteFile(IImmutableList<string> path) =>
             writer.DeleteFile(path);
 
-        public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
+        public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
             writer.SetFileContent(path, fileContent);
 
-        public byte[] GetFileContent(IImmutableList<string> path) =>
+        public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) =>
             reader.GetFileContent(path);
 
         public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>

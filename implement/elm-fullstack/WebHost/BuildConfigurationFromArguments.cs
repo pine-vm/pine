@@ -63,13 +63,11 @@ namespace ElmFullstack.WebHost
                 return true;
             }
 
-            return new Composition.TreeWithStringPath
-            {
-                TreeContent =
+            return Composition.TreeWithStringPath.Tree(
+                treeContent:
                     originalTree.TreeContent
                     .Where(keepNode)
-                    .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList()
-            };
+                    .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList());
         }
 
         static public byte[] BuildConfigurationZipArchive(Composition.Component sourceComposition)

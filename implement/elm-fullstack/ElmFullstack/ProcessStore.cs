@@ -122,9 +122,14 @@ namespace ElmFullstack.ProcessStore
         public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
             EnumerateCompositionsLogFilesPaths().Reverse()
             .SelectMany(compositionFilePath =>
-                Encoding.UTF8.GetString(compositionFileStoreReader.GetFileContent(compositionFilePath))
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
-                .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord)));
+                {
+                    var fileContent = compositionFileStoreReader.GetFileContent(compositionFilePath);
+
+                    return
+                        Encoding.UTF8.GetString(fileContent as byte[] ?? fileContent.ToArray())
+                        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
+                        .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord));
+                });
 
         public ReductionRecord GetReduction(byte[] reducedCompositionHash)
         {
@@ -152,7 +157,8 @@ namespace ElmFullstack.ProcessStore
                     0;
 
                 var reductionRecordFromFile =
-                    JsonConvert.DeserializeObject<ReductionRecordInFile>(Encoding.UTF8.GetString(fileContent.AsSpan(payloadStartIndex)));
+                    JsonConvert.DeserializeObject<ReductionRecordInFile>(
+                        Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)));
 
                 if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
                     throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");

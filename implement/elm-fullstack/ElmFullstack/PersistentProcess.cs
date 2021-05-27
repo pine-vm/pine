@@ -35,7 +35,7 @@ namespace ElmFullstack.PersistentProcess
 
         public PersistentProcessWithHistoryOnFileFromElm019Code(
             IProcessStoreReader storeReader,
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles,
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmAppFiles,
             Action<string> logger,
             ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
         {

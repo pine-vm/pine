@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -17,11 +18,11 @@ namespace test_elm_fullstack
         static string FilePathStringFromPath(IImmutableList<string> path) =>
             Path.Combine(path.ToArray());
 
-        static IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> GetLoweredElmAppFromDirectoryPath(
+        static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetLoweredElmAppFromDirectoryPath(
             IImmutableList<string> directoryPath)
         {
             return
-                ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
+                ElmApp.AsCompletelyLoweredElmApp(
                     sourceFiles: TestSetup.GetElmAppFromDirectoryPath(directoryPath),
                     ElmAppInterfaceConfig.Default).compiledAppFiles;
         }
@@ -30,7 +31,7 @@ namespace test_elm_fullstack
         Get the value from `tests` in the Elm module `Main`.
         */
         static string GetTestsValueFromModuleMain(
-            IImmutableDictionary<IImmutableList<string>, IImmutableList<byte>> elmAppFiles)
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmAppFiles)
         {
             var javascriptFromElmMake = ProcessFromElm019Code.CompileElmToJavascript(
                 elmAppFiles,

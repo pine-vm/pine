@@ -553,12 +553,12 @@ namespace test_elm_fullstack
                 processStoreFileStoreMap: originalFileStore =>
                 {
                     return new FileStoreFromDelegates(
-                        setFileContent: new Action<IImmutableList<string>, byte[]>((path, fileContent) =>
+                        setFileContent: new Action<IImmutableList<string>, IReadOnlyList<byte>>((path, fileContent) =>
                         {
                             runBeforeMutateInFileStore?.Invoke();
                             originalFileStore.SetFileContent(path, fileContent);
                         }),
-                        appendFileContent: new Action<IImmutableList<string>, byte[]>((path, fileContent) =>
+                        appendFileContent: new Action<IImmutableList<string>, IReadOnlyList<byte>>((path, fileContent) =>
                         {
                             runBeforeMutateInFileStore?.Invoke();
                             originalFileStore.AppendFileContent(path, fileContent);
@@ -1211,21 +1211,21 @@ namespace test_elm_fullstack
 
         class FileStoreFromDelegates : IFileStore
         {
-            readonly Action<IImmutableList<string>, byte[]> setFileContent;
+            readonly Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent;
 
-            readonly Action<IImmutableList<string>, byte[]> appendFileContent;
+            readonly Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent;
 
             readonly Action<IImmutableList<string>> deleteFile;
 
-            readonly Func<IImmutableList<string>, byte[]> getFileContent;
+            readonly Func<IImmutableList<string>, IReadOnlyList<byte>> getFileContent;
 
             readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
 
             public FileStoreFromDelegates(
-                Action<IImmutableList<string>, byte[]> setFileContent,
-                Action<IImmutableList<string>, byte[]> appendFileContent,
+                Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent,
+                Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent,
                  Action<IImmutableList<string>> deleteFile,
-                Func<IImmutableList<string>, byte[]> getFileContent,
+                Func<IImmutableList<string>, IReadOnlyList<byte>> getFileContent,
                 Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
             {
                 this.setFileContent = setFileContent;
@@ -1235,19 +1235,19 @@ namespace test_elm_fullstack
                 this.listFilesInDirectory = listFilesInDirectory;
             }
 
-            public void AppendFileContent(IImmutableList<string> path, byte[] fileContent) =>
+            public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
                 appendFileContent(path, fileContent);
 
             public void DeleteFile(IImmutableList<string> path) =>
                 deleteFile(path);
 
-            public byte[] GetFileContent(IImmutableList<string> path) =>
+            public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) =>
                 getFileContent(path);
 
             public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
                 listFilesInDirectory(directoryPath);
 
-            public void SetFileContent(IImmutableList<string> path, byte[] fileContent) =>
+            public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
                 setFileContent(path, fileContent);
         }
 

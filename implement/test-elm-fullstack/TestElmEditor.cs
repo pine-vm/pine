@@ -16,6 +16,7 @@ namespace test_elm_fullstack
             originalString?.Trim()?.Replace("\n\r", "\n")?.Replace("\r\n", "\n");
 
         [TestMethod]
+        [Ignore("Depend on assembly from CI build")]
         public void Elm_editor_backend_support_format_elm_module_text()
         {
             var webAppSource =

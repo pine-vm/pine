@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Immutable;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Pine;
 
@@ -30,7 +31,7 @@ namespace elm_fullstack
             if (fileContent == null)
                 return null;
 
-            return Encoding.UTF8.GetString(fileContent);
+            return Encoding.UTF8.GetString(fileContent as byte[] ?? fileContent.ToArray());
         }
     }
 }

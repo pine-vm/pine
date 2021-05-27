@@ -20,8 +20,8 @@ namespace Pine
             public int ExitCode;
         }
 
-        static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IImmutableList<byte> content)> resultingFiles) ExecuteFileWithArguments(
-            IImmutableList<(IImmutableList<string> path, IImmutableList<byte> content)> environmentFiles,
+        static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) ExecuteFileWithArguments(
+            IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> content)> environmentFiles,
             byte[] executableFile,
             string arguments,
             IDictionary<string, string> environmentStrings,
@@ -40,14 +40,14 @@ namespace Pine
 
                 Directory.CreateDirectory(environmentFileDirectory);
 
-                File.WriteAllBytes(environmentFilePath, environmentFile.content.ToArray());
+                File.WriteAllBytes(environmentFilePath, (environmentFile.content as byte[]) ?? environmentFile.content.ToArray());
             }
 
             var executableFilePathAbsolute = Path.Combine(containerDirectory, executableFileName);
 
             File.WriteAllBytes(executableFilePathAbsolute, executableFile);
 
-            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePathAbsolute);
 
@@ -61,7 +61,7 @@ namespace Pine
                     containerDirectory,
                     Filesystem.MakePlatformSpecificPath(workingDirectory ?? ImmutableList<string>.Empty));
 
-            var process = new System.Diagnostics.Process
+            var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {

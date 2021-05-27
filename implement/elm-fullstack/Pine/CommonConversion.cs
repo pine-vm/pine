@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 
@@ -11,8 +12,8 @@ namespace Pine
             .Select(octetIndex => Convert.ToByte(base16.Substring(octetIndex * 2, 2), 16))
             .ToArray();
 
-        static public string StringBase16FromByteArray(byte[] array) =>
-            BitConverter.ToString(array).Replace("-", "").ToLowerInvariant();
+        static public string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
+            BitConverter.ToString(bytes as byte[] ?? bytes.ToArray()).Replace("-", "").ToLowerInvariant();
 
         static public byte[] HashSHA256(byte[] input)
         {
@@ -55,12 +56,12 @@ namespace Pine
             return deflatedStream.ToArray();
         }
 
-        static public byte[] Inflate(byte[] input)
+        static public byte[] Inflate(IReadOnlyList<byte> input)
         {
             using var inflatedStream = new System.IO.MemoryStream();
 
             using var deflateStream = new System.IO.Compression.DeflateStream(
-                new System.IO.MemoryStream(input), System.IO.Compression.CompressionMode.Decompress);
+                new System.IO.MemoryStream(input as byte[] ?? input.ToArray()), System.IO.Compression.CompressionMode.Decompress);
 
             deflateStream.CopyTo(inflatedStream);
 

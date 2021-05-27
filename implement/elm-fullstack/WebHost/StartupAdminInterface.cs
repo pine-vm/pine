@@ -676,7 +676,7 @@ namespace ElmFullstack.WebHost
 
                         context.Response.StatusCode = 200;
                         context.Response.ContentType = "application/octet-stream";
-                        await context.Response.Body.WriteAsync(fileContent);
+                        await context.Response.Body.WriteAsync(fileContent as byte[] ?? fileContent.ToArray());
                         return;
                     }
 
