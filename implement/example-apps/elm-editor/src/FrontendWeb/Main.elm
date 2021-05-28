@@ -1223,7 +1223,7 @@ view state =
                                         in
                                         viewFileTree
                                             { selectEventFromNode = selectEventFromFileTreeNode
-                                            , iconFromFileName = iconFromFileName
+                                            , iconFromFileName = Visuals.iconFromFileName
                                             }
                                             (sortFileTreeForExplorerView workingState.fileTree)
                                             |> Element.el
@@ -1243,7 +1243,7 @@ view state =
                                                         Visuals.iconSvgElementFromIcon { color = iconColor } iconType
                                                     )
                                                 |> Maybe.withDefault Element.none
-                                                |> Element.el [ Element.width (Element.px (defaultFontSize * 8 // 10)) ]
+                                                |> Element.el [ Element.width (Element.px defaultFontSize) ]
 
                                         filePathElement =
                                             case List.reverse filePathOpenedInEditor of
@@ -1259,23 +1259,35 @@ view state =
                                                             filePathOpenedInEditor
                                                                 |> List.reverse
                                                                 |> List.head
-                                                                |> Maybe.andThen iconFromFileName
+                                                                |> Maybe.andThen Visuals.iconFromFileName
                                                                 |> headerIconElementFromTypeAndColor
+
+                                                        elementFromPathSegmentText appendDirectorySeparator segmentText =
+                                                            [ Element.text segmentText
+                                                            , if appendDirectorySeparator then
+                                                                directorySeparatorIconElement
+
+                                                              else
+                                                                Element.none
+                                                            ]
+                                                                |> Element.row
+                                                                    [ Element.spacing (defaultFontSize // 2)
+                                                                    , Element.alpha 0.83
+                                                                    ]
                                                     in
-                                                    (directoryPathReversed |> List.reverse |> List.map Element.text)
-                                                        ++ [ [ fileIconElement, fileName |> Element.text ]
+                                                    (directoryPathReversed |> List.reverse |> List.map (elementFromPathSegmentText True))
+                                                        ++ [ [ fileIconElement, fileName |> elementFromPathSegmentText False ]
                                                                 |> Element.row [ Element.spacing (defaultFontSize // 2) ]
                                                            ]
-                                                        |> List.intersperse directorySeparatorIconElement
                                                         |> Element.row
-                                                            [ Element.spacing (defaultFontSize // 2)
-                                                            , elementFontSizePercent 80
-                                                            ]
+                                                            [ Element.spacing (defaultFontSize // 2) ]
 
                                         closeEditorElement =
                                             Element.Input.button
                                                 [ Element.mouseOver [ Element.Background.color (Element.rgba 0 0.5 0.8 0.5) ]
                                                 , Element.padding 4
+                                                , Element.scale 0.8
+                                                , Element.centerY
                                                 ]
                                                 { label = headerIconElementFromTypeAndColor (Just ( Visuals.CloseEditorIcon, "white" ))
                                                 , onPress = Just UserInputCloseEditor
@@ -1288,7 +1300,7 @@ view state =
                                                     , Element.height Element.fill
                                                     , Element.spacing defaultFontSize
                                                     , Element.alignLeft
-                                                    , Element.alpha 0.8
+                                                    , Element.htmlAttribute (HA.style "user-select" "none")
                                                     ]
                                             , [ buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
                                               , buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
@@ -1548,7 +1560,7 @@ viewFileTreeList =
                             Visuals.iconSvgElementFromIcon { color = iconColor } iconType
 
                 currentNodeElement =
-                    [ iconElement |> Element.el [ Element.width (Element.px defaultFontSize), Element.alpha 0.8 ]
+                    [ iconElement |> Element.el [ Element.width (Element.px defaultFontSize) ]
                     , Element.text item.label
                     ]
                         |> Element.row [ Element.spacing (defaultFontSize // 2), Element.padding 5 ]
@@ -1561,15 +1573,6 @@ viewFileTreeList =
             currentNodeElement
         )
         >> Element.column [ Element.width Element.fill ]
-
-
-iconFromFileName : String -> Maybe ( Visuals.Icon, String )
-iconFromFileName fileName =
-    if String.endsWith ".elm" fileName then
-        Just ( Visuals.FileTypeElmIcon, "rgb(127, 201, 255)" )
-
-    else
-        Nothing
 
 
 toggleEnlargedPaneButton : WorkingProjectStateStructure -> WorkspacePane -> Element.Element WorkspaceEventStructure
@@ -1930,7 +1933,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
                 |> Element.paragraph []
             , viewFileTree
                 { selectEventFromNode = always (always Nothing)
-                , iconFromFileName = iconFromFileName
+                , iconFromFileName = Visuals.iconFromFileName
                 }
                 (sortFileTreeForExplorerView loadOk.fileTree)
                 |> Element.el
