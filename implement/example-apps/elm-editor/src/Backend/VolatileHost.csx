@@ -178,11 +178,13 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
             loadFromGitResult.Success.tree.EnumerateBlobsTransitive()
             .ToImmutableList();
 
+        var urlInCommit = loadFromGitResult.Success.urlInCommit;
+
         ResponseStructure responseErrorExceedingLimit(string limitName)
         {
             return new ResponseStructure
             {
-                ErrorResponse = ImmutableList.Create("Composition '" + compositionId + "' exceeds supported limits: " + limitName)
+                ErrorResponse = ImmutableList.Create("Composition " + compositionId + " from " + urlInCommit + " exceeds supported limits: " + limitName)
             };
         }
 
@@ -225,7 +227,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                 {
                     compositionId = compositionId,
                     filesAsFlatList = filesAsFlatList,
-                    urlInCommit = loadFromGitResult.Success.urlInCommit,
+                    urlInCommit = urlInCommit,
                 })
         };
     }

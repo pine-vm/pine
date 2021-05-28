@@ -70,7 +70,7 @@ type alias State =
     , time : Time.Posix
     , workspace : WorkspaceStateStructure
     , popup : Maybe PopupState
-    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error BackendLoadFromGitOkWithCache )
+    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error (Result String BackendLoadFromGitOkWithCache) )
     }
 
 
@@ -114,7 +114,7 @@ type Event
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputLoadOrImportTakeProjectStateEvent ProjectState.FileTreeNode
     | UserInputClosePopup
-    | BackendLoadFromGitResultEvent String (Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure)
+    | BackendLoadFromGitResultEvent String (Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure))
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
@@ -178,7 +178,7 @@ type alias GetLinkToProjectDialogState =
 type alias LoadFromGitDialogState =
     { urlIntoGitRepository : String
     , requestTime : Maybe Time.Posix
-    , loadCompositionResult : Maybe (Result Http.Error BackendLoadFromGitOkWithCache)
+    , loadCompositionResult : Maybe (Result Http.Error (Result String BackendLoadFromGitOkWithCache))
     }
 
 
@@ -318,6 +318,7 @@ update event stateBefore =
                                             else
                                                 stateBefore.lastBackendLoadFromGitResult
                                                     |> Maybe.andThen (Tuple.second >> Result.toMaybe)
+                                                    |> Maybe.andThen Result.toMaybe
 
                                         url =
                                             stateBefore.url
@@ -848,17 +849,19 @@ processEventUrlChanged url stateBefore =
                         continueWithDiffProjectState diffProjectState
 
 
-processEventBackendLoadFromGitResult : String -> Result Http.Error FrontendBackendInterface.LoadCompositionResponseStructure -> State -> ( State, Cmd Event )
+processEventBackendLoadFromGitResult : String -> Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure) -> State -> ( State, Cmd Event )
 processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeRememberingResult =
     let
         resultWithFileTreeAndCache =
             result
                 |> Result.map
-                    (\loadOk ->
-                        { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
-                        , compositionIdCache = loadOk.compositionId
-                        , urlInCommit = loadOk.urlInCommit
-                        }
+                    (Result.map
+                        (\loadOk ->
+                            { fileTree = fileTreeNodeFromListFileWithPath loadOk.filesAsFlatList
+                            , compositionIdCache = loadOk.compositionId
+                            , urlInCommit = loadOk.urlInCommit
+                            }
+                        )
                     )
 
         stateBefore =
@@ -878,7 +881,7 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
             case stateBefore.workspace of
                 WorkspaceLoadingFromLink projectStateLoadingFromLink ->
                     if urlIntoGitRepository == projectStateLoadingFromLink.projectStateDescription.base then
-                        case resultWithFileTreeAndCache of
+                        case resultWithFileTreeAndCache |> Result.Extra.unpack (describeHttpError >> Err) identity of
                             Ok loadOk ->
                                 updateForLoadedProjectState
                                     { expectedCompositionHash = projectStateLoadingFromLink.expectedCompositionHash
@@ -889,9 +892,7 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
                                     stateBefore
 
                             Err loadingError ->
-                                ( { stateBefore
-                                    | workspace = WorkspaceErr (describeErrorLoadingContentsFromGit loadingError)
-                                  }
+                                ( { stateBefore | workspace = WorkspaceErr loadingError }
                                 , Cmd.none
                                 )
 
@@ -998,10 +999,10 @@ loadFromGitCmd urlIntoGitRepository =
         backendResponseJsonDecoder backendResponse =
             case backendResponse of
                 FrontendBackendInterface.LoadCompositionResponse loadComposition ->
-                    Json.Decode.succeed loadComposition
+                    Json.Decode.succeed (Ok loadComposition)
 
                 FrontendBackendInterface.ErrorResponse error ->
-                    Json.Decode.fail ("The server reported an error: " ++ error)
+                    Json.Decode.succeed (Err ("The server reported an error: " ++ error))
 
                 _ ->
                     Json.Decode.fail "Unexpected response: Not a LoadCompositionResponse"
@@ -1749,9 +1750,11 @@ viewLoadFromGitDialog dialogState =
         resultElement =
             dialogState.loadCompositionResult
                 |> Maybe.map
-                    (viewLoadOrImportDialogResultElement
-                        elementToDisplayLoadFromGitError
-                        UserInputLoadOrImportTakeProjectStateEvent
+                    (Result.Extra.unpack (describeHttpError >> Err) identity
+                        >> Result.mapError (String.left 500)
+                        >> viewLoadOrImportDialogResultElement
+                            dialogErrorElementFromDescription
+                            UserInputLoadOrImportTakeProjectStateEvent
                     )
                 |> Maybe.withDefault Element.none
 
@@ -1814,7 +1817,7 @@ viewImportFromZipArchiveDialog dialogState =
             dialogState.loadCompositionResult
                 |> Maybe.map
                     (viewLoadOrImportDialogResultElement
-                        (Element.text >> List.singleton >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ])
+                        dialogErrorElementFromDescription
                         UserInputLoadOrImportTakeProjectStateEvent
                     )
                 |> Maybe.withDefault Element.none
@@ -1835,12 +1838,15 @@ viewImportFromZipArchiveDialog dialogState =
 
 
 elementToDisplayLoadFromGitError : Http.Error -> Element.Element msg
-elementToDisplayLoadFromGitError loadError =
-    [ describeErrorLoadingContentsFromGit loadError
-        |> String.left 500
-        |> Element.text
-    ]
-        |> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
+elementToDisplayLoadFromGitError =
+    describeErrorLoadingContentsFromGit
+        >> String.left 500
+        >> dialogErrorElementFromDescription
+
+
+dialogErrorElementFromDescription : String -> Element.Element e
+dialogErrorElementFromDescription =
+    Element.text >> List.singleton >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
 
 
 projectSummaryElementForDialog : ProjectState.FileTreeNode -> Element.Element e
