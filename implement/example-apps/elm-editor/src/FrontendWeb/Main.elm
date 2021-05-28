@@ -2,6 +2,7 @@ port module FrontendWeb.Main exposing (Event(..), State, defaultProject, init, m
 
 import Base64
 import Browser
+import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Navigation
 import Bytes
@@ -177,7 +178,7 @@ type alias GetLinkToProjectDialogState =
 
 type alias LoadFromGitDialogState =
     { urlIntoGitRepository : String
-    , requestTime : Maybe Time.Posix
+    , request : Maybe { url : String, time : Time.Posix }
     , loadCompositionResult : Maybe (Result Http.Error (Result String BackendLoadFromGitOkWithCache))
     }
 
@@ -344,26 +345,26 @@ update event stateBefore =
                         (ModalDialog
                             (LoadFromGitDialog
                                 { urlIntoGitRepository = ""
-                                , requestTime = Nothing
+                                , request = Nothing
                                 , loadCompositionResult = Nothing
                                 }
                             )
                         )
               }
-            , Cmd.none
+            , focusInputUrlElementCmd
             )
 
         UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository }) ->
             case stateBefore.popup of
                 Just (ModalDialog (LoadFromGitDialog dialogStateBefore)) ->
-                    if dialogStateBefore.requestTime /= Nothing || dialogStateBefore.loadCompositionResult /= Nothing then
+                    if dialogStateBefore.request /= Nothing || dialogStateBefore.loadCompositionResult /= Nothing then
                         ( stateBefore, Cmd.none )
 
                     else
                         let
                             dialogState =
                                 { urlIntoGitRepository = urlIntoGitRepository
-                                , requestTime = Nothing
+                                , request = Nothing
                                 , loadCompositionResult = Nothing
                                 }
                         in
@@ -380,7 +381,7 @@ update event stateBefore =
                     let
                         dialogState =
                             { urlIntoGitRepository = urlIntoGitRepository
-                            , requestTime = Just stateBefore.time
+                            , request = Just { url = urlIntoGitRepository, time = stateBefore.time }
                             , loadCompositionResult = Nothing
                             }
                     in
@@ -1429,9 +1430,19 @@ view state =
     { title = "Elm Editor", body = [ body ] }
 
 
+focusInputUrlElementCmd : Cmd Event
+focusInputUrlElementCmd =
+    Browser.Dom.focus inputUrlElementId |> Task.attempt (\_ -> DiscardEvent)
+
+
 titleBarMenubarElementId : String
 titleBarMenubarElementId =
     "titlebar-menubar"
+
+
+inputUrlElementId : String
+inputUrlElementId =
+    "input-url"
 
 
 type alias FileTreeNodeViewModel event =
@@ -1728,6 +1739,7 @@ viewLoadFromGitDialog dialogState =
             Element.Input.text
                 [ Element.Background.color backgroundColor
                 , onKeyDownEnter userInputBeginLoadingEvent
+                , Element.htmlAttribute (HA.id inputUrlElementId)
                 ]
                 { onChange = \url -> UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository = url })
                 , text = dialogState.urlIntoGitRepository
@@ -1735,17 +1747,48 @@ viewLoadFromGitDialog dialogState =
                 , label = Element.Input.labelAbove [] (Element.text "URL to tree in git repository")
                 }
 
-        offerBeginLoading =
-            (dialogState.urlIntoGitRepository /= "")
-                && (dialogState.requestTime == Nothing)
-                && (dialogState.loadCompositionResult == Nothing)
-
         sendRequestButton =
             buttonElement
                 { label = "Begin Loading"
                 , onPress = Just userInputBeginLoadingEvent
                 }
-                |> Element.el [ Element.centerX, elementTransparent (not offerBeginLoading) ]
+
+        inputOrProgressElement =
+            case dialogState.request of
+                Nothing ->
+                    [ urlInputElement
+                    , sendRequestButton
+                        |> Element.el
+                            [ Element.centerX
+                            , elementTransparent (not (dialogState.urlIntoGitRepository /= ""))
+                            ]
+                    ]
+                        |> Element.column
+                            [ Element.width Element.fill
+                            , Element.spacing defaultFontSize
+                            ]
+
+                Just request ->
+                    let
+                        describeProgress =
+                            case dialogState.loadCompositionResult of
+                                Nothing ->
+                                    "in progress..."
+
+                                Just (Err _) ->
+                                    "failed"
+
+                                Just (Ok (Err _)) ->
+                                    "failed"
+
+                                Just (Ok (Ok _)) ->
+                                    "completed"
+                    in
+                    [ Element.text "Loading from "
+                    , linkElementFromUrlAndTextLabel { url = request.url, labelText = request.url }
+                    , Element.text (" " ++ describeProgress)
+                    ]
+                        |> Element.paragraph []
 
         resultElement =
             dialogState.loadCompositionResult
@@ -1768,8 +1811,7 @@ viewLoadFromGitDialog dialogState =
         , linkElementFromUrlAndTextLabel { url = exampleUrl, labelText = exampleUrl }
         ]
     , contentElement =
-        [ urlInputElement
-        , sendRequestButton
+        [ inputOrProgressElement
         , resultElement
         ]
             |> Element.column
