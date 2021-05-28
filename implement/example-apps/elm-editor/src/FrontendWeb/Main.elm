@@ -1719,9 +1719,15 @@ a:hover {
 viewLoadFromGitDialog : LoadFromGitDialogState -> PopupWindowAttributes Event
 viewLoadFromGitDialog dialogState =
     let
+        userInputBeginLoadingEvent =
+            UserInputLoadFromGit
+                (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
+
         urlInputElement =
             Element.Input.text
-                [ Element.Background.color backgroundColor ]
+                [ Element.Background.color backgroundColor
+                , onKeyDownEnter userInputBeginLoadingEvent
+                ]
                 { onChange = \url -> UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository = url })
                 , text = dialogState.urlIntoGitRepository
                 , placeholder = Just (Element.Input.placeholder [] (Element.text "URL to tree in git repository"))
@@ -1736,11 +1742,7 @@ viewLoadFromGitDialog dialogState =
         sendRequestButton =
             buttonElement
                 { label = "Begin Loading"
-                , onPress =
-                    Just
-                        (UserInputLoadFromGit
-                            (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
-                        )
+                , onPress = Just userInputBeginLoadingEvent
                 }
                 |> Element.el [ Element.centerX, elementTransparent (not offerBeginLoading) ]
 
@@ -2796,3 +2798,20 @@ extractFileTreeFromZipArchive =
             )
         >> Result.Extra.combine
         >> Result.map ProjectState.sortedFileTreeFromListOfBlobs
+
+
+onKeyDownEnter : msg -> Element.Attribute msg
+onKeyDownEnter msg =
+    Element.htmlAttribute
+        (Html.Events.on "keydown"
+            (Json.Decode.field "key" Json.Decode.string
+                |> Json.Decode.andThen
+                    (\key ->
+                        if key == "Enter" then
+                            Json.Decode.succeed msg
+
+                        else
+                            Json.Decode.fail "Not the enter key"
+                    )
+            )
+        )
