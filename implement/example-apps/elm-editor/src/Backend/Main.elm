@@ -168,7 +168,7 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
                             [ httpResponseOkWithBodyAsBase64
-                                (CompilationInterface.SourceFiles.file____src_monarch_js |> Base64.fromBytes)
+                                (Just CompilationInterface.SourceFiles.file__base64____src_monarch_js)
                                 staticContentHttpHeaders
                             ]
                     )

@@ -4,11 +4,9 @@ import Bytes
 import Bytes.Encode
 
 
-file____src_monarch_js : Bytes.Bytes
-file____src_monarch_js =
+file__base64____src_monarch_js : String
+file__base64____src_monarch_js =
     "The compiler replaces this value."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
 
 
 file____default_app_elm_json : Bytes.Bytes
