@@ -2835,6 +2835,7 @@ buildZipArchiveFromFileTree =
 extractFileTreeFromZipArchive : Zip.Zip -> Result String ProjectState.FileTreeNode
 extractFileTreeFromZipArchive =
     Zip.entries
+        >> List.filter (Zip.Entry.isDirectory >> not)
         >> List.map
             (\entry ->
                 case Zip.Entry.toBytes entry of
