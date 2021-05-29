@@ -173,6 +173,16 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                             ]
                     )
 
+                Just (Backend.Route.StaticFileRoute Backend.Route.FaviconRoute) ->
+                    ( stateBefore
+                    , InterfaceToHost.passiveAppEventResponse
+                        |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            [ httpResponseOkWithBodyAsBase64
+                                (Just CompilationInterface.SourceFiles.file__base64____static_favicon_svg)
+                                staticContentHttpHeaders
+                            ]
+                    )
+
                 Just Backend.Route.ApiRoute ->
                     ( { stateBefore | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10 }
                     , InterfaceToHost.passiveAppEventResponse
@@ -434,9 +444,9 @@ frontendHtmlDocument { debug } =
 <head>
   <meta charset="UTF-8">
   <title>Elm Editor</title>
-  <link rel="icon" href="data:image/svg+xml;base64,"""
-        ++ CompilationInterface.SourceFiles.file__base64____static_favicon_svg
-        ++ """">
+  <link rel="icon" href="/"""
+        ++ Common.faviconPath
+        ++ """" type="image/x-icon">
   <script type="text/javascript" src="""
         ++ elmMadeScriptFileName
         ++ """></script>

@@ -13,3 +13,8 @@ decodeBytesToString bytes =
 decodeBase64ToString : String -> Maybe String
 decodeBase64ToString =
     Base64.toBytes >> Maybe.andThen decodeBytesToString
+
+
+faviconPath : String
+faviconPath =
+    "favicon.ico"
