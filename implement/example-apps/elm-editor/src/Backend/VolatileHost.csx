@@ -20,7 +20,7 @@ using System.Collections.Immutable;
 using System.Linq;
 
 
-int loadCompositionLimitFileCount = 80;
+int loadCompositionLimitFileCount = 110;
 int loadCompositionLimitAggregateFileSize = 500_000;
 int loadCompositionLimitMaximumPathLength = 200;
 
