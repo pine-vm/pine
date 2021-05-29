@@ -24,11 +24,13 @@ import ElmMakeExecutableFile
 import File
 import File.Download
 import File.Select
+import FileTree
 import FontAwesome.Icon
 import FontAwesome.Solid
 import FontAwesome.Styles
 import FrontendBackendInterface
 import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
+import FrontendWeb.FileTreeInWorkspace as FileTreeInWorkspace
 import FrontendWeb.MonacoEditor
 import FrontendWeb.ProjectStateInUrl
 import FrontendWeb.Visuals as Visuals
@@ -41,9 +43,9 @@ import Json.Encode
 import Keyboard.Event
 import Keyboard.Key
 import List.Extra
-import ProjectState
 import ProjectState_2021_01
 import Result.Extra
+import SHA256
 import String.Extra
 import Task
 import Time
@@ -88,11 +90,11 @@ type WorkspaceStateStructure
 
 
 type alias WorkingProjectStateStructure =
-    { fileTree : ProjectState.FileTreeNode
+    { fileTree : FileTreeInWorkspace.FileTreeNode
     , editing : { filePathOpenedInEditor : Maybe (List String) }
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
-    , pendingElmMakeRequest : Maybe { time : Time.Posix, request : ElmMakeRequestStructure }
+    , pendingElmMakeRequest : Maybe { time : Time.Posix, requestIdentity : ElmMakeRequestStructure }
     , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , viewEnlargedPane : Maybe WorkspacePane
@@ -115,7 +117,7 @@ type alias ElmMakeResultStructure =
 type Event
     = TimeHasArrived Time.Posix
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
-    | UserInputLoadOrImportTakeProjectStateEvent ProjectState.FileTreeNode
+    | UserInputLoadOrImportTakeProjectStateEvent FileTreeInWorkspace.FileTreeNode
     | UserInputClosePopup
     | BackendLoadFromGitResultEvent String (Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure))
     | UrlRequest Browser.UrlRequest
@@ -186,14 +188,21 @@ type alias LoadFromGitDialogState =
 
 
 type alias ImportFromZipArchiveDialogState =
-    { loadCompositionResult : Maybe (Result String { fileTree : ProjectState.FileTreeNode, compositionIdCache : String })
+    { loadCompositionResult :
+        Maybe
+            (Result
+                String
+                { fileTree : FileTreeInWorkspace.FileTreeNode
+                , compositionIdCache : String
+                }
+            )
     }
 
 
 type alias BackendLoadFromGitOkWithCache =
     { urlInCommit : String
     , compositionIdCache : String
-    , fileTree : ProjectState.FileTreeNode
+    , fileTree : FileTreeInWorkspace.FileTreeNode
     }
 
 
@@ -415,13 +424,13 @@ update event stateBefore =
                             if sendDownloadCmd then
                                 let
                                     projectStateHash =
-                                        FrontendWeb.ProjectStateInUrl.projectStateCompositionHash workingState.fileTree
+                                        FileTreeInWorkspace.compositionHashFromFileTreeNode workingState.fileTree
                                 in
                                 workingState.fileTree
                                     |> buildZipArchiveFromFileTree
                                     |> Zip.toBytes
                                     |> File.Download.bytes
-                                        ("elm-app-" ++ projectStateHash ++ ".zip")
+                                        ("elm-app-" ++ SHA256.toHex projectStateHash ++ ".zip")
                                         "application/zip"
 
                             else
@@ -461,7 +470,7 @@ update event stateBefore =
                                 |> Result.map
                                     (\fileTree ->
                                         { fileTree = fileTree
-                                        , compositionIdCache = FrontendWeb.ProjectStateInUrl.projectStateCompositionHash fileTree
+                                        , compositionIdCache = FrontendWeb.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes fileTree)
                                         }
                                     )
                     in
@@ -538,7 +547,7 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
         textForEditor =
             stateBeforeConsiderCompile
                 |> fileOpenedInEditorFromWorkspace
-                |> Maybe.andThen (Tuple.second >> stringFromFileContent)
+                |> Maybe.andThen (Tuple.second >> .asBytes >> stringFromFileContent)
                 |> Maybe.withDefault "Failed to map file content to string."
 
         setTextToEditorCmd =
@@ -571,7 +580,9 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                                     |> Result.toMaybe
                                     |> Maybe.andThen .reportFromJson
                                     |> editorDocumentMarkersFromElmMakeReport
-                                        { elmMakeRequest = elmMakeRequest, fileOpenedInEditor = fileOpenedInEditor }
+                                        { elmMakeRequest = elmMakeRequest
+                                        , fileOpenedInEditor = fileOpenedInEditor
+                                        }
                                     |> setModelMarkersInMonacoEditorCmd
                                     |> Just
 
@@ -607,14 +618,14 @@ filePathOpenedInEditorFromWorkspace =
     fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
 
 
-fileOpenedInEditorFromWorkspace : WorkingProjectStateStructure -> Maybe ( List String, Bytes.Bytes )
+fileOpenedInEditorFromWorkspace : WorkingProjectStateStructure -> Maybe ( List String, FileTreeInWorkspace.BlobNodeWithCache )
 fileOpenedInEditorFromWorkspace workingState =
     case workingState.editing.filePathOpenedInEditor of
         Nothing ->
             Nothing
 
         Just filePathOpenedInEditor ->
-            case workingState.fileTree |> ProjectState.getBlobAtPathFromFileTree filePathOpenedInEditor of
+            case workingState.fileTree |> FileTree.getBlobAtPathFromFileTree filePathOpenedInEditor of
                 Nothing ->
                     Nothing
 
@@ -626,7 +637,7 @@ updateWorkspaceWithoutCmdToUpdateEditor : { time : Time.Posix } -> WorkspaceEven
 updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
-            if ProjectState.getBlobAtPathFromFileTree filePath stateBefore.fileTree == Nothing then
+            if FileTree.getBlobAtPathFromFileTree filePath stateBefore.fileTree == Nothing then
                 ( stateBefore, Cmd.none )
 
             else
@@ -647,7 +658,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                     { stateBefore
                         | fileTree =
                             stateBefore.fileTree
-                                |> ProjectState.setBlobAtPathInSortedFileTree ( filePath, fileContentFromString inputText )
+                                |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes ( filePath, fileContentFromString inputText )
                         , lastTextReceivedFromEditor = Just inputText
                     }
             , Cmd.none
@@ -716,7 +727,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                         { stateBefore
                             | fileTree =
                                 stateBefore.fileTree
-                                    |> ProjectState.setBlobAtPathInSortedFileTree
+                                    |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes
                                         ( formatResponseEvent.filePath
                                         , fileContentFromString formattedText
                                         )
@@ -798,7 +809,7 @@ processEventUrlChanged url stateBefore =
         projectWithMatchingStateHashAlreadyLoaded =
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
-                    Just (FrontendWeb.ProjectStateInUrl.projectStateCompositionHash workingState.fileTree)
+                    Just (FrontendWeb.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes workingState.fileTree))
                         == projectStateExpectedCompositionHash
 
                 _ ->
@@ -833,12 +844,12 @@ processEventUrlChanged url stateBefore =
 
             else
                 case projectStateDescription of
-                    FrontendWeb.ProjectStateInUrl.LiteralProjectState projectState ->
+                    FrontendWeb.ProjectStateInUrl.LiteralProjectState fileTreeFromUrl ->
                         updateForLoadedProjectState
                             { expectedCompositionHash = projectStateExpectedCompositionHash
                             , filePathToOpen = filePathToOpen
                             }
-                            projectState
+                            (FileTreeInWorkspace.mapBlobsFromBytes fileTreeFromUrl)
                             ProjectState_2021_01.noDifference
                             stateBefore
 
@@ -848,7 +859,7 @@ processEventUrlChanged url stateBefore =
                             , differenceFromBase = ProjectState_2021_01.noDifference
                             }
 
-                    FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState ->
+                    FrontendWeb.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
                         continueWithDiffProjectState diffProjectState
 
 
@@ -908,12 +919,16 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
 
 updateForLoadedProjectState :
     { expectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
-    -> ProjectState.FileTreeNode
+    -> FileTreeInWorkspace.FileTreeNode
     -> ProjectState_2021_01.ProjectStateDifference
     -> State
     -> ( State, Cmd Event )
 updateForLoadedProjectState config loadedBaseProjectState projectStateDiff stateBefore =
-    ( (case ProjectState.applyProjectStateDifference_2021_01 projectStateDiff loadedBaseProjectState of
+    ( (case
+        FileTreeInWorkspace.applyProjectStateDifference_2021_01
+            projectStateDiff
+            (FileTreeInWorkspace.mapBlobsToBytes loadedBaseProjectState)
+       of
         Err error ->
             Err ("Failed to apply difference model to compute project state: " ++ error)
 
@@ -925,7 +940,9 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
                 continueIfHashOk =
                     { stateBefore
                         | workspace =
-                            { fileTree = composedProjectState, filePathOpenedInEditor = config.filePathToOpen }
+                            { fileTree = FileTreeInWorkspace.mapBlobsFromBytes composedProjectState
+                            , filePathOpenedInEditor = config.filePathToOpen
+                            }
                                 |> initWorkspaceFromFileTreeAndFileSelection
                                 |> WorkspaceOk
                     }
@@ -953,7 +970,7 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
     )
 
 
-fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> ProjectState.FileTreeNode
+fileTreeNodeFromListFileWithPath : List FrontendBackendInterface.FileWithPath -> FileTreeInWorkspace.FileTreeNode
 fileTreeNodeFromListFileWithPath =
     List.map
         (\file ->
@@ -963,7 +980,7 @@ fileTreeNodeFromListFileWithPath =
                 |> Maybe.withDefault ("Failed to decode from Base64" |> Bytes.Encode.string |> Bytes.Encode.encode)
             )
         )
-        >> ProjectState.sortedFileTreeFromListOfBlobs
+        >> FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
 
 
 elmFormatCmd : WorkingProjectStateStructure -> Maybe (Cmd WorkspaceEventStructure)
@@ -973,7 +990,7 @@ elmFormatCmd state =
             Nothing
 
         Just ( filePath, fileContent ) ->
-            case stringFromFileContent fileContent of
+            case stringFromFileContent fileContent.asBytes of
                 Nothing ->
                     Nothing
 
@@ -1033,17 +1050,19 @@ userInputCompileFileOpenedInEditor { time } stateBefore =
                             Json.Decode.fail "Unexpected response"
             in
             ( { stateBefore
-                | pendingElmMakeRequest = Just { time = time, request = elmMakeRequest }
+                | pendingElmMakeRequest = Just { time = time, requestIdentity = elmMakeRequest.requestIdentity }
                 , elmMakeResult = Nothing
               }
             , requestToApiCmd
-                (FrontendBackendInterface.ElmMakeRequest elmMakeRequest)
+                (FrontendBackendInterface.ElmMakeRequest (elmMakeRequest.buildRequest ()))
                 jsonDecoder
-                (BackendElmMakeResponseEvent elmMakeRequest)
+                (BackendElmMakeResponseEvent elmMakeRequest.requestIdentity)
             )
 
 
-elmMakeRequestForFileOpenedInEditor : WorkingProjectStateStructure -> Maybe ElmMakeRequestStructure
+elmMakeRequestForFileOpenedInEditor :
+    WorkingProjectStateStructure
+    -> Maybe { requestIdentity : ElmMakeRequestStructure, buildRequest : () -> ElmMakeRequestStructure }
 elmMakeRequestForFileOpenedInEditor workspace =
     case workspace.editing.filePathOpenedInEditor of
         Nothing ->
@@ -1051,36 +1070,16 @@ elmMakeRequestForFileOpenedInEditor workspace =
 
         Just entryPointFilePath ->
             let
-                filesBeforeLowering =
-                    workspace.fileTree
-                        |> ProjectState.flatListOfBlobsFromFileTreeNode
-
-                loweringResult =
-                    CompileFullstackApp.asCompletelyLoweredElmApp
-                        { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
-                        , sourceFiles = Dict.fromList filesBeforeLowering
-                        , dependencies = []
-                        , rootModuleName = []
-                        , interfaceToHostRootModuleName = []
-                        }
-
-                files =
-                    loweringResult
-                        |> Result.toMaybe
-                        |> Maybe.map Dict.toList
-                        |> Maybe.withDefault filesBeforeLowering
-                        |> List.filter (Tuple.first >> CompileFullstackApp.includeFilePathInElmMakeRequest)
-
                 base64FromBytes : Bytes.Bytes -> String
                 base64FromBytes =
-                    Base64.fromBytes
-                        >> Maybe.withDefault "Error encoding in base64"
+                    Base64.fromBytes >> Maybe.withDefault "Error encoding in base64"
 
-                allFilePaths =
-                    List.map Tuple.first files
+                filesBeforeLowering =
+                    workspace.fileTree
+                        |> FileTree.flatListOfBlobsFromFileTreeNode
 
                 directoryContainsElmJson directoryPath =
-                    allFilePaths |> List.member (directoryPath ++ [ "elm.json" ])
+                    filesBeforeLowering |> List.map Tuple.first |> List.member (directoryPath ++ [ "elm.json" ])
 
                 workingDirectoryPath =
                     entryPointFilePath
@@ -1092,19 +1091,43 @@ elmMakeRequestForFileOpenedInEditor workspace =
                         |> List.filter directoryContainsElmJson
                         |> List.head
                         |> Maybe.withDefault []
+
+                mapFilesToRequestStructure mapContent =
+                    List.map (\( path, content ) -> { path = path, contentBase64 = mapContent content })
+
+                requestIdentity =
+                    { files = mapFilesToRequestStructure .asBase64 filesBeforeLowering
+                    , workingDirectoryPath = workingDirectoryPath
+                    , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
+                    , makeOptionDebug = workspace.enableInspectionOnCompile
+                    }
+
+                buildRequest () =
+                    let
+                        filesBeforeLoweringOnlyAsBytes =
+                            filesBeforeLowering |> List.map (Tuple.mapSecond .asBytes)
+
+                        loweringResult =
+                            CompileFullstackApp.asCompletelyLoweredElmApp
+                                { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
+                                , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
+                                , dependencies = []
+                                , rootModuleName = []
+                                , interfaceToHostRootModuleName = []
+                                }
+
+                        files =
+                            loweringResult
+                                |> Result.toMaybe
+                                |> Maybe.map Dict.toList
+                                |> Maybe.withDefault filesBeforeLoweringOnlyAsBytes
+                                |> List.filter (Tuple.first >> CompileFullstackApp.includeFilePathInElmMakeRequest)
+                    in
+                    { requestIdentity | files = mapFilesToRequestStructure base64FromBytes files }
             in
             Just
-                { files =
-                    files
-                        |> List.map
-                            (\( path, content ) ->
-                                { path = path
-                                , contentBase64 = content |> base64FromBytes
-                                }
-                            )
-                , workingDirectoryPath = workingDirectoryPath
-                , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
-                , makeOptionDebug = workspace.enableInspectionOnCompile
+                { requestIdentity = requestIdentity
+                , buildRequest = buildRequest
                 }
 
 
@@ -1234,10 +1257,10 @@ view state =
                                         let
                                             selectEventFromFileTreeNode upperPath ( nodeName, nodeContent ) =
                                                 case nodeContent of
-                                                    ProjectState.BlobNode _ ->
+                                                    FileTree.BlobNode _ ->
                                                         Just (UserInputOpenFileInEditor (upperPath ++ [ nodeName ]))
 
-                                                    ProjectState.TreeNode _ ->
+                                                    FileTree.TreeNode _ ->
                                                         Nothing
                                         in
                                         viewFileTree
@@ -1484,58 +1507,58 @@ type alias FileTreeNodeViewModel event =
     }
 
 
-sortFileTreeForExplorerView : ProjectState.FileTreeNode -> ProjectState.FileTreeNode
+sortFileTreeForExplorerView : FileTreeInWorkspace.FileTreeNode -> FileTreeInWorkspace.FileTreeNode
 sortFileTreeForExplorerView node =
     case node of
-        ProjectState.BlobNode _ ->
+        FileTree.BlobNode _ ->
             node
 
-        ProjectState.TreeNode tree ->
+        FileTree.TreeNode tree ->
             tree
                 |> List.map (Tuple.mapSecond sortFileTreeForExplorerView)
                 |> List.sortBy
                     (\( _, child ) ->
-                        if ProjectState.isBlobNode child then
+                        if FileTree.isBlobNode child then
                             0
 
                         else
                             1
                     )
-                |> ProjectState.TreeNode
+                |> FileTree.TreeNode
 
 
 viewFileTree :
-    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event
+    { selectEventFromNode : List String -> ( String, FileTreeInWorkspace.FileTreeNode ) -> Maybe event
     , iconFromFileName : String -> Maybe ( Visuals.Icon, String )
     }
-    -> ProjectState.FileTreeNode
+    -> FileTreeInWorkspace.FileTreeNode
     -> Element.Element event
 viewFileTree configuration rootNode =
     case rootNode of
-        ProjectState.BlobNode _ ->
+        FileTree.BlobNode _ ->
             Element.text "Error: Root node is a blob, not a tree"
 
-        ProjectState.TreeNode treeItems ->
+        FileTree.TreeNode treeItems ->
             treeItems
                 |> List.concatMap (buildFileTreeViewList configuration [])
                 |> viewFileTreeList
 
 
 buildFileTreeViewList :
-    { selectEventFromNode : List String -> ( String, ProjectState.FileTreeNode ) -> Maybe event
+    { selectEventFromNode : List String -> ( String, FileTreeInWorkspace.FileTreeNode ) -> Maybe event
     , iconFromFileName : String -> Maybe ( Visuals.Icon, String )
     }
     -> List String
-    -> ( String, ProjectState.FileTreeNode )
+    -> ( String, FileTreeInWorkspace.FileTreeNode )
     -> List (FileTreeNodeViewModel event)
 buildFileTreeViewList configuration path ( currentNodeName, currentNodeContent ) =
     let
         icon =
             case currentNodeContent of
-                ProjectState.TreeNode _ ->
+                FileTree.TreeNode _ ->
                     Just ( Visuals.DirectoryExpandedIcon, "white" )
 
-                ProjectState.BlobNode _ ->
+                FileTree.BlobNode _ ->
                     configuration.iconFromFileName currentNodeName
 
         currentItem =
@@ -1546,10 +1569,10 @@ buildFileTreeViewList configuration path ( currentNodeName, currentNodeContent )
             }
     in
     case currentNodeContent of
-        ProjectState.BlobNode _ ->
+        FileTree.BlobNode _ ->
             [ currentItem ]
 
-        ProjectState.TreeNode tree ->
+        FileTree.TreeNode tree ->
             currentItem
                 :: List.concatMap (buildFileTreeViewList configuration (path ++ [ currentNodeName ])) tree
 
@@ -1631,7 +1654,7 @@ type alias PopupWindowAttributes event =
     }
 
 
-viewGetLinkToProjectDialog : GetLinkToProjectDialogState -> ProjectState.FileTreeNode -> PopupWindowAttributes Event
+viewGetLinkToProjectDialog : GetLinkToProjectDialogState -> FileTreeInWorkspace.FileTreeNode -> PopupWindowAttributes Event
 viewGetLinkToProjectDialog dialogState projectState =
     let
         linkElementFromUrl urlToProject =
@@ -1656,7 +1679,7 @@ viewGetLinkToProjectDialog dialogState projectState =
                                 FrontendWeb.ProjectStateInUrl.LinkProjectState link ->
                                     Just link
 
-                                FrontendWeb.ProjectStateInUrl.DiffProjectState diffProjectState ->
+                                FrontendWeb.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
                                     Just diffProjectState.base
 
                 dependenciesDescriptionLines =
@@ -1843,7 +1866,7 @@ viewLoadFromGitDialog dialogState =
     }
 
 
-viewExportToZipArchiveDialog : ProjectState.FileTreeNode -> PopupWindowAttributes Event
+viewExportToZipArchiveDialog : FileTreeInWorkspace.FileTreeNode -> PopupWindowAttributes Event
 viewExportToZipArchiveDialog projectState =
     let
         buttonDownloadArchive =
@@ -1913,16 +1936,16 @@ dialogErrorElementFromDescription =
     Element.text >> List.singleton >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
 
 
-projectSummaryElementForDialog : ProjectState.FileTreeNode -> Element.Element e
+projectSummaryElementForDialog : FileTreeInWorkspace.FileTreeNode -> Element.Element e
 projectSummaryElementForDialog projectState =
     let
         projectFiles =
-            projectState |> ProjectState.flatListOfBlobsFromFileTreeNode
+            FileTree.flatListOfBlobsFromFileTreeNode projectState
     in
     [ ("This project contains "
         ++ (projectFiles |> List.length |> String.fromInt)
         ++ " files with an aggregate size of "
-        ++ (projectFiles |> List.map (Tuple.second >> Bytes.width) |> List.sum |> String.fromInt)
+        ++ (projectFiles |> List.map (Tuple.second >> .asBytes >> Bytes.width) |> List.sum |> String.fromInt)
         ++ " bytes."
       )
         |> Element.text
@@ -1932,8 +1955,8 @@ projectSummaryElementForDialog projectState =
 
 viewLoadOrImportDialogResultElement :
     (err -> Element.Element e)
-    -> (ProjectState.FileTreeNode -> e)
-    -> Result err { r | fileTree : ProjectState.FileTreeNode, compositionIdCache : String }
+    -> (FileTreeInWorkspace.FileTreeNode -> e)
+    -> Result err { r | fileTree : FileTreeInWorkspace.FileTreeNode, compositionIdCache : String }
     -> Element.Element e
 viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCompositionResult =
     case loadCompositionResult of
@@ -1944,7 +1967,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
             [ [ ("Loaded composition "
                     ++ loadOk.compositionIdCache
                     ++ " containing "
-                    ++ (loadOk.fileTree |> ProjectState.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
+                    ++ (loadOk.fileTree |> FileTree.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
                     ++ " files:"
                 )
                     |> Element.text
@@ -2100,14 +2123,14 @@ viewOutputPaneContent state =
                     Just pendingElmMakeRequest ->
                         let
                             elmMakeRequestEntryPointFilePathAbs =
-                                pendingElmMakeRequest.request.workingDirectoryPath
-                                    ++ pendingElmMakeRequest.request.entryPointFilePathFromWorkingDirectory
+                                pendingElmMakeRequest.requestIdentity.workingDirectoryPath
+                                    ++ pendingElmMakeRequest.requestIdentity.entryPointFilePathFromWorkingDirectory
                         in
                         [ Element.text
                             ("Compiling module '"
                                 ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
                                 ++ "' with inspection "
-                                ++ (if pendingElmMakeRequest.request.makeOptionDebug then
+                                ++ (if pendingElmMakeRequest.requestIdentity.makeOptionDebug then
                                         "enabled"
 
                                     else
@@ -2132,7 +2155,7 @@ viewOutputPaneContent state =
 
                         currentFileContentIsStillSame =
                             Just elmMakeRequest.files
-                                == (elmMakeRequestFromCurrentState |> Maybe.map .files)
+                                == (elmMakeRequestFromCurrentState |> Maybe.map (.requestIdentity >> .files))
 
                         elmMakeRequestEntryPointFilePathAbs =
                             elmMakeRequest.workingDirectoryPath
@@ -2359,7 +2382,7 @@ viewElementFromElmMakeCompileErrorMessage =
 
 
 editorDocumentMarkersFromElmMakeReport :
-    { elmMakeRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, Bytes.Bytes ) }
+    { elmMakeRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
     -> Maybe (Result String ElmMakeExecutableFile.ElmMakeReportFromJson)
     -> List FrontendWeb.MonacoEditor.EditorMarker
 editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } maybeReportFromJson =
@@ -2373,10 +2396,7 @@ editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } ma
                     Tuple.first fileOpenedInEditor
 
                 fileOpenedInEditorBase64 =
-                    fileOpenedInEditor
-                        |> Tuple.second
-                        |> Base64.fromBytes
-                        |> Maybe.withDefault "Error encoding in base64"
+                    (Tuple.second fileOpenedInEditor).asBase64
             in
             case elmMakeRequest.files |> List.filter (.path >> (==) filePathOpenedInEditor) |> List.head of
                 Nothing ->
@@ -2662,17 +2682,17 @@ monacoEditorElement _ =
         |> Element.html
 
 
-defaultProject : { fileTree : ProjectState.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
+defaultProject : { fileTree : FileTreeInWorkspace.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
 defaultProject =
     { fileTree =
-        ProjectState.TreeNode
+        FileTree.TreeNode
             [ ( "elm.json"
-              , ProjectState.BlobNode CompilationInterface.SourceFiles.file____default_app_elm_json
+              , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_elm_json
               )
             , ( "src"
-              , ProjectState.TreeNode
+              , FileTree.TreeNode
                     [ ( "Main.elm"
-                      , ProjectState.BlobNode CompilationInterface.SourceFiles.file____default_app_src_Main_elm
+                      , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_Main_elm
                       )
                     ]
               )
@@ -2682,7 +2702,7 @@ defaultProject =
 
 
 initWorkspaceFromFileTreeAndFileSelection :
-    { fileTree : ProjectState.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
+    { fileTree : FileTreeInWorkspace.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
     -> WorkingProjectStateStructure
 initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     { fileTree = fileTree
@@ -2836,12 +2856,12 @@ isOutsideParentWithId parentId =
         ]
 
 
-buildZipArchiveFromFileTree : ProjectState.FileTreeNode -> Zip.Zip
+buildZipArchiveFromFileTree : FileTreeInWorkspace.FileTreeNode -> Zip.Zip
 buildZipArchiveFromFileTree =
-    ProjectState.flatListOfBlobsFromFileTreeNode
+    FileTree.flatListOfBlobsFromFileTreeNode
         >> List.map
             (\( path, blobContent ) ->
-                blobContent
+                blobContent.asBytes
                     |> Zip.Entry.store
                         { path = String.join "/" path
                         , lastModified = ( Time.utc, Time.millisToPosix 0 )
@@ -2851,7 +2871,7 @@ buildZipArchiveFromFileTree =
         >> Zip.fromEntries
 
 
-extractFileTreeFromZipArchive : Zip.Zip -> Result String ProjectState.FileTreeNode
+extractFileTreeFromZipArchive : Zip.Zip -> Result String FileTreeInWorkspace.FileTreeNode
 extractFileTreeFromZipArchive =
     Zip.entries
         >> List.filter (Zip.Entry.isDirectory >> not)
@@ -2868,7 +2888,7 @@ extractFileTreeFromZipArchive =
                             )
             )
         >> Result.Extra.combine
-        >> Result.map ProjectState.sortedFileTreeFromListOfBlobs
+        >> Result.map FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
 
 
 onKeyDownEnter : msg -> Element.Attribute msg

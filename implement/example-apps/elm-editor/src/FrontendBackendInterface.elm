@@ -1,5 +1,8 @@
 module FrontendBackendInterface exposing (..)
 
+import Bytes
+import FileTree
+
 
 type RequestStructure
     = ElmMakeRequest ElmMakeRequestStructure
@@ -53,3 +56,7 @@ type alias ProcessOutputStructure =
     , standardOutput : String
     , exitCode : Int
     }
+
+
+type alias FileTreeNode =
+    FileTree.FileTreeNode Bytes.Bytes

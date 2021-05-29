@@ -1,20 +1,21 @@
 module ProjectStateModelTests exposing (..)
 
+import Base64
 import Bytes
 import Bytes.Encode
 import Expect
+import FileTree
+import FrontendWeb.FileTreeInWorkspace
 import FrontendWeb.Main
-import Pine
-import ProjectState
 import ProjectState_2021_01
 import SHA256
 import Test
 
 
-demoProject : String -> ProjectState.FileTreeNode
+demoProject : String -> FrontendWeb.FileTreeInWorkspace.FileTreeNode
 demoProject elmModuleText =
     FrontendWeb.Main.defaultProject.fileTree
-        |> ProjectState.setBlobAtPathInSortedFileTree
+        |> FrontendWeb.FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes
             ( [ "src", "TestModule.elm" ]
             , elmModuleText |> Bytes.Encode.string |> Bytes.Encode.encode
             )
@@ -255,20 +256,29 @@ renderToHtml gameState =
                     baseProjectModuleText
                 )
     in
-    case ProjectState.searchProjectStateDifference_2021_01 editedProject { baseComposition = baseProject } of
+    case FrontendWeb.FileTreeInWorkspace.searchProjectStateDifference_2021_01 editedProject { baseComposition = baseProject } of
         Err error ->
             Test.test testName <|
                 \_ ->
                     Expect.fail ("Failed to find diff model: " ++ error)
 
         Ok projectStateDiffModel ->
-            case ProjectState.applyProjectStateDifference_2021_01 projectStateDiffModel baseProject of
+            case
+                baseProject
+                    |> FrontendWeb.FileTreeInWorkspace.mapBlobsToBytes
+                    |> FrontendWeb.FileTreeInWorkspace.applyProjectStateDifference_2021_01 projectStateDiffModel
+            of
                 Err applyDiffError ->
                     Test.test "Try apply diff to restore project state" <|
                         \_ ->
                             Expect.fail ("Failed to apply project state diff: " ++ applyDiffError)
 
-                Ok restoredProjectStatePineValue ->
+                Ok restoredProjectState ->
+                    let
+                        restoredProjectStateAsBase64 =
+                            restoredProjectState
+                                |> FileTree.mapBlobs (Base64.fromBytes >> Maybe.withDefault "Failed to encode in base64")
+                    in
                     Test.describe testName
                         [ Test.test "Projects modeled in the test code are not equal" <|
                             \_ ->
@@ -278,7 +288,7 @@ renderToHtml gameState =
                                 Expect.notEqual (compositionHashFromProject editedProject) (compositionHashFromProject baseProject)
                         , Test.test "Project state restored from diff equals input project state" <|
                             \_ ->
-                                Expect.equal editedProject restoredProjectStatePineValue
+                                Expect.equal (FileTree.mapBlobs .asBase64 editedProject) restoredProjectStateAsBase64
                         , Test.test "projectStateDiffModel.setNodes contains 1 element" <|
                             \_ ->
                                 Expect.equal 1 (projectStateDiffModel.changeBlobs |> List.length)
@@ -289,9 +299,9 @@ renderToHtml gameState =
                         ]
 
 
-compositionHashFromProject : ProjectState.FileTreeNode -> String
+compositionHashFromProject : FrontendWeb.FileTreeInWorkspace.FileTreeNode -> String
 compositionHashFromProject =
-    ProjectState.compositionPineValueFromFileTreeNode >> Pine.hashDigestFromValue >> SHA256.toHex
+    FrontendWeb.FileTreeInWorkspace.compositionHashFromFileTreeNode >> SHA256.toHex
 
 
 approximateSizeOfProjectStateDifferenceModel_2021_01 : ProjectState_2021_01.ProjectStateDifference -> Int

@@ -6,11 +6,12 @@ import Bytes.Encode
 import Common
 import CompilationInterface.GenerateJsonCoders
 import Flate
+import FrontendBackendInterface
+import FrontendWeb.FileTreeInWorkspace as FileTreeInWorkspace
 import Json.Decode
 import Json.Encode
 import LZ77
 import Maybe.Extra
-import ProjectState
 import ProjectState_2021_01
 import SHA256
 import Url
@@ -20,9 +21,9 @@ import Url.Parser.Query
 
 
 type ProjectStateDescriptionInUrl
-    = LiteralProjectState ProjectState.FileTreeNode
+    = LiteralProjectState FrontendBackendInterface.FileTreeNode
     | LinkProjectState String
-    | DiffProjectState ProjectState_2021_01.ProjectState
+    | DiffProjectState_Version_2021_01 ProjectState_2021_01.ProjectState
 
 
 projectStateQueryParameterName : String
@@ -45,29 +46,33 @@ filePathToOpenQueryParameterName =
     "file-path-to-open"
 
 
-setProjectStateInUrl : ProjectState.FileTreeNode -> Maybe { r | urlInCommit : String, fileTree : ProjectState.FileTreeNode } -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
+setProjectStateInUrl : FileTreeInWorkspace.FileTreeNode -> Maybe { r | urlInCommit : String, fileTree : FileTreeInWorkspace.FileTreeNode } -> { filePathToOpen : Maybe (List String) } -> Url.Url -> Url.Url
 setProjectStateInUrl projectState maybeProjectStateBase optionalParameters url =
     let
+        projectStateJustBytes =
+            FileTreeInWorkspace.mapBlobsToBytes projectState
+
         projectStateDescription =
             case maybeProjectStateBase of
                 Nothing ->
-                    LiteralProjectState projectState
+                    LiteralProjectState projectStateJustBytes
 
                 Just projectStateBase ->
-                    if projectStateCompositionHash projectState == projectStateCompositionHash projectStateBase.fileTree then
+                    if projectStateCompositionHash projectStateJustBytes == projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes projectStateBase.fileTree) then
                         LinkProjectState projectStateBase.urlInCommit
 
                     else
                         case
-                            ProjectState.searchProjectStateDifference_2021_01
+                            FileTreeInWorkspace.searchProjectStateDifference_2021_01
                                 projectState
                                 { baseComposition = projectStateBase.fileTree }
                         of
                             Err _ ->
-                                LiteralProjectState projectState
+                                LiteralProjectState projectStateJustBytes
 
                             Ok diffModel ->
-                                DiffProjectState { base = projectStateBase.urlInCommit, differenceFromBase = diffModel }
+                                DiffProjectState_Version_2021_01
+                                    { base = projectStateBase.urlInCommit, differenceFromBase = diffModel }
 
         ( projectStateString, applyCompression ) =
             case projectStateDescription of
@@ -119,7 +124,7 @@ setProjectStateInUrl projectState maybeProjectStateBase optionalParameters url =
         (Url.toString { url | path = "", query = Nothing, fragment = Nothing })
         []
         (projectStateQueryParameter
-            :: Url.Builder.string projectStateHashQueryParameterName (projectStateCompositionHash projectState)
+            :: Url.Builder.string projectStateHashQueryParameterName (projectStateCompositionHash projectStateJustBytes)
             :: optionalQueryParameters
         )
         |> Url.fromString
@@ -184,9 +189,9 @@ projectStateHashFromUrl url =
         |> Maybe.Extra.join
 
 
-projectStateCompositionHash : ProjectState.FileTreeNode -> String
+projectStateCompositionHash : FrontendBackendInterface.FileTreeNode -> String
 projectStateCompositionHash =
-    ProjectState.compositionHashFromFileTreeNode >> SHA256.toHex
+    FileTreeInWorkspace.compositionHashFromFileTreeNodeBytes >> SHA256.toHex
 
 
 jsonEncodeProjectStateDescription : ProjectStateDescriptionInUrl -> Json.Encode.Value
@@ -195,14 +200,14 @@ jsonEncodeProjectStateDescription projectStateDescription =
         LiteralProjectState literalProjectState ->
             Json.Encode.object
                 [ ( "version_2020_12"
-                  , CompilationInterface.GenerateJsonCoders.jsonEncodeProjectState_2020_12 literalProjectState
+                  , CompilationInterface.GenerateJsonCoders.jsonEncodeFileTreeNode literalProjectState
                   )
                 ]
 
         LinkProjectState link ->
             Json.Encode.string link
 
-        DiffProjectState diffProjectState ->
+        DiffProjectState_Version_2021_01 diffProjectState ->
             Json.Encode.object
                 [ ( "version_2021_01"
                   , CompilationInterface.GenerateJsonCoders.jsonEncodeProjectState_2021_01 diffProjectState
@@ -214,11 +219,11 @@ jsonDecodeProjectStateDescription : Json.Decode.Decoder ProjectStateDescriptionI
 jsonDecodeProjectStateDescription =
     Json.Decode.oneOf
         [ Json.Decode.field "version_2020_12"
-            CompilationInterface.GenerateJsonCoders.jsonDecodeProjectState_2020_12
+            CompilationInterface.GenerateJsonCoders.jsonDecodeFileTreeNode
             |> Json.Decode.map LiteralProjectState
         , Json.Decode.field "version_2021_01"
             CompilationInterface.GenerateJsonCoders.jsonDecodeProjectState_2021_01
-            |> Json.Decode.map DiffProjectState
+            |> Json.Decode.map DiffProjectState_Version_2021_01
         ]
 
 

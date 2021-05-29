@@ -4,7 +4,6 @@ import FrontendBackendInterface
 import FrontendWeb.MonacoEditor
 import Json.Decode
 import Json.Encode
-import ProjectState
 import ProjectState_2021_01
 
 
@@ -33,13 +32,13 @@ jsonDecodeMessageFromMonacoEditor =
     Json.Decode.fail "The compiler replaces this function."
 
 
-jsonEncodeProjectState_2020_12 : ProjectState.ProjectState_2020_12 -> Json.Encode.Value
-jsonEncodeProjectState_2020_12 =
+jsonEncodeFileTreeNode : FrontendBackendInterface.FileTreeNode -> Json.Encode.Value
+jsonEncodeFileTreeNode =
     always (Json.Encode.string "The compiler replaces this function.")
 
 
-jsonDecodeProjectState_2020_12 : Json.Decode.Decoder ProjectState.ProjectState_2020_12
-jsonDecodeProjectState_2020_12 =
+jsonDecodeFileTreeNode : Json.Decode.Decoder FrontendBackendInterface.FileTreeNode
+jsonDecodeFileTreeNode =
     Json.Decode.fail "The compiler replaces this function."
 
 
