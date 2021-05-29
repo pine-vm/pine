@@ -25,11 +25,9 @@ file____default_app_src_Main_elm =
         |> Bytes.Encode.encode
 
 
-file____static_favicon_svg : Bytes.Bytes
-file____static_favicon_svg =
+file__base64____static_favicon_svg : String
+file__base64____static_favicon_svg =
     "The compiler replaces this value."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
 
 
 file__utf8____src_Backend_VolatileHost_csx : String

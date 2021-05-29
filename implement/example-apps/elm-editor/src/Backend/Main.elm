@@ -435,7 +435,7 @@ frontendHtmlDocument { debug } =
   <meta charset="UTF-8">
   <title>Elm Editor</title>
   <link rel="icon" href="data:image/svg+xml;base64,"""
-        ++ (CompilationInterface.SourceFiles.file____static_favicon_svg |> Base64.fromBytes |> Maybe.withDefault "Failed to encode as base64")
+        ++ CompilationInterface.SourceFiles.file__base64____static_favicon_svg
         ++ """">
   <script type="text/javascript" src="""
         ++ elmMadeScriptFileName
