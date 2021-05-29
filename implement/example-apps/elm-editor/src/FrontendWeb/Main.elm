@@ -11,6 +11,8 @@ import Bytes.Encode
 import Common
 import CompilationInterface.GenerateJsonCoders
 import CompilationInterface.SourceFiles
+import CompileFullstackApp
+import Dict
 import Element
 import Element.Background
 import Element.Border
@@ -1049,15 +1051,33 @@ elmMakeRequestForFileOpenedInEditor workspace =
 
         Just entryPointFilePath ->
             let
+                filesBeforeLowering =
+                    workspace.fileTree
+                        |> ProjectState.flatListOfBlobsFromFileTreeNode
+
+                loweringResult =
+                    CompileFullstackApp.asCompletelyLoweredElmApp
+                        { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
+                        , sourceFiles = Dict.fromList filesBeforeLowering
+                        , dependencies = []
+                        , rootModuleName = []
+                        , interfaceToHostRootModuleName = []
+                        }
+
+                files =
+                    loweringResult
+                        |> Result.toMaybe
+                        |> Maybe.map Dict.toList
+                        |> Maybe.withDefault filesBeforeLowering
+                        |> List.filter (Tuple.first >> CompileFullstackApp.includeFilePathInElmMakeRequest)
+
                 base64FromBytes : Bytes.Bytes -> String
                 base64FromBytes =
                     Base64.fromBytes
                         >> Maybe.withDefault "Error encoding in base64"
 
                 allFilePaths =
-                    workspace.fileTree
-                        |> ProjectState.flatListOfBlobsFromFileTreeNode
-                        |> List.map Tuple.first
+                    List.map Tuple.first files
 
                 directoryContainsElmJson directoryPath =
                     allFilePaths |> List.member (directoryPath ++ [ "elm.json" ])
@@ -1075,8 +1095,7 @@ elmMakeRequestForFileOpenedInEditor workspace =
             in
             Just
                 { files =
-                    workspace.fileTree
-                        |> ProjectState.flatListOfBlobsFromFileTreeNode
+                    files
                         |> List.map
                             (\( path, content ) ->
                                 { path = path
