@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-05-29";
+        static public string AppVersionId => "2021-06-03";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -925,7 +925,7 @@ namespace elm_fullstack
                             return new System.Net.Http.HttpRequestMessage
                             {
                                 Method = System.Net.Http.HttpMethod.Post,
-                                RequestUri = MapUriForDefaultPortForAdminInterface(deployAddress),
+                                RequestUri = MapUriForForAdminInterface(deployAddress),
                                 Content = httpContent,
                             };
                         },
@@ -1057,8 +1057,19 @@ namespace elm_fullstack
             return (httpResponse, enteredPassword);
         }
 
-        static Uri MapUriForDefaultPortForAdminInterface(string uriString) =>
-                MapUriForDefaultPort(uriString, AdminInterfaceDefaultPort);
+        static Uri MapUriForForAdminInterface(string uriString)
+        {
+            if (!Uri.IsWellFormedUriString(uriString, UriKind.Absolute))
+            {
+                if (!(uriString.StartsWith("http://", StringComparison.InvariantCultureIgnoreCase) ||
+                    uriString.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase)))
+                {
+                    uriString = "http://" + uriString;
+                }
+            }
+
+            return MapUriForDefaultPort(uriString, AdminInterfaceDefaultPort);
+        }
 
         static Uri MapUriForDefaultPort(string uriString, int defaultPort)
         {
@@ -1130,7 +1141,7 @@ namespace elm_fullstack
                     return new System.Net.Http.HttpRequestMessage
                     {
                         Method = System.Net.Http.HttpMethod.Post,
-                        RequestUri = MapUriForDefaultPortForAdminInterface(site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState),
+                        RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState),
                         Content = httpContent,
                     };
                 },
@@ -1204,7 +1215,7 @@ namespace elm_fullstack
                     new System.Net.Http.HttpRequestMessage
                     {
                         Method = System.Net.Http.HttpMethod.Post,
-                        RequestUri = MapUriForDefaultPortForAdminInterface(requestUrl),
+                        RequestUri = MapUriForForAdminInterface(requestUrl),
                     },
                 defaultPassword: siteDefaultPassword,
                 promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
