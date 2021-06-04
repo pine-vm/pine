@@ -761,7 +761,7 @@ namespace elm_fullstack
 
             return () =>
             {
-                var site = siteOption.Value();
+                var site = MapSiteForCommandLineArgument(siteOption.Value());
 
                 var sitePassword =
                     sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
@@ -902,7 +902,7 @@ namespace elm_fullstack
 
             try
             {
-                if (Regex.IsMatch(site, "^http(|s)\\:"))
+                if (!LooksLikeLocalSite(site))
                 {
                     var deployAddress =
                         (site.TrimEnd('/')) +
@@ -1057,6 +1057,14 @@ namespace elm_fullstack
             return (httpResponse, enteredPassword);
         }
 
+        static string MapSiteForCommandLineArgument(string siteArgument)
+        {
+            if (LooksLikeLocalSite(siteArgument))
+                return siteArgument;
+
+            return MapUriForForAdminInterface(siteArgument).ToString();
+        }
+
         static Uri MapUriForForAdminInterface(string uriString)
         {
             if (!Uri.IsWellFormedUriString(uriString, UriKind.Absolute))
@@ -1079,6 +1087,20 @@ namespace elm_fullstack
                 return WithPort(uri, defaultPort);
 
             return uri;
+        }
+
+        static bool LooksLikeLocalSite(string site)
+        {
+            if (Regex.IsMatch(site, "^http(|s)://", RegexOptions.IgnoreCase))
+                return false;
+
+            try
+            {
+                return Directory.Exists(site) || File.Exists(site);
+            }
+            catch { }
+
+            return false;
         }
 
         static public Uri WithPort(Uri uri, int newPort)
@@ -1286,7 +1308,7 @@ namespace elm_fullstack
         static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
             string sourcePath, string sourcePassword)
         {
-            if (Regex.IsMatch(sourcePath, "http(|s)://", RegexOptions.IgnoreCase))
+            if (!LooksLikeLocalSite(sourcePath))
             {
                 Console.WriteLine("Begin reading process history from '" + sourcePath + "' ...");
 

@@ -342,6 +342,9 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
             if (compositionHeadHash == null)
                 yield break;
 
+            if (1000 < compositionHeadHash.Count)
+                throw new Exception("Content of file for head hash is corrupted: File length is " + compositionHeadHash.Count);
+
             var nextHashBase16 = CommonConversion.StringBase16FromByteArray(compositionHeadHash);
 
             while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
