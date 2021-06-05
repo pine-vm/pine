@@ -95,7 +95,7 @@ namespace test_elm_fullstack
 
         static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> AsLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> originalAppFiles) =>
-                ElmApp.AsCompletelyLoweredElmApp(
+                ElmAppCompilation.AsCompletelyLoweredElmApp(
                     sourceFiles: originalAppFiles,
                     ElmAppInterfaceConfig.Default).compiledAppFiles;
 

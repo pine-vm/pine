@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -30,17 +31,62 @@ namespace ElmFullstack
         static public IImmutableList<string> CompilationInterfaceModuleNamePrefixes => ImmutableList.Create("ElmFullstackCompilerInterface", "CompilationInterface");
     }
 
-    public class ElmApp
+    public class ElmAppCompilation
     {
+        static readonly System.Diagnostics.Stopwatch cacheItemTimeSource = System.Diagnostics.Stopwatch.StartNew();
+
+        static readonly ConcurrentDictionary<string, (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache =
+            new ConcurrentDictionary<string, (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>, TimeSpan)>();
+
+        static void ElmAppCompilationCacheRemoveOlderItems(long retainedSizeLimit) =>
+            Cache.RemoveItemsToLimitRetainedSize(
+                ElmAppCompilationCache,
+                item => 1000 + EstimateCacheItemSizeInMemory(item.Value.compilationResult),
+                item => item.Value.lastUseTime,
+                retainedSizeLimit);
+
         static public (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
-            ElmAppInterfaceConfig interfaceConfig) =>
-                AsCompletelyLoweredElmApp(
-                    sourceFiles,
-                    rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
-                    interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
+            ElmAppInterfaceConfig interfaceConfig)
+        {
+            var sourceFilesHash =
+                CommonConversion.StringBase16FromByteArray(Composition.GetHash(Composition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
 
-        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
+            var compilationHash =
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(new
+                    {
+                        sourceFilesHash,
+                        interfaceConfig,
+                    }))));
+
+            IImmutableList<CompilationIterationReport> newCompilationIterationsReports = null;
+
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compileNew()
+            {
+                var (compiledAppFiles, iterationsReports) =
+                    AsCompletelyLoweredElmApp(
+                        sourceFiles,
+                        rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
+                        interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
+
+                newCompilationIterationsReports = iterationsReports;
+
+                return compiledAppFiles;
+            }
+
+            var (compilationResult, _) =
+                ElmAppCompilationCache.AddOrUpdate(
+                    compilationHash,
+                    _ => (compileNew(), cacheItemTimeSource.Elapsed),
+                    (_, previousEntry) => (previousEntry.compilationResult, cacheItemTimeSource.Elapsed));
+
+            ElmAppCompilationCacheRemoveOlderItems(50_000_000);
+
+            return (compilationResult, newCompilationIterationsReports);
+        }
+
+        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName) =>
@@ -65,7 +111,7 @@ namespace ElmFullstack
                 stack.SelectMany(frame => frame.discoveredDependencies)
                 .ToImmutableList();
 
-            var (compilationResult, compilationReport) = ElmAppCompilation(
+            var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
                 sourceFiles: sourceFiles,
                 rootModuleName: rootModuleName,
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
@@ -189,7 +235,17 @@ namespace ElmFullstack
                 stack: stack.Push(newStackFrame));
         }
 
-        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, CompilationIterationCompilationReport report) ElmAppCompilation(
+        static readonly ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache =
+            new ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, TimeSpan)>();
+
+        static void ElmAppCompilationIterationCacheRemoveOlderItems(long retainedSizeLimit) =>
+            Cache.RemoveItemsToLimitRetainedSize(
+                ElmAppCompilationIterationCache,
+                item => 1000 + EstimateCacheItemSizeInMemory(item.Value.compilationResult),
+                item => item.Value.lastUseTime,
+                retainedSizeLimit);
+
+        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
@@ -228,42 +284,62 @@ namespace ElmFullstack
                 }
             );
 
+            var argumentsJsonHash =
+                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(argumentsJson)));
+
             serializeStopwatch.Stop();
 
-            var prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            System.Diagnostics.Stopwatch prepareJsEngineStopwatch = null;
+            System.Diagnostics.Stopwatch inJsEngineStopwatch = null;
+            System.Diagnostics.Stopwatch deserializeStopwatch = null;
 
-            var jsEngine = jsEngineToCompileElmApp.Value;
+            ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compileNew()
+            {
+                prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            prepareJsEngineStopwatch.Stop();
+                var jsEngine = jsEngineToCompileElmApp.Value;
 
-            var inJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                prepareJsEngineStopwatch.Stop();
 
-            var responseJson =
-                jsEngine.CallFunction("lowerSerialized", argumentsJson)
-                ?.ToString();
+                inJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            inJsEngineStopwatch.Stop();
+                var responseJson =
+                    jsEngine.CallFunction("lowerSerialized", argumentsJson)
+                    ?.ToString();
 
-            var deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                inJsEngineStopwatch.Stop();
 
-            var withFilesAsList =
-                Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(responseJson);
+                deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var mappedResult =
-                withFilesAsList.map(files =>
-                    files.ToImmutableDictionary(
-                        entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                        entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                    .WithComparers(EnumerableExtension.EqualityComparer<string>()));
+                var withFilesAsList =
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(responseJson);
+
+                var mappedResult =
+                    withFilesAsList.map(files =>
+                        files.ToImmutableDictionary(
+                            entry => (IImmutableList<string>)entry.path.ToImmutableList(),
+                            entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
+                        .WithComparers(EnumerableExtension.EqualityComparer<string>()));
+
+                return mappedResult;
+            }
+
+            var result =
+                ElmAppCompilationIterationCache.AddOrUpdate(
+                    argumentsJsonHash,
+                    _ => (compileNew(), cacheItemTimeSource.Elapsed),
+                    (_, previousEntry) => (previousEntry.compilationResult, cacheItemTimeSource.Elapsed));
+
+            ElmAppCompilationIterationCacheRemoveOlderItems(50_000_000);
 
             return
-                (mappedResult,
+                (result.compilationResult,
                 new CompilationIterationCompilationReport
                 {
                     serializeTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds,
-                    prepareJsEngineTimeSpentMilli = (int)prepareJsEngineStopwatch.ElapsedMilliseconds,
-                    inJsEngineTimeSpentMilli = (int)inJsEngineStopwatch.ElapsedMilliseconds,
-                    deserializeTimeSpentMilli = (int)deserializeStopwatch.ElapsedMilliseconds,
+                    prepareJsEngineTimeSpentMilli = (int?)prepareJsEngineStopwatch?.ElapsedMilliseconds,
+                    inJsEngineTimeSpentMilli = (int?)inJsEngineStopwatch?.ElapsedMilliseconds,
+                    deserializeTimeSpentMilli = (int?)deserializeStopwatch?.ElapsedMilliseconds,
                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
                 });
         }
@@ -281,7 +357,7 @@ namespace ElmFullstack
 
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
-        static Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> jsEngineToCompileElmApp = new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(PrepareJsEngineToCompileElmApp);
+        static readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> jsEngineToCompileElmApp = new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(PrepareJsEngineToCompileElmApp);
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToCompileElmApp()
         {
@@ -328,7 +404,7 @@ namespace ElmFullstack
 
         static byte[] GetManifestResourceStreamContent(string name)
         {
-            using var stream = typeof(ElmApp).Assembly.GetManifestResourceStream(name);
+            using var stream = typeof(ElmAppCompilation).Assembly.GetManifestResourceStream(name);
             using var memoryStream = new System.IO.MemoryStream();
 
             stream.CopyTo(memoryStream);
@@ -338,6 +414,23 @@ namespace ElmFullstack
 
         static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError) =>
             Newtonsoft.Json.JsonConvert.SerializeObject(compilationError, Newtonsoft.Json.Formatting.Indented);
+
+
+        static long EstimateCacheItemSizeInMemory(ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> item) =>
+            (item.Err?.Sum(err => err.Sum(EstimateCacheItemSizeInMemory)) ?? 0) +
+            (item.Ok?.Sum(EstimateCacheItemSizeInMemory) ?? 0);
+
+        static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> item) =>
+            (item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Count)) ?? 0;
+
+        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.CompilationError compilationError) =>
+            compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
+
+        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.DependencyKey dependencyKey) =>
+            dependencyKey.ElmMakeDependency?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
+
+        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.ElmMakeRequestStructure elmMakeRequest) =>
+            elmMakeRequest?.files?.Sum(file => file.content.AsBase64.Length) ?? 0;
 
         public class CompilationIterationReport
         {
@@ -352,11 +445,11 @@ namespace ElmFullstack
         {
             public int serializeTimeSpentMilli;
 
-            public int prepareJsEngineTimeSpentMilli;
+            public int? prepareJsEngineTimeSpentMilli;
 
-            public int inJsEngineTimeSpentMilli;
+            public int? inJsEngineTimeSpentMilli;
 
-            public int deserializeTimeSpentMilli;
+            public int? deserializeTimeSpentMilli;
 
             public int totalTimeSpentMilli;
         }
@@ -385,7 +478,7 @@ namespace ElmFullstack
 
         class ElmMakeRequestStructure
         {
-            public IReadOnlyList<CompilerSerialInterface.AppCodeEntry> files;
+            public IReadOnlyList<AppCodeEntry> files;
 
             public IReadOnlyList<string> entryPointFilePath;
 

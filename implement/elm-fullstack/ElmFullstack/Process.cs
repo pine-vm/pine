@@ -129,9 +129,9 @@ namespace ElmFullstack
 
             var javascriptFromElmMake = CompileElmToJavascript(
                 elmCodeFiles,
-                ElmApp.FilePathFromModuleName(ElmApp.InterfaceToHostRootModuleName));
+                ElmAppCompilation.FilePathFromModuleName(ElmAppCompilation.InterfaceToHostRootModuleName));
 
-            var pathToFunctionCommonStart = ElmApp.InterfaceToHostRootModuleName + ".";
+            var pathToFunctionCommonStart = ElmAppCompilation.InterfaceToHostRootModuleName + ".";
 
             var javascriptPreparedToRun =
                 BuildAppJavascript(

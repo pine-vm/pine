@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-06-04";
+        static public string AppVersionId => "2021-06-05";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -556,11 +556,11 @@ namespace elm_fullstack
 
                     string compilationException = null;
                     Composition.TreeWithStringPath compiledTree = null;
-                    IImmutableList<ElmFullstack.ElmApp.CompilationIterationReport> compilationIterationsReports = null;
+                    IImmutableList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports = null;
 
                     try
                     {
-                        var (compiledAppFiles, iterationsReports) = ElmFullstack.ElmApp.AsCompletelyLoweredElmApp(
+                        var (compiledAppFiles, iterationsReports) = ElmFullstack.ElmAppCompilation.AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
                             ElmFullstack.ElmAppInterfaceConfig.Default);
 
@@ -816,7 +816,7 @@ namespace elm_fullstack
 
             public SourceSummaryStructure sourceSummary;
 
-            public IImmutableList<ElmFullstack.ElmApp.CompilationIterationReport> compilationIterationsReports;
+            public IImmutableList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports;
 
             public string compilationException;
 

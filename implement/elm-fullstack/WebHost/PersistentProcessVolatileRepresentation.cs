@@ -88,7 +88,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
         {
             var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(appConfig);
 
-            var (loweredAppFiles, _) = ElmApp.AsCompletelyLoweredElmApp(
+            var (loweredAppFiles, _) = ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default);
 
@@ -397,13 +397,17 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
                 var appConfig = compositionEvent.DeployAppConfigAndMigrateElmAppState;
 
-                var prepareMigrateResult =
-                    PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig);
+                var prepareMigrateTask = System.Threading.Tasks.Task.Run(() =>
+                    PrepareMigrateSerializedValue(destinationAppConfigTree: appConfig));
 
-                var (newElmAppProcess, buildArtifacts) =
+                var processFromWebAppConfigTask = System.Threading.Tasks.Task.Run(() =>
                     ProcessFromWebAppConfig(
                         appConfig,
-                        overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+                        overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig));
+
+                var prepareMigrateResult = prepareMigrateTask.Result;
+
+                var (newElmAppProcess, buildArtifacts) = processFromWebAppConfigTask.Result;
 
                 string migratedSerializedState = null;
                 Result<string, string> setElmAppStateResult = null;
@@ -573,11 +577,11 @@ namespace ElmFullstack.WebHost.PersistentProcess
             var appConfigFiles =
                 Composition.TreeToFlatDictionaryWithPathComparer(destinationAppConfigTree);
 
-            var pathToInterfaceModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
-            var pathToCompilationRootModuleFile = ElmApp.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
+            var pathToInterfaceModuleFile = ElmAppCompilation.FilePathFromModuleName(MigrationElmAppInterfaceModuleName);
+            var pathToCompilationRootModuleFile = ElmAppCompilation.FilePathFromModuleName(MigrationElmAppCompilationRootModuleName);
 
             if (!appConfigFiles.TryGetValue(pathToInterfaceModuleFile, out var _) &&
-                !appConfigFiles.TryGetValue(ElmApp.FilePathFromModuleName(Old_MigrationElmAppInterfaceModuleName), out var _))
+                !appConfigFiles.TryGetValue(ElmAppCompilation.FilePathFromModuleName(Old_MigrationElmAppInterfaceModuleName), out var _))
                 return new Result<string, Func<string, Result<string, string>>>
                 {
                     Err = "Did not find interface module at '" + string.Join("/", pathToInterfaceModuleFile) + "'",
@@ -585,18 +589,18 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
             try
             {
-                var (migrateElmAppFiles, _) = ElmApp.AsCompletelyLoweredElmApp(
+                var (migrateElmAppFiles, _) = ElmAppCompilation.AsCompletelyLoweredElmApp(
                     sourceFiles: appConfigFiles,
                     interfaceConfig: ElmAppInterfaceConfig.Default);
 
-                var javascriptFromElmMake = ElmFullstack.ProcessFromElm019Code.CompileElmToJavascript(
+                var javascriptFromElmMake = ProcessFromElm019Code.CompileElmToJavascript(
                     migrateElmAppFiles,
                     pathToCompilationRootModuleFile);
 
-                var javascriptMinusCrashes = ElmFullstack.ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
+                var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
 
                 var javascriptToRun =
-                    ElmFullstack.ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                    ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
                         javascriptMinusCrashes,
                         new[]
                         {
@@ -620,7 +624,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
                     }
 
                     var migrateResultStructure =
-                        JsonConvert.DeserializeObject<ElmFullstack.ElmValueCommonJson.Result<string, string>>(migrateResultString);
+                        JsonConvert.DeserializeObject<ElmValueCommonJson.Result<string, string>>(migrateResultString);
 
                     var elmAppStateMigratedSerialized = migrateResultStructure?.Ok?.FirstOrDefault();
 

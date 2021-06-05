@@ -22,7 +22,7 @@ namespace test_elm_fullstack
             IImmutableList<string> directoryPath)
         {
             return
-                ElmApp.AsCompletelyLoweredElmApp(
+                ElmAppCompilation.AsCompletelyLoweredElmApp(
                     sourceFiles: TestSetup.GetElmAppFromDirectoryPath(directoryPath),
                     ElmAppInterfaceConfig.Default).compiledAppFiles;
         }
