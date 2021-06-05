@@ -1091,6 +1091,9 @@ namespace elm_fullstack
 
         static bool LooksLikeLocalSite(string site)
         {
+            if (site.StartsWith(".") || site.StartsWith("/"))
+                return true;
+
             if (Regex.IsMatch(site, "^http(|s)://", RegexOptions.IgnoreCase))
                 return false;
 
