@@ -240,7 +240,7 @@ namespace elm_fullstack
                 string[] publicWebHostUrlsDefault = new[] { "http://*", "https://*" };
 
 
-                var processStoreDirectoryPathOption = runServerCmd.Option("--process-store-directory-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
+                var processStorePathOption = runServerCmd.Option("--process-store-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
                 var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
                 var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
@@ -251,7 +251,7 @@ namespace elm_fullstack
 
                 runServerCmd.OnExecute(() =>
                 {
-                    var processStoreDirectoryPath = processStoreDirectoryPathOption.Value();
+                    var processStorePath = processStorePathOption.Value();
 
                     var publicAppUrls =
                         publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
@@ -262,19 +262,19 @@ namespace elm_fullstack
                     var replicateProcessAdminPassword =
                         replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessFrom);
 
-                    if ((deletePreviousProcessOption.HasValue() || replicateProcessFrom != null) && processStoreDirectoryPath != null)
+                    if ((deletePreviousProcessOption.HasValue() || replicateProcessFrom != null) && processStorePath != null)
                     {
-                        Console.WriteLine("Deleting the previous process state from '" + processStoreDirectoryPath + "'...");
+                        Console.WriteLine("Deleting the previous process state from '" + processStorePath + "'...");
 
-                        if (System.IO.Directory.Exists(processStoreDirectoryPath))
-                            System.IO.Directory.Delete(processStoreDirectoryPath, true);
+                        if (System.IO.Directory.Exists(processStorePath))
+                            System.IO.Directory.Delete(processStorePath, true);
 
-                        Console.WriteLine("Completed deleting the previous process state from '" + processStoreDirectoryPath + "'.");
+                        Console.WriteLine("Completed deleting the previous process state from '" + processStorePath + "'.");
                     }
 
                     IFileStore processStoreFileStore = null;
 
-                    if (processStoreDirectoryPath == null)
+                    if (processStorePath == null)
                     {
                         Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
@@ -311,7 +311,7 @@ namespace elm_fullstack
                     }
                     else
                     {
-                        processStoreFileStore = new FileStoreFromSystemIOFile(processStoreDirectoryPath);
+                        processStoreFileStore = new FileStoreFromSystemIOFile(processStorePath);
                     }
 
                     if (replicateProcessFrom != null)
@@ -355,7 +355,7 @@ namespace elm_fullstack
 
                         var initElmAppState =
                             (deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue()) ||
-                            processStoreDirectoryPath == null;
+                            processStorePath == null;
 
                         var compositionLogEvent =
                             ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
