@@ -4,8 +4,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-27/elm-fullstack-bin-289b468ee441567ea57dd964e8a74c2c0a690e2b-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-05-27/elm-fullstack-bin-289b468ee441567ea57dd964e8a74c2c0a690e2b-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-05/elm-fullstack-separate-assemblies-6d96fca86dc807208e923caffb94a449d6f4b22d-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-05/elm-fullstack-bin-6d96fca86dc807208e923caffb94a449d6f4b22d-linux-x64.zip
 
 To register the elm-fs executable on your systems PATH environment variable, run the `elm-fs  install` command.
 
@@ -13,12 +13,12 @@ To register the elm-fs executable on your systems PATH environment variable, run
 
 To deploy an Elm Fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/6d96fca86dc807208e923caffb94a449d6f4b22d/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/6d96fca86dc807208e923caffb94a449d6f4b22d/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -26,7 +26,7 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition 46e5c927796a8a33f12a56e82aff40599c3fa4b4c0a2c7bbee903f499d4da8b3 from 'https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app'.
+Loaded source composition 46e5c927796a8a33f12a56e82aff40599c3fa4b4c0a2c7bbee903f499d4da8b3 from 'https://github.com/elm-fullstack/elm-fullstack/tree/6d96fca86dc807208e923caffb94a449d6f4b22d/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -166,21 +166,21 @@ To map the source file path to a name in this module, replace any non-alphanumer
 
 The compilation will fail if this module contains a name that matches more than one or none of the source files.
 
-### `MigrateBackendState` Elm Module
+### `Backend.MigrateState` Elm Module
 
-We need to add the `MigrateBackendState` module when we choose to migrate the back-end state during an app's deployment. We encode the migration in a function named `migrate` with types matching previous app and new app accordingly.
+We need to add the `Backend.MigrateState` module when we choose to migrate the back-end state during an app's deployment. We encode the migration in a function named `migrate` with types matching previous app and new app accordingly.
 
 In the simplest case, we did not change the back-end state model since the last deployment to the process. In this case, both input type and return type are the same. Then we can implement the whole module as follows:
 
 ```Elm
-module MigrateBackendState exposing (migrate)
+module Backend.MigrateState exposing (migrate)
 
 import Backend.Main
 
 
 migrate : Backend.Main.State -> Backend.Main.State
-migrate backendState =
-    backendState
+migrate =
+    identity
 ```
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
@@ -202,7 +202,7 @@ On startup, the server restores the state of the process from the given store lo
 Here is a complete command to run a server that maintains the persistence of the Elm Fullstack process:
 
 ```cmd
-elm-fs  run-server  --process-store-directory-path=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
+elm-fs  run-server  --process-store-path=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
 When running this command, you will get an output like this:
@@ -233,7 +233,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-05-27.
+Welcome to the Elm Fullstack admin interface version 2021-06-05.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -246,7 +246,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/8a5eebdc0792d9b1a3a932e2e4a169a6fabd5f54/implement/example-apps/docker-image-default-app  --init-app-state
+elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/6d96fca86dc807208e923caffb94a449d6f4b22d/implement/example-apps/docker-image-default-app  --init-app-state
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
