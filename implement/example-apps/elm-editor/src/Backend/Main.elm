@@ -95,13 +95,15 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                 bodyFromString =
                     Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
-                staticContentHttpHeaders =
-                    { cacheMaxAgeMinutes = Just (60 * 4) }
+                staticContentHttpHeaders contentType =
+                    { cacheMaxAgeMinutes = Just (60 * 4)
+                    , contentType = contentType
+                    }
 
                 httpResponseOkWithStringContent stringContent httpResponseHeaders =
                     httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
 
-                httpResponseOkWithBodyAsBase64 bodyAsBase64 { cacheMaxAgeMinutes } =
+                httpResponseOkWithBodyAsBase64 bodyAsBase64 { cacheMaxAgeMinutes, contentType } =
                     let
                         cacheHeaders =
                             case cacheMaxAgeMinutes of
@@ -111,6 +113,9 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                                 Just maxAgeMinutes ->
                                     [ { name = "Cache-Control"
                                       , values = [ "public, max-age=" ++ String.fromInt (maxAgeMinutes * 60) ]
+                                      }
+                                    , { name = "Content-Type"
+                                      , values = [ contentType ]
                                       }
                                     ]
                     in
@@ -125,7 +130,8 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                 frontendHtmlDocumentResponse frontendConfig =
                     InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig) staticContentHttpHeaders
+                            [ httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
+                                (staticContentHttpHeaders "text/html")
                             ]
             in
             case httpRequestEvent.request.uri |> Url.fromString |> Maybe.andThen Backend.Route.routeFromUrl of
@@ -152,7 +158,7 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                                         CompilationInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
                                     )
                                 )
-                                staticContentHttpHeaders
+                                (staticContentHttpHeaders "text/javascript")
                             ]
                     )
 
@@ -160,7 +166,9 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                     ( stateBefore
                     , InterfaceToHost.passiveAppEventResponse
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent monacoHtmlDocument staticContentHttpHeaders ]
+                            [ httpResponseOkWithStringContent monacoHtmlDocument
+                                (staticContentHttpHeaders "text/html")
+                            ]
                     )
 
                 Just (Backend.Route.StaticFileRoute Backend.Route.MonarchJavascriptRoute) ->
@@ -169,7 +177,7 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
                             [ httpResponseOkWithBodyAsBase64
                                 (Just CompilationInterface.SourceFiles.file__base64____src_monarch_js)
-                                staticContentHttpHeaders
+                                (staticContentHttpHeaders "text/javascript")
                             ]
                     )
 
@@ -179,7 +187,7 @@ processEventBeforeCreatingTasks hostEvent stateBefore =
                         |> InterfaceToHost.withCompleteHttpResponsesAdded
                             [ httpResponseOkWithBodyAsBase64
                                 (Just CompilationInterface.SourceFiles.file__base64____static_favicon_svg)
-                                staticContentHttpHeaders
+                                (staticContentHttpHeaders "image/svg+xml")
                             ]
                     )
 
