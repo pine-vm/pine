@@ -2694,6 +2694,12 @@ defaultProject =
                     [ ( "Main.elm"
                       , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_Main_elm
                       )
+                    , ( "Playground.elm"
+                      , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_Playground_elm
+                      )
+                    , ( "SimpleGameDev.elm"
+                      , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_SimpleGameDev_elm
+                      )
                     ]
               )
             ]

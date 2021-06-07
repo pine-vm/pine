@@ -23,6 +23,20 @@ file____default_app_src_Main_elm =
         |> Bytes.Encode.encode
 
 
+file____default_app_src_Playground_elm : Bytes.Bytes
+file____default_app_src_Playground_elm =
+    "The compiler replaces this value."
+        |> Bytes.Encode.string
+        |> Bytes.Encode.encode
+
+
+file____default_app_src_SimpleGameDev_elm : Bytes.Bytes
+file____default_app_src_SimpleGameDev_elm =
+    "The compiler replaces this value."
+        |> Bytes.Encode.string
+        |> Bytes.Encode.encode
+
+
 file__base64____static_favicon_svg : String
 file__base64____static_favicon_svg =
     "The compiler replaces this value."

@@ -1,10 +1,8 @@
 module Main exposing (..)
 
--- Press buttons to increment and decrement a counter.
+-- This app implements an interactive counter. It contains two buttons to increment and decrement the number shown between the buttons.
 --
--- Read how it works:
---   https://guide.elm-lang.org/architecture/buttons.html
---
+-- For a list of other example projects, see https://github.com/onlinegamemaker/making-online-games
 
 import Browser
 import Html
@@ -12,6 +10,7 @@ import Html.Attributes
 import Html.Events
 
 
+main : Program () State Event
 main =
     Browser.sandbox { init = init, update = update, view = view }
 
@@ -20,14 +19,14 @@ type alias State =
     Int
 
 
-init : State
-init =
-    0
-
-
 type Event
     = Increment
     | Decrement
+
+
+init : State
+init =
+    0
 
 
 update : Event -> State -> State
