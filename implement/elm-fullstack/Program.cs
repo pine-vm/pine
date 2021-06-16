@@ -35,14 +35,14 @@ namespace elm_fullstack
 
             var installCmd = app.Command("install", installCmd =>
             {
-                var (commandName, _, registerExecutableDirectoryOnPath) = CheckIfExecutableIsRegisteredOnPath();
+                var (commandName, checkInstallation) = CheckIfExecutableIsRegisteredOnPath();
 
                 installCmd.Description = "Installs the '" + commandName + "' command for the current user account.";
                 installCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 installCmd.OnExecute(() =>
                 {
-                    registerExecutableDirectoryOnPath();
+                    checkInstallation().registerExecutableDirectoryOnPath();
                 });
             });
 
@@ -93,8 +93,10 @@ namespace elm_fullstack
 
                 allOption.ShortName = "a";
 
+                var checkedInstallation = CheckIfExecutableIsRegisteredOnPath().checkInstallation();
+
                 var setupGroupCommands =
-                    CheckIfExecutableIsRegisteredOnPath().executableIsRegisteredOnPath
+                    checkedInstallation.executableIsRegisteredOnPath
                     ?
                     new CommandLineApplication[0] :
                     new[]
@@ -1376,7 +1378,7 @@ namespace elm_fullstack
                  httpResponse.Content.ReadAsStringAsync().Result);
         }
 
-        static (string commandName, bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)
+        static (string commandName, Func<(bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)> checkInstallation)
             CheckIfExecutableIsRegisteredOnPath()
         {
             var environmentVariableName = "PATH";
@@ -1390,29 +1392,71 @@ namespace elm_fullstack
 
             var commandName = Regex.Match(executableFileName, @"(.+?)(?=\.exe$|$)").Groups[1].Value;
 
-            var registerExecutableForCurrentUser = new Action(() =>
+            (bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath) checkInstallation()
             {
-                var newValueForPathEnv =
-                    executableDirectoryPath +
-                    System.IO.Path.PathSeparator +
-                    getCurrentValueOfEnvironmentVariable();
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    var executableIsRegisteredOnPath =
+                        (getCurrentValueOfEnvironmentVariable() ?? "")
+                        .Split(Path.PathSeparator).Contains(executableDirectoryPath);
 
-                Environment.SetEnvironmentVariable(environmentVariableName, newValueForPathEnv, environmentVariableScope);
+                    var registerExecutableForCurrentUser = new Action(() =>
+                    {
+                        var newValueForPathEnv =
+                            executableDirectoryPath +
+                            Path.PathSeparator +
+                            getCurrentValueOfEnvironmentVariable();
 
-                //  https://stackoverflow.com/questions/32650063/get-environment-variable-out-of-new-process-in-c-sharp/32650213#32650213
-                //  https://devblogs.microsoft.com/oldnewthing/?p=91591
-                //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
+                        Environment.SetEnvironmentVariable(environmentVariableName, newValueForPathEnv, environmentVariableScope);
 
-                Console.WriteLine(
-        "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-        "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
-            });
+                        //  https://stackoverflow.com/questions/32650063/get-environment-variable-out-of-new-process-in-c-sharp/32650213#32650213
+                        //  https://devblogs.microsoft.com/oldnewthing/?p=91591
+                        //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
-            var executableIsRegisteredOnPath =
-                (getCurrentValueOfEnvironmentVariable() ?? "")
-                .Split(Path.PathSeparator).Contains(executableDirectoryPath);
+                        Console.WriteLine(
+                            "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+                            "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+                    });
 
-            return (commandName, executableIsRegisteredOnPath, registerExecutableForCurrentUser);
+                    return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
+                }
+                else
+                {
+                    var destinationExecutableFilePath = "/bin/" + commandName;
+
+                    byte[] currentRegisteredFileContent = null;
+
+                    if (File.Exists(destinationExecutableFilePath))
+                    {
+                        currentRegisteredFileContent = File.ReadAllBytes(destinationExecutableFilePath);
+                    }
+
+                    var currentExecuableFileContent = File.ReadAllBytes(executableFilePath);
+
+                    var executableIsRegisteredOnPath =
+                        currentRegisteredFileContent != null &&
+                        currentRegisteredFileContent.SequenceEqual(currentExecuableFileContent);
+
+                    var registerExecutableForCurrentUser = new Action(() =>
+                    {
+                        File.WriteAllBytes(destinationExecutableFilePath, currentExecuableFileContent);
+
+                        var unixFileInfo = new Mono.Unix.UnixFileInfo(destinationExecutableFilePath);
+
+                        unixFileInfo.FileAccessPermissions |=
+                            Mono.Unix.FileAccessPermissions.GroupExecute | Mono.Unix.FileAccessPermissions.UserExecute | Mono.Unix.FileAccessPermissions.OtherExecute |
+                            Mono.Unix.FileAccessPermissions.GroupRead | Mono.Unix.FileAccessPermissions.UserRead | Mono.Unix.FileAccessPermissions.OtherRead;
+
+                        Console.WriteLine(
+                            "I copied the executable file to '" + destinationExecutableFilePath +
+                            "'. You will be able to use the '" + commandName + "' command in newer terminal instances.");
+                    });
+
+                    return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
+                }
+            };
+
+            return (commandName, checkInstallation);
         }
 
         static public void BuildConfiguration(
