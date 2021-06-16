@@ -5,12 +5,16 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2021.0605.0.0</AssemblyVersion>
-    <FileVersion>2021.0605.0.0</FileVersion>
+    <AssemblyVersion>2021.0616.0.0</AssemblyVersion>
+    <FileVersion>2021.0616.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Globalization.Invariant" Value="true" />
   </ItemGroup>
 
   <PropertyGroup>
