@@ -1,13 +1,31 @@
 # How to Configure and Deploy an Elm Fullstack App
 
+## Installing and Registering the `elm-fs` Command
+
 In this guide, I use the `elm-fs` command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-fullstack/elm-fullstack/releases
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-05/elm-fullstack-separate-assemblies-6d96fca86dc807208e923caffb94a449d6f4b22d-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-05/elm-fullstack-bin-6d96fca86dc807208e923caffb94a449d6f4b22d-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-16/elm-fullstack-separate-assemblies-0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-16/elm-fullstack-bin-0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46-linux-x64.zip
 
-To register the elm-fs executable on your systems PATH environment variable, run the `elm-fs  install` command.
+To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
+
+```text
+./elm-fs  install
+```
+
+In Windows, you will get a confirmation like this:
+
+```text
+I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
+```
+
+On Linux, the confirmation of the installation looks like this:
+
+```text
+I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-fs' command in newer terminal instances.
+```
 
 ## Running a Server and Deploying an App
 
@@ -233,7 +251,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-06-05.
+Welcome to the Elm Fullstack admin interface version 2021-06-16.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.

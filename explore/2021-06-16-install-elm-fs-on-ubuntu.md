@@ -80,3 +80,32 @@ root@5d520e80c116:/# echo $PATH
 ```
 
 At the moment, I don't see a use case for depending on that libicu. Maybe removing that dependency is better for our application.
+
+## Update After Working on The Implementation
+
+Release 2021-06-16 fixes both issues. The installation on Linux now uses the approach implemented with https://github.com/elm-fullstack/elm-fullstack/commit/0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46
+Copy the executable file into the directory `/bin/`
+
+Following are the commands for installing on Ubuntu 20.10:
+
+```PS
+docker run  -p 5000:5000 -p 4000:4000  --name=ubuntu  -t -i ubuntu:20.10  bash
+
+apt-get update && apt-get install -y wget && apt-get install -y unzip
+
+wget  https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-06-16/elm-fullstack-bin-0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46-linux-x64.zip
+
+unzip  elm-fullstack-bin-0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46-linux-x64.zip
+
+chmod a+x  elm-fs
+
+./elm-fs  install
+```
+
+The docker run command above also exposes ports for further testing and administration from outside. Skip the docker to work directly on the host system.
+
+Now the system is ready to run productive commands like this one:
+
+```text
+elm-fs  run-server  --admin-password=test  --public-urls="http://*:5000"  --deploy-app-from=https://github.com/elm-fullstack/elm-fullstack/tree/6d96fca86dc807208e923caffb94a449d6f4b22d/implement/example-apps/docker-image-default-app
+```
