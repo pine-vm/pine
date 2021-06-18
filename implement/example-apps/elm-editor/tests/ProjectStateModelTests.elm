@@ -6,7 +6,6 @@ import Bytes.Encode
 import Expect
 import FileTree
 import FrontendWeb.FileTreeInWorkspace
-import FrontendWeb.Main
 import ProjectState_2021_01
 import SHA256
 import Test
@@ -14,11 +13,11 @@ import Test
 
 demoProject : String -> FrontendWeb.FileTreeInWorkspace.FileTreeNode
 demoProject elmModuleText =
-    FrontendWeb.Main.defaultProject.fileTree
-        |> FrontendWeb.FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes
-            ( [ "src", "TestModule.elm" ]
-            , elmModuleText |> Bytes.Encode.string |> Bytes.Encode.encode
-            )
+    FrontendWeb.FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
+        [ ( [ "src", "TestModule.elm" ]
+          , elmModuleText |> Bytes.Encode.string |> Bytes.Encode.encode
+          )
+        ]
 
 
 project_state_find_diff_encoding_2021_01 : Test.Test

@@ -1,4 +1,4 @@
-port module FrontendWeb.Main exposing (Event(..), State, defaultProject, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
+port module FrontendWeb.Main exposing (Event(..), State, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
 
 import Base64
 import Browser
@@ -10,7 +10,6 @@ import Bytes.Decode
 import Bytes.Encode
 import Common
 import CompilationInterface.GenerateJsonCoders
-import CompilationInterface.SourceFiles
 import CompileFullstackApp
 import Dict
 import Element
@@ -206,7 +205,7 @@ type alias BackendLoadFromGitOkWithCache =
     }
 
 
-main : Program () (BrowserApplicationInitWithTime.State () State Event) (BrowserApplicationInitWithTime.Event Event)
+main : BrowserApplicationInitWithTime.Program () State Event
 main =
     BrowserApplicationInitWithTime.application
         { init = init
@@ -237,11 +236,46 @@ init _ url navigationKey time =
     { navigationKey = navigationKey
     , url = url
     , time = time
-    , workspace = defaultProject |> initWorkspaceFromFileTreeAndFileSelection |> WorkspaceOk
+    , workspace = WorkspaceErr "Initial update failed"
     , popup = Nothing
     , lastBackendLoadFromGitResult = Nothing
     }
-        |> update (UrlChange url)
+        |> foldUpdates
+            [ update (UrlChange url)
+            , updateBeginLoadDefaultProjectIfWorkspaceErr
+            ]
+
+
+updateBeginLoadDefaultProjectIfWorkspaceErr : State -> ( State, Cmd Event )
+updateBeginLoadDefaultProjectIfWorkspaceErr stateBefore =
+    case stateBefore.workspace of
+        WorkspaceErr _ ->
+            updateToBeginLoadProjectState
+                { projectStateExpectedCompositionHash = Nothing
+                , filePathToOpen = Just [ "src", "Main.elm" ]
+                }
+                stateBefore
+                { base = defaultProjectLink
+                , differenceFromBase = ProjectState_2021_01.noDifference
+                }
+
+        _ ->
+            ( stateBefore, Cmd.none )
+
+
+foldUpdates : List (State -> ( State, Cmd Event )) -> State -> ( State, Cmd Event )
+foldUpdates events stateBefore =
+    List.foldl
+        (\event ( state, cmds ) ->
+            let
+                ( nextState, nextCmd ) =
+                    event state
+            in
+            ( nextState, nextCmd :: cmds )
+        )
+        ( stateBefore, [] )
+        events
+        |> Tuple.mapSecond Cmd.batch
 
 
 update : Event -> State -> ( State, Cmd Event )
@@ -815,17 +849,12 @@ processEventUrlChanged url stateBefore =
                 _ ->
                     False
 
-        continueWithDiffProjectState projectStateDescription =
-            ( { stateBefore
-                | workspace =
-                    WorkspaceLoadingFromLink
-                        { projectStateDescription = projectStateDescription
-                        , filePathToOpen = filePathToOpen
-                        , expectedCompositionHash = projectStateExpectedCompositionHash
-                        }
-              }
-            , loadFromGitCmd projectStateDescription.base
-            )
+        continueWithDiffProjectState =
+            updateToBeginLoadProjectState
+                { projectStateExpectedCompositionHash = projectStateExpectedCompositionHash
+                , filePathToOpen = filePathToOpen
+                }
+                stateBefore
     in
     case FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl url of
         Nothing ->
@@ -861,6 +890,24 @@ processEventUrlChanged url stateBefore =
 
                     FrontendWeb.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
                         continueWithDiffProjectState diffProjectState
+
+
+updateToBeginLoadProjectState :
+    { projectStateExpectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
+    -> State
+    -> ProjectState_2021_01.ProjectState
+    -> ( State, Cmd Event )
+updateToBeginLoadProjectState { projectStateExpectedCompositionHash, filePathToOpen } stateBefore projectStateDescription =
+    ( { stateBefore
+        | workspace =
+            WorkspaceLoadingFromLink
+                { projectStateDescription = projectStateDescription
+                , filePathToOpen = filePathToOpen
+                , expectedCompositionHash = projectStateExpectedCompositionHash
+                }
+      }
+    , loadFromGitCmd projectStateDescription.base
+    )
 
 
 processEventBackendLoadFromGitResult : String -> Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure) -> State -> ( State, Cmd Event )
@@ -2682,29 +2729,9 @@ monacoEditorElement _ =
         |> Element.html
 
 
-defaultProject : { fileTree : FileTreeInWorkspace.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
-defaultProject =
-    { fileTree =
-        FileTree.TreeNode
-            [ ( "elm.json"
-              , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_elm_json
-              )
-            , ( "src"
-              , FileTree.TreeNode
-                    [ ( "Main.elm"
-                      , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_Main_elm
-                      )
-                    , ( "Playground.elm"
-                      , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_Playground_elm
-                      )
-                    , ( "SimpleGameDev.elm"
-                      , FileTreeInWorkspace.blobNodeFromBytes CompilationInterface.SourceFiles.file____default_app_src_SimpleGameDev_elm
-                      )
-                    ]
-              )
-            ]
-    , filePathOpenedInEditor = Just [ "src", "Main.elm" ]
-    }
+defaultProjectLink : String
+defaultProjectLink =
+    "https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/default-app"
 
 
 initWorkspaceFromFileTreeAndFileSelection :

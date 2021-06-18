@@ -11,6 +11,10 @@ import Time
 import Url
 
 
+type alias Program flags state event =
+    Platform.Program flags (State flags state event) (Event event)
+
+
 type State flags state event
     = WaitingForTimeState (WaitingForTimeStateStructure flags event)
     | InitializedState state
@@ -40,7 +44,7 @@ type alias Configuration flags state event =
     }
 
 
-application : Configuration flags state event -> Program flags (State flags state event) (Event event)
+application : Configuration flags state event -> Program flags state event
 application configuration =
     Browser.application
         { init = init
