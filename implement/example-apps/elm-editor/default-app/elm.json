@@ -6,6 +6,9 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
+            "Gizra/elm-keyboard-event": "1.0.1",
+            "SwiftsNamesake/proper-keyboard": "4.0.0",
+            "avh4/elm-color": "1.0.0",
             "danfishgold/base64-bytes": "1.0.3",
             "elm/browser": "1.0.2",
             "elm/bytes": "1.0.8",
@@ -18,11 +21,22 @@
             "elm/url": "1.0.0",
             "elm-explorations/linear-algebra": "1.0.3",
             "elm-explorations/webgl": "1.1.2",
+            "ianmackenzie/elm-3d-camera": "3.1.0",
+            "ianmackenzie/elm-3d-scene": "1.0.1",
+            "ianmackenzie/elm-geometry": "3.9.0",
+            "ianmackenzie/elm-triangular-mesh": "1.1.0",
+            "ianmackenzie/elm-units": "2.9.0",
             "mdgriffith/elm-ui": "1.1.8"
         },
         "indirect": {
             "elm/file": "1.0.5",
-            "elm/virtual-dom": "1.0.2"
+            "elm/random": "1.0.0",
+            "elm/virtual-dom": "1.0.2",
+            "ianmackenzie/elm-1d-parameter": "1.0.1",
+            "ianmackenzie/elm-float-extra": "1.1.0",
+            "ianmackenzie/elm-geometry-linear-algebra-interop": "2.0.2",
+            "ianmackenzie/elm-interval": "2.0.0",
+            "ianmackenzie/elm-units-interval": "2.3.0"
         }
     },
     "test-dependencies": {
