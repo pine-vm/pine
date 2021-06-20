@@ -14,7 +14,7 @@ module Playground exposing
     , white, lightGrey, grey, darkGrey, lightCharcoal, charcoal, darkCharcoal, black
     , lightGray, gray, darkGray
     , Number
-    , render, toScreen
+    , ShapeInteractivity(..), reactOnClick, render, toScreen
     )
 
 {-|
@@ -109,6 +109,17 @@ import Task
 import Time
 
 
+type alias RenderConfig state event =
+    { attributeForShapeInteractivity : Maybe (ShapeInteractivity state -> Svg.Attribute event)
+    }
+
+
+renderConfigWithoutInteractivity : RenderConfig state event
+renderConfigWithoutInteractivity =
+    { attributeForShapeInteractivity = Nothing
+    }
+
+
 {-| Make a picture! Here is a picture of a triangle with an eyeball:
 
     import Playground exposing (..)
@@ -121,7 +132,7 @@ import Time
             ]
 
 -}
-picture : List Shape -> Program () Screen ( Int, Int )
+picture : List (Shape state) -> Program () Screen ( Int, Int )
 picture shapes =
     let
         init () =
@@ -129,7 +140,7 @@ picture shapes =
 
         view screen =
             { title = "Playground"
-            , body = [ render screen shapes ]
+            , body = [ render renderConfigWithoutInteractivity screen shapes ]
             }
 
         update ( width, height ) _ =
@@ -523,7 +534,7 @@ Within `view` we can use functions like [`spin`](#spin), [`wave`](#wave),
 and [`zigzag`](#zigzag) to move and rotate our shapes.
 
 -}
-animation : (Time -> List Shape) -> Program () Animation Msg
+animation : (Time -> List (Shape e)) -> Program () Animation Msg
 animation viewFrame =
     let
         init () =
@@ -533,11 +544,11 @@ animation viewFrame =
 
         view (Animation _ screen time) =
             { title = "Playground"
-            , body = [ render screen (viewFrame time) ]
+            , body = [ render renderConfigWithoutInteractivity screen (viewFrame time) ]
             }
 
-        update msg model =
-            ( animationUpdate msg model
+        update event state =
+            ( animationUpdate event state
             , Cmd.none
             )
 
@@ -571,8 +582,8 @@ animationSubscriptions =
 
 
 animationUpdate : Msg -> Animation -> Animation
-animationUpdate msg ((Animation v s t) as state) =
-    case msg of
+animationUpdate event ((Animation v s t) as state) =
+    case event of
         Tick posix ->
             Animation v s (Time posix)
 
@@ -653,7 +664,7 @@ Notice that in the `update` we use information from the keyboard to update the
 `x` and `y` values. These building blocks let you make pretty fancy games!
 
 -}
-game : (Computer -> memory -> List Shape) -> (Computer -> memory -> memory) -> memory -> Program () (Game memory) Msg
+game : (Computer -> memory -> List (Shape e)) -> (Computer -> memory -> memory) -> memory -> Program () (Game memory) Msg
 game viewMemory updateMemory initialMemory =
     let
         init () =
@@ -663,11 +674,11 @@ game viewMemory updateMemory initialMemory =
 
         view (Game _ memory computer) =
             { title = "Playground"
-            , body = [ render computer.screen (viewMemory computer memory) ]
+            , body = [ render renderConfigWithoutInteractivity computer.screen (viewMemory computer memory) ]
             }
 
-        update msg model =
-            ( gameUpdate updateMemory msg model
+        update event state =
+            ( gameUpdate updateMemory event state
             , Cmd.none
             )
 
@@ -727,8 +738,8 @@ type Msg
 
 
 gameUpdate : (Computer -> memory -> memory) -> Msg -> Game memory -> Game memory
-gameUpdate updateMemory msg (Game vis memory computer) =
-    case msg of
+gameUpdate updateMemory event (Game vis memory computer) =
+    case event of
         Tick time ->
             Game vis (updateMemory computer memory) <|
                 if computer.mouse.click then
@@ -856,7 +867,7 @@ Read on to see examples of [`circle`](#circle), [`rectangle`](#rectangle),
 [`words`](#words), [`image`](#image), and many more!
 
 -}
-type Shape
+type Shape state
     = Shape
         Number
         -- x
@@ -868,10 +879,11 @@ type Shape
         -- scale
         Number
         -- alpha
-        Form
+        (Form state)
+        (List (ShapeInteractivity state))
 
 
-type Form
+type Form state
     = Circle Color Number
     | Oval Color Number Number
     | Rectangle Color Number Number
@@ -879,7 +891,11 @@ type Form
     | Polygon Color (List ( Number, Number ))
     | Image Number Number String
     | Words Color String
-    | Group (List Shape)
+    | Group (List (Shape state))
+
+
+type ShapeInteractivity state
+    = ReactOnClick (state -> state)
 
 
 {-| Make circles:
@@ -894,9 +910,9 @@ You give a color and then the radius. So the higher the number, the larger
 the circle.
 
 -}
-circle : Color -> Number -> Shape
+circle : Color -> Number -> Shape state
 circle color radius =
-    Shape 0 0 0 1 1 (Circle color radius)
+    Shape 0 0 0 1 1 (Circle color radius) []
 
 
 {-| Make ovals:
@@ -908,9 +924,9 @@ You give the color, and then the width and height. So our `football` example
 is 200 pixels wide and 100 pixels tall.
 
 -}
-oval : Color -> Number -> Number -> Shape
+oval : Color -> Number -> Number -> Shape state
 oval color width height =
-    Shape 0 0 0 1 1 (Oval color width height)
+    Shape 0 0 0 1 1 (Oval color width height) []
 
 
 {-| Make squares. Here are two squares combined to look like an empty box:
@@ -927,9 +943,9 @@ The number you give is the dimension of each side. So that purple square would
 be 80 pixels by 80 pixels.
 
 -}
-square : Color -> Number -> Shape
+square : Color -> Number -> Shape state
 square color n =
-    Shape 0 0 0 1 1 (Rectangle color n n)
+    Shape 0 0 0 1 1 (Rectangle color n n) []
 
 
 {-| Make rectangles. This example makes a red cross:
@@ -946,9 +962,9 @@ You give the color, width, and then height. So the first shape is vertical
 part of the cross, the thinner and taller part.
 
 -}
-rectangle : Color -> Number -> Number -> Shape
+rectangle : Color -> Number -> Number -> Shape state
 rectangle color width height =
-    Shape 0 0 0 1 1 (Rectangle color width height)
+    Shape 0 0 0 1 1 (Rectangle color width height) []
 
 
 {-| Make triangles. So if you wanted to draw the Egyptian pyramids, you could
@@ -965,9 +981,9 @@ The number is the "radius", so the distance from the center to each point of
 the pyramid is `200`. Pretty big!
 
 -}
-triangle : Color -> Number -> Shape
+triangle : Color -> Number -> Shape state
 triangle color radius =
-    Shape 0 0 0 1 1 (Ngon color 3 radius)
+    Shape 0 0 0 1 1 (Ngon color 3 radius) []
 
 
 {-| Make pentagons:
@@ -983,9 +999,9 @@ You give the color and then the radius. So the distance from the center to each
 of the five points is 100 pixels.
 
 -}
-pentagon : Color -> Number -> Shape
+pentagon : Color -> Number -> Shape state
 pentagon color radius =
-    Shape 0 0 0 1 1 (Ngon color 5 radius)
+    Shape 0 0 0 1 1 (Ngon color 5 radius) []
 
 
 {-| Make hexagons:
@@ -1003,9 +1019,9 @@ If you made more hexagons, you could [`move`](#move) them around to make a
 honeycomb pattern!
 
 -}
-hexagon : Color -> Number -> Shape
+hexagon : Color -> Number -> Shape state
 hexagon color radius =
-    Shape 0 0 0 1 1 (Ngon color 6 radius)
+    Shape 0 0 0 1 1 (Ngon color 6 radius) []
 
 
 {-| Make octogons:
@@ -1021,9 +1037,9 @@ You give the color and radius, so each point of this stop sign is 100 pixels
 from the center.
 
 -}
-octagon : Color -> Number -> Shape
+octagon : Color -> Number -> Shape state
 octagon color radius =
-    Shape 0 0 0 1 1 (Ngon color 8 radius)
+    Shape 0 0 0 1 1 (Ngon color 8 radius) []
 
 
 {-| Make any shape you want! Here is a very thin triangle:
@@ -1040,9 +1056,9 @@ octagon color radius =
 [`move`](#move) or [`group`](#group) so that rotation makes more sense.
 
 -}
-polygon : Color -> List ( Number, Number ) -> Shape
+polygon : Color -> List ( Number, Number ) -> Shape state
 polygon color points =
-    Shape 0 0 0 1 1 (Polygon color points)
+    Shape 0 0 0 1 1 (Polygon color points) []
 
 
 {-| Add some image from the internet:
@@ -1057,9 +1073,9 @@ polygon color points =
 You provide the width, height, and then the URL of the image you want to show.
 
 -}
-image : Number -> Number -> String -> Shape
+image : Number -> Number -> String -> Shape state
 image w h src =
-    Shape 0 0 0 1 1 (Image w h src)
+    Shape 0 0 0 1 1 (Image w h src) []
 
 
 {-| Show some words!
@@ -1074,9 +1090,9 @@ image w h src =
 You can use [`scale`](#scale) to make the words bigger or smaller.
 
 -}
-words : Color -> String -> Shape
+words : Color -> String -> Shape state
 words color string =
-    Shape 0 0 0 1 1 (Words color string)
+    Shape 0 0 0 1 1 (Words color string) []
 
 
 {-| Put shapes together so you can [`move`](#move) and [`rotate`](#rotate)
@@ -1108,9 +1124,9 @@ them as a group. Maybe you want to put a bunch of stars in the sky:
             ]
 
 -}
-group : List Shape -> Shape
+group : List (Shape state) -> Shape state
 group shapes =
-    Shape 0 0 0 1 1 (Group shapes)
+    Shape 0 0 0 1 1 (Group shapes) []
 
 
 
@@ -1134,9 +1150,9 @@ group shapes =
             ]
 
 -}
-move : Number -> Number -> Shape -> Shape
-move dx dy (Shape x y a s o f) =
-    Shape (x + dx) (y + dy) a s o f
+move : Number -> Number -> Shape state -> Shape state
+move dx dy (Shape x y a s o f interactivity) =
+    Shape (x + dx) (y + dy) a s o f interactivity
 
 
 {-| Move a shape up by some number of pixels. So if you wanted to make a tree
@@ -1152,7 +1168,7 @@ you could move the leaves up above the trunk:
             ]
 
 -}
-moveUp : Number -> Shape -> Shape
+moveUp : Number -> Shape state -> Shape state
 moveUp =
     moveY
 
@@ -1171,9 +1187,9 @@ above the ground, you could move the sky up and the ground down:
             ]
 
 -}
-moveDown : Number -> Shape -> Shape
-moveDown dy (Shape x y a s o f) =
-    Shape x (y - dy) a s o f
+moveDown : Number -> Shape state -> Shape state
+moveDown dy (Shape x y a s o f interactivity) =
+    Shape x (y - dy) a s o f interactivity
 
 
 {-| Move shapes to the left.
@@ -1188,9 +1204,9 @@ moveDown dy (Shape x y a s o f) =
             ]
 
 -}
-moveLeft : Number -> Shape -> Shape
-moveLeft dx (Shape x y a s o f) =
-    Shape (x - dx) y a s o f
+moveLeft : Number -> Shape state -> Shape state
+moveLeft dx (Shape x y a s o f interactivity) =
+    Shape (x - dx) y a s o f interactivity
 
 
 {-| Move shapes to the right.
@@ -1205,7 +1221,7 @@ moveLeft dx (Shape x y a s o f) =
             ]
 
 -}
-moveRight : Number -> Shape -> Shape
+moveRight : Number -> Shape state -> Shape state
 moveRight =
     moveX
 
@@ -1226,9 +1242,9 @@ moves back and forth:
 Using `moveX` feels a bit nicer here because the movement may be positive or negative.
 
 -}
-moveX : Number -> Shape -> Shape
-moveX dx (Shape x y a s o f) =
-    Shape (x + dx) y a s o f
+moveX : Number -> Shape state -> Shape state
+moveX dx (Shape x y a s o f interactivity) =
+    Shape (x + dx) y a s o f interactivity
 
 
 {-| Move the `y` coordinate of a shape by some amount. Maybe you want to make
@@ -1251,9 +1267,9 @@ Using `moveY` feels a bit nicer when setting things relative to the bottom or
 top of the screen, since the values are negative sometimes.
 
 -}
-moveY : Number -> Shape -> Shape
-moveY dy (Shape x y a s o f) =
-    Shape x (y + dy) a s o f
+moveY : Number -> Shape state -> Shape state
+moveY dy (Shape x y a s o f interactivity) =
+    Shape x (y + dy) a s o f interactivity
 
 
 {-| Make a shape bigger or smaller. So if you wanted some [`words`](#words) to
@@ -1268,9 +1284,9 @@ be larger, you could say:
             ]
 
 -}
-scale : Number -> Shape -> Shape
-scale ns (Shape x y a s o f) =
-    Shape x y a (s * ns) o f
+scale : Number -> Shape state -> Shape state
+scale ns (Shape x y a s o f interactivity) =
+    Shape x y a (s * ns) o f interactivity
 
 
 {-| Rotate shapes in degrees.
@@ -1287,9 +1303,9 @@ The degrees go **counter-clockwise** to match the direction of the
 [unit circle](https://en.wikipedia.org/wiki/Unit_circle).
 
 -}
-rotate : Number -> Shape -> Shape
-rotate da (Shape x y a s o f) =
-    Shape x y (a + da) s o f
+rotate : Number -> Shape state -> Shape state
+rotate da (Shape x y a s o f interactivity) =
+    Shape x y (a + da) s o f interactivity
 
 
 {-| Fade a shape. This lets you make shapes see-through or even completely
@@ -1310,9 +1326,9 @@ The number has to be between `0` and `1`, where `0` is totally transparent
 and `1` is completely solid.
 
 -}
-fade : Number -> Shape -> Shape
-fade o (Shape x y a s _ f) =
-    Shape x y a s o f
+fade : Number -> Shape state -> Shape state
+fade o (Shape x y a s _ f interactivity) =
+    Shape x y a s o f interactivity
 
 
 {-| Represents a color.
@@ -1561,8 +1577,8 @@ colorClamp number =
     clamp 0 255 (round number)
 
 
-render : Screen -> List Shape -> Html.Html msg
-render screen shapes =
+render : RenderConfig state event -> Screen -> List (Shape state) -> Html.Html event
+render config screen shapes =
     let
         w =
             String.fromFloat screen.width
@@ -1584,39 +1600,53 @@ render screen shapes =
         , width "100%"
         , height "100%"
         ]
-        (List.map renderShape shapes)
+        (List.map (renderShape config) shapes)
 
 
-renderShape : Shape -> Svg msg
-renderShape (Shape x y angle s alpha form) =
-    case form of
-        Circle color radius ->
-            renderCircle color radius x y angle s alpha
+renderShape : RenderConfig state event -> Shape state -> Svg event
+renderShape config (Shape x y angle s alpha form interactivity) =
+    let
+        shapeWithoutInteractivity =
+            case form of
+                Circle color radius ->
+                    renderCircle color radius x y angle s alpha
 
-        Oval color width height ->
-            renderOval color width height x y angle s alpha
+                Oval color width height ->
+                    renderOval color width height x y angle s alpha
 
-        Rectangle color width height ->
-            renderRectangle color width height x y angle s alpha
+                Rectangle color width height ->
+                    renderRectangle color width height x y angle s alpha
 
-        Ngon color n radius ->
-            renderNgon color n radius x y angle s alpha
+                Ngon color n radius ->
+                    renderNgon color n radius x y angle s alpha
 
-        Polygon color points ->
-            renderPolygon color points x y angle s alpha
+                Polygon color points ->
+                    renderPolygon color points x y angle s alpha
 
-        Image width height src ->
-            renderImage width height src x y angle s alpha
+                Image width height src ->
+                    renderImage width height src x y angle s alpha
 
-        Words color string ->
-            renderWords color string x y angle s alpha
+                Words color string ->
+                    renderWords color string x y angle s alpha
 
-        Group shapes ->
-            g (transform (renderTransform x y angle s) :: renderAlpha alpha)
-                (List.map renderShape shapes)
+                Group shapes ->
+                    g (transform (renderTransform x y angle s) :: renderAlpha alpha)
+                        (List.map (renderShape config) shapes)
+    in
+    case config.attributeForShapeInteractivity of
+        Nothing ->
+            shapeWithoutInteractivity
+
+        Just attributeForShapeInteractivity ->
+            if interactivity == [] then
+                shapeWithoutInteractivity
+
+            else
+                [ shapeWithoutInteractivity ]
+                    |> g (interactivity |> List.map attributeForShapeInteractivity)
 
 
-renderCircle : Color -> Number -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderCircle : Color -> Number -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderCircle color radius x y angle s alpha =
     Svg.circle
         (r (String.fromFloat radius)
@@ -1627,7 +1657,7 @@ renderCircle color radius x y angle s alpha =
         []
 
 
-renderOval : Color -> Number -> Number -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderOval : Color -> Number -> Number -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderOval color width height x y angle s alpha =
     ellipse
         (rx (String.fromFloat (width / 2))
@@ -1639,7 +1669,7 @@ renderOval color width height x y angle s alpha =
         []
 
 
-renderRectangle : Color -> Number -> Number -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderRectangle : Color -> Number -> Number -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderRectangle color w h x y angle s alpha =
     rect
         (width (String.fromFloat w)
@@ -1661,7 +1691,7 @@ renderRectTransform width height x y angle s =
         ++ ")"
 
 
-renderImage : Number -> Number -> String -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderImage : Number -> Number -> String -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderImage w h src x y angle s alpha =
     Svg.image
         (xlinkHref src
@@ -1673,7 +1703,7 @@ renderImage w h src x y angle s alpha =
         []
 
 
-renderNgon : Color -> Int -> Number -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderNgon : Color -> Int -> Number -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderNgon color n radius x y angle s alpha =
     Svg.polygon
         (points (toNgonPoints 0 n radius "")
@@ -1703,7 +1733,7 @@ toNgonPoints i n radius string =
         toNgonPoints (i + 1) n radius (string ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ " ")
 
 
-renderPolygon : Color -> List ( Number, Number ) -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderPolygon : Color -> List ( Number, Number ) -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderPolygon color coordinates x y angle s alpha =
     Svg.polygon
         (points (List.foldl addPoint "" coordinates)
@@ -1719,7 +1749,7 @@ addPoint ( x, y ) str =
     str ++ String.fromFloat x ++ "," ++ String.fromFloat -y ++ " "
 
 
-renderWords : Color -> String -> Number -> Number -> Number -> Number -> Number -> Svg msg
+renderWords : Color -> String -> Number -> Number -> Number -> Number -> Number -> Svg event
 renderWords color string x y angle s alpha =
     text_
         (textAnchor "middle"
@@ -1742,7 +1772,7 @@ renderColor color =
             "rgb(" ++ String.fromInt r ++ "," ++ String.fromInt g ++ "," ++ String.fromInt b ++ ")"
 
 
-renderAlpha : Number -> List (Svg.Attribute msg)
+renderAlpha : Number -> List (Svg.Attribute event)
 renderAlpha alpha =
     if alpha == 1 then
         []
@@ -1765,3 +1795,8 @@ renderTransform x y a s =
 
     else
         "translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat -y ++ ") rotate(" ++ String.fromFloat -a ++ ") scale(" ++ String.fromFloat s ++ ")"
+
+
+reactOnClick : (state -> state) -> Shape state -> Shape state
+reactOnClick updateState (Shape x y a s o f interactivity) =
+    Shape x y a s o f (ReactOnClick updateState :: interactivity)
