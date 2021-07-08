@@ -93,12 +93,16 @@ type alias WorkingProjectStateStructure =
     , editing : { filePathOpenedInEditor : Maybe (List String) }
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
-    , pendingElmMakeRequest : Maybe { time : Time.Posix, requestIdentity : ElmMakeRequestStructure }
-    , elmMakeResult : Maybe ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
+    , compilation : Maybe CompilationState
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
     }
+
+
+type CompilationState
+    = ElmMakeRequestPending { time : Time.Posix, requestIdentity : ElmMakeRequestStructure }
+    | ElmMakeRequestCompleted ( ElmMakeRequestStructure, Result Http.Error ElmMakeResultStructure )
 
 
 type WorkspacePane
@@ -597,13 +601,10 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                     Nothing
 
                 Just fileOpenedInEditor ->
-                    case stateBeforeConsiderCompile.elmMakeResult of
-                        Nothing ->
-                            Nothing
-
-                        Just ( elmMakeRequest, elmMakeResult ) ->
+                    case stateBeforeConsiderCompile.compilation of
+                        Just (ElmMakeRequestCompleted ( elmMakeRequest, elmMakeResult )) ->
                             if
-                                (stateBeforeConsiderCompile.elmMakeResult == stateBeforeApplyingEvent.elmMakeResult)
+                                (stateBeforeConsiderCompile.compilation == stateBeforeApplyingEvent.compilation)
                                     && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromWorkspace stateBeforeApplyingEvent)
                                     && (setTextToEditorCmd == Nothing)
                             then
@@ -620,18 +621,20 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                                     |> setModelMarkersInMonacoEditorCmd
                                     |> Just
 
-        triggerCompile =
+                        _ ->
+                            Nothing
+
+        triggerCompileForFirstOpenedModule =
             (stateBeforeConsiderCompile
                 |> filePathOpenedInEditorFromWorkspace
                 |> Maybe.andThen (List.reverse >> List.head)
                 |> Maybe.map (String.endsWith ".elm")
                 |> Maybe.withDefault False
             )
-                && (stateBeforeConsiderCompile.pendingElmMakeRequest == Nothing)
-                && (stateBeforeConsiderCompile.elmMakeResult == Nothing)
+                && (stateBeforeConsiderCompile.compilation == Nothing)
 
         ( state, compileCmd ) =
-            if triggerCompile then
+            if triggerCompileForFirstOpenedModule then
                 userInputCompileFileOpenedInEditor updateConfig stateBeforeConsiderCompile
 
             else
@@ -809,8 +812,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                             )
             in
             ( { stateBefore
-                | elmMakeResult = Just ( elmMakeRequest, elmMakeResult )
-                , pendingElmMakeRequest = Nothing
+                | compilation = Just (ElmMakeRequestCompleted ( elmMakeRequest, elmMakeResult ))
               }
             , Cmd.none
             )
@@ -1097,8 +1099,7 @@ userInputCompileFileOpenedInEditor { time } stateBefore =
                             Json.Decode.fail "Unexpected response"
             in
             ( { stateBefore
-                | pendingElmMakeRequest = Just { time = time, requestIdentity = elmMakeRequest.requestIdentity }
-                , elmMakeResult = Nothing
+                | compilation = Just (ElmMakeRequestPending { time = time, requestIdentity = elmMakeRequest.requestIdentity })
               }
             , requestToApiCmd
                 (FrontendBackendInterface.ElmMakeRequest (elmMakeRequest.buildRequest ()))
@@ -2153,44 +2154,8 @@ viewOutputPaneContent :
     WorkingProjectStateStructure
     -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element WorkspaceEventStructure }
 viewOutputPaneContent state =
-    case state.elmMakeResult of
-        Nothing ->
-            { mainContent =
-                case state.pendingElmMakeRequest of
-                    Nothing ->
-                        if filePathOpenedInEditorFromWorkspace state == Nothing then
-                            Element.none
-
-                        else
-                            [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
-                                |> Element.text
-                            ]
-                                |> Element.paragraph [ Element.padding defaultFontSize ]
-
-                    Just pendingElmMakeRequest ->
-                        let
-                            elmMakeRequestEntryPointFilePathAbs =
-                                pendingElmMakeRequest.requestIdentity.workingDirectoryPath
-                                    ++ pendingElmMakeRequest.requestIdentity.entryPointFilePathFromWorkingDirectory
-                        in
-                        [ Element.text
-                            ("Compiling module '"
-                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
-                                ++ "' with inspection "
-                                ++ (if pendingElmMakeRequest.requestIdentity.makeOptionDebug then
-                                        "enabled"
-
-                                    else
-                                        "disabled"
-                                   )
-                                ++ " ..."
-                            )
-                        ]
-                            |> Element.paragraph [ Element.padding defaultFontSize ]
-            , header = Element.none
-            }
-
-        Just ( elmMakeRequest, elmMakeResult ) ->
+    case state.compilation of
+        Just (ElmMakeRequestCompleted ( elmMakeRequest, elmMakeResult )) ->
             case elmMakeResult of
                 Err elmMakeError ->
                     { mainContent = ("Error: " ++ describeHttpError elmMakeError) |> Element.text, header = Element.none }
@@ -2339,6 +2304,42 @@ viewOutputPaneContent state =
                     { mainContent = compileResultElement
                     , header = warnAboutOutdatedOrOfferModifyCompilationElement
                     }
+
+        _ ->
+            { mainContent =
+                case state.compilation of
+                    Just (ElmMakeRequestPending pendingElmMakeRequest) ->
+                        let
+                            elmMakeRequestEntryPointFilePathAbs =
+                                pendingElmMakeRequest.requestIdentity.workingDirectoryPath
+                                    ++ pendingElmMakeRequest.requestIdentity.entryPointFilePathFromWorkingDirectory
+                        in
+                        [ Element.text
+                            ("Compiling module '"
+                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                ++ "' with inspection "
+                                ++ (if pendingElmMakeRequest.requestIdentity.makeOptionDebug then
+                                        "enabled"
+
+                                    else
+                                        "disabled"
+                                   )
+                                ++ " ..."
+                            )
+                        ]
+                            |> Element.paragraph [ Element.padding defaultFontSize ]
+
+                    _ ->
+                        if filePathOpenedInEditorFromWorkspace state == Nothing then
+                            Element.none
+
+                        else
+                            [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
+                                |> Element.text
+                            ]
+                                |> Element.paragraph [ Element.padding defaultFontSize ]
+            , header = Element.none
+            }
 
 
 viewElmMakeCompileError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
@@ -2742,8 +2743,7 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     , editing = { filePathOpenedInEditor = filePathOpenedInEditor }
     , decodeMessageFromMonacoEditorError = Nothing
     , lastTextReceivedFromEditor = Nothing
-    , pendingElmMakeRequest = Nothing
-    , elmMakeResult = Nothing
+    , compilation = Nothing
     , elmFormatResult = Nothing
     , viewEnlargedPane = Nothing
     , enableInspectionOnCompile = False
