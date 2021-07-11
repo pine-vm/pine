@@ -45,8 +45,10 @@ import Elm.Syntax.Signature
 import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
+import JaroWinkler
 import Json.Encode
 import List
+import List.Extra
 import Maybe
 import Parser
 import Result.Extra
@@ -2644,24 +2646,81 @@ indentElmCodeLines level =
 findFileWithPathMatchingRepresentationInFunctionName : AppFiles -> String -> Result String ( List String, Bytes.Bytes )
 findFileWithPathMatchingRepresentationInFunctionName sourceFiles pathPattern =
     let
-        matchingFiles =
+        filesWithRepresentations =
             sourceFiles
                 |> Dict.toList
-                |> List.filter (Tuple.first >> pathMatchesPatternFromFunctionName pathPattern)
+                |> List.map (\( filePath, file ) -> ( filePathRepresentationInFunctionName filePath, ( filePath, file ) ))
+
+        filesGroupedByRepresentation : Dict.Dict String (List ( List String, Bytes.Bytes ))
+        filesGroupedByRepresentation =
+            filesWithRepresentations
+                |> List.map Tuple.first
+                |> Set.fromList
+                |> Set.toList
+                |> List.map
+                    (\representation ->
+                        ( representation
+                        , filesWithRepresentations |> List.filter (Tuple.first >> (==) representation) |> List.map Tuple.second
+                        )
+                    )
+                |> Dict.fromList
     in
-    case matchingFiles of
+    case Maybe.withDefault [] (Dict.get pathPattern filesGroupedByRepresentation) of
         [ matchingFile ] ->
             Ok matchingFile
 
         [] ->
-            Err
-                ("Did not find any source file with a path matching the representation '"
-                    ++ pathPattern
-                    ++ "'. Here is a list of the available files: "
-                    ++ String.join ", " (List.map (String.join "/") (Dict.keys sourceFiles))
-                )
+            let
+                filesWithSimilarity =
+                    filesGroupedByRepresentation
+                        |> Dict.keys
+                        |> List.map
+                            (\pathRepresentation ->
+                                ( pathRepresentation
+                                , JaroWinkler.similarity pathRepresentation pathPattern
+                                )
+                            )
+                        |> List.sortBy (Tuple.second >> negate)
 
-        _ ->
+                pointOutSimilarNamesLines =
+                    case filesWithSimilarity |> List.filter (Tuple.second >> (<=) 0.5) of
+                        ( mostSimilarRepresentation, _ ) :: _ ->
+                            [ "Did you mean '" ++ mostSimilarRepresentation ++ "'?" ]
+
+                        _ ->
+                            []
+
+                examplesListItems =
+                    Dict.keys filesGroupedByRepresentation
+
+                examplesListItemsForDisplay =
+                    List.take 8 examplesListItems
+
+                examplesListItemsDisplayItems =
+                    examplesListItemsForDisplay
+                        ++ (if examplesListItemsForDisplay == examplesListItems then
+                                []
+
+                            else
+                                [ "..." ]
+                           )
+            in
+            [ [ "Did not find any source file with a path matching the representation '"
+                    ++ pathPattern
+                    ++ "'."
+              ]
+            , pointOutSimilarNamesLines
+            , [ "There are "
+                    ++ String.fromInt (Dict.size sourceFiles)
+                    ++ " files available in this compilation: "
+                    ++ (examplesListItemsDisplayItems |> String.join ", ")
+              ]
+            ]
+                |> List.concat
+                |> String.join "\n"
+                |> Err
+
+        matchingFiles ->
             Err
                 ("The file path representation '"
                     ++ pathPattern
@@ -2890,11 +2949,6 @@ parseFlagsAndPathPatternFromFunctionName requiredPrefix functionName =
                     ( flags
                     , String.dropLeft (separatorIndex + String.length functionNameFlagsSeparator) partAfterPrefix
                     )
-
-
-pathMatchesPatternFromFunctionName : String -> List String -> Bool
-pathMatchesPatternFromFunctionName pathPattern path =
-    filePathRepresentationInFunctionName path == pathPattern
 
 
 filePathRepresentationInFunctionName : List String -> String

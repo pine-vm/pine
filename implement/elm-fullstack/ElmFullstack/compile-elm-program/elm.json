@@ -16,16 +16,17 @@
             "elm/parser": "1.1.0",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
+            "elm-community/list-extra": "8.2.4",
             "elm-community/maybe-extra": "5.2.0",
             "elm-community/result-extra": "2.4.0",
             "folkertdev/elm-sha2": "1.0.0",
             "mdgriffith/elm-ui": "1.1.8",
-            "stil4m/elm-syntax": "7.2.5"
+            "stil4m/elm-syntax": "7.2.5",
+            "z5h/jaro-winkler": "1.0.2"
         },
         "indirect": {
             "elm/regex": "1.0.0",
             "elm/virtual-dom": "1.0.2",
-            "elm-community/list-extra": "8.2.4",
             "miniBill/elm-unicode": "1.0.2",
             "rtfeldman/elm-hex": "1.0.0",
             "stil4m/structured-writer": "1.0.3"

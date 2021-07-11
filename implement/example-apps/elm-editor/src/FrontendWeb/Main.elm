@@ -2428,9 +2428,16 @@ viewLoweringCompileError locatedLoweringError =
                         (compilationSyntaxRangeAsElmMakeReportRegion errorLocation.locationInModuleText)
 
                 errorDescriptionElement =
-                    loweringError
+                    -- Work around problem described at https://github.com/mdgriffith/elm-ui/issues/49#issuecomment-550229883
+                    [ loweringError
                         |> loweringCompilationErrorDisplayText
-                        |> Element.text
+                        |> Html.text
+                        |> Element.html
+                    ]
+                        |> Element.paragraph
+                            [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
+                            , Element.htmlAttribute attributeMonospaceFont
+                            ]
             in
             [ locationElement, errorDescriptionElement ]
                 |> Element.column
