@@ -4,34 +4,30 @@ import Base64
 import Bytes
 import CompileFullstackApp exposing (CompilationArguments)
 import Dict
+import Elm.Syntax.Range
 import Json.Decode
 import Json.Encode
 import Platform
 
 
 type alias CompilationResponse =
-    Result (List CompileFullstackApp.CompilationError) CompileFullstackApp.AppFiles
+    Result String (Result (List CompileFullstackApp.LocatedCompilationError) CompileFullstackApp.AppFiles)
 
 
 lowerSerialized : String -> String
 lowerSerialized argumentsJson =
-    (case Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson of
-        Err decodeError ->
-            Err [ CompileFullstackApp.OtherCompilationError ("Failed to decode arguments: " ++ Json.Decode.errorToString decodeError) ]
-
-        Ok args ->
-            CompileFullstackApp.asCompletelyLoweredElmApp args
-    )
+    Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson
+        |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
+        |> Result.map CompileFullstackApp.asCompletelyLoweredElmApp
         |> jsonEncodeLowerForSourceFilesResponse
         |> Json.Encode.encode 0
 
 
 jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value
-jsonEncodeLowerForSourceFilesResponse submissionResponse =
+jsonEncodeLowerForSourceFilesResponse =
     json_encode_Result
-        (Json.Encode.list jsonEncodeCompilationError)
-        jsonEncodeAppCode
-        submissionResponse
+        Json.Encode.string
+        (json_encode_Result (Json.Encode.list jsonEncodeLocatedCompilationError) jsonEncodeAppCode)
 
 
 jsonDecodeCompilationArguments : Json.Decode.Decoder CompilationArguments
@@ -49,6 +45,40 @@ jsonDecodeCompilationArgumentsDependency =
     Json.Decode.map2 Tuple.pair
         (Json.Decode.field "key" jsonDecodeDependencyKey)
         (Json.Decode.field "value" json_decode_Bytes)
+
+
+jsonEncodeLocatedCompilationError : CompileFullstackApp.LocatedCompilationError -> Json.Encode.Value
+jsonEncodeLocatedCompilationError locatedCompilationError =
+    case locatedCompilationError of
+        CompileFullstackApp.LocatedInSourceFiles location error ->
+            [ ( "location", jsonEncodeLocationInSourceFiles location )
+            , ( "error", jsonEncodeCompilationError error )
+            ]
+                |> Json.Encode.object
+
+
+jsonEncodeLocationInSourceFiles : CompileFullstackApp.LocationInSourceFiles -> Json.Encode.Value
+jsonEncodeLocationInSourceFiles location =
+    [ ( "filePath", location.filePath |> Json.Encode.list Json.Encode.string )
+    , ( "locationInModuleText", location.locationInModuleText |> jsonEncodeRangeInText )
+    ]
+        |> Json.Encode.object
+
+
+jsonEncodeRangeInText : Elm.Syntax.Range.Range -> Json.Encode.Value
+jsonEncodeRangeInText range =
+    [ ( "start", range.start |> jsonEncodeLocationInText )
+    , ( "end", range.end |> jsonEncodeLocationInText )
+    ]
+        |> Json.Encode.object
+
+
+jsonEncodeLocationInText : Elm.Syntax.Range.Location -> Json.Encode.Value
+jsonEncodeLocationInText location =
+    [ ( "row", location.row |> Json.Encode.int )
+    , ( "column", location.column |> Json.Encode.int )
+    ]
+        |> Json.Encode.object
 
 
 jsonEncodeCompilationError : CompileFullstackApp.CompilationError -> Json.Encode.Value

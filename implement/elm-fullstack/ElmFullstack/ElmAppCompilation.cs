@@ -139,7 +139,7 @@ namespace ElmFullstack
 
             var compilationErrorsMissingElmMakeDependencies =
                 compilationErrors
-                .Where(error => error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
+                .Where(error => error.error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
                 .ToImmutableList();
 
             var otherErrors =
@@ -179,7 +179,7 @@ namespace ElmFullstack
                     var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var dependencyKey =
-                        error.MissingDependencyError.FirstOrDefault();
+                        error.error.MissingDependencyError.FirstOrDefault();
 
                     var elmMakeRequest =
                         dependencyKey.ElmMakeDependency.FirstOrDefault();
@@ -235,8 +235,8 @@ namespace ElmFullstack
                 stack: stack.Push(newStackFrame));
         }
 
-        static readonly ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache =
-            new ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, TimeSpan)>();
+        static readonly ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache =
+            new ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, TimeSpan)>();
 
         static void ElmAppCompilationIterationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -245,7 +245,7 @@ namespace ElmFullstack
                 item => item.Value.lastUseTime,
                 retainedSizeLimit);
 
-        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
+        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
@@ -293,7 +293,7 @@ namespace ElmFullstack
             System.Diagnostics.Stopwatch inJsEngineStopwatch = null;
             System.Diagnostics.Stopwatch deserializeStopwatch = null;
 
-            ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compileNew()
+            ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compileNew()
             {
                 prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -311,11 +311,19 @@ namespace ElmFullstack
 
                 deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                var withFilesAsList =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>(responseJson);
+                var compilationResponse =
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<
+                        ElmValueCommonJson.Result<
+                            string,
+                            ElmValueCommonJson.Result<
+                                IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
+                                IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>>(responseJson);
+
+                if (compilationResponse.Ok?.FirstOrDefault() == null)
+                    throw new Exception("Protocol error: " + compilationResponse.Err);
 
                 var mappedResult =
-                    withFilesAsList.map(files =>
+                    compilationResponse.Ok?.FirstOrDefault().map(files =>
                         files.ToImmutableDictionary(
                             entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                             entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
@@ -412,16 +420,22 @@ namespace ElmFullstack
             return memoryStream.ToArray();
         }
 
+        static string DescribeCompilationError(CompilerSerialInterface.LocatedCompilationError locatedCompilationError) =>
+            DescribeCompilationError(locatedCompilationError.error);
+
         static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError) =>
             Newtonsoft.Json.JsonConvert.SerializeObject(compilationError, Newtonsoft.Json.Formatting.Indented);
 
 
-        static long EstimateCacheItemSizeInMemory(ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.CompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> item) =>
+        static long EstimateCacheItemSizeInMemory(ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> item) =>
             (item.Err?.Sum(err => err.Sum(EstimateCacheItemSizeInMemory)) ?? 0) +
             (item.Ok?.Sum(EstimateCacheItemSizeInMemory) ?? 0);
 
         static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> item) =>
             (item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Count)) ?? 0;
+
+        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.LocatedCompilationError compilationError) =>
+            100 + compilationError.location.filePath.Sum(e => e.Length) + EstimateCacheItemSizeInMemory(compilationError.error);
 
         static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.CompilationError compilationError) =>
             compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
@@ -469,6 +483,18 @@ namespace ElmFullstack
             public IReadOnlyList<string> OtherCompilationError;
 
             public IReadOnlyList<DependencyKey> MissingDependencyError;
+        }
+
+        class LocatedCompilationError
+        {
+            public LocationInSourceFiles location;
+
+            public CompilationError error;
+        }
+
+        class LocationInSourceFiles
+        {
+            public IReadOnlyList<string> filePath;
         }
 
         struct DependencyKey

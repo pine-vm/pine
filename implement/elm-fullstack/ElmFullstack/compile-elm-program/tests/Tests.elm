@@ -149,14 +149,21 @@ interfaceToHost_processEvent =
                             |> Result.map
                                 (\parsedModule ->
                                     let
+                                        moduleFilePath =
+                                            [ "src", "Backend", "Main.elm" ]
+
                                         sourceModules =
-                                            [ moduleText ]
-                                                |> CompileFullstackApp.elmModulesDictFromFilesTexts
-                                                |> Dict.map (always Tuple.second)
+                                            [ ( moduleFilePath
+                                              , Bytes.Encode.encode (Bytes.Encode.string moduleText)
+                                              )
+                                            ]
+                                                |> Dict.fromList
+                                                |> CompileFullstackApp.elmModulesDictFromAppFiles
+                                                |> Dict.map (always (Tuple.mapSecond Tuple.second))
                                     in
                                     CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
                                         sourceModules
-                                        parsedModule
+                                        ( moduleFilePath, parsedModule )
                                         |> Expect.equal expectedResult
                                 )
                             |> Result.Extra.unpack Expect.fail identity
@@ -502,6 +509,9 @@ type alias MixedRecord =
                             |> Result.andThen
                                 (\modules ->
                                     let
+                                        filePathFromElmModuleName =
+                                            CompileFullstackApp.filePathFromElmModuleName
+
                                         namedModules =
                                             modules
                                                 |> List.map
@@ -512,6 +522,7 @@ type alias MixedRecord =
                                                     )
                                                 |> List.map (Tuple.mapFirst (String.join "."))
                                                 |> Dict.fromList
+                                                |> Dict.map (\moduleName -> Tuple.pair (filePathFromElmModuleName moduleName))
 
                                         rootModuleImports =
                                             namedModules
@@ -549,7 +560,7 @@ type alias MixedRecord =
                                                                 Nothing
 
                                                             else
-                                                                Just (Elm.Syntax.Node.value functionSignature.typeAnnotation)
+                                                                Just functionSignature.typeAnnotation
                                                         )
                                                     |> List.head
                                                     |> Maybe.map Ok
@@ -557,7 +568,16 @@ type alias MixedRecord =
                                                     |> Result.map
                                                         (\declarationAnnotation ->
                                                             declarationAnnotation
-                                                                |> Tuple.pair rootModule
+                                                                |> Tuple.pair
+                                                                    (Tuple.pair
+                                                                        (rootModule.moduleDefinition
+                                                                            |> Elm.Syntax.Node.value
+                                                                            |> Elm.Syntax.Module.moduleName
+                                                                            |> String.join "."
+                                                                            |> filePathFromElmModuleName
+                                                                        )
+                                                                        rootModule
+                                                                    )
                                                                 |> CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation namedModules
                                                                 |> Expect.equal expectedResult
                                                         )

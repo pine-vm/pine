@@ -19,6 +19,7 @@ import Element.Events
 import Element.Font
 import Element.Input
 import Element.Region
+import Elm.Syntax.Range
 import ElmMakeExecutableFile
 import File
 import File.Download
@@ -106,7 +107,7 @@ type CompilationState
 
 
 type CompilationCompletedState
-    = CompilationFailedLowering (List CompileFullstackApp.CompilationError)
+    = CompilationFailedLowering (List CompileFullstackApp.LocatedCompilationError)
     | ElmMakeRequestCompleted (Result Http.Error ElmMakeResultStructure)
 
 
@@ -606,16 +607,25 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                     Nothing
 
                 Just fileOpenedInEditor ->
-                    case stateBeforeConsiderCompile.compilation of
-                        Just (CompilationCompleted requestIdentity (ElmMakeRequestCompleted elmMakeResult)) ->
-                            if
-                                (stateBeforeConsiderCompile.compilation == stateBeforeApplyingEvent.compilation)
-                                    && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromWorkspace stateBeforeApplyingEvent)
-                                    && (setTextToEditorCmd == Nothing)
-                            then
-                                Nothing
+                    if
+                        (stateBeforeConsiderCompile.compilation == stateBeforeApplyingEvent.compilation)
+                            && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromWorkspace stateBeforeApplyingEvent)
+                            && (setTextToEditorCmd == Nothing)
+                    then
+                        Nothing
 
-                            else
+                    else
+                        case stateBeforeConsiderCompile.compilation of
+                            Just (CompilationCompleted requestIdentity (CompilationFailedLowering failedLowering)) ->
+                                failedLowering
+                                    |> editorDocumentMarkersFromFailedLowering
+                                        { compileRequest = requestIdentity
+                                        , fileOpenedInEditor = fileOpenedInEditor
+                                        }
+                                    |> setModelMarkersInMonacoEditorCmd
+                                    |> Just
+
+                            Just (CompilationCompleted requestIdentity (ElmMakeRequestCompleted elmMakeResult)) ->
                                 elmMakeResult
                                     |> Result.toMaybe
                                     |> Maybe.andThen .reportFromJson
@@ -626,8 +636,8 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                                     |> setModelMarkersInMonacoEditorCmd
                                     |> Just
 
-                        _ ->
-                            Nothing
+                            _ ->
+                                Nothing
 
         triggerCompileForFirstOpenedModule =
             (stateBeforeConsiderCompile
@@ -2407,29 +2417,49 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
     }
 
 
-viewLoweringCompileError : CompileFullstackApp.CompilationError -> Element.Element WorkspaceEventStructure
-viewLoweringCompileError loweringError =
-    case loweringError of
-        CompileFullstackApp.MissingDependencyError missingDependency ->
-            Element.text
-                ("Missing Dependency: "
-                    ++ (case missingDependency of
-                            CompileFullstackApp.ElmMakeDependency elmMakeRequest ->
-                                "Elm Make "
-                                    ++ (case elmMakeRequest.outputType of
-                                            CompileFullstackApp.ElmMakeOutputTypeJs ->
-                                                "javascript"
+viewLoweringCompileError : CompileFullstackApp.LocatedCompilationError -> Element.Element WorkspaceEventStructure
+viewLoweringCompileError locatedLoweringError =
+    case locatedLoweringError of
+        CompileFullstackApp.LocatedInSourceFiles errorLocation loweringError ->
+            let
+                locationElement =
+                    viewElmMakeErrorLocation
+                        errorLocation.filePath
+                        (compilationSyntaxRangeAsElmMakeReportRegion errorLocation.locationInModuleText)
 
-                                            CompileFullstackApp.ElmMakeOutputTypeHtml ->
-                                                "html"
-                                       )
-                                    ++ " from "
-                                    ++ String.join "/" elmMakeRequest.entryPointFilePath
-                       )
-                )
+                errorDescriptionElement =
+                    loweringError
+                        |> loweringCompilationErrorDisplayText
+                        |> Element.text
+            in
+            [ locationElement, errorDescriptionElement ]
+                |> Element.column
+                    [ Element.spacing (defaultFontSize // 2)
+                    , Element.width Element.fill
+                    ]
+
+
+loweringCompilationErrorDisplayText : CompileFullstackApp.CompilationError -> String
+loweringCompilationErrorDisplayText compilationError =
+    case compilationError of
+        CompileFullstackApp.MissingDependencyError missingDependency ->
+            "Missing Dependency: "
+                ++ (case missingDependency of
+                        CompileFullstackApp.ElmMakeDependency elmMakeRequest ->
+                            "Elm Make "
+                                ++ (case elmMakeRequest.outputType of
+                                        CompileFullstackApp.ElmMakeOutputTypeJs ->
+                                            "javascript"
+
+                                        CompileFullstackApp.ElmMakeOutputTypeHtml ->
+                                            "html"
+                                   )
+                                ++ " from "
+                                ++ String.join "/" elmMakeRequest.entryPointFilePath
+                   )
 
         CompileFullstackApp.OtherCompilationError otherError ->
-            Element.text otherError
+            otherError
 
 
 viewElmMakeCompileError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
@@ -2448,23 +2478,7 @@ viewElmMakeCompileError elmMakeRequest elmMakeError =
                             |> elmEditorProblemDisplayTitleFromReportTitle
                             |> Element.text
                             |> Element.el [ Element.Font.bold ]
-                        , (String.join "/" displayPath
-                            ++ " - Line "
-                            ++ String.fromInt elmMakeProblem.region.start.line
-                            ++ ", Column "
-                            ++ String.fromInt elmMakeProblem.region.start.column
-                          )
-                            |> Element.text
-                            |> Element.el
-                                (Element.Events.onClick
-                                    (UserInputRevealPositionInEditor
-                                        { filePath = displayPath
-                                        , lineNumber = elmMakeProblem.region.start.line
-                                        , column = elmMakeProblem.region.start.column
-                                        }
-                                    )
-                                    :: elementLinkStyleAttributes
-                                )
+                        , viewElmMakeErrorLocation displayPath elmMakeProblem.region
                         ]
                             |> Element.column
                                 [ Element.spacing (defaultFontSize // 2)
@@ -2483,6 +2497,39 @@ viewElmMakeCompileError elmMakeRequest elmMakeError =
             [ Element.spacing defaultFontSize
             , Element.width Element.fill
             ]
+
+
+viewElmMakeErrorLocation : List String -> ElmMakeExecutableFile.ElmMakeReportRegion -> Element.Element WorkspaceEventStructure
+viewElmMakeErrorLocation filePath regionInFile =
+    (String.join "/" filePath
+        ++ " - Line "
+        ++ String.fromInt regionInFile.start.line
+        ++ ", Column "
+        ++ String.fromInt regionInFile.start.column
+    )
+        |> Element.text
+        |> Element.el
+            (Element.Events.onClick
+                (UserInputRevealPositionInEditor
+                    { filePath = filePath
+                    , lineNumber = regionInFile.start.line
+                    , column = regionInFile.start.column
+                    }
+                )
+                :: elementLinkStyleAttributes
+            )
+
+
+compilationSyntaxRangeAsElmMakeReportRegion : Elm.Syntax.Range.Range -> ElmMakeExecutableFile.ElmMakeReportRegion
+compilationSyntaxRangeAsElmMakeReportRegion range =
+    { start = compilationSyntaxLocationAsElmMakeReportLocation range.start
+    , end = compilationSyntaxLocationAsElmMakeReportLocation range.end
+    }
+
+
+compilationSyntaxLocationAsElmMakeReportLocation : Elm.Syntax.Range.Location -> ElmMakeExecutableFile.ElmMakeReportLocation
+compilationSyntaxLocationAsElmMakeReportLocation location =
+    { line = location.row, column = location.column }
 
 
 viewElementFromElmMakeCompileErrorMessage : List ElmMakeExecutableFile.ElmMakeReportMessageListItem -> Element.Element a
@@ -2517,6 +2564,43 @@ viewElementFromElmMakeCompileErrorMessage =
             [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
             , Element.htmlAttribute attributeMonospaceFont
             ]
+
+
+editorDocumentMarkersFromFailedLowering :
+    { compileRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
+    -> List CompileFullstackApp.LocatedCompilationError
+    -> List FrontendWeb.MonacoEditor.EditorMarker
+editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } compileErrors =
+    let
+        filePathOpenedInEditor =
+            Tuple.first fileOpenedInEditor
+
+        fileOpenedInEditorBase64 =
+            (Tuple.second fileOpenedInEditor).asBase64
+    in
+    case compileRequest.files |> List.filter (.path >> (==) filePathOpenedInEditor) |> List.head of
+        Nothing ->
+            []
+
+        Just requestFile ->
+            if requestFile.contentBase64 /= fileOpenedInEditorBase64 then
+                []
+
+            else
+                compileErrors
+                    |> List.filterMap
+                        (\locatedCompilationError ->
+                            case locatedCompilationError of
+                                CompileFullstackApp.LocatedInSourceFiles location error ->
+                                    if location.filePath == filePathOpenedInEditor then
+                                        Just
+                                            (editorDocumentMarkerFromLoweringCompileError
+                                                ( compilationSyntaxRangeAsElmMakeReportRegion location.locationInModuleText, error )
+                                            )
+
+                                    else
+                                        Nothing
+                        )
 
 
 editorDocumentMarkersFromElmMakeReport :
@@ -2579,6 +2663,17 @@ elmMakeReportTextFromMessageItem messageItem =
 
         ElmMakeExecutableFile.ElmMakeReportMessageListItemStyled styled ->
             styled.string
+
+
+editorDocumentMarkerFromLoweringCompileError : ( ElmMakeExecutableFile.ElmMakeReportRegion, CompileFullstackApp.CompilationError ) -> FrontendWeb.MonacoEditor.EditorMarker
+editorDocumentMarkerFromLoweringCompileError ( region, error ) =
+    { message = loweringCompilationErrorDisplayText error
+    , startLineNumber = region.start.line
+    , startColumn = region.start.column
+    , endLineNumber = region.end.line
+    , endColumn = region.end.column
+    , severity = FrontendWeb.MonacoEditor.ErrorSeverity
+    }
 
 
 editorDocumentMarkerFromElmMakeProblem : ElmMakeExecutableFile.ElmMakeReportProblem -> FrontendWeb.MonacoEditor.EditorMarker
