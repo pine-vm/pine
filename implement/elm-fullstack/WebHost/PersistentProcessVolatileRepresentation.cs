@@ -118,8 +118,22 @@ namespace ElmFullstack.WebHost.PersistentProcess
         {
             var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
+            var listFilePlaceholderContent = Encoding.UTF8.GetBytes("Placeholder only to make file path appear in list files API");
+
             var recordingReader = new DelegatingFileStoreReader
             {
+                ListFilesInDirectoryDelegate = directoryPath =>
+                {
+                    var filesPaths = fileStoreReader.ListFilesInDirectory(directoryPath);
+
+                    foreach (var filePath in filesPaths)
+                        filesForProcessRestore.AddOrUpdate(
+                            filePath,
+                            addValue: listFilePlaceholderContent,
+                            updateValueFactory: (_, fileContent) => fileContent);
+
+                    return filesPaths;
+                },
                 GetFileContentDelegate = filePath =>
                 {
                     var fileContent = fileStoreReader.GetFileContent(filePath);
@@ -275,7 +289,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
                         processRepresentationDuringRestore = new PersistentProcessVolatileRepresentationDuringRestore(
                             lastAppConfig: (compositionLogRecord.reduction.Value.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
                             lastElmAppVolatileProcess: newElmAppProcess,
-                            lastSetElmAppStateResult: null);
+                            lastSetElmAppStateResult: CheckSetElmAppStateResult(newElmAppProcess, elmAppStateAsString));
 
                         continue;
                     }
@@ -371,24 +385,9 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
                 processBefore.lastElmAppVolatileProcess.SetSerializedState(projectedElmAppState);
 
-                var resultingElmAppState = processBefore.lastElmAppVolatileProcess.GetSerializedState();
-
-                var lastSetElmAppStateResult =
-                    ApplyCommonFormattingToJson(resultingElmAppState) == ApplyCommonFormattingToJson(projectedElmAppState)
-                    ?
-                    new Result<string, string>
-                    {
-                        Ok = "Successfully loaded the elm app state.",
-                    }
-                    :
-                    new Result<string, string>
-                    {
-                        Err = "Failed to load the serialized state with the elm app. resulting State:\n" + resultingElmAppState
-                    };
-
                 return
                     processBefore
-                    .WithLastSetElmAppStateResult(lastSetElmAppStateResult);
+                    .WithLastSetElmAppStateResult(CheckSetElmAppStateResult(processBefore.lastElmAppVolatileProcess, projectedElmAppState));
             }
 
             if (compositionEvent.DeployAppConfigAndMigrateElmAppState != null)
@@ -463,10 +462,35 @@ namespace ElmFullstack.WebHost.PersistentProcess
             throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
         }
 
+        static Result<string, string> CheckSetElmAppStateResult(IDisposableProcessWithStringInterface process, string expectedState)
+        {
+            var processElmAppState = process.GetSerializedState();
+
+            if (ApplyCommonFormattingToJson(processElmAppState) == ApplyCommonFormattingToJson(expectedState))
+                return new Result<string, string>
+                {
+                    Ok = "Successfully loaded the Elm app state.",
+                };
+
+            return
+                new Result<string, string>
+                {
+                    Err = "Failed to load the serialized state with the Elm app. resulting state:\n" + processElmAppState
+                };
+        }
+
         static CompositionEventWithLoadedDependencies? LoadCompositionEventDependencies(
             CompositionLogRecordInFile.CompositionEvent compositionEvent,
             IProcessStoreReader storeReader)
         {
+            IReadOnlyList<byte> loadComponentFromValueInFileStructureAndAssertIsBlob(ValueInFileStructure valueInFileStructure)
+            {
+                if (valueInFileStructure.LiteralStringUtf8 != null)
+                    return Encoding.UTF8.GetBytes(valueInFileStructure.LiteralStringUtf8);
+
+                return loadComponentFromStoreAndAssertIsBlob(valueInFileStructure.HashBase16);
+            }
+
             IReadOnlyList<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
             {
                 var component = storeReader.LoadComponent(componentHash);
@@ -499,8 +523,8 @@ namespace ElmFullstack.WebHost.PersistentProcess
             {
                 return new CompositionEventWithLoadedDependencies
                 {
-                    UpdateElmAppStateForEvent = loadComponentFromStoreAndAssertIsBlob(
-                        compositionEvent.UpdateElmAppStateForEvent.HashBase16).ToArray(),
+                    UpdateElmAppStateForEvent =
+                        loadComponentFromValueInFileStructureAndAssertIsBlob(compositionEvent.UpdateElmAppStateForEvent).ToArray(),
                 };
             }
 
@@ -544,7 +568,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
             public OkT Ok;
         }
 
-        static public Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>
+        static public Composition.Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>
             TestContinueWithCompositionEvent(
                 CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
                 IFileStoreReader fileStoreReader)
@@ -561,13 +585,13 @@ namespace ElmFullstack.WebHost.PersistentProcess
                 {
                     if (projectedProcess.lastSetElmAppStateResult?.Ok == null)
                     {
-                        return Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.err(
+                        return Composition.Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.err(
                             "Failed to migrate Elm app state for this deployment: " + projectedProcess.lastSetElmAppStateResult?.Err);
                     }
                 }
             }
 
-            return Composition.Result<string, (string parentHashBase16, IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.ok(
+            return Composition.Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.ok(
                 projectionResult);
         }
 
@@ -675,30 +699,19 @@ namespace ElmFullstack.WebHost.PersistentProcess
         {
             lock (processLock)
             {
-                var eventElmAppEventComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(serializedEvent));
-
-                storeWriter.StoreComponent(eventElmAppEventComponent);
-
                 var elmAppResponse =
                     lastElmAppVolatileProcess.ProcessEvent(serializedEvent);
 
-                var compositionRecord = new CompositionLogRecordInFile
-                {
-                    parentHashBase16 = lastCompositionLogRecordHashBase16,
-                    compositionEvent =
-                        new CompositionLogRecordInFile.CompositionEvent
+                var compositionEvent =
+                    new CompositionLogRecordInFile.CompositionEvent
+                    {
+                        UpdateElmAppStateForEvent = new ValueInFileStructure
                         {
-                            UpdateElmAppStateForEvent = new ValueInFileStructure
-                            {
-                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(eventElmAppEventComponent))
-                            }
-                        },
-                };
+                            LiteralStringUtf8 = serializedEvent
+                        }
+                    };
 
-                var serializedCompositionLogRecord =
-                    ProcessStoreInFileStore.Serialize(compositionRecord);
-
-                var recordHash = storeWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
+                var recordHash = storeWriter.AppendCompositionLogRecord(compositionEvent);
 
                 lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
 

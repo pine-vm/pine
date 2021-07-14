@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-07-11";
+        static public string AppVersionId => "2021-07-13";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -345,6 +345,8 @@ namespace elm_fullstack
 
                         var processStoreWriter =
                             new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                                processStoreFileStore,
+                                getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
                                 processStoreFileStore);
 
                         processStoreWriter.StoreComponent(appConfigComponent);
@@ -960,6 +962,8 @@ namespace elm_fullstack
 
                     var processStoreWriter =
                         new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                            processStoreFileStore,
+                            getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
                             processStoreFileStore);
 
                     var appConfigTree =
@@ -1289,6 +1293,21 @@ namespace elm_fullstack
 
             var processHistoryFileStoreRemoteReader = new DelegatingFileStoreReader
             {
+                ListFilesInDirectoryDelegate = directoryPath =>
+                {
+                    var httpRequestPath =
+                        ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
+                        string.Join("/", directoryPath);
+
+                    var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
+
+                    if (!response.IsSuccessStatusCode)
+                        throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
+
+                    return
+                        response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(path => path.Split('/').ToImmutableList());
+                },
                 GetFileContentDelegate = filePath =>
                 {
                     var httpRequestPath =

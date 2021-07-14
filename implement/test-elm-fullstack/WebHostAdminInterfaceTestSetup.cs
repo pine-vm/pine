@@ -60,14 +60,16 @@ namespace test_elm_fullstack
             Setup(
                 adminPassword: adminPassword,
                 deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
-                webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)));
+                webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
+                persistentProcessHostDateTime: persistentProcessHostDateTime);
 
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminPassword = null,
             Composition.Component deployAppConfigAndInitElmState = null,
             string adminWebHostUrlOverride = null,
-            string publicWebHostUrlOverride = null)
+            string publicWebHostUrlOverride = null,
+            Func<DateTimeOffset> persistentProcessHostDateTime = null)
         {
             var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -77,7 +79,8 @@ namespace test_elm_fullstack
                 deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: webHostBuilderMap,
                 adminWebHostUrlOverride: adminWebHostUrlOverride,
-                publicWebHostUrlOverride: publicWebHostUrlOverride);
+                publicWebHostUrlOverride: publicWebHostUrlOverride,
+                persistentProcessHostDateTime: persistentProcessHostDateTime);
 
             return setup;
         }
@@ -127,7 +130,8 @@ namespace test_elm_fullstack
             Composition.Component deployAppConfigAndInitElmState,
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminWebHostUrlOverride,
-            string publicWebHostUrlOverride)
+            string publicWebHostUrlOverride,
+            Func<DateTimeOffset> persistentProcessHostDateTime = null)
         {
             this.testDirectory = testDirectory;
             this.adminPassword = adminPassword ?? "notempty";
@@ -149,20 +153,13 @@ namespace test_elm_fullstack
 
                 var processStoreWriter =
                     new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                    defaultFileStore,
+                    getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
                     defaultFileStore);
 
                 processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
 
-                var compositionRecord = new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile
-                {
-                    parentHashBase16 = ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16,
-                    compositionEvent = compositionLogEvent
-                };
-
-                var serializedCompositionLogRecord =
-                    ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreInFileStore.Serialize(compositionRecord);
-
-                processStoreWriter.SetCompositionLogHeadRecord(serializedCompositionLogRecord);
+                processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
             }
         }
 
@@ -177,9 +174,14 @@ namespace test_elm_fullstack
         {
             var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-            ElmFullstack.InterfaceToHost.AppEventStructure eventFromHash(string eventComponentHash)
+            ElmFullstack.InterfaceToHost.AppEventStructure eventLogEntry(ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
             {
-                var component = processStoreReader.LoadComponent(eventComponentHash);
+                var component =
+                    logEntry.LiteralStringUtf8 != null
+                    ?
+                    Composition.Component.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
+                    :
+                    processStoreReader.LoadComponent(logEntry.HashBase16);
 
                 if (component == null)
                     throw new Exception("component == null");
@@ -189,7 +191,7 @@ namespace test_elm_fullstack
 
                 var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
-                return Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.AppEventStructure>(eventString);
+                return JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.AppEventStructure>(eventString);
             }
 
             return
@@ -199,7 +201,7 @@ namespace test_elm_fullstack
                 .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
                 .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
                 .WhereNotNull()
-                .Select(updateElmAppStateForEvent => eventFromHash(updateElmAppStateForEvent.HashBase16));
+                .Select(updateElmAppStateForEvent => eventLogEntry(updateElmAppStateForEvent));
         }
     }
 }

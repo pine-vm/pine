@@ -179,6 +179,9 @@ namespace Pine
 
     static public class FileStoreExtension
     {
+        static public IEnumerable<IImmutableList<string>> ListFiles(this IFileStoreReader fileStore) =>
+            fileStore.ListFilesInDirectory(ImmutableList<string>.Empty);
+
         static public IFileStoreReader WithMappedPath(
             this IFileStoreReader originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
             new DelegatingFileStoreReader
@@ -187,9 +190,12 @@ namespace Pine
                 ListFilesInDirectoryDelegate = originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath)),
             };
 
+        static public IFileStoreReader ForSubdirectory(this IFileStoreReader originalFileStore, string directoryName) =>
+            ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
+
         static public IFileStoreReader ForSubdirectory(
-            this IFileStoreReader originalFileStore, string directoryName) =>
-            WithMappedPath(originalFileStore, originalPath => originalPath.Insert(0, directoryName));
+            this IFileStoreReader originalFileStore, IEnumerable<string> directoryPath) =>
+            WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
 
         static public IFileStoreWriter WithMappedPath(
             this IFileStoreWriter originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
@@ -200,8 +206,11 @@ namespace Pine
                 DeleteFileDelegate = originalPath => originalFileStore.DeleteFile(pathMap(originalPath)),
             };
 
+        static public IFileStoreWriter ForSubdirectory(this IFileStoreWriter originalFileStore, string directoryName) =>
+            ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
+
         static public IFileStoreWriter ForSubdirectory(
-            this IFileStoreWriter originalFileStore, string directoryName) =>
-            WithMappedPath(originalFileStore, originalPath => originalPath.Insert(0, directoryName));
+            this IFileStoreWriter originalFileStore, IEnumerable<string> directoryPath) =>
+            WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
     }
 }

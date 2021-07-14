@@ -37,6 +37,8 @@ namespace ElmFullstack.WebHost
 
         static public string PathApiProcessHistoryFileStoreGetFileContent => PathApiProcessHistoryFileStore + "/get-file-content";
 
+        static public string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
+
         static public string JsonFileName => "elm-fullstack.json";
 
         static public IImmutableList<string> JsonFilePath => ImmutableList.Create(JsonFileName);
@@ -114,7 +116,10 @@ namespace ElmFullstack.WebHost
             });
 
             var processStoreWriter =
-                new ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(processStoreFileStore);
+                new ProcessStoreWriterInFileStore(
+                    processStoreFileStore,
+                    getTimeForCompositionLogBatch: getDateTimeOffset,
+                    processStoreFileStore);
 
             void startPublicApp()
             {
@@ -397,7 +402,7 @@ namespace ElmFullstack.WebHost
                                 {
                                     StoreComponentDelegate = components.Add,
                                     StoreProvisionalReductionDelegate = _ => { },
-                                    SetCompositionLogHeadRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
+                                    AppendCompositionLogRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
                                 };
 
                                 var reductionRecord =
@@ -547,10 +552,12 @@ namespace ElmFullstack.WebHost
 
                         var processVersionId = revertToRemainingPath.ToString().Trim('/');
 
-                        var processVersionComponent =
-                            new ProcessStoreReaderInFileStore(processStoreFileStore).LoadComponent(processVersionId);
+                        var processVersionCompositionRecord =
+                            new ProcessStoreReaderInFileStore(processStoreFileStore)
+                            .EnumerateSerializedCompositionLogRecordsReverse()
+                            .FirstOrDefault(compositionEntry => CompositionLogRecordInFile.HashBase16FromCompositionRecord(compositionEntry) == processVersionId);
 
-                        if (processVersionComponent == null)
+                        if (processVersionCompositionRecord == null)
                         {
                             context.Response.StatusCode = 404;
                             await context.Response.WriteAsync("Did not find process version '" + processVersionId + "'.");
@@ -652,32 +659,60 @@ namespace ElmFullstack.WebHost
                         return;
                     }
 
-                    if (context.Request.Path.StartsWithSegments(
-                        new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
                     {
-                        if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                        if (context.Request.Path.StartsWithSegments(
+                            new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
                         {
-                            context.Response.StatusCode = 405;
-                            await context.Response.WriteAsync("Method not supported.");
+                            if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                context.Response.StatusCode = 405;
+                                await context.Response.WriteAsync("Method not supported.");
+                                return;
+                            }
+
+                            var filePathInStore =
+                                remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
+
+                            var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
+
+                            if (fileContent == null)
+                            {
+                                context.Response.StatusCode = 404;
+                                await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
+                                return;
+                            }
+
+                            context.Response.StatusCode = 200;
+                            context.Response.ContentType = "application/octet-stream";
+                            await context.Response.Body.WriteAsync(fileContent as byte[] ?? fileContent.ToArray());
                             return;
                         }
+                    }
 
-                        var filePathInStore =
-                            remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
-
-                        var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
-
-                        if (fileContent == null)
+                    {
+                        if (context.Request.Path.StartsWithSegments(
+                            new PathString(PathApiProcessHistoryFileStoreListFilesInDirectory), out var remainingPathString))
                         {
-                            context.Response.StatusCode = 404;
-                            await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
+                            if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                context.Response.StatusCode = 405;
+                                await context.Response.WriteAsync("Method not supported.");
+                                return;
+                            }
+
+                            var filePathInStore =
+                                remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
+
+                            var filesPaths = processStoreFileStore.ListFilesInDirectory(filePathInStore);
+
+                            var filesPathsList =
+                                string.Join('\n', filesPaths.Select(path => string.Join('/', path)));
+
+                            context.Response.StatusCode = 200;
+                            context.Response.ContentType = "application/octet-stream";
+                            await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(filesPathsList));
                             return;
                         }
-
-                        context.Response.StatusCode = 200;
-                        context.Response.ContentType = "application/octet-stream";
-                        await context.Response.Body.WriteAsync(fileContent as byte[] ?? fileContent.ToArray());
-                        return;
                     }
 
                     (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
@@ -797,7 +832,6 @@ namespace ElmFullstack.WebHost
                 return (statusCode: 400, new AttemptContinueWithCompositionEventReport
                 {
                     beginTime = beginTime,
-                    parentCompositionHashBase16 = projectionResult.parentHashBase16,
                     compositionEvent = compositionLogEvent,
                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
                     result = Composition.Result<string, string>.err(testContinueResult.Err),
@@ -811,7 +845,6 @@ namespace ElmFullstack.WebHost
             return (statusCode: 200, new AttemptContinueWithCompositionEventReport
             {
                 beginTime = beginTime,
-                parentCompositionHashBase16 = projectionResult.parentHashBase16,
                 compositionEvent = compositionLogEvent,
                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
                 result = Composition.Result<string, string>.ok("Successfully applied this composition event to the process."),
@@ -822,8 +855,6 @@ namespace ElmFullstack.WebHost
     public class AttemptContinueWithCompositionEventReport
     {
         public string beginTime;
-
-        public string parentCompositionHashBase16;
 
         public CompositionLogRecordInFile.CompositionEvent compositionEvent;
 

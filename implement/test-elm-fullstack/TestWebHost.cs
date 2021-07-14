@@ -880,9 +880,8 @@ namespace test_elm_fullstack
 
             var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
-            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.First();
-
-            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.Skip(1).First();
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(0);
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
 
             using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
                 deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
@@ -961,9 +960,8 @@ namespace test_elm_fullstack
 
             var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
-            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.First();
-
-            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.Skip(1).First();
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(0);
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
 
             HttpClient originalServerPublicAppClient = null;
 
@@ -1048,6 +1046,8 @@ namespace test_elm_fullstack
         [TestMethod]
         public void Web_host_supports_truncate_process_history()
         {
+            DateTimeOffset persistentProcessHostDateTime = new DateTimeOffset(year: 2021, month: 7, day: 13, hour: 13, 0, 0, TimeSpan.Zero);
+
             var allEventsAndExpectedResponses =
                 TestSetup.CounterProcessTestEventsAndExpectedResponses(
                     new (int addition, int expectedResponse)[]
@@ -1063,11 +1063,12 @@ namespace test_elm_fullstack
 
             var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
-            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.First();
-
-            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.Skip(1).First();
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(0);
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
+            var thirdBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(2);
 
             using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+                persistentProcessHostDateTime: () => persistentProcessHostDateTime,
                 deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
 
             int countFilesInProcessFileStore() =>
@@ -1079,6 +1080,18 @@ namespace test_elm_fullstack
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
             foreach (var (serializedEvent, expectedResponse) in firstBatchOfCounterAppEvents)
+            {
+                var httpResponse =
+                    publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+            }
+
+            persistentProcessHostDateTime += TimeSpan.FromHours(3);
+
+            foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
             {
                 var httpResponse =
                     publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
@@ -1108,7 +1121,7 @@ namespace test_elm_fullstack
                 numberOfFilesAfter < numberOfFilesBefore,
                 "Number of files in store is lower after truncate request.");
 
-            foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
+            foreach (var (serializedEvent, expectedResponse) in thirdBatchOfCounterAppEvents)
             {
                 var httpResponse =
                     publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
@@ -1116,6 +1129,79 @@ namespace test_elm_fullstack
                 var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
                 Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+            }
+        }
+
+        [TestMethod]
+        public void Web_host_clock_jumping_back_does_not_prevent_restoring_process_state()
+        {
+            DateTimeOffset persistentProcessHostDateTime = new DateTimeOffset(year: 2021, month: 7, day: 13, hour: 13, 0, 0, TimeSpan.Zero);
+
+            var allEventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (3, 4),
+                        (5, 9),
+                        (7, 16),
+                        (11, 27),
+                        (-13, 14),
+                    }).ToList();
+
+            var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
+
+            var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(0);
+            var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
+            var thirdBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(2);
+
+            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+                persistentProcessHostDateTime: () => persistentProcessHostDateTime,
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+
+            using (var server = testSetup.StartWebHost())
+            {
+                using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
+                foreach (var (serializedEvent, expectedResponse) in firstBatchOfCounterAppEvents)
+                {
+                    var httpResponse =
+                        publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                    var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                    Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                }
+
+                persistentProcessHostDateTime -= TimeSpan.FromDays(1);
+
+                foreach (var (serializedEvent, expectedResponse) in secondBatchOfCounterAppEvents)
+                {
+                    var httpResponse =
+                        publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                    var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                    Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                }
+            }
+
+            persistentProcessHostDateTime -= TimeSpan.FromDays(1);
+
+            using (var server = testSetup.StartWebHost())
+            {
+                using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
+                foreach (var (serializedEvent, expectedResponse) in thirdBatchOfCounterAppEvents)
+                {
+                    var httpResponse =
+                        publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                    var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                    Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                }
             }
         }
 
