@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-07-13";
+        static public string AppVersionId => "2021-07-14";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -247,9 +247,9 @@ namespace elm_fullstack
                 var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
-                var replicateProcessFromOption = runServerCmd.Option("--replicate-process-from", "Path to a process to replicate. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
-                var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-process-admin-password", "Used together with '--replicate-process-from' if that location requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployAppFromOption = runServerCmd.Option("--deploy-app-from", "Path to an app to deploy on startup, analogous to the '--from' path on the `deploy-app` command. Can be combined with '--replicate-process-from'.", CommandOptionType.SingleValue);
+                var replicateProcessOption = runServerCmd.Option("--replicate-process", "Path to a process to replicate. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
+                var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-admin-password", "Used together with '--replicate-process' if that location requires a password to authenticate.", CommandOptionType.SingleValue);
+                var deployAppOption = runServerCmd.Option("--deploy-app", "Path to an app to deploy on startup, analogous to the '--from' path on the `deploy-app` command. Can be combined with '--replicate-process'.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -259,12 +259,12 @@ namespace elm_fullstack
                         publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
                         publicWebHostUrlsDefault;
 
-                    var replicateProcessFrom = replicateProcessFromOption.Value();
+                    var replicateProcess = replicateProcessOption.Value();
 
                     var replicateProcessAdminPassword =
-                        replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcessFrom);
+                        replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcess);
 
-                    if ((deletePreviousProcessOption.HasValue() || replicateProcessFrom != null) && processStorePath != null)
+                    if ((deletePreviousProcessOption.HasValue() || replicateProcess != null) && processStorePath != null)
                     {
                         Console.WriteLine("Deleting the previous process state from '" + processStorePath + "'...");
 
@@ -316,11 +316,11 @@ namespace elm_fullstack
                         processStoreFileStore = new FileStoreFromSystemIOFile(processStorePath);
                     }
 
-                    if (replicateProcessFrom != null)
+                    if (replicateProcess != null)
                     {
                         var replicateFiles =
                             LoadFilesForRestoreFromPathAndLogToConsole(
-                                sourcePath: replicateProcessFrom,
+                                sourcePath: replicateProcess,
                                 sourcePassword: replicateProcessAdminPassword);
 
                         foreach (var file in replicateFiles)
@@ -329,13 +329,13 @@ namespace elm_fullstack
 
                     var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
-                    if (deployAppFromOption.HasValue())
+                    if (deployAppOption.HasValue())
                     {
                         Console.WriteLine("Loading app config to deploy...");
 
                         var appConfigZipArchive =
                             ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                                sourcePath: deployAppFromOption.Value()).configZipArchive;
+                                sourcePath: deployAppOption.Value()).configZipArchive;
 
                         var appConfigTree =
                             Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
@@ -358,7 +358,7 @@ namespace elm_fullstack
                             };
 
                         var initElmAppState =
-                            (deletePreviousProcessOption.HasValue() && !replicateProcessFromOption.HasValue()) ||
+                            (deletePreviousProcessOption.HasValue() && !replicateProcessOption.HasValue()) ||
                             processStorePath == null;
 
                         var compositionLogEvent =
