@@ -580,7 +580,7 @@ namespace ElmFullstack.WebHost
                         var numbersOfThreadsToDeleteFiles = 4;
 
                         var filePathsInProcessStorePartitions =
-                            processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
+                            processStoreFileStore.ListFiles()
                             .Select((s, i) => (s, i))
                             .GroupBy(x => x.i % numbersOfThreadsToDeleteFiles)
                             .Select(g => g.Select(x => x.s).ToImmutableList())
@@ -638,6 +638,8 @@ namespace ElmFullstack.WebHost
                             return new TruncateProcessHistoryReport
                             {
                                 beginTime = beginTime,
+                                filesForRestoreCount = filesForRestore.Count,
+                                discoveredFilesCount = filePathsInProcessStorePartitions.Sum(partition => partition.Count),
                                 deletedFilesCount = totalDeletedFilesCount,
                                 storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
                                 storeReductionReport = storeReductionReport,
@@ -870,6 +872,10 @@ namespace ElmFullstack.WebHost
     public class TruncateProcessHistoryReport
     {
         public string beginTime;
+
+        public int filesForRestoreCount;
+
+        public int discoveredFilesCount;
 
         public int deletedFilesCount;
 

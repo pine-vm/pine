@@ -118,22 +118,9 @@ namespace ElmFullstack.WebHost.PersistentProcess
         {
             var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
-            var listFilePlaceholderContent = Encoding.UTF8.GetBytes("Placeholder only to make file path appear in list files API");
-
             var recordingReader = new DelegatingFileStoreReader
             {
-                ListFilesInDirectoryDelegate = directoryPath =>
-                {
-                    var filesPaths = fileStoreReader.ListFilesInDirectory(directoryPath);
-
-                    foreach (var filePath in filesPaths)
-                        filesForProcessRestore.AddOrUpdate(
-                            filePath,
-                            addValue: listFilePlaceholderContent,
-                            updateValueFactory: (_, fileContent) => fileContent);
-
-                    return filesPaths;
-                },
+                ListFilesInDirectoryDelegate = fileStoreReader.ListFilesInDirectory,
                 GetFileContentDelegate = filePath =>
                 {
                     var fileContent = fileStoreReader.GetFileContent(filePath);
