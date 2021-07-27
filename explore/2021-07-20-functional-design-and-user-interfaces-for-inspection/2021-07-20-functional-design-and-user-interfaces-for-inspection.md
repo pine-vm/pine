@@ -39,4 +39,4 @@ I summarized my takeaway as follows:
 
 > We did not yet find a good reason to keep a dedicated type for events mid-term. Short term, the limitations in tools were reasons to have an event/'msg' type.
 
-The example above shows how to map a scenario with 'Msg' type to a more general representation of an app history in functional programming. A concrete tool can omit the `EntryModuleName.update` part as implicit if it is the same for all events (as would be the case in a standard frontend Elm app)
+The example above shows how to map a scenario with 'Msg' type to a more general representation of an app history in functional programming. A concrete tool can omit the `EntryModuleName.update` part as implicit if it is the same for all events (as would be the case in a Elm 0.19 `Browser` app)
