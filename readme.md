@@ -8,7 +8,7 @@ Elm Fullstack currently offers:
 
 + Persisting and restoring the state of backend Elm apps.
 + Migrating backend state when deploying a new program version.
-+ Generating functions to serialize and deserialize Elm values.
++ Generating functions to serialize and deserialize Elm values based on type declarations from Elm programs.
 + Ports to integrate and interoperate with custom components written in any programming language.
 + A single executable file (per operating system) integrating all tools with a command-line interface.
 
