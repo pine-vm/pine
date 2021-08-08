@@ -1,8 +1,8 @@
-module Backend.VolatileHost exposing (volatileHostScript)
+module Backend.VolatileProcess exposing (programCode)
 
 
-volatileHostScript : String
-volatileHostScript =
+programCode : String
+programCode =
     """
 #r "netstandard"
 #r "System"

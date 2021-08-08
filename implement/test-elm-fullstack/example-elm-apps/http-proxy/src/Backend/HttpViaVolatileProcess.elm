@@ -1,9 +1,9 @@
-module Backend.HttpViaVolatileHost exposing
+module Backend.HttpViaVolatileProcess exposing
     ( HttpRequestProperties
     , HttpResponseProperties
-    , decodeVolatileHostHttpResponse
-    , requestToVolatileHost
-    , volatileHostScript
+    , decodeVolatileProcessHttpResponse
+    , programCode
+    , requestToVolatileProcess
     )
 
 import CompilationInterface.SourceFiles
@@ -32,8 +32,8 @@ type alias HttpHeader =
     }
 
 
-decodeVolatileHostHttpResponse : Json.Decode.Decoder HttpResponseProperties
-decodeVolatileHostHttpResponse =
+decodeVolatileProcessHttpResponse : Json.Decode.Decoder HttpResponseProperties
+decodeVolatileProcessHttpResponse =
     Json.Decode.map3 HttpResponseProperties
         (Json.Decode.field "statusCode" Json.Decode.int)
         (Json.Decode.field "headers" (Json.Decode.list decodeHttpHeader))
@@ -75,11 +75,11 @@ jsonDecodeNullAsMaybeNothing =
     Json.Decode.nullable
 
 
-requestToVolatileHost : HttpRequestProperties -> String
-requestToVolatileHost =
+requestToVolatileProcess : HttpRequestProperties -> String
+requestToVolatileProcess =
     encodeHttpRequestProperties >> Json.Encode.encode 0
 
 
-volatileHostScript : String
-volatileHostScript =
-    CompilationInterface.SourceFiles.file__utf8____src_Backend_HttpViaVolatileHost_csx
+programCode : String
+programCode =
+    CompilationInterface.SourceFiles.file__utf8____src_Backend_HttpViaVolatileProcess_csx

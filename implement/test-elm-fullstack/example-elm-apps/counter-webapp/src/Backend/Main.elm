@@ -1,14 +1,13 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
+    , backendMain
     )
 
-import Backend.InterfaceToHost as InterfaceToHost
 import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
+import ElmFullstack
 import Json.Decode
 
 
@@ -20,10 +19,17 @@ type alias CounterEvent =
     { addition : Int }
 
 
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+backendMain : ElmFullstack.BackendConfiguration State
+backendMain =
+    { init = 0
+    , update = processEvent
+    }
+
+
+processEvent : ElmFullstack.BackendEvent -> State -> ( State, ElmFullstack.BackendEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
+        ElmFullstack.HttpRequestEvent httpRequestEvent ->
             let
                 ( state, result ) =
                     case
@@ -56,15 +62,15 @@ processEvent hostEvent stateBefore =
                     }
             in
             ( state
-            , InterfaceToHost.passiveAppEventResponse
-                |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+            , ElmFullstack.passiveBackendEventResponse
+                |> ElmFullstack.withCompleteHttpResponsesAdded [ httpResponse ]
             )
 
-        InterfaceToHost.TaskCompleteEvent _ ->
-            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+        ElmFullstack.TaskCompleteEvent _ ->
+            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
 
-        InterfaceToHost.ArrivedAtTimeEvent _ ->
-            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+        ElmFullstack.PosixTimeHasArrivedEvent _ ->
+            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
 
 
 processCounterEvent : CounterEvent -> State -> ( State, String )
@@ -86,13 +92,3 @@ deserializeCounterEvent serializedEvent =
 decodeBytesToString : Bytes.Bytes -> Maybe String
 decodeBytesToString bytes =
     bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
-
-
-interfaceToHost_initState : State
-interfaceToHost_initState =
-    0
-
-
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent

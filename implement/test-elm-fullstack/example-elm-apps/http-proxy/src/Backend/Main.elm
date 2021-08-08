@@ -1,58 +1,64 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
+    , backendMain
     )
 
-import Backend.HttpViaVolatileHost as HttpViaVolatileHost
-import Backend.InterfaceToHost as InterfaceToHost
+import Backend.HttpViaVolatileProcess as HttpViaVolatileProcess
 import Base64
 import Bytes.Encode
+import ElmFullstack
 import Json.Decode
 
 
 type alias State =
-    { volatileHostId : Maybe String
-    , httpRequestToForward : Maybe InterfaceToHost.HttpRequestEventStructure
+    { volatileProcessId : Maybe String
+    , httpRequestToForward : Maybe ElmFullstack.HttpRequestEventStructure
     }
 
 
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+backendMain : ElmFullstack.BackendConfiguration State
+backendMain =
+    { init = { volatileProcessId = Nothing, httpRequestToForward = Nothing }
+    , update = processEvent
+    }
+
+
+processEvent : ElmFullstack.BackendEvent -> State -> ( State, ElmFullstack.BackendEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.ArrivedAtTimeEvent _ ->
+        ElmFullstack.PosixTimeHasArrivedEvent _ ->
             ( stateBefore
-            , InterfaceToHost.passiveAppEventResponse
+            , ElmFullstack.passiveBackendEventResponse
             )
 
-        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
+        ElmFullstack.HttpRequestEvent httpRequestEvent ->
             let
                 state =
                     { stateBefore | httpRequestToForward = Just httpRequestEvent }
             in
             ( state, state |> httpRequestForwardRequestsFromState )
 
-        InterfaceToHost.TaskCompleteEvent taskComplete ->
+        ElmFullstack.TaskCompleteEvent taskComplete ->
             case taskComplete.taskResult of
-                InterfaceToHost.CreateVolatileHostResponse createVolatileHostResponse ->
-                    case createVolatileHostResponse of
+                ElmFullstack.CreateVolatileProcessResponse createVolatileProcessResponse ->
+                    case createVolatileProcessResponse of
                         Err _ ->
                             ( stateBefore
-                            , InterfaceToHost.passiveAppEventResponse
+                            , ElmFullstack.passiveBackendEventResponse
                             )
 
-                        Ok { hostId } ->
+                        Ok { processId } ->
                             let
                                 state =
-                                    { stateBefore | volatileHostId = Just hostId }
+                                    { stateBefore | volatileProcessId = Just processId }
                             in
                             ( state, state |> httpRequestForwardRequestsFromState )
 
-                InterfaceToHost.RequestToVolatileHostResponse requestToVolatileHostResponse ->
+                ElmFullstack.RequestToVolatileProcessResponse requestToVolatileProcessResponse ->
                     case stateBefore.httpRequestToForward of
                         Nothing ->
                             ( stateBefore
-                            , InterfaceToHost.passiveAppEventResponse
+                            , ElmFullstack.passiveBackendEventResponse
                             )
 
                         Just httpRequestToForward ->
@@ -61,10 +67,10 @@ processEvent hostEvent stateBefore =
                                     Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
                                 httpResponse =
-                                    case requestToVolatileHostResponse of
+                                    case requestToVolatileProcessResponse of
                                         Err _ ->
                                             { statusCode = 500
-                                            , bodyAsBase64 = bodyFromString "Error running in volatile host."
+                                            , bodyAsBase64 = bodyFromString "Error running in volatile process."
                                             , headersToAdd = []
                                             }
 
@@ -72,7 +78,7 @@ processEvent hostEvent stateBefore =
                                             case requestToVolatileHostComplete.exceptionToString of
                                                 Just exceptionToString ->
                                                     { statusCode = 500
-                                                    , bodyAsBase64 = bodyFromString ("Exception in volatile host: " ++ exceptionToString)
+                                                    , bodyAsBase64 = bodyFromString ("Exception in volatile process: " ++ exceptionToString)
                                                     , headersToAdd = []
                                                     }
 
@@ -81,13 +87,13 @@ processEvent hostEvent stateBefore =
                                                         returnValueAsHttpResponseResult =
                                                             requestToVolatileHostComplete.returnValueToString
                                                                 |> Maybe.withDefault ""
-                                                                |> Json.Decode.decodeString HttpViaVolatileHost.decodeVolatileHostHttpResponse
+                                                                |> Json.Decode.decodeString HttpViaVolatileProcess.decodeVolatileProcessHttpResponse
                                                     in
                                                     case returnValueAsHttpResponseResult of
                                                         Err decodeError ->
                                                             { statusCode = 500
                                                             , bodyAsBase64 =
-                                                                bodyFromString ("Error decoding response from volatile host: " ++ (decodeError |> Json.Decode.errorToString))
+                                                                bodyFromString ("Error decoding response from volatile process: " ++ (decodeError |> Json.Decode.errorToString))
                                                             , headersToAdd = []
                                                             }
 
@@ -106,37 +112,37 @@ processEvent hostEvent stateBefore =
                                     { stateBefore | httpRequestToForward = Nothing }
                             in
                             ( state
-                            , InterfaceToHost.passiveAppEventResponse
-                                |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            , ElmFullstack.passiveBackendEventResponse
+                                |> ElmFullstack.withCompleteHttpResponsesAdded
                                     [ { httpRequestId = httpRequestToForward.httpRequestId
                                       , response = httpResponse
                                       }
                                     ]
                             )
 
-                InterfaceToHost.CompleteWithoutResult ->
+                ElmFullstack.CompleteWithoutResult ->
                     ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
+                    , ElmFullstack.passiveBackendEventResponse
                     )
 
 
-httpRequestForwardRequestsFromState : State -> InterfaceToHost.AppEventResponse
+httpRequestForwardRequestsFromState : State -> ElmFullstack.BackendEventResponse
 httpRequestForwardRequestsFromState state =
     case state.httpRequestToForward of
         Nothing ->
-            InterfaceToHost.passiveAppEventResponse
+            ElmFullstack.passiveBackendEventResponse
 
         Just httpRequestToForward ->
-            case state.volatileHostId of
+            case state.volatileProcessId of
                 Nothing ->
-                    InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withStartTasksAdded
-                            [ { taskId = "create-vhost"
-                              , task = InterfaceToHost.CreateVolatileHost { script = HttpViaVolatileHost.volatileHostScript }
+                    ElmFullstack.passiveBackendEventResponse
+                        |> ElmFullstack.withStartTasksAdded
+                            [ { taskId = "create-volatile-process"
+                              , task = ElmFullstack.CreateVolatileProcess { programCode = HttpViaVolatileProcess.programCode }
                               }
                             ]
 
-                Just volatileHostId ->
+                Just volatileProcessId ->
                     let
                         maybeForwardTo : Maybe String
                         maybeForwardTo =
@@ -148,8 +154,8 @@ httpRequestForwardRequestsFromState state =
                     in
                     case maybeForwardTo of
                         Nothing ->
-                            InterfaceToHost.passiveAppEventResponse
-                                |> InterfaceToHost.withCompleteHttpResponsesAdded
+                            ElmFullstack.passiveBackendEventResponse
+                                |> ElmFullstack.withCompleteHttpResponsesAdded
                                     [ { httpRequestId = httpRequestToForward.httpRequestId
                                       , response =
                                             { statusCode = 400
@@ -173,25 +179,15 @@ httpRequestForwardRequestsFromState state =
                                     }
 
                                 task =
-                                    { hostId = volatileHostId
+                                    { processId = volatileProcessId
                                     , request =
-                                        HttpViaVolatileHost.requestToVolatileHost httpRequest
+                                        HttpViaVolatileProcess.requestToVolatileProcess httpRequest
                                     }
-                                        |> InterfaceToHost.RequestToVolatileHost
+                                        |> ElmFullstack.RequestToVolatileProcess
                             in
-                            InterfaceToHost.passiveAppEventResponse
-                                |> InterfaceToHost.withStartTasksAdded
+                            ElmFullstack.passiveBackendEventResponse
+                                |> ElmFullstack.withStartTasksAdded
                                     [ { taskId = "http-request-forward-" ++ httpRequestToForward.httpRequestId
                                       , task = task
                                       }
                                     ]
-
-
-interfaceToHost_initState : State
-interfaceToHost_initState =
-    { volatileHostId = Nothing, httpRequestToForward = Nothing }
-
-
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent

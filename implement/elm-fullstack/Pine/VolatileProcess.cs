@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.Scripting;
 
 namespace Pine
 {
-    public class VolatileHost
+    public class VolatileProcess
     {
         readonly object @lock = new object();
 
@@ -21,7 +21,7 @@ namespace Pine
 
         readonly Func<byte[], byte[]> getFileFromHashSHA256;
 
-        public VolatileHost(
+        public VolatileProcess(
             Func<byte[], byte[]> getFileFromHashSHA256,
             string csharpScript)
         {
@@ -32,7 +32,7 @@ namespace Pine
             var runSetupScriptResult = RunScript(csharpScript);
 
             if (runSetupScriptResult.Exception != null)
-                throw new Exception("Failed to setup the volatile host:" + runSetupScriptResult.Exception.ToString());
+                throw new Exception("Failed to setup the volatile process:" + runSetupScriptResult.Exception.ToString());
         }
 
         /// <summary>

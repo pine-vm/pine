@@ -1,28 +1,28 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
-    , processEvent
+    , backendMain
     )
 
-import Backend.InterfaceToHost as InterfaceToHost
 import Base64
 import Bytes.Encode
+import ElmFullstack
 
 
 type alias State =
     ()
 
 
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
+backendMain : ElmFullstack.BackendConfiguration ()
+backendMain =
+    { init = ()
+    , update = processEvent
+    }
 
 
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+processEvent : ElmFullstack.BackendEvent -> State -> ( State, ElmFullstack.BackendEventResponse )
 processEvent hostEvent stateBefore =
     case hostEvent of
-        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
+        ElmFullstack.HttpRequestEvent httpRequestEvent ->
             let
                 httpResponse =
                     { statusCode = 200
@@ -35,21 +35,16 @@ processEvent hostEvent stateBefore =
                     }
             in
             ( stateBefore
-            , InterfaceToHost.passiveAppEventResponse
-                |> InterfaceToHost.withCompleteHttpResponsesAdded
+            , ElmFullstack.passiveBackendEventResponse
+                |> ElmFullstack.withCompleteHttpResponsesAdded
                     [ { httpRequestId = httpRequestEvent.httpRequestId
                       , response = httpResponse
                       }
                     ]
             )
 
-        InterfaceToHost.TaskCompleteEvent _ ->
-            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
+        ElmFullstack.TaskCompleteEvent _ ->
+            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
 
-        InterfaceToHost.ArrivedAtTimeEvent _ ->
-            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
-
-
-interfaceToHost_initState : State
-interfaceToHost_initState =
-    ()
+        ElmFullstack.PosixTimeHasArrivedEvent _ ->
+            ( stateBefore, ElmFullstack.passiveBackendEventResponse )

@@ -48,7 +48,6 @@ import Elm.Syntax.TypeAnnotation
 import JaroWinkler
 import Json.Encode
 import List
-import List.Extra
 import Maybe
 import Parser
 import Result.Extra
@@ -68,15 +67,26 @@ type alias CompilationArguments =
 type alias ElmAppInterfaceConvention =
     { initialStateFunctionName : String
     , processSerializedEventFunctionName : String
+
+    {-
+       TODO: Remove initialStateFunctionName and processSerializedEventFunctionName after migrating apps in production to `backendMainDeclarationName`
+    -}
+    , backendMainDeclarationName : String
     , serializeStateFunctionName : String
     , deserializeStateFunctionName : String
     }
+
+
+type InterfaceToHostVersion
+    = InterfaceToHostVersion_Before_2021_08
+    | InterfaceToHostVersion_2021_08
 
 
 elmAppInterfaceConvention : ElmAppInterfaceConvention
 elmAppInterfaceConvention =
     { initialStateFunctionName = "interfaceToHost_processEvent"
     , processSerializedEventFunctionName = "interfaceToHost_processEvent"
+    , backendMainDeclarationName = "backendMain"
     , serializeStateFunctionName = "interfaceToHost_serializeState"
     , deserializeStateFunctionName = "interfaceToHost_deserializeState"
     }
@@ -254,7 +264,7 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, or
                 parseAppStateElmTypeAndDependenciesRecursively originalSourceModules backendMainModule
                     |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type name: "))
                     |> Result.map
-                        (\( stateTypeAnnotation, stateTypeDependencies ) ->
+                        (\( interfaceVersion, ( stateTypeAnnotation, stateTypeDependencies ) ) ->
                             let
                                 ( appFiles, { generatedModuleName, modulesToImport } ) =
                                     mapAppFilesToSupportJsonCoding
@@ -278,6 +288,7 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, or
 
                                 rootElmModuleText =
                                     composeAppRootElmModuleText
+                                        interfaceVersion
                                         { interfaceToHostRootModuleName = String.join "." interfaceToHostRootModuleName
                                         , rootModuleNameBeforeLowering = String.join "." rootModuleName
                                         , stateTypeAnnotation = stateTypeAnnotation
@@ -359,7 +370,7 @@ loweredForAppStateMigration { originalSourceModules } sourceFiles =
                     |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
 
 
-parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String ( List String, Elm.Syntax.File.File ) -> ( List String, Elm.Syntax.File.File ) -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String ( List String, Elm.Syntax.File.File ) -> ( List String, Elm.Syntax.File.File ) -> Result (LocatedInSourceFiles String) ( InterfaceToHostVersion, ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct ) )
 parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
     stateTypeAnnotationFromRootElmModule parsedModule
         |> Result.mapError
@@ -370,10 +381,11 @@ parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFileP
                     }
             )
         |> Result.andThen
-            (\stateTypeAnnotation ->
+            (\( interfaceVersion, stateTypeAnnotation ) ->
                 parseElmTypeAndDependenciesRecursivelyFromAnnotation
                     sourceModules
                     ( ( parsedModuleFilePath, parsedModule ), stateTypeAnnotation )
+                    |> Result.map (Tuple.pair interfaceVersion)
             )
 
 
@@ -407,8 +419,65 @@ parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModu
             )
 
 
-stateTypeAnnotationFromRootElmModule : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
+stateTypeAnnotationFromRootElmModule : Elm.Syntax.File.File -> Result String ( InterfaceToHostVersion, Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
 stateTypeAnnotationFromRootElmModule parsedModule =
+    case stateTypeAnnotationFromRootElmModule_2021_08 parsedModule of
+        Ok typeAnnotation ->
+            Ok ( InterfaceToHostVersion_2021_08, typeAnnotation )
+
+        Err newError ->
+            case stateTypeAnnotationFromRootElmModule_Before_2021_08 parsedModule of
+                Err oldError ->
+                    Err newError
+
+                Ok typeAnnotation ->
+                    Ok ( InterfaceToHostVersion_Before_2021_08, typeAnnotation )
+
+
+stateTypeAnnotationFromRootElmModule_2021_08 : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
+stateTypeAnnotationFromRootElmModule_2021_08 parsedModule =
+    parsedModule.declarations
+        |> List.filterMap
+            (\declaration ->
+                case Elm.Syntax.Node.value declaration of
+                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                        if
+                            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                                == elmAppInterfaceConvention.backendMainDeclarationName
+                        then
+                            Just functionDeclaration
+
+                        else
+                            Nothing
+
+                    _ ->
+                        Nothing
+            )
+        |> List.head
+        |> Maybe.map
+            (\functionDeclaration ->
+                case functionDeclaration.signature of
+                    Nothing ->
+                        Err "Missing function signature"
+
+                    Just signature ->
+                        case Elm.Syntax.Node.value (Elm.Syntax.Node.value signature).typeAnnotation of
+                            Elm.Syntax.TypeAnnotation.Typed _ typeArguments ->
+                                case typeArguments of
+                                    [ singleTypeArgument ] ->
+                                        Ok singleTypeArgument
+
+                                    _ ->
+                                        Err ("Unexpected number of type arguments: " ++ String.fromInt (List.length typeArguments))
+
+                            _ ->
+                                Err "Unexpected type annotation: Not an instance"
+            )
+        |> Maybe.withDefault (Err "Did not find declaration with matching name")
+
+
+stateTypeAnnotationFromRootElmModule_Before_2021_08 : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
+stateTypeAnnotationFromRootElmModule_Before_2021_08 parsedModule =
     parsedModule.declarations
         |> List.filterMap
             (\declaration ->
@@ -502,6 +571,26 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
 
 
 composeAppRootElmModuleText :
+    InterfaceToHostVersion
+    ->
+        { interfaceToHostRootModuleName : String
+        , rootModuleNameBeforeLowering : String
+        , stateTypeAnnotation : ElmTypeAnnotation
+        , modulesToImport : List (List String)
+        , encodeFunction : String
+        , decodeFunction : String
+        }
+    -> String
+composeAppRootElmModuleText interfaceVersion config =
+    case interfaceVersion of
+        InterfaceToHostVersion_2021_08 ->
+            composeAppRootElmModuleText_2021_08 config
+
+        InterfaceToHostVersion_Before_2021_08 ->
+            composeAppRootElmModuleText_Before_2021_08 config
+
+
+composeAppRootElmModuleText_2021_08 :
     { interfaceToHostRootModuleName : String
     , rootModuleNameBeforeLowering : String
     , stateTypeAnnotation : ElmTypeAnnotation
@@ -510,7 +599,361 @@ composeAppRootElmModuleText :
     , decodeFunction : String
     }
     -> String
-composeAppRootElmModuleText { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
+composeAppRootElmModuleText_2021_08 { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
+    "module " ++ interfaceToHostRootModuleName ++ """ exposing
+    ( State
+    , interfaceToHost_deserializeState
+    , interfaceToHost_initState
+    , interfaceToHost_processEvent
+    , interfaceToHost_serializeState
+    , main
+    )
+
+import """ ++ rootModuleNameBeforeLowering ++ """
+""" ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> String.join "\n") ++ """
+import Platform
+import ElmFullstack exposing (..)
+
+
+type alias DeserializedState =
+    (""" ++ buildTypeAnnotationText stateTypeAnnotation ++ """)
+
+
+type State
+    = DeserializeFailed String
+    | DeserializeSuccessful DeserializedState
+
+
+interfaceToHost_initState = """ ++ rootModuleNameBeforeLowering ++ """.backendMain.init |> DeserializeSuccessful
+
+
+interfaceToHost_processEvent hostEvent stateBefore =
+    case stateBefore of
+        DeserializeFailed _ ->
+            ( stateBefore, "[]" )
+
+        DeserializeSuccessful deserializedState ->
+            deserializedState
+                |> wrapForSerialInterface_processEvent """ ++ rootModuleNameBeforeLowering ++ """.backendMain.update hostEvent
+                |> Tuple.mapFirst DeserializeSuccessful
+
+
+interfaceToHost_serializeState = jsonEncodeState >> Json.Encode.encode 0
+
+
+interfaceToHost_deserializeState = deserializeState
+
+
+-- Support function-level dead code elimination (https://elm-lang.org/blog/small-assets-without-the-headache) Elm code needed to inform the Elm compiler about our entry points.
+
+
+main : Program Int State String
+main =
+    Platform.worker
+        { init = \\_ -> ( interfaceToHost_initState, Cmd.none )
+        , update =
+            \\event stateBefore ->
+                interfaceToHost_processEvent event (stateBefore |> interfaceToHost_serializeState |> interfaceToHost_deserializeState) |> Tuple.mapSecond (always Cmd.none)
+        , subscriptions = \\_ -> Sub.none
+        }
+
+
+-- Inlined helpers -->
+
+
+{-| Turn a `Result e a` to an `a`, by applying the conversion
+function specified to the `e`.
+-}
+result_Extra_Extract : (e -> a) -> Result e a -> a
+result_Extra_Extract f x =
+    case x of
+        Ok a ->
+            a
+
+        Err e ->
+            f e
+
+
+-- Remember and communicate errors from state deserialization -->
+
+
+jsonEncodeState : State -> Json.Encode.Value
+jsonEncodeState state =
+    case state of
+        DeserializeFailed error ->
+            [ ( "Interface_DeserializeFailed", [ ( "error", error |> Json.Encode.string ) ] |> Json.Encode.object ) ] |> Json.Encode.object
+
+        DeserializeSuccessful deserializedState ->
+            deserializedState |> jsonEncodeDeserializedState
+
+
+deserializeState : String -> State
+deserializeState serializedState =
+    serializedState
+        |> Json.Decode.decodeString jsonDecodeState
+        |> Result.mapError Json.Decode.errorToString
+        |> result_Extra_Extract DeserializeFailed
+
+
+jsonDecodeState : Json.Decode.Decoder State
+jsonDecodeState =
+    Json.Decode.oneOf
+        [ Json.Decode.field "Interface_DeserializeFailed" (Json.Decode.field "error" Json.Decode.string |> Json.Decode.map DeserializeFailed)
+        , jsonDecodeDeserializedState |> Json.Decode.map DeserializeSuccessful
+        ]
+
+----
+
+wrapForSerialInterface_processEvent : (BackendEvent -> state -> ( state, BackendEventResponse )) -> String -> state -> ( state, String )
+wrapForSerialInterface_processEvent update serializedEvent stateBefore =
+    let
+        ( state, response ) =
+            case serializedEvent |> Json.Decode.decodeString decodeBackendEvent of
+                Err error ->
+                    ( stateBefore
+                    , ("Failed to deserialize event: " ++ (error |> Json.Decode.errorToString))
+                        |> DecodeEventError
+                    )
+
+                Ok hostEvent ->
+                    stateBefore
+                        |> update hostEvent
+                        |> Tuple.mapSecond DecodeEventSuccess
+    in
+    ( state, response |> encodeResponseOverSerialInterface |> Json.Encode.encode 0 )
+
+
+decodeBackendEvent : Json.Decode.Decoder BackendEvent
+decodeBackendEvent =
+    Json.Decode.oneOf
+        [ Json.Decode.field "ArrivedAtTimeEvent" (Json.Decode.field "posixTimeMilli" Json.Decode.int)
+            |> Json.Decode.map (\\posixTimeMilli -> PosixTimeHasArrivedEvent { posixTimeMilli = posixTimeMilli })
+        , Json.Decode.field "PosixTimeHasArrivedEvent" (Json.Decode.field "posixTimeMilli" Json.Decode.int)
+            |> Json.Decode.map (\\posixTimeMilli -> PosixTimeHasArrivedEvent { posixTimeMilli = posixTimeMilli })
+        , Json.Decode.field "TaskCompleteEvent" decodeTaskCompleteEventStructure |> Json.Decode.map TaskCompleteEvent
+        , Json.Decode.field "HttpRequestEvent" decodeHttpRequestEventStructure |> Json.Decode.map HttpRequestEvent
+        ]
+
+
+decodeTaskCompleteEventStructure : Json.Decode.Decoder TaskCompleteEventStructure
+decodeTaskCompleteEventStructure =
+    Json.Decode.map2 TaskCompleteEventStructure
+        (Json.Decode.field "taskId" Json.Decode.string)
+        (Json.Decode.field "taskResult" decodeTaskResult)
+
+
+decodeTaskResult : Json.Decode.Decoder TaskResultStructure
+decodeTaskResult =
+    Json.Decode.oneOf
+        [ Json.Decode.field "CreateVolatileProcessResponse" (decodeResult decodeCreateVolatileProcessError decodeCreateVolatileProcessComplete)
+            |> Json.Decode.map CreateVolatileProcessResponse
+        , Json.Decode.field "RequestToVolatileProcessResponse" (decodeResult decodeRequestToVolatileProcessError decodeRequestToVolatileProcessComplete)
+            |> Json.Decode.map RequestToVolatileProcessResponse
+        , Json.Decode.field "CompleteWithoutResult" (jsonDecodeSucceedWhenNotNull CompleteWithoutResult)
+        ]
+
+
+decodeCreateVolatileProcessError : Json.Decode.Decoder CreateVolatileProcessErrorStruct
+decodeCreateVolatileProcessError =
+    Json.Decode.map CreateVolatileProcessErrorStruct
+        (Json.Decode.field "exceptionToString" Json.Decode.string)
+
+
+decodeCreateVolatileProcessComplete : Json.Decode.Decoder CreateVolatileProcessComplete
+decodeCreateVolatileProcessComplete =
+    Json.Decode.map CreateVolatileProcessComplete
+        (Json.Decode.field "processId" Json.Decode.string)
+
+
+decodeRequestToVolatileProcessComplete : Json.Decode.Decoder RequestToVolatileProcessComplete
+decodeRequestToVolatileProcessComplete =
+    Json.Decode.map3 RequestToVolatileProcessComplete
+        (decodeOptionalField "exceptionToString" Json.Decode.string)
+        (decodeOptionalField "returnValueToString" Json.Decode.string)
+        (Json.Decode.field "durationInMilliseconds" Json.Decode.int)
+
+
+decodeRequestToVolatileProcessError : Json.Decode.Decoder RequestToVolatileProcessError
+decodeRequestToVolatileProcessError =
+    Json.Decode.oneOf
+        [ Json.Decode.field "ProcessNotFound" (jsonDecodeSucceedWhenNotNull ProcessNotFound)
+        ]
+
+
+decodeHttpRequestEventStructure : Json.Decode.Decoder HttpRequestEventStructure
+decodeHttpRequestEventStructure =
+    Json.Decode.map4 HttpRequestEventStructure
+        (Json.Decode.field "httpRequestId" Json.Decode.string)
+        (Json.Decode.field "posixTimeMilli" Json.Decode.int)
+        (Json.Decode.field "requestContext" decodeHttpRequestContext)
+        (Json.Decode.field "request" decodeHttpRequest)
+
+
+decodeHttpRequestContext : Json.Decode.Decoder HttpRequestContext
+decodeHttpRequestContext =
+    Json.Decode.map HttpRequestContext
+        (decodeOptionalField "clientAddress" Json.Decode.string)
+
+
+decodeHttpRequest : Json.Decode.Decoder HttpRequestProperties
+decodeHttpRequest =
+    Json.Decode.map4 HttpRequestProperties
+        (Json.Decode.field "method" Json.Decode.string)
+        (Json.Decode.field "uri" Json.Decode.string)
+        (decodeOptionalField "bodyAsBase64" Json.Decode.string)
+        (Json.Decode.field "headers" (Json.Decode.list decodeHttpHeader))
+
+
+decodeHttpHeader : Json.Decode.Decoder HttpHeader
+decodeHttpHeader =
+    Json.Decode.map2 HttpHeader
+        (Json.Decode.field "name" Json.Decode.string)
+        (Json.Decode.field "values" (Json.Decode.list Json.Decode.string))
+
+
+decodeOptionalField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
+decodeOptionalField fieldName decoder =
+    let
+        finishDecoding json =
+            case Json.Decode.decodeValue (Json.Decode.field fieldName Json.Decode.value) json of
+                Ok _ ->
+                    -- The field is present, so run the decoder on it.
+                    Json.Decode.map Just (Json.Decode.field fieldName decoder)
+
+                Err _ ->
+                    -- The field was missing, which is fine!
+                    Json.Decode.succeed Nothing
+    in
+    Json.Decode.value
+        |> Json.Decode.andThen finishDecoding
+
+
+encodeResponseOverSerialInterface : ResponseOverSerialInterface -> Json.Encode.Value
+encodeResponseOverSerialInterface responseOverSerialInterface =
+    (case responseOverSerialInterface of
+        DecodeEventError error ->
+            [ ( "DecodeEventError", error |> Json.Encode.string ) ]
+
+        DecodeEventSuccess response ->
+            [ ( "DecodeEventSuccess", response |> encodeBackendEventResponse ) ]
+    )
+        |> Json.Encode.object
+
+
+encodeBackendEventResponse : BackendEventResponse -> Json.Encode.Value
+encodeBackendEventResponse request =
+    [ ( "notifyWhenPosixTimeHasArrived"
+      , request.notifyWhenPosixTimeHasArrived
+            |> Maybe.map (\\time -> [ ( "minimumPosixTimeMilli", time.minimumPosixTimeMilli |> Json.Encode.int ) ] |> Json.Encode.object)
+            |> Maybe.withDefault Json.Encode.null
+      )
+    , ( "startTasks", request.startTasks |> Json.Encode.list encodeStartTask )
+    , ( "completeHttpResponses", request.completeHttpResponses |> Json.Encode.list encodeHttpResponseRequest )
+    ]
+        |> Json.Encode.object
+
+
+encodeStartTask : StartTaskStructure -> Json.Encode.Value
+encodeStartTask startTaskAfterTime =
+    Json.Encode.object
+        [ ( "taskId", startTaskAfterTime.taskId |> encodeTaskId )
+        , ( "task", startTaskAfterTime.task |> encodeTask )
+        ]
+
+
+encodeTaskId : TaskId -> Json.Encode.Value
+encodeTaskId =
+    Json.Encode.string
+
+
+encodeTask : Task -> Json.Encode.Value
+encodeTask task =
+    case task of
+        CreateVolatileProcess createVolatileProcess ->
+            Json.Encode.object
+                [ ( "CreateVolatileProcess"
+                  , Json.Encode.object [ ( "programCode", createVolatileProcess.programCode |> Json.Encode.string ) ]
+                  )
+                ]
+
+        RequestToVolatileProcess requestToVolatileProcess ->
+            Json.Encode.object
+                [ ( "RequestToVolatileProcess"
+                  , Json.Encode.object
+                        [ ( "processId", requestToVolatileProcess.processId |> Json.Encode.string )
+                        , ( "request", requestToVolatileProcess.request |> Json.Encode.string )
+                        ]
+                  )
+                ]
+
+        TerminateVolatileProcess terminateVolatileProcess ->
+            Json.Encode.object
+                [ ( "TerminateVolatileProcess"
+                  , Json.Encode.object
+                        [ ( "processId", terminateVolatileProcess.processId |> Json.Encode.string )
+                        ]
+                  )
+                ]
+
+
+encodeHttpResponseRequest : HttpResponseRequest -> Json.Encode.Value
+encodeHttpResponseRequest httpResponseRequest =
+    Json.Encode.object
+        [ ( "httpRequestId", httpResponseRequest.httpRequestId |> Json.Encode.string )
+        , ( "response", httpResponseRequest.response |> encodeHttpResponse )
+        ]
+
+
+encodeHttpResponse : HttpResponse -> Json.Encode.Value
+encodeHttpResponse httpResponse =
+    [ ( "statusCode", httpResponse.statusCode |> Json.Encode.int )
+    , ( "headersToAdd", httpResponse.headersToAdd |> Json.Encode.list encodeHttpHeader )
+    , ( "bodyAsBase64", httpResponse.bodyAsBase64 |> Maybe.map Json.Encode.string |> Maybe.withDefault Json.Encode.null )
+    ]
+        |> Json.Encode.object
+
+
+encodeHttpHeader : HttpHeader -> Json.Encode.Value
+encodeHttpHeader httpHeader =
+    [ ( "name", httpHeader.name |> Json.Encode.string )
+    , ( "values", httpHeader.values |> Json.Encode.list Json.Encode.string )
+    ]
+        |> Json.Encode.object
+
+
+decodeResult : Json.Decode.Decoder error -> Json.Decode.Decoder ok -> Json.Decode.Decoder (Result error ok)
+decodeResult errorDecoder okDecoder =
+    Json.Decode.oneOf
+        [ Json.Decode.field "Err" errorDecoder |> Json.Decode.map Err
+        , Json.Decode.field "Ok" okDecoder |> Json.Decode.map Ok
+        ]
+
+
+jsonDecodeSucceedWhenNotNull : a -> Json.Decode.Decoder a
+jsonDecodeSucceedWhenNotNull valueIfNotNull =
+    Json.Decode.value
+        |> Json.Decode.andThen
+            (\\asValue ->
+                if asValue == Json.Encode.null then
+                    Json.Decode.fail "Is null."
+
+                else
+                    Json.Decode.succeed valueIfNotNull
+            )
+
+""" ++ encodeFunction ++ "\n\n" ++ decodeFunction
+
+
+composeAppRootElmModuleText_Before_2021_08 :
+    { interfaceToHostRootModuleName : String
+    , rootModuleNameBeforeLowering : String
+    , stateTypeAnnotation : ElmTypeAnnotation
+    , modulesToImport : List (List String)
+    , encodeFunction : String
+    , decodeFunction : String
+    }
+    -> String
+composeAppRootElmModuleText_Before_2021_08 { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
     "module " ++ interfaceToHostRootModuleName ++ """ exposing
     ( State
     , interfaceToHost_deserializeState

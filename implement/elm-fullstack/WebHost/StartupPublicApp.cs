@@ -96,15 +96,15 @@ namespace ElmFullstack.WebHost
             if (webAppAndElmAppConfig.WebAppConfiguration?.letsEncryptOptions != null)
                 app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
-            var createVolatileHostAttempts = 0;
+            var createVolatileProcessAttempts = 0;
 
-            var volatileHosts = new ConcurrentDictionary<string, VolatileHost>();
+            var volatileProcesses = new ConcurrentDictionary<string, VolatileProcess>();
 
             var appTaskCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
 
             System.Threading.Timer notifyTimeHasArrivedTimer = null;
             DateTimeOffset? lastAppEventTimeHasArrived = null;
-            InterfaceToHost.NotifyWhenArrivedAtTimeRequestStructure nextTimeToNotify = null;
+            InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStructure nextTimeToNotify = null;
             var nextTimeToNotifyLock = new object();
 
             byte[] getBlobWithSHA256(byte[] sha256)
@@ -124,33 +124,33 @@ namespace ElmFullstack.WebHost
                 return BlobLibrary.GetBlobWithSHA256(sha256);
             }
 
-            InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
-                performProcessTaskRequestToVolatileHost(
-                InterfaceToHost.Task.RequestToVolatileHostStructure requestToVolatileHost)
+            InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileProcessError, InterfaceToHost.TaskResult.RequestToVolatileProcessComplete>
+                performProcessTaskRequestToVolatileProcess(
+                InterfaceToHost.Task.RequestToVolatileProcessStruct requestToVolatileProcess)
             {
-                if (!volatileHosts.TryGetValue(requestToVolatileHost.hostId, out var volatileHost))
+                if (!volatileProcesses.TryGetValue(requestToVolatileProcess.processId, out var volatileHost))
                 {
-                    return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
+                    return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileProcessError, InterfaceToHost.TaskResult.RequestToVolatileProcessComplete>
                     {
-                        Err = new InterfaceToHost.TaskResult.RequestToVolatileHostError
+                        Err = new InterfaceToHost.TaskResult.RequestToVolatileProcessError
                         {
-                            HostNotFound = new object(),
+                            ProcessNotFound = new object(),
                         }
                     };
                 }
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                var fromVolatileHostResult = volatileHost.ProcessRequest(requestToVolatileHost.request);
+                var fromVolatileProcessResult = volatileHost.ProcessRequest(requestToVolatileProcess.request);
 
                 stopwatch.Stop();
 
-                return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileHostError, InterfaceToHost.TaskResult.RequestToVolatileHostComplete>
+                return new InterfaceToHost.Result<InterfaceToHost.TaskResult.RequestToVolatileProcessError, InterfaceToHost.TaskResult.RequestToVolatileProcessComplete>
                 {
-                    Ok = new InterfaceToHost.TaskResult.RequestToVolatileHostComplete
+                    Ok = new InterfaceToHost.TaskResult.RequestToVolatileProcessComplete
                     {
-                        exceptionToString = fromVolatileHostResult.Exception?.ToString(),
-                        returnValueToString = fromVolatileHostResult.ReturnValue?.ToString(),
+                        exceptionToString = fromVolatileProcessResult.Exception?.ToString(),
+                        returnValueToString = fromVolatileProcessResult.ReturnValue?.ToString(),
                         durationInMilliseconds = stopwatch.ElapsedMilliseconds,
                     }
                 };
@@ -158,24 +158,55 @@ namespace ElmFullstack.WebHost
 
             InterfaceToHost.TaskResult performProcessTask(InterfaceToHost.Task task)
             {
-                if (task?.CreateVolatileHost != null)
+                var createVolatileProcess =
+                    task?.CreateVolatileProcess ??
+                    (task?.CreateVolatileHost == null ? null :
+                    new InterfaceToHost.Task.CreateVolatileProcessStruct
+                    {
+                        programCode = task?.CreateVolatileHost.script
+                    });
+
+                var requestToVolatileProcess =
+                    task?.RequestToVolatileProcess ??
+                    (task?.RequestToVolatileHost == null ? null :
+                    new InterfaceToHost.Task.RequestToVolatileProcessStruct
+                    {
+                        processId = task?.RequestToVolatileHost.hostId,
+                        request = task?.RequestToVolatileHost.request,
+                    });
+
+                var terminateVolatileProcess =
+                    task?.TerminateVolatileProcess ??
+                    (task?.ReleaseVolatileHost == null ? null :
+                    new InterfaceToHost.Task.TerminateVolatileProcessStruct
+                    {
+                        processId = task?.ReleaseVolatileHost.hostId,
+                    });
+
+                if (createVolatileProcess != null)
                 {
                     try
                     {
-                        var volatileHost = new VolatileHost(getBlobWithSHA256, task?.CreateVolatileHost.script);
+                        var volatileProcess = new VolatileProcess(getBlobWithSHA256, createVolatileProcess.programCode);
 
-                        var volatileHostId = System.Threading.Interlocked.Increment(ref createVolatileHostAttempts).ToString();
+                        var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
 
-                        volatileHosts[volatileHostId] = volatileHost;
+                        volatileProcesses[volatileProcessId] = volatileProcess;
+
+                        var completeStructure = new InterfaceToHost.TaskResult.CreateVolatileProcessComplete
+                        {
+                            processId = volatileProcessId,
+                        };
 
                         return new InterfaceToHost.TaskResult
                         {
+                            CreateVolatileProcessResponse = new InterfaceToHost.Result<InterfaceToHost.TaskResult.CreateVolatileProcessErrorStructure, InterfaceToHost.TaskResult.CreateVolatileProcessComplete>
+                            {
+                                Ok = completeStructure,
+                            },
                             CreateVolatileHostResponse = new InterfaceToHost.Result<InterfaceToHost.TaskResult.CreateVolatileHostErrorStructure, InterfaceToHost.TaskResult.CreateVolatileHostComplete>
                             {
-                                Ok = new InterfaceToHost.TaskResult.CreateVolatileHostComplete
-                                {
-                                    hostId = volatileHostId,
-                                },
+                                Ok = new InterfaceToHost.TaskResult.CreateVolatileHostComplete(completeStructure),
                             },
                         };
                     }
@@ -194,9 +225,9 @@ namespace ElmFullstack.WebHost
                     }
                 }
 
-                if (task?.ReleaseVolatileHost != null)
+                if (terminateVolatileProcess != null)
                 {
-                    volatileHosts.TryRemove(task?.ReleaseVolatileHost.hostId, out var volatileHost);
+                    volatileProcesses.TryRemove(terminateVolatileProcess.processId, out var volatileHost);
 
                     return new InterfaceToHost.TaskResult
                     {
@@ -204,11 +235,17 @@ namespace ElmFullstack.WebHost
                     };
                 }
 
-                if (task?.RequestToVolatileHost != null)
+                if (requestToVolatileProcess != null)
                 {
+                    var response = performProcessTaskRequestToVolatileProcess(requestToVolatileProcess);
+
                     return new InterfaceToHost.TaskResult
                     {
-                        RequestToVolatileHostResponse = performProcessTaskRequestToVolatileHost(task?.RequestToVolatileHost),
+                        RequestToVolatileProcessResponse = response,
+                        RequestToVolatileHostResponse =
+                            response
+                            .mapErr(vproc => new InterfaceToHost.TaskResult.RequestToVolatileHostError(vproc))
+                            .map(vproc => new InterfaceToHost.TaskResult.RequestToVolatileHostComplete(vproc)),
                     };
                 }
 
@@ -279,13 +316,18 @@ namespace ElmFullstack.WebHost
                         throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
                     }
 
-                    if (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime != null)
+                    var notifyWhenPosixTimeHasArrived =
+                        structuredResponse.DecodeEventSuccess.notifyWhenPosixTimeHasArrived ??
+                        (structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime == null ? null :
+                        new InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStructure { minimumPosixTimeMilli = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime.posixTimeMilli });
+
+                    if (notifyWhenPosixTimeHasArrived != null)
                     {
                         System.Threading.Tasks.Task.Run(() =>
                             {
                                 lock (nextTimeToNotifyLock)
                                 {
-                                    nextTimeToNotify = structuredResponse.DecodeEventSuccess.notifyWhenArrivedAtTime;
+                                    nextTimeToNotify = notifyWhenPosixTimeHasArrived;
                                 }
                             });
                     }
@@ -339,7 +381,7 @@ namespace ElmFullstack.WebHost
 
                         var localNextTimeToNotify = nextTimeToNotify;
 
-                        if (localNextTimeToNotify != null && localNextTimeToNotify.posixTimeMilli <= getDateTimeOffset().ToUnixTimeMilliseconds())
+                        if (localNextTimeToNotify != null && localNextTimeToNotify.minimumPosixTimeMilli <= getDateTimeOffset().ToUnixTimeMilliseconds())
                         {
                             nextTimeToNotify = null;
                             processEventTimeHasArrived();

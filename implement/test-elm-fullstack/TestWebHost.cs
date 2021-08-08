@@ -1279,9 +1279,9 @@ namespace test_elm_fullstack
         }
 
         [TestMethod]
-        public void Volatile_host_from_local_blob()
+        public void Volatile_process_from_local_blob()
         {
-            var appSourceFiles = TestSetup.GetElmAppFromExampleName("volatile-host-from-local-blob");
+            var appSourceFiles = TestSetup.GetElmAppFromExampleName("volatile-process-from-local-blob");
 
             using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
             using var server = testSetup.StartWebHost();
