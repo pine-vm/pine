@@ -164,6 +164,7 @@ interfaceToHost_processEvent =
                                     CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
                                         sourceModules
                                         ( moduleFilePath, parsedModule )
+                                        |> Result.map Tuple.second
                                         |> Expect.equal expectedResult
                                 )
                             |> Result.Extra.unpack Expect.fail identity
