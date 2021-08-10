@@ -112,6 +112,7 @@ namespace ElmFullstack
                 .ToImmutableList();
 
             var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
+                compilerElmProgramCodeFiles: CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value,
                 sourceFiles: sourceFiles,
                 rootModuleName: rootModuleName,
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
@@ -246,6 +247,7 @@ namespace ElmFullstack
                 retainedSizeLimit);
 
         static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilerElmProgramCodeFiles,
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
@@ -297,7 +299,7 @@ namespace ElmFullstack
             {
                 prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                var jsEngine = jsEngineToCompileElmApp.Value;
+                var jsEngine = CachedJsEngineToCompileFileTree(compilerElmProgramCodeFiles);
 
                 prepareJsEngineStopwatch.Stop();
 
@@ -365,11 +367,27 @@ namespace ElmFullstack
 
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
-        static readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> jsEngineToCompileElmApp = new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(PrepareJsEngineToCompileElmApp);
-
-        static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToCompileElmApp()
+        static public JavaScriptEngineSwitcher.Core.IJsEngine CachedJsEngineToCompileFileTree(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilerElmProgramCodeFiles)
         {
-            var javascript = JavascriptToCompileElmApp.Value;
+            var compilerId =
+                CommonConversion.StringBase16FromByteArray(
+                    Composition.GetHash(
+                        Composition.FromTreeWithStringPath(
+                            Composition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles))));
+
+            return FileTreeCompilerJsEngineCache.GetOrAdd(
+                compilerId,
+                _ => CreateJsEngineToCompileFileTree(compilerElmProgramCodeFiles));
+        }
+
+        static readonly ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine> FileTreeCompilerJsEngineCache =
+            new ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine>();
+
+        static public JavaScriptEngineSwitcher.Core.IJsEngine CreateJsEngineToCompileFileTree(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilerElmProgramCodeFiles)
+        {
+            var javascript = BuildJavascriptToCompileFileTree(compilerElmProgramCodeFiles);
 
             var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
 
@@ -378,13 +396,11 @@ namespace ElmFullstack
             return javascriptEngine;
         }
 
-        static readonly Lazy<string> JavascriptToCompileElmApp = new Lazy<string>(BuildJavascriptToCompileElmApp);
-
-        static string BuildJavascriptToCompileElmApp()
+        static string BuildJavascriptToCompileFileTree(IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilerElmProgramCodeFiles)
         {
             var javascriptFromElmMake =
                 ProcessFromElm019Code.CompileElmToJavascript(
-                    CompileElmProgramAppCodeFiles(),
+                    compilerElmProgramCodeFiles,
                     ImmutableList.Create("src", "Main.elm"));
 
             var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
@@ -403,7 +419,10 @@ namespace ElmFullstack
                     listFunctionToPublish);
         }
 
-        static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> CompileElmProgramAppCodeFiles() =>
+        static public Lazy<IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
+            new Lazy<IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
+
+        static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
             ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
             .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.elm.json"))
