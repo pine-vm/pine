@@ -619,12 +619,95 @@ type alias DeserializedState =
     (""" ++ buildTypeAnnotationText stateTypeAnnotation ++ """)
 
 
+type alias DeserializedStateWithTaskFramework =
+    { stateLessFramework : DeserializedState
+    , nextTaskIndex : Int
+    , posixTimeMilli : Int
+    , createVolatileProcessTasks : Dict.Dict TaskId (CreateVolatileProcessResult -> DeserializedState -> ( DeserializedState, BackendCmds DeserializedState ))
+    , requestToVolatileProcessTasks : Dict.Dict TaskId (RequestToVolatileProcessResult -> DeserializedState -> ( DeserializedState, BackendCmds DeserializedState ))
+    , terminateVolatileProcessTasks : Dict.Dict TaskId ()
+    }
+
+
+initDeserializedStateWithTaskFramework : DeserializedState -> DeserializedStateWithTaskFramework
+initDeserializedStateWithTaskFramework stateLessFramework =
+    { stateLessFramework = stateLessFramework
+    , nextTaskIndex = 0
+    , posixTimeMilli = 0
+    , createVolatileProcessTasks = Dict.empty
+    , requestToVolatileProcessTasks = Dict.empty
+    , terminateVolatileProcessTasks = Dict.empty
+    }
+
+
+type ResponseOverSerialInterface
+    = DecodeEventError String
+    | DecodeEventSuccess BackendEventResponse
+
+
 type State
     = DeserializeFailed String
-    | DeserializeSuccessful DeserializedState
+    | DeserializeSuccessful DeserializedStateWithTaskFramework
 
 
-interfaceToHost_initState = """ ++ rootModuleNameBeforeLowering ++ """.backendMain.init |> DeserializeSuccessful
+type BackendEvent
+    = HttpRequestEvent ElmFullstack.HttpRequestEventStruct
+    | TaskCompleteEvent TaskCompleteEventStruct
+    | PosixTimeHasArrivedEvent { posixTimeMilli : Int }
+
+
+type alias BackendEventResponse =
+    { startTasks : List StartTaskStructure
+    , notifyWhenPosixTimeHasArrived : Maybe { minimumPosixTimeMilli : Int }
+    , completeHttpResponses : List RespondToHttpRequestStruct
+    }
+
+
+type alias TaskCompleteEventStruct =
+    { taskId : TaskId
+    , taskResult : TaskResultStructure
+    }
+
+
+type TaskResultStructure
+    = CreateVolatileProcessResponse (Result CreateVolatileProcessErrorStruct CreateVolatileProcessComplete)
+    | RequestToVolatileProcessResponse (Result RequestToVolatileProcessError RequestToVolatileProcessComplete)
+    | CompleteWithoutResult
+
+
+type alias StartTaskStructure =
+    { taskId : TaskId
+    , task : Task
+    }
+
+
+type Task
+    = CreateVolatileProcess CreateVolatileProcessLessUpdateStruct
+    | RequestToVolatileProcess RequestToVolatileProcessLessUpdateStruct
+    | TerminateVolatileProcess TerminateVolatileProcessStruct
+
+
+type alias CreateVolatileProcessLessUpdateStruct =
+    { programCode : String
+    }
+
+
+type alias RequestToVolatileProcessLessUpdateStruct =
+    { processId : String
+    , request : String
+    }
+
+
+type alias TaskId =
+    String
+
+
+interfaceToHost_initState =
+    """ ++ rootModuleNameBeforeLowering ++ """.backendMain.init
+        -- TODO: Expand the runtime to consider the tasks from init.
+        |> Tuple.first
+        |> initDeserializedStateWithTaskFramework
+        |> DeserializeSuccessful
 
 
 interfaceToHost_processEvent hostEvent stateBefore =
@@ -634,7 +717,7 @@ interfaceToHost_processEvent hostEvent stateBefore =
 
         DeserializeSuccessful deserializedState ->
             deserializedState
-                |> wrapForSerialInterface_processEvent """ ++ rootModuleNameBeforeLowering ++ """.backendMain.update hostEvent
+                |> wrapForSerialInterface_processEvent Backend.Main.backendMain.subscriptions hostEvent
                 |> Tuple.mapFirst DeserializeSuccessful
 
 
@@ -653,7 +736,11 @@ main =
         { init = \\_ -> ( interfaceToHost_initState, Cmd.none )
         , update =
             \\event stateBefore ->
-                interfaceToHost_processEvent event (stateBefore |> interfaceToHost_serializeState |> interfaceToHost_deserializeState) |> Tuple.mapSecond (always Cmd.none)
+                { a = interfaceToHost_processEvent
+                , b = interfaceToHost_serializeState
+                , c = interfaceToHost_deserializeState
+                }
+                    |> always ( stateBefore, Cmd.none )
         , subscriptions = \\_ -> Sub.none
         }
 
@@ -681,10 +768,14 @@ jsonEncodeState : State -> Json.Encode.Value
 jsonEncodeState state =
     case state of
         DeserializeFailed error ->
-            [ ( "Interface_DeserializeFailed", [ ( "error", error |> Json.Encode.string ) ] |> Json.Encode.object ) ] |> Json.Encode.object
+            [ ( "Interface_DeserializeFailed"
+              , [ ( "error", error |> Json.Encode.string ) ] |> Json.Encode.object
+              )
+            ]
+                |> Json.Encode.object
 
         DeserializeSuccessful deserializedState ->
-            deserializedState |> jsonEncodeDeserializedState
+            deserializedState.stateLessFramework |> jsonEncodeDeserializedState
 
 
 deserializeState : String -> State
@@ -699,13 +790,19 @@ jsonDecodeState : Json.Decode.Decoder State
 jsonDecodeState =
     Json.Decode.oneOf
         [ Json.Decode.field "Interface_DeserializeFailed" (Json.Decode.field "error" Json.Decode.string |> Json.Decode.map DeserializeFailed)
-        , jsonDecodeDeserializedState |> Json.Decode.map DeserializeSuccessful
+        , jsonDecodeDeserializedState |> Json.Decode.map (initDeserializedStateWithTaskFramework >> DeserializeSuccessful)
         ]
+
 
 ----
 
-wrapForSerialInterface_processEvent : (BackendEvent -> state -> ( state, BackendEventResponse )) -> String -> state -> ( state, String )
-wrapForSerialInterface_processEvent update serializedEvent stateBefore =
+
+wrapForSerialInterface_processEvent :
+    (DeserializedState -> BackendSubs DeserializedState)
+    -> String
+    -> DeserializedStateWithTaskFramework
+    -> ( DeserializedStateWithTaskFramework, String )
+wrapForSerialInterface_processEvent subscriptions serializedEvent stateBefore =
     let
         ( state, response ) =
             case serializedEvent |> Json.Decode.decodeString decodeBackendEvent of
@@ -717,10 +814,280 @@ wrapForSerialInterface_processEvent update serializedEvent stateBefore =
 
                 Ok hostEvent ->
                     stateBefore
-                        |> update hostEvent
+                        |> processEvent subscriptions hostEvent
                         |> Tuple.mapSecond DecodeEventSuccess
     in
     ( state, response |> encodeResponseOverSerialInterface |> Json.Encode.encode 0 )
+
+
+processEvent :
+    (DeserializedState -> BackendSubs DeserializedState)
+    -> BackendEvent
+    -> DeserializedStateWithTaskFramework
+    -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
+processEvent subscriptions hostEvent stateBefore =
+    let
+        maybeEventPosixTimeMilli =
+            case hostEvent of
+                HttpRequestEvent httpRequestEvent ->
+                    Just httpRequestEvent.posixTimeMilli
+
+                PosixTimeHasArrivedEvent posixTimeHasArrivedEvent ->
+                    Just posixTimeHasArrivedEvent.posixTimeMilli
+
+                _ ->
+                    Nothing
+
+        state =
+            case maybeEventPosixTimeMilli of
+                Nothing ->
+                    stateBefore
+
+                Just eventPosixTimeMilli ->
+                    { stateBefore | posixTimeMilli = max stateBefore.posixTimeMilli eventPosixTimeMilli }
+    in
+    processEventLessRememberTime subscriptions hostEvent state
+
+
+processEventLessRememberTime :
+    (DeserializedState -> BackendSubs DeserializedState)
+    -> BackendEvent
+    -> DeserializedStateWithTaskFramework
+    -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
+processEventLessRememberTime subscriptions hostEvent stateBefore =
+    let
+        discardEvent =
+            ( stateBefore
+            , { startTasks = []
+              , notifyWhenPosixTimeHasArrived = Nothing
+              , completeHttpResponses = []
+              }
+            )
+
+        continueWithUpdateToTasks updateToTasks stateBeforeUpdateToTasks =
+            let
+                ( stateLessFramework, runtimeTasks ) =
+                    updateToTasks stateBeforeUpdateToTasks.stateLessFramework
+            in
+            backendEventResponseFromRuntimeTasksAndSubscriptions
+                subscriptions
+                runtimeTasks
+                { stateBeforeUpdateToTasks | stateLessFramework = stateLessFramework }
+    in
+    case hostEvent of
+        HttpRequestEvent httpRequestEvent ->
+            continueWithUpdateToTasks
+                ((subscriptions stateBefore.stateLessFramework).httpRequest httpRequestEvent)
+                stateBefore
+
+        PosixTimeHasArrivedEvent posixTimeHasArrivedEvent ->
+            case (subscriptions stateBefore.stateLessFramework).posixTimeIsPast of
+                Nothing ->
+                    discardEvent
+
+                Just posixTimeIsPastSub ->
+                    if posixTimeHasArrivedEvent.posixTimeMilli < posixTimeIsPastSub.minimumPosixTimeMilli then
+                        discardEvent
+
+                    else
+                        continueWithUpdateToTasks
+                            (posixTimeIsPastSub.update { currentPosixTimeMilli = posixTimeHasArrivedEvent.posixTimeMilli })
+                            stateBefore
+
+        TaskCompleteEvent taskCompleteEvent ->
+            case taskCompleteEvent.taskResult of
+                CreateVolatileProcessResponse createVolatileProcessResponse ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.createVolatileProcessTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry createVolatileProcessResponse)
+                                { stateBefore
+                                    | createVolatileProcessTasks =
+                                        stateBefore.createVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                                }
+
+                RequestToVolatileProcessResponse requestToVolatileProcessResponse ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.requestToVolatileProcessTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry requestToVolatileProcessResponse)
+                                { stateBefore
+                                    | requestToVolatileProcessTasks =
+                                        stateBefore.requestToVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                                }
+
+                CompleteWithoutResult ->
+                    ( { stateBefore
+                        | terminateVolatileProcessTasks =
+                            stateBefore.terminateVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                      }
+                    , { startTasks = []
+                      , notifyWhenPosixTimeHasArrived = Nothing
+                      , completeHttpResponses = []
+                      }
+                    )
+
+
+backendEventResponseFromRuntimeTasksAndSubscriptions :
+    (DeserializedState -> BackendSubs DeserializedState)
+    -> List (BackendCmd DeserializedState)
+    -> DeserializedStateWithTaskFramework
+    -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
+backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBefore =
+    let
+        subscriptionsForState =
+            subscriptions stateBefore.stateLessFramework
+    in
+    tasks
+        |> List.foldl
+            (\\task ( previousState, previousResponse ) ->
+                let
+                    ( newState, newResponse ) =
+                        backendEventResponseFromRuntimeTask task previousState
+                in
+                ( newState, newResponse :: previousResponse )
+            )
+            ( stateBefore
+            , [ { startTasks = []
+                , completeHttpResponses = []
+                , notifyWhenPosixTimeHasArrived =
+                    subscriptionsForState.posixTimeIsPast
+                        |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
+                }
+              ]
+            )
+        |> Tuple.mapSecond concatBackendEventResponse
+
+
+backendEventResponseFromRuntimeTask :
+    BackendCmd DeserializedState
+    -> DeserializedStateWithTaskFramework
+    -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
+backendEventResponseFromRuntimeTask task stateBefore =
+    let
+        createTaskId stateBeforeCreateTaskId =
+            let
+                taskId =
+                    String.join "-"
+                        [ String.fromInt stateBeforeCreateTaskId.posixTimeMilli
+                        , String.fromInt stateBeforeCreateTaskId.nextTaskIndex
+                        ]
+            in
+            ( { stateBeforeCreateTaskId
+                | nextTaskIndex = stateBeforeCreateTaskId.nextTaskIndex + 1
+              }
+            , taskId
+            )
+    in
+    case task of
+        RespondToHttpRequest respondToHttpRequest ->
+            ( stateBefore
+            , passiveBackendEventResponse
+                |> withCompleteHttpResponsesAdded [ respondToHttpRequest ]
+            )
+
+        ElmFullstack.CreateVolatileProcess createVolatileProcess ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | createVolatileProcessTasks =
+                    stateAfterCreateTaskId.createVolatileProcessTasks
+                        |> Dict.insert taskId createVolatileProcess.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = CreateVolatileProcess { programCode = createVolatileProcess.programCode }
+                      }
+                    ]
+            )
+
+        ElmFullstack.RequestToVolatileProcess requestToVolatileProcess ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | requestToVolatileProcessTasks =
+                    stateAfterCreateTaskId.requestToVolatileProcessTasks
+                        |> Dict.insert taskId requestToVolatileProcess.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task =
+                            RequestToVolatileProcess
+                                { processId = requestToVolatileProcess.processId
+                                , request = requestToVolatileProcess.request
+                                }
+                      }
+                    ]
+            )
+
+        ElmFullstack.TerminateVolatileProcess terminateVolatileProcess ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | terminateVolatileProcessTasks =
+                    stateAfterCreateTaskId.terminateVolatileProcessTasks |> Dict.insert taskId ()
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = TerminateVolatileProcess terminateVolatileProcess
+                      }
+                    ]
+            )
+
+
+concatBackendEventResponse : List BackendEventResponse -> BackendEventResponse
+concatBackendEventResponse responses =
+    let
+        notifyWhenPosixTimeHasArrived =
+            responses
+                |> List.filterMap .notifyWhenPosixTimeHasArrived
+                |> List.map .minimumPosixTimeMilli
+                |> List.minimum
+                |> Maybe.map (\\posixTimeMilli -> { minimumPosixTimeMilli = posixTimeMilli })
+
+        startTasks =
+            responses |> List.concatMap .startTasks
+
+        completeHttpResponses =
+            responses |> List.concatMap .completeHttpResponses
+    in
+    { notifyWhenPosixTimeHasArrived = notifyWhenPosixTimeHasArrived
+    , startTasks = startTasks
+    , completeHttpResponses = completeHttpResponses
+    }
+
+
+passiveBackendEventResponse : BackendEventResponse
+passiveBackendEventResponse =
+    { startTasks = []
+    , completeHttpResponses = []
+    , notifyWhenPosixTimeHasArrived = Nothing
+    }
+
+
+withStartTasksAdded : List StartTaskStructure -> BackendEventResponse -> BackendEventResponse
+withStartTasksAdded startTasksToAdd responseBefore =
+    { responseBefore | startTasks = responseBefore.startTasks ++ startTasksToAdd }
+
+
+withCompleteHttpResponsesAdded : List RespondToHttpRequestStruct -> BackendEventResponse -> BackendEventResponse
+withCompleteHttpResponsesAdded httpResponsesToAdd responseBefore =
+    { responseBefore | completeHttpResponses = responseBefore.completeHttpResponses ++ httpResponsesToAdd }
 
 
 decodeBackendEvent : Json.Decode.Decoder BackendEvent
@@ -731,13 +1098,13 @@ decodeBackendEvent =
         , Json.Decode.field "PosixTimeHasArrivedEvent" (Json.Decode.field "posixTimeMilli" Json.Decode.int)
             |> Json.Decode.map (\\posixTimeMilli -> PosixTimeHasArrivedEvent { posixTimeMilli = posixTimeMilli })
         , Json.Decode.field "TaskCompleteEvent" decodeTaskCompleteEventStructure |> Json.Decode.map TaskCompleteEvent
-        , Json.Decode.field "HttpRequestEvent" decodeHttpRequestEventStructure |> Json.Decode.map HttpRequestEvent
+        , Json.Decode.field "HttpRequestEvent" decodeHttpRequestEventStruct |> Json.Decode.map HttpRequestEvent
         ]
 
 
-decodeTaskCompleteEventStructure : Json.Decode.Decoder TaskCompleteEventStructure
+decodeTaskCompleteEventStructure : Json.Decode.Decoder TaskCompleteEventStruct
 decodeTaskCompleteEventStructure =
-    Json.Decode.map2 TaskCompleteEventStructure
+    Json.Decode.map2 TaskCompleteEventStruct
         (Json.Decode.field "taskId" Json.Decode.string)
         (Json.Decode.field "taskResult" decodeTaskResult)
 
@@ -780,9 +1147,9 @@ decodeRequestToVolatileProcessError =
         ]
 
 
-decodeHttpRequestEventStructure : Json.Decode.Decoder HttpRequestEventStructure
-decodeHttpRequestEventStructure =
-    Json.Decode.map4 HttpRequestEventStructure
+decodeHttpRequestEventStruct : Json.Decode.Decoder HttpRequestEventStruct
+decodeHttpRequestEventStruct =
+    Json.Decode.map4 HttpRequestEventStruct
         (Json.Decode.field "httpRequestId" Json.Decode.string)
         (Json.Decode.field "posixTimeMilli" Json.Decode.int)
         (Json.Decode.field "requestContext" decodeHttpRequestContext)
@@ -809,23 +1176,6 @@ decodeHttpHeader =
     Json.Decode.map2 HttpHeader
         (Json.Decode.field "name" Json.Decode.string)
         (Json.Decode.field "values" (Json.Decode.list Json.Decode.string))
-
-
-decodeOptionalField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
-decodeOptionalField fieldName decoder =
-    let
-        finishDecoding json =
-            case Json.Decode.decodeValue (Json.Decode.field fieldName Json.Decode.value) json of
-                Ok _ ->
-                    -- The field is present, so run the decoder on it.
-                    Json.Decode.map Just (Json.Decode.field fieldName decoder)
-
-                Err _ ->
-                    -- The field was missing, which is fine!
-                    Json.Decode.succeed Nothing
-    in
-    Json.Decode.value
-        |> Json.Decode.andThen finishDecoding
 
 
 encodeResponseOverSerialInterface : ResponseOverSerialInterface -> Json.Encode.Value
@@ -896,7 +1246,7 @@ encodeTask task =
                 ]
 
 
-encodeHttpResponseRequest : HttpResponseRequest -> Json.Encode.Value
+encodeHttpResponseRequest : RespondToHttpRequestStruct -> Json.Encode.Value
 encodeHttpResponseRequest httpResponseRequest =
     Json.Encode.object
         [ ( "httpRequestId", httpResponseRequest.httpRequestId |> Json.Encode.string )
@@ -921,6 +1271,8 @@ encodeHttpHeader httpHeader =
         |> Json.Encode.object
 
 
+""" ++ encodeFunction ++ "\n\n" ++ decodeFunction ++ """
+
 decodeResult : Json.Decode.Decoder error -> Json.Decode.Decoder ok -> Json.Decode.Decoder (Result error ok)
 decodeResult errorDecoder okDecoder =
     Json.Decode.oneOf
@@ -941,7 +1293,23 @@ jsonDecodeSucceedWhenNotNull valueIfNotNull =
                     Json.Decode.succeed valueIfNotNull
             )
 
-""" ++ encodeFunction ++ "\n\n" ++ decodeFunction
+
+decodeOptionalField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
+decodeOptionalField fieldName decoder =
+    let
+        finishDecoding json =
+            case Json.Decode.decodeValue (Json.Decode.field fieldName Json.Decode.value) json of
+                Ok _ ->
+                    -- The field is present, so run the decoder on it.
+                    Json.Decode.map Just (Json.Decode.field fieldName decoder)
+
+                Err _ ->
+                    -- The field was missing, which is fine!
+                    Json.Decode.succeed Nothing
+    in
+    Json.Decode.value
+        |> Json.Decode.andThen finishDecoding
+"""
 
 
 composeAppRootElmModuleText_Before_2021_08 :

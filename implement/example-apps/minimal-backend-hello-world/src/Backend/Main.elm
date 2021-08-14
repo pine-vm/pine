@@ -12,39 +12,37 @@ type alias State =
     ()
 
 
-backendMain : ElmFullstack.BackendConfiguration ()
+backendMain : ElmFullstack.BackendConfig ()
 backendMain =
-    { init = ()
-    , update = processEvent
+    { init = ( (), [] )
+    , subscriptions = subscriptions
     }
 
 
-processEvent : ElmFullstack.BackendEvent -> State -> ( State, ElmFullstack.BackendEventResponse )
-processEvent hostEvent stateBefore =
-    case hostEvent of
-        ElmFullstack.HttpRequestEvent httpRequestEvent ->
-            let
-                httpResponse =
-                    { statusCode = 200
-                    , bodyAsBase64 =
-                        "Hello, World!"
-                            |> Bytes.Encode.string
-                            |> Bytes.Encode.encode
-                            |> Base64.fromBytes
-                    , headersToAdd = []
-                    }
-            in
-            ( stateBefore
-            , ElmFullstack.passiveBackendEventResponse
-                |> ElmFullstack.withCompleteHttpResponsesAdded
-                    [ { httpRequestId = httpRequestEvent.httpRequestId
-                      , response = httpResponse
-                      }
-                    ]
-            )
+subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions _ =
+    { httpRequest = updateForHttpRequestEvent
+    , posixTimeIsPast = Nothing
+    }
 
-        ElmFullstack.TaskCompleteEvent _ ->
-            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
 
-        ElmFullstack.PosixTimeHasArrivedEvent _ ->
-            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
+updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent event state =
+    let
+        httpResponse =
+            { statusCode = 200
+            , bodyAsBase64 =
+                "Hello, World!"
+                    |> Bytes.Encode.string
+                    |> Bytes.Encode.encode
+                    |> Base64.fromBytes
+            , headersToAdd = []
+            }
+    in
+    ( state
+    , [ ElmFullstack.RespondToHttpRequest
+            { httpRequestId = event.httpRequestId
+            , response = httpResponse
+            }
+      ]
+    )

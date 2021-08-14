@@ -1,84 +1,94 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
+    , backendMain
     )
 
-import Backend.InterfaceToHost as InterfaceToHost
 import Base64
 import Bytes
 import Bytes.Encode
+import ElmFullstack
 
 
 type alias State =
     { posixTimeMilli : Int
-    , httpRequestsToRespondTo : List InterfaceToHost.HttpRequestEventStructure
+    , httpRequestsToRespondTo : List ElmFullstack.HttpRequestEventStruct
     }
 
 
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEvent hostEvent stateBefore =
-    case hostEvent of
-        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
-            let
-                state =
-                    { stateBefore
-                        | posixTimeMilli = httpRequestEvent.posixTimeMilli
-                        , httpRequestsToRespondTo = httpRequestEvent :: stateBefore.httpRequestsToRespondTo
-                    }
-            in
-            state |> updateForHttpResponses
-
-        InterfaceToHost.TaskCompleteEvent _ ->
-            stateBefore |> updateForHttpResponses
-
-        InterfaceToHost.ArrivedAtTimeEvent { posixTimeMilli } ->
-            { stateBefore | posixTimeMilli = posixTimeMilli } |> updateForHttpResponses
+backendMain : ElmFullstack.BackendConfig State
+backendMain =
+    { init = ( initState, [] )
+    , subscriptions = subscriptions
+    }
 
 
-updateForHttpResponses : State -> ( State, InterfaceToHost.AppEventResponse )
-updateForHttpResponses state =
+subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions state =
     let
-        httpRequestsWithCompletionTimes =
-            state.httpRequestsToRespondTo
-                |> List.map (\requestEvent -> ( requestEvent, completionTimeForHttpRequest requestEvent ))
-
         nextCompletionPosixTimeMilli =
-            httpRequestsWithCompletionTimes
+            state
+                |> getHttpRequestsWithCompletionTimes
                 |> List.map (Tuple.second >> .completionPosixTimeMilli)
                 |> List.minimum
-
-        completeHttpRequestsTasks =
-            httpRequestsWithCompletionTimes
-                |> List.filter (\( _, { completionPosixTimeMilli } ) -> completionPosixTimeMilli <= state.posixTimeMilli)
-                |> List.map Tuple.first
-                |> List.map
-                    (\requestEvent ->
-                        let
-                            ageInMilliseconds =
-                                state.posixTimeMilli - requestEvent.posixTimeMilli
-                        in
-                        { httpRequestId = requestEvent.httpRequestId
-                        , response =
-                            { statusCode = 200
-                            , bodyAsBase64 =
-                                ("Completed in " ++ (ageInMilliseconds |> String.fromInt) ++ " milliseconds.")
-                                    |> encodeStringToBytes
-                                    |> Base64.fromBytes
-                            , headersToAdd = []
-                            }
-                        }
-                    )
     in
+    { httpRequest = updateForHttpRequestEvent
+    , posixTimeIsPast =
+        Just
+            { minimumPosixTimeMilli = nextCompletionPosixTimeMilli |> Maybe.withDefault (state.posixTimeMilli + 1000)
+            , update =
+                \{ currentPosixTimeMilli } stateBefore ->
+                    { stateBefore | posixTimeMilli = currentPosixTimeMilli } |> updateForHttpResponses
+            }
+    }
+
+
+updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent httpRequestEvent stateBefore =
+    let
+        state =
+            { stateBefore
+                | posixTimeMilli = httpRequestEvent.posixTimeMilli
+                , httpRequestsToRespondTo = httpRequestEvent :: stateBefore.httpRequestsToRespondTo
+            }
+    in
+    state |> updateForHttpResponses
+
+
+updateForHttpResponses : State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpResponses state =
     ( state
-    , { completeHttpResponses = completeHttpRequestsTasks
-      , notifyWhenArrivedAtTime = Just { posixTimeMilli = nextCompletionPosixTimeMilli |> Maybe.withDefault (state.posixTimeMilli + 1000) }
-      , startTasks = []
-      }
+    , state
+        |> getHttpRequestsWithCompletionTimes
+        |> List.filter (\( _, { completionPosixTimeMilli } ) -> completionPosixTimeMilli <= state.posixTimeMilli)
+        |> List.map Tuple.first
+        |> List.map
+            (\requestEvent ->
+                let
+                    ageInMilliseconds =
+                        state.posixTimeMilli - requestEvent.posixTimeMilli
+                in
+                { httpRequestId = requestEvent.httpRequestId
+                , response =
+                    { statusCode = 200
+                    , bodyAsBase64 =
+                        ("Completed in " ++ (ageInMilliseconds |> String.fromInt) ++ " milliseconds.")
+                            |> encodeStringToBytes
+                            |> Base64.fromBytes
+                    , headersToAdd = []
+                    }
+                }
+            )
+        |> List.map ElmFullstack.RespondToHttpRequest
     )
 
 
-completionTimeForHttpRequest : InterfaceToHost.HttpRequestEventStructure -> { completionPosixTimeMilli : Int }
+getHttpRequestsWithCompletionTimes : State -> List ( ElmFullstack.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
+getHttpRequestsWithCompletionTimes state =
+    state.httpRequestsToRespondTo
+        |> List.map (\requestEvent -> ( requestEvent, completionTimeForHttpRequest requestEvent ))
+
+
+completionTimeForHttpRequest : ElmFullstack.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
 completionTimeForHttpRequest httpRequest =
     let
         delayMilliseconds =
@@ -97,11 +107,6 @@ encodeStringToBytes =
     Bytes.Encode.string >> Bytes.Encode.encode
 
 
-interfaceToHost_initState : State
-interfaceToHost_initState =
+initState : State
+initState =
     { posixTimeMilli = 0, httpRequestsToRespondTo = [] }
-
-
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent

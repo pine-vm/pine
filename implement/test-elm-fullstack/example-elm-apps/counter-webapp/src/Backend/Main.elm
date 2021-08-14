@@ -19,58 +19,56 @@ type alias CounterEvent =
     { addition : Int }
 
 
-backendMain : ElmFullstack.BackendConfiguration State
+backendMain : ElmFullstack.BackendConfig State
 backendMain =
-    { init = 0
-    , update = processEvent
+    { init = ( 0, [] )
+    , subscriptions = subscriptions
     }
 
 
-processEvent : ElmFullstack.BackendEvent -> State -> ( State, ElmFullstack.BackendEventResponse )
-processEvent hostEvent stateBefore =
-    case hostEvent of
-        ElmFullstack.HttpRequestEvent httpRequestEvent ->
-            let
-                ( state, result ) =
-                    case
-                        httpRequestEvent.request.bodyAsBase64
-                            |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
-                            |> Maybe.withDefault "Missing HTTP body"
-                            |> deserializeCounterEvent
-                    of
-                        Err error ->
-                            ( stateBefore, Err ("Failed to deserialize counter event from HTTP Request content: " ++ error) )
+subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions _ =
+    { httpRequest = updateForHttpRequestEvent
+    , posixTimeIsPast = Nothing
+    }
 
-                        Ok counterEvent ->
-                            stateBefore |> processCounterEvent counterEvent |> Tuple.mapSecond Ok
 
-                ( httpResponseCode, httpResponseBodyString ) =
-                    case result of
-                        Err error ->
-                            ( 400, error )
+updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent httpRequestEvent stateBefore =
+    let
+        ( state, result ) =
+            case
+                httpRequestEvent.request.bodyAsBase64
+                    |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
+                    |> Maybe.withDefault "Missing HTTP body"
+                    |> deserializeCounterEvent
+            of
+                Err error ->
+                    ( stateBefore, Err ("Failed to deserialize counter event from HTTP Request content: " ++ error) )
 
-                        Ok message ->
-                            ( 200, message )
+                Ok counterEvent ->
+                    stateBefore |> processCounterEvent counterEvent |> Tuple.mapSecond Ok
 
-                httpResponse =
-                    { httpRequestId = httpRequestEvent.httpRequestId
-                    , response =
-                        { statusCode = httpResponseCode
-                        , bodyAsBase64 = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
-                        , headersToAdd = []
-                        }
-                    }
-            in
-            ( state
-            , ElmFullstack.passiveBackendEventResponse
-                |> ElmFullstack.withCompleteHttpResponsesAdded [ httpResponse ]
-            )
+        ( httpResponseCode, httpResponseBodyString ) =
+            case result of
+                Err error ->
+                    ( 400, error )
 
-        ElmFullstack.TaskCompleteEvent _ ->
-            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
+                Ok message ->
+                    ( 200, message )
 
-        ElmFullstack.PosixTimeHasArrivedEvent _ ->
-            ( stateBefore, ElmFullstack.passiveBackendEventResponse )
+        httpResponse =
+            { httpRequestId = httpRequestEvent.httpRequestId
+            , response =
+                { statusCode = httpResponseCode
+                , bodyAsBase64 = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
+                , headersToAdd = []
+                }
+            }
+    in
+    ( state
+    , [ ElmFullstack.RespondToHttpRequest httpResponse ]
+    )
 
 
 processCounterEvent : CounterEvent -> State -> ( State, String )
