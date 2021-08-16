@@ -27,7 +27,7 @@ subscriptions _ =
 
 
 updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
-updateForHttpRequestEvent event state =
+updateForHttpRequestEvent httpRequestEvent state =
     let
         httpResponse =
             { statusCode = 200
@@ -41,7 +41,7 @@ updateForHttpRequestEvent event state =
     in
     ( state
     , [ ElmFullstack.RespondToHttpRequest
-            { httpRequestId = event.httpRequestId
+            { httpRequestId = httpRequestEvent.httpRequestId
             , response = httpResponse
             }
       ]

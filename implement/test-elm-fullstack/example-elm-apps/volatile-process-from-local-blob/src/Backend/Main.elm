@@ -30,10 +30,10 @@ subscriptions _ =
 
 
 updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
-updateForHttpRequestEvent event stateBefore =
+updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
-            { stateBefore | pendingHttpRequest = Just event }
+            { stateBefore | pendingHttpRequest = Just httpRequestEvent }
     in
     ( state, state |> volatileProcessCmdsFromState )
 

@@ -1,11 +1,8 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
-    , processEvent
+    , backendMain
     )
 
-import Backend.InterfaceToHost as InterfaceToHost
 import Base64
 import Bytes
 import Bytes.Decode
@@ -15,6 +12,7 @@ import CompilationInterface.GenerateJsonCoders as GenerateJsonCoders
 import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
+import ElmFullstack
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
@@ -53,37 +51,31 @@ type alias UserProfile =
     }
 
 
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
+backendMain : ElmFullstack.BackendConfig State
+backendMain =
+    { init = ( initState, [] )
+    , subscriptions = subscriptions
+    }
 
 
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEvent hostEvent stateBefore =
-    let
-        ( stateBeforeProcessPendingHttpRequests, responseBeforeHttpResponses ) =
-            processEventWithoutPendingHttpRequests hostEvent stateBefore
+subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions state =
+    { httpRequest = updateForHttpRequestEvent
+    , posixTimeIsPast =
+        if Dict.isEmpty state.pendingHttpRequests then
+            Nothing
 
-        ( state, httpResponses ) =
-            processPendingHttpRequests stateBeforeProcessPendingHttpRequests
-
-        notifyWhenArrivedAtTime =
-            if Dict.isEmpty state.pendingHttpRequests then
-                Nothing
-
-            else
-                Just { posixTimeMilli = state.posixTimeMilli + 1000 }
-
-        response =
-            { responseBeforeHttpResponses | notifyWhenArrivedAtTime = notifyWhenArrivedAtTime }
-                |> InterfaceToHost.withCompleteHttpResponsesAdded httpResponses
-    in
-    ( state
-    , response
-    )
+        else
+            Just
+                { minimumPosixTimeMilli = state.posixTimeMilli + 1000
+                , update =
+                    \{ currentPosixTimeMilli } stateBefore ->
+                        processPendingHttpRequests { stateBefore | posixTimeMilli = currentPosixTimeMilli }
+                }
+    }
 
 
-processPendingHttpRequests : State -> ( State, List InterfaceToHost.HttpResponseRequest )
+processPendingHttpRequests : State -> ( State, ElmFullstack.BackendCmds State )
 processPendingHttpRequests stateBefore =
     let
         ( state, httpResponses ) =
@@ -143,48 +135,46 @@ processPendingHttpRequests stateBefore =
                 |> List.foldl Dict.remove stateBefore.pendingHttpRequests
     in
     ( { state | pendingHttpRequests = pendingHttpRequests }
-    , httpResponses
+    , List.map ElmFullstack.RespondToHttpRequest httpResponses
     )
 
 
-processEventWithoutPendingHttpRequests : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEventWithoutPendingHttpRequests hostEvent stateBefore =
-    case hostEvent of
-        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
-            processEventHttpRequest httpRequestEvent
-                { stateBefore | posixTimeMilli = httpRequestEvent.posixTimeMilli }
-
-        InterfaceToHost.TaskCompleteEvent _ ->
-            ( stateBefore, InterfaceToHost.passiveAppEventResponse )
-
-        InterfaceToHost.ArrivedAtTimeEvent { posixTimeMilli } ->
-            ( { stateBefore | posixTimeMilli = posixTimeMilli }
-            , InterfaceToHost.passiveAppEventResponse
-            )
-
-
-processEventHttpRequest : InterfaceToHost.HttpRequestEventStructure -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEventHttpRequest httpRequestEvent stateBefore =
+updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
+        ( ( state, pendingHttpRequestsCmds ), directCmds ) =
+            updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
+                |> Tuple.mapFirst processPendingHttpRequests
+    in
+    ( state
+    , directCmds ++ pendingHttpRequestsCmds
+    )
+
+
+updateForHttpRequestEventWithoutPendingHttpRequests : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBeforeUpdatingTime =
+    let
+        stateBefore =
+            { stateBeforeUpdatingTime | posixTimeMilli = httpRequestEvent.posixTimeMilli }
+
         respondWithFrontendHtmlDocument { enableInspector } =
             ( stateBefore
-            , InterfaceToHost.passiveAppEventResponse
-                |> InterfaceToHost.withCompleteHttpResponsesAdded
-                    [ { httpRequestId = httpRequestEvent.httpRequestId
-                      , response =
-                            { statusCode = 200
-                            , bodyAsBase64 =
-                                Just
-                                    (if enableInspector then
-                                        CompilationInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
+            , [ ElmFullstack.RespondToHttpRequest
+                    { httpRequestId = httpRequestEvent.httpRequestId
+                    , response =
+                        { statusCode = 200
+                        , bodyAsBase64 =
+                            Just
+                                (if enableInspector then
+                                    CompilationInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
 
-                                     else
-                                        CompilationInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
-                                    )
-                            , headersToAdd = []
-                            }
-                      }
-                    ]
+                                 else
+                                    CompilationInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
+                                )
+                        , headersToAdd = []
+                        }
+                    }
+              ]
             )
     in
     case
@@ -220,8 +210,7 @@ processEventHttpRequest httpRequestEvent stateBefore =
                             }
                     in
                     ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded [ httpResponse ]
+                    , [ ElmFullstack.RespondToHttpRequest httpResponse ]
                     )
 
                 Ok requestFromUser ->
@@ -257,7 +246,7 @@ processEventHttpRequest httpRequestEvent stateBefore =
                                     , requestFromUser = requestFromUser
                                     }
                       }
-                    , InterfaceToHost.passiveAppEventResponse
+                    , []
                     )
 
         Just (FrontendBackendInterface.StaticContentRoute contentName) ->
@@ -280,12 +269,11 @@ processEventHttpRequest httpRequestEvent stateBefore =
                             }
             in
             ( stateBefore
-            , InterfaceToHost.passiveAppEventResponse
-                |> InterfaceToHost.withCompleteHttpResponsesAdded
-                    [ { httpRequestId = httpRequestEvent.httpRequestId
-                      , response = httpResponse
-                      }
-                    ]
+            , [ ElmFullstack.RespondToHttpRequest
+                    { httpRequestId = httpRequestEvent.httpRequestId
+                    , response = httpResponse
+                    }
+              ]
             )
 
 
@@ -420,7 +408,7 @@ initUserProfile =
     { chosenName = "" }
 
 
-userSessionIdAndStateFromRequestOrCreateNew : InterfaceToHost.HttpRequestProperties -> State -> ( String, UserSessionState )
+userSessionIdAndStateFromRequestOrCreateNew : ElmFullstack.HttpRequestProperties -> State -> ( String, UserSessionState )
 userSessionIdAndStateFromRequestOrCreateNew httpRequest state =
     state |> getFirstMatchingUserSessionOrCreateNew (getSessionIdsFromHttpRequest httpRequest)
 
@@ -449,7 +437,7 @@ getFirstMatchingUserSessionOrCreateNew sessionIds state =
         |> Maybe.withDefault (state |> getNextUserSessionIdAndState)
 
 
-getSessionIdsFromHttpRequest : InterfaceToHost.HttpRequestProperties -> List String
+getSessionIdsFromHttpRequest : ElmFullstack.HttpRequestProperties -> List String
 getSessionIdsFromHttpRequest httpRequest =
     let
         cookies =
@@ -553,7 +541,7 @@ encodeStringToBytes =
     Bytes.Encode.string >> Bytes.Encode.encode
 
 
-addCookieUserSessionId : String -> InterfaceToHost.HttpResponse -> InterfaceToHost.HttpResponse
+addCookieUserSessionId : String -> ElmFullstack.HttpResponse -> ElmFullstack.HttpResponse
 addCookieUserSessionId userSessionId httpResponse =
     let
         cookieHeader =
@@ -567,8 +555,8 @@ httpSessionIdCookieName =
     "sessionid"
 
 
-interfaceToHost_initState : State
-interfaceToHost_initState =
+initState : State
+initState =
     { posixTimeMilli = 0
     , conversationHistory = []
     , usersProfiles = Dict.empty

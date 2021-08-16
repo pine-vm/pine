@@ -7,16 +7,16 @@ module Backend.State exposing
     , valueForOpaqueCustomType
     )
 
-import Backend.InterfaceToHost as InterfaceToHost
 import Bytes
 import Dict
+import ElmFullstack
 import ListDict
 import Set
 
 
 type alias State =
     { httpRequestsCount : Int
-    , lastHttpRequests : List InterfaceToHost.HttpRequestEventStructure
+    , lastHttpRequests : List ElmFullstack.HttpRequestEventStruct
     , tuple2 : Tuple2
     , tuple3 : Tuple3
     , list_custom_type : List CustomType

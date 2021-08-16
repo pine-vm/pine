@@ -1,7 +1,7 @@
-module Backend.VolatileHost exposing
+module Backend.VolatileProcess exposing
     ( jsonDecodeResponseStructure
-    , requestToVolatileHost
-    , volatileHostScript
+    , requestToVolatileProcess
+    , volatileProcessProgramCode
     )
 
 import CompilationInterface.GenerateJsonCoders
@@ -29,11 +29,11 @@ jsonEncodeRequestStructure =
     CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure
 
 
-requestToVolatileHost : RequestStructure -> String
-requestToVolatileHost =
+requestToVolatileProcess : RequestStructure -> String
+requestToVolatileProcess =
     jsonEncodeRequestStructure >> Json.Encode.encode 0
 
 
-volatileHostScript : String
-volatileHostScript =
-    CompilationInterface.SourceFiles.file__utf8____src_Backend_VolatileHost_csx
+volatileProcessProgramCode : String
+volatileProcessProgramCode =
+    CompilationInterface.SourceFiles.file__utf8____src_Backend_VolatileProcess_csx

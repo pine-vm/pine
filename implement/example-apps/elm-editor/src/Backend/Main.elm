@@ -1,438 +1,435 @@
 module Backend.Main exposing
     ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
+    , backendMain
     )
 
-import Backend.InterfaceToHost as InterfaceToHost
 import Backend.Route
-import Backend.VolatileHost as VolatileHost
+import Backend.VolatileProcess as VolatileProcess
 import Base64
 import Bytes.Encode
 import Common
 import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
 import Dict
+import ElmFullstack
 import Flate
 import MonacoHtml
 import Set
 import Url
 
 
+type Event
+    = HttpRequestEvent ElmFullstack.HttpRequestEventStruct
+    | CreateVolatileProcessResponse ElmFullstack.CreateVolatileProcessResult
+    | RequestToVolatileProcessResponse String ElmFullstack.RequestToVolatileProcessResult
+
+
 type alias State =
     { posixTimeMilli : Int
-    , volatileHostsIds : Set.Set String
-    , pendingHttpRequests : List InterfaceToHost.HttpRequestEventStructure
-    , pendingTasksForRequestVolatileHost : Dict.Dict String { volatileHostId : String, startPosixTimeMilli : Int }
+    , volatileProcessesIds : Set.Set String
+    , pendingHttpRequests : List ElmFullstack.HttpRequestEventStruct
+    , pendingTasksForRequestVolatileProcess : Dict.Dict String { volatileProcessId : String, startPosixTimeMilli : Int }
     }
 
 
-parallelVolatileHostsCount : Int
-parallelVolatileHostsCount =
+parallelVolatileProcessesCount : Int
+parallelVolatileProcessesCount =
     3
 
 
-requestToVolatileHostTimeoutMilliseconds : Int
-requestToVolatileHostTimeoutMilliseconds =
+requestToVolatileProcessTimeoutMilliseconds : Int
+requestToVolatileProcessTimeoutMilliseconds =
     1000 * 30
 
 
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+backendMain : ElmFullstack.BackendConfig State
+backendMain =
+    { init = ( initState, [] )
+    , subscriptions = subscriptions
+    }
+
+
+initState : State
+initState =
+    { posixTimeMilli = 0
+    , volatileProcessesIds = Set.empty
+    , pendingHttpRequests = []
+    , pendingTasksForRequestVolatileProcess = Dict.empty
+    }
+
+
+subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions _ =
+    { httpRequest = updateForHttpRequestEvent
+    , posixTimeIsPast = Nothing
+    }
+
+
+updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent httpRequestEvent =
+    processEvent (HttpRequestEvent httpRequestEvent)
+
+
+processEvent : Event -> State -> ( State, ElmFullstack.BackendCmds State )
 processEvent hostEvent stateBefore =
     let
-        ( ( state, tasks ), responseBeforeTasks ) =
-            processEventBeforeCreatingTasks hostEvent stateBefore
-                |> Tuple.mapFirst processEventPartCreateTasks
+        ( ( state, toVolatileProcessesCmds ), responseCmds ) =
+            updateExceptRequestsToVolatileProcess hostEvent stateBefore
+                |> Tuple.mapFirst updatePartRequestsToVolatileProcess
     in
     ( state
-    , responseBeforeTasks |> InterfaceToHost.withStartTasksAdded tasks
+    , responseCmds ++ toVolatileProcessesCmds
     )
 
 
-processEventPartCreateTasks : State -> ( State, List InterfaceToHost.StartTaskStructure )
-processEventPartCreateTasks stateBefore =
+updatePartRequestsToVolatileProcess : State -> ( State, ElmFullstack.BackendCmds State )
+updatePartRequestsToVolatileProcess stateBefore =
     let
-        tasks =
-            tasksFromState stateBefore
-
-        newPendingTasksForRequestVolatileHost =
-            tasks
-                |> List.filterMap
-                    (\task ->
-                        case task.task of
-                            InterfaceToHost.RequestToVolatileHost requestToVolatileHost ->
-                                Just
-                                    ( task.taskId
-                                    , { startPosixTimeMilli = stateBefore.posixTimeMilli
-                                      , volatileHostId = requestToVolatileHost.hostId
-                                      }
-                                    )
-
-                            _ ->
-                                Nothing
-                    )
-                |> Dict.fromList
-
-        pendingTasksForRequestVolatileHost =
-            stateBefore.pendingTasksForRequestVolatileHost
-                |> Dict.union newPendingTasksForRequestVolatileHost
-    in
-    ( { stateBefore | pendingTasksForRequestVolatileHost = pendingTasksForRequestVolatileHost }
-    , tasks
-    )
-
-
-processEventBeforeCreatingTasks : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEventBeforeCreatingTasks hostEvent stateBefore =
-    case hostEvent of
-        InterfaceToHost.ArrivedAtTimeEvent { posixTimeMilli } ->
-            ( { stateBefore | posixTimeMilli = posixTimeMilli }
-            , InterfaceToHost.passiveAppEventResponse
-            )
-
-        InterfaceToHost.HttpRequestEvent httpRequestEvent ->
-            let
-                bodyFromString =
-                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
-                staticContentHttpHeaders contentType =
-                    { cacheMaxAgeMinutes = Just (60 * 4)
-                    , contentType = contentType
+        tasksToEnsureEnoughVolatileProcessesCreated =
+            if Set.size stateBefore.volatileProcessesIds < parallelVolatileProcessesCount then
+                [ ElmFullstack.CreateVolatileProcess
+                    { programCode = VolatileProcess.volatileProcessProgramCode
+                    , update =
+                        \createVolatileProcessResult ->
+                            processEvent (CreateVolatileProcessResponse createVolatileProcessResult)
                     }
-
-                httpResponseOkWithStringContent stringContent httpResponseHeaders =
-                    httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
-
-                httpResponseOkWithBodyAsBase64 bodyAsBase64 { cacheMaxAgeMinutes, contentType } =
-                    let
-                        cacheHeaders =
-                            case cacheMaxAgeMinutes of
-                                Nothing ->
-                                    []
-
-                                Just maxAgeMinutes ->
-                                    [ { name = "Cache-Control"
-                                      , values = [ "public, max-age=" ++ String.fromInt (maxAgeMinutes * 60) ]
-                                      }
-                                    , { name = "Content-Type"
-                                      , values = [ contentType ]
-                                      }
-                                    ]
-                    in
-                    { httpRequestId = httpRequestEvent.httpRequestId
-                    , response =
-                        { statusCode = 200
-                        , bodyAsBase64 = bodyAsBase64
-                        , headersToAdd = cacheHeaders
-                        }
-                    }
-
-                frontendHtmlDocumentResponse frontendConfig =
-                    InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
-                                (staticContentHttpHeaders "text/html")
-                            ]
-            in
-            case httpRequestEvent.request.uri |> Url.fromString |> Maybe.andThen Backend.Route.routeFromUrl of
-                Nothing ->
-                    ( stateBefore
-                    , frontendHtmlDocumentResponse { debug = False }
-                    )
-
-                Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendHtmlDocumentRoute frontendConfig)) ->
-                    ( stateBefore
-                    , frontendHtmlDocumentResponse frontendConfig
-                    )
-
-                Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
-                    ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithBodyAsBase64
-                                (Just
-                                    (if debug then
-                                        CompilationInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm
-
-                                     else
-                                        CompilationInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
-                                    )
-                                )
-                                (staticContentHttpHeaders "text/javascript")
-                            ]
-                    )
-
-                Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
-                    ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithStringContent monacoHtmlDocument
-                                (staticContentHttpHeaders "text/html")
-                            ]
-                    )
-
-                Just (Backend.Route.StaticFileRoute Backend.Route.MonarchJavascriptRoute) ->
-                    ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithBodyAsBase64
-                                (Just CompilationInterface.SourceFiles.file__base64____src_monarch_js)
-                                (staticContentHttpHeaders "text/javascript")
-                            ]
-                    )
-
-                Just (Backend.Route.StaticFileRoute Backend.Route.FaviconRoute) ->
-                    ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ httpResponseOkWithBodyAsBase64
-                                (Just CompilationInterface.SourceFiles.file__base64____static_favicon_svg)
-                                (staticContentHttpHeaders "image/svg+xml")
-                            ]
-                    )
-
-                Just Backend.Route.ApiRoute ->
-                    ( { stateBefore | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10 }
-                    , InterfaceToHost.passiveAppEventResponse
-                    )
-
-        InterfaceToHost.TaskCompleteEvent taskComplete ->
-            let
-                ( state, response ) =
-                    processEventTaskComplete taskComplete stateBefore
-            in
-            ( { state
-                | pendingTasksForRequestVolatileHost =
-                    stateBefore.pendingTasksForRequestVolatileHost |> Dict.remove taskComplete.taskId
-              }
-            , response
-            )
-
-
-processEventTaskComplete : InterfaceToHost.TaskCompleteEventStructure -> State -> ( State, InterfaceToHost.AppEventResponse )
-processEventTaskComplete taskComplete stateBefore =
-    case taskComplete.taskResult of
-        InterfaceToHost.CreateVolatileHostResponse createVolatileHostResponse ->
-            case createVolatileHostResponse of
-                Err createVolatileHostError ->
-                    let
-                        bodyFromString =
-                            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
-                        httpResponse =
-                            { statusCode = 500
-                            , bodyAsBase64 = bodyFromString ("Failed to create volatile host: " ++ createVolatileHostError.exceptionToString)
-                            , headersToAdd = []
-                            }
-
-                        httpResponses =
-                            stateBefore.pendingHttpRequests
-                                |> List.map
-                                    (\httpRequest ->
-                                        { httpRequestId = httpRequest.httpRequestId
-                                        , response = httpResponse
-                                        }
-                                    )
-                    in
-                    ( { stateBefore | pendingHttpRequests = [] }
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded httpResponses
-                    )
-
-                Ok { hostId } ->
-                    ( { stateBefore
-                        | volatileHostsIds = Set.insert hostId stateBefore.volatileHostsIds
-                      }
-                    , InterfaceToHost.passiveAppEventResponse
-                    )
-
-        InterfaceToHost.RequestToVolatileHostResponse requestToVolatileHostResponse ->
-            case
-                stateBefore.pendingHttpRequests
-                    |> List.filter (taskIdForHttpRequest >> (==) taskComplete.taskId)
-                    |> List.head
-            of
-                Nothing ->
-                    ( stateBefore
-                    , InterfaceToHost.passiveAppEventResponse
-                    )
-
-                Just httpRequestEvent ->
-                    let
-                        bodyFromString =
-                            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
-                        httpResponseInternalServerError errorMessage =
-                            { statusCode = 500
-                            , bodyAsBase64 = bodyFromString errorMessage
-                            , headersToAdd = []
-                            }
-
-                        ( httpResponse, maybeVolatileHostToRemoveId ) =
-                            case stateBefore.pendingTasksForRequestVolatileHost |> Dict.get taskComplete.taskId of
-                                Nothing ->
-                                    ( httpResponseInternalServerError
-                                        ("Error: Did not find entry for task ID '" ++ taskComplete.taskId ++ "'")
-                                    , stateBefore.pendingTasksForRequestVolatileHost
-                                        |> Dict.get taskComplete.taskId
-                                        |> Maybe.map .volatileHostId
-                                    )
-
-                                Just pendingTask ->
-                                    case requestToVolatileHostResponse of
-                                        Err InterfaceToHost.HostNotFound ->
-                                            ( httpResponseInternalServerError
-                                                ("Error: Volatile host '"
-                                                    ++ pendingTask.volatileHostId
-                                                    ++ "' disappeared. Starting volatile host again... Please retry."
-                                                )
-                                            , Just pendingTask.volatileHostId
-                                            )
-
-                                        Ok requestToVolatileHostComplete ->
-                                            case requestToVolatileHostComplete.exceptionToString of
-                                                Just exceptionToString ->
-                                                    ( { statusCode = 500
-                                                      , bodyAsBase64 = bodyFromString ("Exception in volatile host:\n" ++ exceptionToString)
-                                                      , headersToAdd = []
-                                                      }
-                                                    , Nothing
-                                                    )
-
-                                                Nothing ->
-                                                    let
-                                                        ( headersToAdd, bodyAsBase64 ) =
-                                                            case requestToVolatileHostComplete.returnValueToString of
-                                                                Nothing ->
-                                                                    ( [], Nothing )
-
-                                                                Just returnValueToString ->
-                                                                    let
-                                                                        deflateEncodedBody =
-                                                                            returnValueToString
-                                                                                |> Bytes.Encode.string
-                                                                                |> Bytes.Encode.encode
-                                                                                |> Flate.deflateGZip
-                                                                    in
-                                                                    ( [ { name = "Content-Encoding", values = [ "gzip" ] } ]
-                                                                    , deflateEncodedBody |> Base64.fromBytes
-                                                                    )
-                                                    in
-                                                    ( { statusCode = 200
-                                                      , bodyAsBase64 = bodyAsBase64
-                                                      , headersToAdd = headersToAdd
-                                                      }
-                                                    , Nothing
-                                                    )
-
-                        volatileHostsIds =
-                            case maybeVolatileHostToRemoveId of
-                                Nothing ->
-                                    stateBefore.volatileHostsIds
-
-                                Just volatileHostToRemoveId ->
-                                    stateBefore.volatileHostsIds |> Set.remove volatileHostToRemoveId
-                    in
-                    ( { stateBefore
-                        | pendingHttpRequests = stateBefore.pendingHttpRequests |> List.filter ((==) httpRequestEvent >> not)
-                        , volatileHostsIds = volatileHostsIds
-                      }
-                    , InterfaceToHost.passiveAppEventResponse
-                        |> InterfaceToHost.withCompleteHttpResponsesAdded
-                            [ { httpRequestId = httpRequestEvent.httpRequestId
-                              , response = httpResponse
-                              }
-                            ]
-                    )
-
-        InterfaceToHost.CompleteWithoutResult ->
-            ( stateBefore
-            , InterfaceToHost.passiveAppEventResponse
-            )
-
-
-tasksFromState : State -> List InterfaceToHost.StartTaskStructure
-tasksFromState state =
-    let
-        tasksToEnsureEnoughVolatileHostsCreated =
-            if Set.size state.volatileHostsIds < parallelVolatileHostsCount then
-                [ { taskId = "create-vhost"
-                  , task = InterfaceToHost.CreateVolatileHost { script = VolatileHost.volatileHostScript }
-                  }
                 ]
 
             else
                 []
 
         pendingHttpRequestsWithTaskId =
-            state.pendingHttpRequests
+            stateBefore.pendingHttpRequests
                 |> List.map (\httpRequest -> ( taskIdForHttpRequest httpRequest, httpRequest ))
 
-        pendingTasksForRequestVolatileHost =
-            state.pendingTasksForRequestVolatileHost
+        pendingTasksForRequestVolatileProcessAfterTimeLimit =
+            stateBefore.pendingTasksForRequestVolatileProcess
                 |> Dict.filter
                     (\_ pendingTask ->
-                        state.posixTimeMilli < pendingTask.startPosixTimeMilli + requestToVolatileHostTimeoutMilliseconds
+                        stateBefore.posixTimeMilli < pendingTask.startPosixTimeMilli + requestToVolatileProcessTimeoutMilliseconds
                     )
 
-        pendingHttpRequestsWithoutPendingRequestToVolatileHost =
+        pendingHttpRequestsWithoutPendingRequestToVolatileProcess =
             pendingHttpRequestsWithTaskId
                 |> List.filter
-                    (\( taskId, _ ) -> pendingTasksForRequestVolatileHost |> Dict.member taskId |> not)
+                    (\( taskId, _ ) -> pendingTasksForRequestVolatileProcessAfterTimeLimit |> Dict.member taskId |> not)
 
-        freeVolatileHostsIds =
-            state.volatileHostsIds
+        freeVolatileProcessesIds =
+            stateBefore.volatileProcessesIds
                 |> Set.filter
-                    (\volatileHostId ->
-                        pendingTasksForRequestVolatileHost
+                    (\volatileProcessId ->
+                        pendingTasksForRequestVolatileProcessAfterTimeLimit
                             |> Dict.values
-                            |> List.any (.volatileHostId >> (==) volatileHostId)
+                            |> List.any (.volatileProcessId >> (==) volatileProcessId)
                             |> not
                     )
+
+        continueWithoutRequestToVolatileProcess =
+            ( stateBefore, tasksToEnsureEnoughVolatileProcessesCreated )
     in
-    case pendingHttpRequestsWithoutPendingRequestToVolatileHost |> List.head of
+    case pendingHttpRequestsWithoutPendingRequestToVolatileProcess |> List.head of
         Nothing ->
-            tasksToEnsureEnoughVolatileHostsCreated
+            continueWithoutRequestToVolatileProcess
 
         Just ( taskId, httpRequestEvent ) ->
-            case List.head (Set.toList freeVolatileHostsIds) of
+            case List.head (Set.toList freeVolatileProcessesIds) of
                 Nothing ->
-                    tasksToEnsureEnoughVolatileHostsCreated
+                    continueWithoutRequestToVolatileProcess
 
-                Just volatileHostId ->
+                Just volatileProcessId ->
                     let
                         task =
-                            { hostId = volatileHostId
-                            , request =
-                                httpRequestEvent.request.bodyAsBase64
-                                    |> Maybe.andThen Common.decodeBase64ToString
-                                    |> Maybe.withDefault "Error decoding base64"
-                            }
-                                |> InterfaceToHost.RequestToVolatileHost
+                            ElmFullstack.RequestToVolatileProcess
+                                { processId = volatileProcessId
+                                , request =
+                                    httpRequestEvent.request.bodyAsBase64
+                                        |> Maybe.andThen Common.decodeBase64ToString
+                                        |> Maybe.withDefault "Error decoding base64"
+                                , update =
+                                    \requestToVolatileProcessResponse ->
+                                        processEvent
+                                            (RequestToVolatileProcessResponse taskId requestToVolatileProcessResponse)
+                                }
+
+                        pendingTasksForRequestVolatileProcess =
+                            pendingTasksForRequestVolatileProcessAfterTimeLimit
+                                |> Dict.insert taskId
+                                    { startPosixTimeMilli = stateBefore.posixTimeMilli
+                                    , volatileProcessId = volatileProcessId
+                                    }
                     in
-                    [ { taskId = taskId
-                      , task = task
+                    ( { stateBefore
+                        | pendingTasksForRequestVolatileProcess = pendingTasksForRequestVolatileProcess
                       }
-                    ]
+                    , [ task ]
+                    )
 
 
-taskIdForHttpRequest : InterfaceToHost.HttpRequestEventStructure -> String
+updateExceptRequestsToVolatileProcess : Event -> State -> ( State, ElmFullstack.BackendCmds State )
+updateExceptRequestsToVolatileProcess hostEvent stateBefore =
+    case hostEvent of
+        HttpRequestEvent httpRequestEvent ->
+            updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateBefore
+
+        RequestToVolatileProcessResponse taskId requestToVolatileProcessResponse ->
+            updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResponse stateBefore
+
+        CreateVolatileProcessResponse createVolatileProcessResponse ->
+            updateForCreateVolatileProcessResult createVolatileProcessResponse stateBefore
+
+
+updateForHttpRequestEventExceptRequestsToVolatileProcess : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateBeforeUpdatingTime =
+    let
+        stateBefore =
+            { stateBeforeUpdatingTime | posixTimeMilli = httpRequestEvent.posixTimeMilli }
+
+        bodyFromString =
+            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+
+        staticContentHttpHeaders contentType =
+            { cacheMaxAgeMinutes = Just (60 * 4)
+            , contentType = contentType
+            }
+
+        httpResponseOkWithStringContent stringContent httpResponseHeaders =
+            httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
+
+        httpResponseOkWithBodyAsBase64 bodyAsBase64 { cacheMaxAgeMinutes, contentType } =
+            let
+                cacheHeaders =
+                    case cacheMaxAgeMinutes of
+                        Nothing ->
+                            []
+
+                        Just maxAgeMinutes ->
+                            [ { name = "Cache-Control"
+                              , values = [ "public, max-age=" ++ String.fromInt (maxAgeMinutes * 60) ]
+                              }
+                            , { name = "Content-Type"
+                              , values = [ contentType ]
+                              }
+                            ]
+            in
+            { httpRequestId = httpRequestEvent.httpRequestId
+            , response =
+                { statusCode = 200
+                , bodyAsBase64 = bodyAsBase64
+                , headersToAdd = cacheHeaders
+                }
+            }
+
+        frontendHtmlDocumentResponse frontendConfig =
+            [ ElmFullstack.RespondToHttpRequest
+                (httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
+                    (staticContentHttpHeaders "text/html")
+                )
+            ]
+    in
+    case httpRequestEvent.request.uri |> Url.fromString |> Maybe.andThen Backend.Route.routeFromUrl of
+        Nothing ->
+            ( stateBefore
+            , frontendHtmlDocumentResponse { debug = False }
+            )
+
+        Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendHtmlDocumentRoute frontendConfig)) ->
+            ( stateBefore
+            , frontendHtmlDocumentResponse frontendConfig
+            )
+
+        Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
+            ( stateBefore
+            , [ ElmFullstack.RespondToHttpRequest
+                    (httpResponseOkWithBodyAsBase64
+                        (Just
+                            (if debug then
+                                CompilationInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm
+
+                             else
+                                CompilationInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
+                            )
+                        )
+                        (staticContentHttpHeaders "text/javascript")
+                    )
+              ]
+            )
+
+        Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
+            ( stateBefore
+            , [ ElmFullstack.RespondToHttpRequest
+                    (httpResponseOkWithStringContent monacoHtmlDocument
+                        (staticContentHttpHeaders "text/html")
+                    )
+              ]
+            )
+
+        Just (Backend.Route.StaticFileRoute Backend.Route.MonarchJavascriptRoute) ->
+            ( stateBefore
+            , [ ElmFullstack.RespondToHttpRequest
+                    (httpResponseOkWithBodyAsBase64
+                        (Just CompilationInterface.SourceFiles.file__base64____src_monarch_js)
+                        (staticContentHttpHeaders "text/javascript")
+                    )
+              ]
+            )
+
+        Just (Backend.Route.StaticFileRoute Backend.Route.FaviconRoute) ->
+            ( stateBefore
+            , [ ElmFullstack.RespondToHttpRequest
+                    (httpResponseOkWithBodyAsBase64
+                        (Just CompilationInterface.SourceFiles.file__base64____static_favicon_svg)
+                        (staticContentHttpHeaders "image/svg+xml")
+                    )
+              ]
+            )
+
+        Just Backend.Route.ApiRoute ->
+            ( { stateBefore
+                | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10
+              }
+            , []
+            )
+
+
+updateForRequestToVolatileProcessResult : String -> ElmFullstack.RequestToVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult stateBefore =
+    case
+        stateBefore.pendingHttpRequests
+            |> List.filter (taskIdForHttpRequest >> (==) taskId)
+            |> List.head
+    of
+        Nothing ->
+            ( stateBefore
+            , []
+            )
+
+        Just httpRequestEvent ->
+            let
+                bodyFromString =
+                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+
+                httpResponseInternalServerError errorMessage =
+                    { statusCode = 500
+                    , bodyAsBase64 = bodyFromString errorMessage
+                    , headersToAdd = []
+                    }
+
+                ( httpResponse, maybeVolatileProcessToRemoveId ) =
+                    case stateBefore.pendingTasksForRequestVolatileProcess |> Dict.get taskId of
+                        Nothing ->
+                            ( httpResponseInternalServerError
+                                ("Error: Did not find entry for task ID '" ++ taskId ++ "'")
+                            , stateBefore.pendingTasksForRequestVolatileProcess
+                                |> Dict.get taskId
+                                |> Maybe.map .volatileProcessId
+                            )
+
+                        Just pendingTask ->
+                            case requestToVolatileProcessResult of
+                                Err ElmFullstack.ProcessNotFound ->
+                                    ( httpResponseInternalServerError
+                                        ("Error: Volatile process '"
+                                            ++ pendingTask.volatileProcessId
+                                            ++ "' disappeared. Starting volatile process again... Please retry."
+                                        )
+                                    , Just pendingTask.volatileProcessId
+                                    )
+
+                                Ok requestToVolatileProcessComplete ->
+                                    case requestToVolatileProcessComplete.exceptionToString of
+                                        Just exceptionToString ->
+                                            ( { statusCode = 500
+                                              , bodyAsBase64 = bodyFromString ("Exception in volatile process:\n" ++ exceptionToString)
+                                              , headersToAdd = []
+                                              }
+                                            , Nothing
+                                            )
+
+                                        Nothing ->
+                                            let
+                                                ( headersToAdd, bodyAsBase64 ) =
+                                                    case requestToVolatileProcessComplete.returnValueToString of
+                                                        Nothing ->
+                                                            ( [], Nothing )
+
+                                                        Just returnValueToString ->
+                                                            let
+                                                                deflateEncodedBody =
+                                                                    returnValueToString
+                                                                        |> Bytes.Encode.string
+                                                                        |> Bytes.Encode.encode
+                                                                        |> Flate.deflateGZip
+                                                            in
+                                                            ( [ { name = "Content-Encoding", values = [ "gzip" ] } ]
+                                                            , deflateEncodedBody |> Base64.fromBytes
+                                                            )
+                                            in
+                                            ( { statusCode = 200
+                                              , bodyAsBase64 = bodyAsBase64
+                                              , headersToAdd = headersToAdd
+                                              }
+                                            , Nothing
+                                            )
+
+                volatileProcessesIds =
+                    case maybeVolatileProcessToRemoveId of
+                        Nothing ->
+                            stateBefore.volatileProcessesIds
+
+                        Just volatileProcessToRemoveId ->
+                            stateBefore.volatileProcessesIds |> Set.remove volatileProcessToRemoveId
+            in
+            ( { stateBefore
+                | pendingHttpRequests = stateBefore.pendingHttpRequests |> List.filter ((==) httpRequestEvent >> not)
+                , volatileProcessesIds = volatileProcessesIds
+                , pendingTasksForRequestVolatileProcess = stateBefore.pendingTasksForRequestVolatileProcess |> Dict.remove taskId
+              }
+            , [ ElmFullstack.RespondToHttpRequest
+                    { httpRequestId = httpRequestEvent.httpRequestId
+                    , response = httpResponse
+                    }
+              ]
+            )
+
+
+updateForCreateVolatileProcessResult : ElmFullstack.CreateVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
+    case createVolatileProcessResult of
+        Err createVolatileProcessError ->
+            let
+                bodyFromString =
+                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+
+                httpResponse =
+                    { statusCode = 500
+                    , bodyAsBase64 = bodyFromString ("Failed to create volatile process: " ++ createVolatileProcessError.exceptionToString)
+                    , headersToAdd = []
+                    }
+
+                httpResponses =
+                    stateBefore.pendingHttpRequests
+                        |> List.map
+                            (\httpRequest ->
+                                { httpRequestId = httpRequest.httpRequestId
+                                , response = httpResponse
+                                }
+                            )
+            in
+            ( { stateBefore | pendingHttpRequests = [] }
+            , List.map ElmFullstack.RespondToHttpRequest httpResponses
+            )
+
+        Ok { processId } ->
+            ( { stateBefore
+                | volatileProcessesIds = Set.insert processId stateBefore.volatileProcessesIds
+              }
+            , []
+            )
+
+
+taskIdForHttpRequest : ElmFullstack.HttpRequestEventStruct -> String
 taskIdForHttpRequest httpRequestEvent =
     "http-request-api-" ++ httpRequestEvent.httpRequestId
-
-
-interfaceToHost_initState : State
-interfaceToHost_initState =
-    { posixTimeMilli = 0
-    , volatileHostsIds = Set.empty
-    , pendingHttpRequests = []
-    , pendingTasksForRequestVolatileHost = Dict.empty
-    }
-
-
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
 
 
 frontendHtmlDocument : { debug : Bool } -> String
