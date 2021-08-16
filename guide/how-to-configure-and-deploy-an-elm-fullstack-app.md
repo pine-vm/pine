@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-07-14/elm-fullstack-bin-2141aeca51f744ae3ecd593c4f6121604e5f8463-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-07-14/elm-fullstack-bin-2141aeca51f744ae3ecd593c4f6121604e5f8463-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-16/elm-fullstack-bin-ba6abfc96a31d5eb87e2345a06d4854778ba80c3-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-16/elm-fullstack-bin-ba6abfc96a31d5eb87e2345a06d4854778ba80c3-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -18,7 +18,7 @@ To register the elm-fs executable on your system, run the `elm-fs  install` comm
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-0774c4fc344b0cf3f2ea5b5e9ab8aee5f8d86d46-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-ba6abfc96a31d5eb87e2345a06d4854778ba80c3-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
@@ -29,14 +29,14 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 
 ## Running a Server and Deploying an App
 
-To deploy an Elm Fullstack app, we place a front-end and back-end app in a single elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
+To deploy an Elm Fullstack app, we place a front-end and back-end app in a single Elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/2141aeca51f744ae3ecd593c4f6121604e5f8463/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app=https://github.com/elm-fullstack/elm-fullstack/tree/2141aeca51f744ae3ecd593c4f6121604e5f8463/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app=https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -44,7 +44,7 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition 46e5c927796a8a33f12a56e82aff40599c3fa4b4c0a2c7bbee903f499d4da8b3 from 'https://github.com/elm-fullstack/elm-fullstack/tree/2141aeca51f744ae3ecd593c4f6121604e5f8463/implement/example-apps/docker-image-default-app'.
+Loaded source composition 23cb64cc565b54b8a35abcc713adbb5285a7b82cb0ec16d962f63fb683a61493 from 'https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process volatile representation.
@@ -53,7 +53,7 @@ info: ElmFullstack.WebHost.StartupAdminInterface[0]
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Restored the process state in 6 seconds.
+      Restored the process state in 8 seconds.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Completed building the process volatile representation.
 info: ElmFullstack.WebHost.StartupPublicApp[0]
@@ -71,18 +71,23 @@ This section covers the conventions for structuring the app code so that we can 
 
 ### `Backend.Main` Elm Module
 
-The [main Elm module of the backend](/implement/example-apps/docker-image-default-app/src/Backend/Main.elm) contains the following functions which are called by the engine:
-
-+ `interfaceToHost_initState : State`
-+ `interfaceToHost_processEvent : String -> State -> ( State, String )`
-
-As we can see in the examples, the `interfaceToHost_processEvent` takes care of deserializing the event coming from the host (the `String` parameter) and serializing the response for this specific event to the host (the `String` in the returned tuple). It delegates the rest of the processing to a function working with the types resulting from this (de)serialization:
+The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `backendMain`:
 
 ```Elm
-processEvent : InterfaceToHost.AppEvent -> State -> ( State, InterfaceToHost.AppEventResponse )
+backendMain : ElmFullstack.BackendConfig ()
+backendMain =
+[...]
 ```
 
-Analogous to the update function in a front-end Elm app, this function returns the new state of the back-end app as the first element in the tuple.
+As we can see in the example apps, we compose the backend from an `init` value and an `subscriptions` function:
+
+```Elm
+backendMain : ElmFullstack.BackendConfig ()
+backendMain =
+    { init = ( (), [] )
+    , subscriptions = subscriptions
+    }
+```
 
 ### `CompilationInterface.ElmMake` Elm Module
 
@@ -118,7 +123,7 @@ elm_make__base64____src_FrontendWeb_Main_elm =
     "The compiler replaces this value."
 ```
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/323c78378c93beeef08d176bd7a1011efa20a189/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L38-L50) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -264,7 +269,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/2141aeca51f744ae3ecd593c4f6121604e5f8463/implement/example-apps/docker-image-default-app  --init-app-state
+elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app  --init-app-state
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
@@ -290,7 +295,7 @@ If you do not use the `--admin-password` option with the `run-server` command, t
 Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
 
 ```cmd
-docker run -p 80:80 -p 4000:4000 --env "APPSETTING_adminPassword=test" elmfullstack/elm-fullstack
+docker  run  -p 80:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  elmfullstack/elm-fullstack
 ```
 
 ## Manage the Process Store
