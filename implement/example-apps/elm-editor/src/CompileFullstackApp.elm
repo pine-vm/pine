@@ -856,13 +856,13 @@ processEventLessRememberTime :
     -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
 processEventLessRememberTime subscriptions hostEvent stateBefore =
     let
-        discardEvent =
-            ( stateBefore
-            , { startTasks = []
-              , notifyWhenPosixTimeHasArrived = Nothing
-              , completeHttpResponses = []
-              }
+        continueWithState newState =
+            ( newState
+            , backendEventResponseFromSubscriptions (subscriptions newState.stateLessFramework)
             )
+
+        discardEvent =
+            continueWithState stateBefore
 
         continueWithUpdateToTasks updateToTasks stateBeforeUpdateToTasks =
             let
@@ -923,15 +923,11 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                                 }
 
                 CompleteWithoutResult ->
-                    ( { stateBefore
-                        | terminateVolatileProcessTasks =
-                            stateBefore.terminateVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
-                      }
-                    , { startTasks = []
-                      , notifyWhenPosixTimeHasArrived = Nothing
-                      , completeHttpResponses = []
-                      }
-                    )
+                    continueWithState
+                        { stateBefore
+                            | terminateVolatileProcessTasks =
+                                stateBefore.terminateVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                        }
 
 
 backendEventResponseFromRuntimeTasksAndSubscriptions :
@@ -940,10 +936,6 @@ backendEventResponseFromRuntimeTasksAndSubscriptions :
     -> DeserializedStateWithTaskFramework
     -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
 backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBefore =
-    let
-        subscriptionsForState =
-            subscriptions stateBefore.stateLessFramework
-    in
     tasks
         |> List.foldl
             (\\task ( previousState, previousResponse ) ->
@@ -954,15 +946,19 @@ backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBe
                 ( newState, newResponse :: previousResponse )
             )
             ( stateBefore
-            , [ { startTasks = []
-                , completeHttpResponses = []
-                , notifyWhenPosixTimeHasArrived =
-                    subscriptionsForState.posixTimeIsPast
-                        |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
-                }
-              ]
+            , [ backendEventResponseFromSubscriptions (subscriptions stateBefore.stateLessFramework) ]
             )
         |> Tuple.mapSecond concatBackendEventResponse
+
+
+backendEventResponseFromSubscriptions : BackendSubs DeserializedState -> BackendEventResponse
+backendEventResponseFromSubscriptions subscriptions =
+    { startTasks = []
+    , completeHttpResponses = []
+    , notifyWhenPosixTimeHasArrived =
+        subscriptions.posixTimeIsPast
+            |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
+    }
 
 
 backendEventResponseFromRuntimeTask :
