@@ -152,7 +152,14 @@ namespace ElmFullstack
                 var otherErrorsText =
                     string.Join("\n", otherErrors.Select(DescribeCompilationError));
 
-                throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText);
+                /*
+                 * TODO: To clean up the appearance in the (CL) user interface, avoid burying the error message in a large stack trace:
+                 * Propagate the errors further without runtime exception.
+                 * New C# features might help simplify the syntax to implement this so that implementation might be easier after switching to .NET 6.
+                 * Until then, add line breaks to the message to help spot this within a larger output.
+                 * */
+
+                throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText + "\n\n");
             }
 
             byte[] ElmMake(
@@ -440,11 +447,27 @@ namespace ElmFullstack
         }
 
         static string DescribeCompilationError(CompilerSerialInterface.LocatedCompilationError locatedCompilationError) =>
+            "in file " + string.Join('/', locatedCompilationError.location.filePath) + ": " +
             DescribeCompilationError(locatedCompilationError.error);
 
-        static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError) =>
-            Newtonsoft.Json.JsonConvert.SerializeObject(compilationError, Newtonsoft.Json.Formatting.Indented);
+        static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError)
+        {
+            var otherCompilationError =
+                compilationError?.OtherCompilationError?.FirstOrDefault();
 
+            if (otherCompilationError != null)
+                return otherCompilationError;
+
+            return
+                Newtonsoft.Json.JsonConvert.SerializeObject(
+                    compilationError,
+                    Newtonsoft.Json.Formatting.Indented,
+                    new Newtonsoft.Json.JsonSerializerSettings
+                    {
+                        NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+                        DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Include
+                    });
+        }
 
         static long EstimateCacheItemSizeInMemory(ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> item) =>
             (item.Err?.Sum(err => err.Sum(EstimateCacheItemSizeInMemory)) ?? 0) +

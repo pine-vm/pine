@@ -473,7 +473,7 @@ stateTypeAnnotationFromRootElmModule_2021_08 parsedModule =
                             _ ->
                                 Err "Unexpected type annotation: Not an instance"
             )
-        |> Maybe.withDefault (Err "Did not find declaration with matching name")
+        |> Maybe.withDefault (Err ("Did not find declaration with name '" ++ elmAppInterfaceConvention.backendMainDeclarationName ++ "'"))
 
 
 stateTypeAnnotationFromRootElmModule_Before_2021_08 : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
