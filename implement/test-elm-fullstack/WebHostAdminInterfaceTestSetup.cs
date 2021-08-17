@@ -35,6 +35,8 @@ namespace test_elm_fullstack
 
         IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
+        readonly IFileStore fileStore;
+
         public IWebHost StartWebHost(
              Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
         {
@@ -45,7 +47,7 @@ namespace test_elm_fullstack
                 .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
                 .WithSettingAdminPassword(adminPassword)
                 .UseStartup<StartupAdminInterface>()
-                .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(defaultFileStore) ?? defaultFileStore))
+                .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(fileStore) ?? fileStore))
                 .Build();
 
             webHost?.StartAsync().Wait();
@@ -56,9 +58,11 @@ namespace test_elm_fullstack
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<DateTimeOffset> persistentProcessHostDateTime = null,
             string adminPassword = null,
+            IFileStore fileStore = null,
             Composition.Component deployAppConfigAndInitElmState = null) =>
             Setup(
                 adminPassword: adminPassword,
+                fileStore: fileStore,
                 deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
                 persistentProcessHostDateTime: persistentProcessHostDateTime);
@@ -66,6 +70,7 @@ namespace test_elm_fullstack
         static public WebHostAdminInterfaceTestSetup Setup(
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminPassword = null,
+            IFileStore fileStore = null,
             Composition.Component deployAppConfigAndInitElmState = null,
             string adminWebHostUrlOverride = null,
             string publicWebHostUrlOverride = null,
@@ -76,6 +81,7 @@ namespace test_elm_fullstack
             var setup = new WebHostAdminInterfaceTestSetup(
                 testDirectory,
                 adminPassword: adminPassword,
+                fileStore: fileStore,
                 deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
                 webHostBuilderMap: webHostBuilderMap,
                 adminWebHostUrlOverride: adminWebHostUrlOverride,
@@ -127,6 +133,7 @@ namespace test_elm_fullstack
         WebHostAdminInterfaceTestSetup(
             string testDirectory,
             string adminPassword,
+            IFileStore fileStore,
             Composition.Component deployAppConfigAndInitElmState,
             Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
             string adminWebHostUrlOverride,
@@ -134,7 +141,11 @@ namespace test_elm_fullstack
             Func<DateTimeOffset> persistentProcessHostDateTime = null)
         {
             this.testDirectory = testDirectory;
+
+            fileStore ??= defaultFileStore;
+
             this.adminPassword = adminPassword ?? "notempty";
+            this.fileStore = fileStore;
             this.webHostBuilderMap = webHostBuilderMap;
             this.adminWebHostUrlOverride = adminWebHostUrlOverride;
             this.publicWebHostUrlOverride = publicWebHostUrlOverride;
@@ -153,9 +164,9 @@ namespace test_elm_fullstack
 
                 var processStoreWriter =
                     new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-                    defaultFileStore,
+                    fileStore,
                     getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
-                    defaultFileStore);
+                    fileStore);
 
                 processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -175,6 +176,126 @@ namespace Pine
 
         public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
             reader.ListFilesInDirectory(directoryPath);
+    }
+
+    public class RecordingFileStoreWriter : IFileStoreWriter
+    {
+        readonly ConcurrentQueue<WriteOperation> history = new();
+
+        public IEnumerable<WriteOperation> History => history;
+
+        public IFileStoreReader Apply(IFileStoreReader fileStoreReader) =>
+            WriteOperation.Apply(history, fileStoreReader);
+
+        public class WriteOperation
+        {
+            public (IImmutableList<string> path, IReadOnlyList<byte> fileContent) SetFileContent { get; init; }
+
+            public (IImmutableList<string> path, IReadOnlyList<byte> fileContent) AppendFileContent { get; init; }
+
+            public IImmutableList<string> DeleteFile { get; init; }
+
+            static public IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
+                writeOperations.Aggregate(fileStoreReader, (previousState, writeOperation) => writeOperation.Apply(previousState));
+
+            public IFileStoreReader Apply(IFileStoreReader previousState)
+            {
+                if (SetFileContent.path != null)
+                {
+                    return new DelegatingFileStoreReader
+                    {
+                        GetFileContentDelegate = filePath =>
+                        {
+                            var previousFileContent = previousState.GetFileContent(filePath);
+
+                            if (filePath.SequenceEqual(SetFileContent.path))
+                            {
+                                return SetFileContent.fileContent;
+                            }
+
+                            return previousFileContent;
+                        },
+                        ListFilesInDirectoryDelegate = directoryPath =>
+                        {
+                            var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
+
+                            if (SetFileContent.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                            {
+                                return previousFilesInDirectory.Append(SetFileContent.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
+                            }
+
+                            return previousFilesInDirectory;
+                        }
+                    };
+                }
+
+                if (AppendFileContent.path != null)
+                {
+                    return new DelegatingFileStoreReader
+                    {
+                        GetFileContentDelegate = filePath =>
+                        {
+                            var previousFileContent = previousState.GetFileContent(filePath);
+
+                            if (filePath.SequenceEqual(AppendFileContent.path))
+                            {
+                                return (previousFileContent ?? Array.Empty<byte>()).Concat(AppendFileContent.fileContent).ToList();
+                            }
+
+                            return previousFileContent;
+                        },
+                        ListFilesInDirectoryDelegate = directoryPath =>
+                        {
+                            var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
+
+                            if (AppendFileContent.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                            {
+                                return previousFilesInDirectory.Append(AppendFileContent.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
+                            }
+
+                            return previousFilesInDirectory;
+                        }
+                    };
+                }
+
+                if (DeleteFile != null)
+                {
+                    return new DelegatingFileStoreReader
+                    {
+                        GetFileContentDelegate = filePath =>
+                        {
+                            if (filePath.SequenceEqual(DeleteFile))
+                                return null;
+
+                            return previousState.GetFileContent(filePath);
+                        },
+                        ListFilesInDirectoryDelegate = directoryPath =>
+                            previousState
+                            .ListFilesInDirectory(directoryPath)
+                            .Where(filePathInDirectory => !directoryPath.AddRange(filePathInDirectory).SequenceEqual(DeleteFile))
+                    };
+                }
+
+                throw new Exception("Invalid construction");
+            }
+        }
+
+        public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+            history.Enqueue(new WriteOperation { SetFileContent = (path, fileContent) });
+
+        public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+            history.Enqueue(new WriteOperation { AppendFileContent = (path, fileContent) });
+
+        public void DeleteFile(IImmutableList<string> path) =>
+            history.Enqueue(new WriteOperation { DeleteFile = path });
+    }
+
+    public class EmptyFileStoreReader : IFileStoreReader
+    {
+        public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) => null;
+
+        public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
+            ImmutableList<IImmutableList<string>>.Empty;
     }
 
     static public class FileStoreExtension

@@ -184,6 +184,8 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
     public class ProcessStoreInFileStore
     {
+        static readonly protected IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
+
         static public JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
         {
             NullValueHandling = NullValueHandling.Ignore
@@ -363,10 +365,10 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
             string revertToHashBase16 = null;
 
-            foreach (var recordFilePathAndString in sequenceBeforeConsideringRevertEvent)
+            foreach (var recordFilePathAndContent in sequenceBeforeConsideringRevertEvent)
             {
-                var recordSerial = Encoding.UTF8.GetBytes(recordFilePathAndString.record);
-                var recordHash = CompositionLogRecordInFile.HashBase16FromCompositionRecord(recordSerial);
+                var recordAsArray = recordFilePathAndContent.record.ToArray();
+                var recordHash = CompositionLogRecordInFile.HashBase16FromCompositionRecord(recordAsArray);
 
                 if (revertToHashBase16 != null)
                 {
@@ -376,9 +378,11 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
                     revertToHashBase16 = null;
                 }
 
-                yield return (recordFilePathAndString.filePath, recordSerial);
+                yield return (recordFilePathAndContent.filePath, recordAsArray);
 
-                var recordStruct = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(recordFilePathAndString.record);
+                var recordAsString = Encoding.UTF8.GetString(recordAsArray);
+
+                var recordStruct = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(recordAsString);
 
                 if (recordStruct.compositionEvent.RevertProcessTo != null)
                 {
@@ -387,14 +391,29 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
             }
         }
 
-        static IEnumerable<string> SplitFileContentIntoCompositionLogRecords(IReadOnlyList<byte> fileContent)
+        /// <summary>
+        /// Drop content after the last occurrence of delimiter sequence to account for the possible partial write of the last composition record.
+        /// </summary>
+        static IEnumerable<IReadOnlyList<byte>> SplitFileContentIntoCompositionLogRecords(IReadOnlyList<byte> fileContent)
         {
             if (fileContent == null)
-                return null;
+                yield break;
 
-            var fileContentAsString = Encoding.UTF8.GetString(fileContent.ToArray());
+            var recordBegin = 0;
 
-            return fileContentAsString.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < fileContent.Count; ++i)
+            {
+                if (compositionLogEntryDelimiter.SequenceEqual(fileContent.Skip(i).Take(compositionLogEntryDelimiter.Count())))
+                {
+                    var recordBytes = fileContent.Take(i).Skip(recordBegin).ToArray();
+
+                    yield return recordBytes;
+
+                    i += compositionLogEntryDelimiter.Count();
+
+                    recordBegin = i;
+                }
+            }
         }
 
         public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse_Before_2021_07()
@@ -441,8 +460,6 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
     public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
     {
         static int TryDeflateSizeThreshold => 10_000;
-
-        static readonly IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
 
         protected IFileStoreWriter fileStore;
 

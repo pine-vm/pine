@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using MoreLinq;
+using static MoreLinq.Extensions.BatchExtension;
 using Pine;
 
 namespace test_elm_fullstack
@@ -1201,6 +1201,98 @@ namespace test_elm_fullstack
                     var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
                     Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Since we cannot depend on writes to the process store happening atomic, we consider scenarios in which a starting 
+        /// server finds a store with the last composition partially written to the representation on the file system.
+        /// </summary>
+        [TestMethod]
+        public void Web_host_crash_while_writing_to_store_does_not_prevent_restoring_process_state()
+        {
+            var persistentProcessHostDateTime = new DateTimeOffset(year: 2021, month: 8, day: 17, hour: 16, 0, 0, TimeSpan.Zero);
+
+            var allEventsAndExpectedResponses =
+                TestSetup.CounterProcessTestEventsAndExpectedResponses(
+                    new (int addition, int expectedResponse)[]
+                    {
+                        (0, 0),
+                        (1, 1),
+                        (3, 4),
+                        (5, 9),
+                    }).ToList();
+
+            var fileStoreWriter = new RecordingFileStoreWriter();
+
+            IFileStoreReader getCurrentFileStoreReader() => fileStoreWriter.Apply(new EmptyFileStoreReader());
+
+            var fileStoreReader = new DelegatingFileStoreReader
+            {
+                GetFileContentDelegate = path => getCurrentFileStoreReader().GetFileContent(path),
+                ListFilesInDirectoryDelegate = path => getCurrentFileStoreReader().ListFilesInDirectory(path),
+            };
+
+            var fileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
+
+            static string getCurrentCounterValueFromHttpClient(HttpClient httpClient)
+            {
+                var httpResponse = httpClient.PostAsync("",
+                    new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(new { addition = 0 }), System.Text.Encoding.UTF8)).Result;
+
+                return httpResponse.Content.ReadAsStringAsync().Result;
+            }
+
+            using (var originalTestSetup = WebHostAdminInterfaceTestSetup.Setup(
+                fileStore: fileStore,
+                persistentProcessHostDateTime: () => persistentProcessHostDateTime,
+                deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            {
+                using (var server = originalTestSetup.StartWebHost())
+                {
+                    using var publicAppClient = originalTestSetup.BuildPublicAppHttpClient();
+
+                    foreach (var (serializedEvent, expectedResponse) in allEventsAndExpectedResponses)
+                    {
+                        var httpResponse =
+                            publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+
+                        var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+                        Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+
+                        persistentProcessHostDateTime += TimeSpan.FromSeconds(1);
+                    }
+                }
+            }
+
+            var storeOriginalHistory =
+                fileStoreWriter.History.ToImmutableList();
+
+            var lastWriteOperation = storeOriginalHistory.Last();
+
+            Assert.IsNotNull(lastWriteOperation.AppendFileContent.path, "Last write operation was append");
+
+            var storeHistoryWithCrash =
+                storeOriginalHistory.SkipLast(1).Append(new RecordingFileStoreWriter.WriteOperation
+                {
+                    AppendFileContent = (lastWriteOperation.AppendFileContent.path, Enumerable.Repeat((byte)4, 123).ToImmutableList()),
+                });
+
+            var fileStoreReaderAfterCrash = RecordingFileStoreWriter.WriteOperation.Apply(storeHistoryWithCrash, new EmptyFileStoreReader());
+
+            using (var testSetupAfterCrash = WebHostAdminInterfaceTestSetup.Setup(
+                fileStore: new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReaderAfterCrash),
+                persistentProcessHostDateTime: () => persistentProcessHostDateTime))
+            {
+                using (var server = testSetupAfterCrash.StartWebHost())
+                {
+                    using var publicAppClient = testSetupAfterCrash.BuildPublicAppHttpClient();
+
+                    Assert.AreEqual(
+                        allEventsAndExpectedResponses.SkipLast(1).Last().expectedResponse,
+                        getCurrentCounterValueFromHttpClient(publicAppClient));
                 }
             }
         }
