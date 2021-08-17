@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-16/elm-fullstack-bin-ba6abfc96a31d5eb87e2345a06d4854778ba80c3-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-16/elm-fullstack-bin-ba6abfc96a31d5eb87e2345a06d4854778ba80c3-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-17/elm-fullstack-bin-c1e11e96d4151b4cd0a1a2693edb1bd235398f92-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-17/elm-fullstack-bin-c1e11e96d4151b4cd0a1a2693edb1bd235398f92-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
