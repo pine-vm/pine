@@ -7,30 +7,19 @@ namespace Pine
 {
     public class Composition
     {
-        public class Component : IEquatable<Component>
+        public record Component(byte[] BlobContent = null, IImmutableList<Component> ListContent = null)
         {
-            public readonly byte[] BlobContent;
-
-            public readonly IImmutableList<Component> ListContent;
-
-            public Component(byte[] blobContent)
-            {
-                BlobContent = blobContent;
-            }
-
-            public Component(IImmutableList<Component> listContent)
-            {
-                ListContent = listContent;
-            }
-
             static public Component Blob(IReadOnlyList<byte> blobContent) =>
-                new Component(blobContent as byte[] ?? blobContent.ToArray());
+                new(BlobContent: blobContent as byte[] ?? blobContent.ToArray());
 
             static public Component List(ImmutableList<Component> listContent) =>
-                new Component(listContent: listContent);
+                new(ListContent: listContent);
 
-            public bool Equals(Component other)
+            public virtual bool Equals(Component other)
             {
+                if (other == null)
+                    return false;
+
                 if (BlobContent != null || other.BlobContent != null)
                 {
                     if (BlobContent == null || other.BlobContent == null)
@@ -49,8 +38,6 @@ namespace Pine
                     Enumerable.Range(0, ListContent.Count)
                     .All(i => ListContent.ElementAt(i).Equals(other.ListContent.ElementAt(i)));
             }
-
-            override public bool Equals(object obj) => Equals(obj as Component);
 
             public override int GetHashCode()
             {
@@ -333,19 +320,19 @@ namespace Pine
                 return null;
 
             if (tree.BlobContent != null)
-                return new Component(blobContent: tree.BlobContent);
+                return Component.Blob(tree.BlobContent);
 
             var listContent =
                 tree.TreeContent
                 .Select(treeComponent =>
-                    new Component(listContent:
+                    Component.List(
                         ImmutableList.Create(
                             ComponentFromString(treeComponent.name),
                             FromTreeWithStringPath(treeComponent.component))
                     ))
                 .ToImmutableList();
 
-            return new Component(listContent: listContent);
+            return Component.List(listContent);
         }
 
         static public TreeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
@@ -512,7 +499,7 @@ namespace Pine
                         "Failed to load element " + CommonConversion.StringBase16FromByteArray(firstFailed.elementHash) + ": " + firstFailed.loadResult.Err);
 
                 return Result<string, Component>.ok(
-                    new Component(listContent: loadElementsResults.Select(elementResult => elementResult.loadResult.Ok).ToImmutableList()));
+                    Component.List(loadElementsResults.Select(elementResult => elementResult.loadResult.Ok).ToImmutableList()));
             }
 
             return Result<string, Component>.err("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
@@ -583,40 +570,13 @@ namespace Pine
             return null;
         }
 
-        public class Result<ErrT, OkT> : IEquatable<Result<ErrT, OkT>>
+        public record Result<ErrT, OkT>(ErrT Err = default, OkT Ok = default)
         {
-            public ErrT Err;
-
-            public OkT Ok;
-
             static public Result<ErrT, OkT> err(ErrT err) =>
-                new Result<ErrT, OkT> { Err = err };
+                new() { Err = err };
 
             static public Result<ErrT, OkT> ok(OkT ok) =>
-                new Result<ErrT, OkT> { Ok = ok };
-
-            public bool Equals(Result<ErrT, OkT> other)
-            {
-                if (Err != null || other.Err != null)
-                {
-                    if (Err == null || other.Err == null)
-                        return false;
-
-                    return Err.Equals(other.Err);
-                }
-
-                if (Ok == null || other.Ok == null)
-                    return false;
-
-                return Ok.Equals(other.Ok);
-            }
-
-            override public bool Equals(object obj) => Equals(obj as Result<ErrT, OkT>);
-
-            public override int GetHashCode()
-            {
-                return HashCode.Combine(Err, Ok);
-            }
+                new() { Ok = ok };
 
             public Result<ErrT, MappedOkT> map<MappedOkT>(Func<OkT, MappedOkT> okMap)
             {
@@ -627,7 +587,7 @@ namespace Pine
             }
         }
 
-        public class ParseAsTreeWithStringPathResult : Result<IImmutableList<(int index, string name)>, TreeWithStringPath>
+        public record ParseAsTreeWithStringPathResult : Result<IImmutableList<(int index, string name)>, TreeWithStringPath>
         {
         }
 

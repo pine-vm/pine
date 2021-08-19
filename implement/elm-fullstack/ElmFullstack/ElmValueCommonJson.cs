@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace ElmFullstack.ElmValueCommonJson
 {
-    public class Maybe<JustT>
+    public record Maybe<JustT>
     {
         [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public IReadOnlyList<object> Nothing;
@@ -14,10 +14,10 @@ namespace ElmFullstack.ElmValueCommonJson
         public IReadOnlyList<JustT> Just;
 
         static public Maybe<JustT> just(JustT j) =>
-            new Maybe<JustT> { Just = ImmutableList.Create(j) };
+            new() { Just = ImmutableList.Create(j) };
 
         static public Maybe<JustT> nothing() =>
-            new Maybe<JustT> { Nothing = ImmutableList<object>.Empty };
+            new() { Nothing = ImmutableList<object>.Empty };
 
         static public Maybe<JustT> NothingFromNull(JustT maybeNull) =>
             maybeNull == null
@@ -27,7 +27,7 @@ namespace ElmFullstack.ElmValueCommonJson
             new Maybe<JustT> { Just = ImmutableList.Create(maybeNull) };
     }
 
-    public class Result<ErrT, OkT>
+    public record Result<ErrT, OkT>
     {
         [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public IReadOnlyList<ErrT> Err;
@@ -36,10 +36,10 @@ namespace ElmFullstack.ElmValueCommonJson
         public IReadOnlyList<OkT> Ok;
 
         static public Result<ErrT, OkT> ok(OkT ok) =>
-            new Result<ErrT, OkT> { Ok = ImmutableList.Create(ok) };
+            new() { Ok = ImmutableList.Create(ok) };
 
         static public Result<ErrT, OkT> err(ErrT err) =>
-            new Result<ErrT, OkT> { Err = ImmutableList.Create(err) };
+            new() { Err = ImmutableList.Create(err) };
 
         public Result<ErrT, NewOkT> map<NewOkT>(Func<OkT, NewOkT> mapOk)
         {
