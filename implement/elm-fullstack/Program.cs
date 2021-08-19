@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-08-17";
+        static public string AppVersionId => "2021-08-19";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -249,7 +249,7 @@ namespace elm_fullstack
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessOption = runServerCmd.Option("--replicate-process", "Path to a process to replicate. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-admin-password", "Used together with '--replicate-process' if that location requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployAppOption = runServerCmd.Option("--deploy-app", "Path to an app to deploy on startup, analogous to the '--from' path on the `deploy-app` command. Can be combined with '--replicate-process'.", CommandOptionType.SingleValue);
+                var deployAppOption = runServerCmd.Option("--deploy-app", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy-app` command. Can be combined with '--replicate-process'.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -400,8 +400,6 @@ namespace elm_fullstack
 
                     WebHostExtensions.WaitForShutdown(webHost);
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(runServerCmd);
             });
 
         static CommandLineApplication AddDeployAppCmd(CommandLineApplication app) =>
@@ -410,58 +408,59 @@ namespace elm_fullstack
                 deployAppCmd.Description = "Deploy an app to an Elm Fullstack process. Deployment implies migration from the previous app state if not specified otherwise.";
                 deployAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var getSiteAndPasswordFromOptions = SiteAndSitePasswordOptionsOnCommand(deployAppCmd);
-                var fromOption = deployAppCmd.Option("--from", "Path to the app to deploy.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var sourceArgument = deployAppCmd.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
 
-                var initElmAppStateOption = deployAppCmd.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
+                var siteArgument = ProcessSiteArgumentOnCommand(deployAppCmd);
+                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(deployAppCmd);
+
+                var initAppStateOption = deployAppCmd.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
 
                 deployAppCmd.OnExecute(() =>
                 {
-                    var (site, sitePassword) = getSiteAndPasswordFromOptions();
+                    var site = siteArgument.Value;
+                    var sitePassword = passwordFromSite(site);
 
                     var deployReport =
                         DeployApp(
-                            sourcePath: fromOption.Value(),
+                            sourcePath: sourceArgument.Value,
                             site: site,
                             siteDefaultPassword: sitePassword,
-                            initElmAppState: initElmAppStateOption.HasValue(),
+                            initElmAppState: initAppStateOption.HasValue(),
                             promptForPasswordOnConsole: true);
 
                     WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "deploy-app.json");
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(deployAppCmd);
             });
 
         static CommandLineApplication AddSetAppStateCmd(CommandLineApplication app) =>
-            app.Command("set-app-state", setElmAppStateCmd =>
+            app.Command("set-app-state", setAppStateCmd =>
             {
-                setElmAppStateCmd.Description = "Set the state of a backend Elm app.";
-                setElmAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                setAppStateCmd.Description = "Set the state of the backend Elm app in the given process.";
+                setAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var siteAndPasswordFromCmd = SiteAndSitePasswordOptionsOnCommand(setElmAppStateCmd);
+                var sourceArgument = setAppStateCmd.Argument("source", "Path to the serialized state representation to load.").IsRequired(allowEmptyStrings: false);
 
-                var fromOption = setElmAppStateCmd.Option("--from", "Path to the serialized state representation to load.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var siteArgument = ProcessSiteArgumentOnCommand(setAppStateCmd);
+                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(setAppStateCmd);
 
-                setElmAppStateCmd.OnExecute(() =>
+                setAppStateCmd.OnExecute(() =>
                 {
-                    var (site, sitePassword) = siteAndPasswordFromCmd();
+                    var site = siteArgument.Value;
+                    var sitePassword = passwordFromSite(site);
 
                     var attemptReport =
                         SetElmAppState(
                             site: site,
                             siteDefaultPassword: sitePassword,
-                            sourcePath: fromOption.Value(),
+                            sourcePath: sourceArgument.Value,
                             promptForPasswordOnConsole: true);
 
                     WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "set-app-state.json");
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(setElmAppStateCmd);
             });
 
         static CommandLineApplication AddArchiveProcessCmd(CommandLineApplication app) =>
@@ -470,11 +469,13 @@ namespace elm_fullstack
                 archiveProcessCmd.Description = "Copy all files needed to restore or replicate a process and store them in a zip archive.";
                 archiveProcessCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var siteAndPasswordFromCmd = SiteAndSitePasswordOptionsOnCommand(archiveProcessCmd);
+                var siteArgument = ProcessSiteArgumentOnCommand(archiveProcessCmd);
+                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(archiveProcessCmd);
 
                 archiveProcessCmd.OnExecute(() =>
                 {
-                    var (site, sitePassword) = siteAndPasswordFromCmd();
+                    var site = MapSiteForCommandLineArgument(siteArgument.Value);
+                    var sitePassword = passwordFromSite(site);
 
                     sitePassword =
                         AttemptHttpRequest(
@@ -498,8 +499,6 @@ namespace elm_fullstack
 
                     Console.WriteLine("Saved process archive to file '" + filePath + "'.");
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(archiveProcessCmd);
             });
 
         static CommandLineApplication AddTruncateProcessHistoryCmd(CommandLineApplication app) =>
@@ -508,11 +507,13 @@ namespace elm_fullstack
                 truncateProcessHistoryCmd.Description = "Remove parts of the process history that are not needed to restore the process.";
                 truncateProcessHistoryCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var siteAndPasswordFromCmd = SiteAndSitePasswordOptionsOnCommand(truncateProcessHistoryCmd);
+                var siteArgument = ProcessSiteArgumentOnCommand(truncateProcessHistoryCmd);
+                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(truncateProcessHistoryCmd);
 
                 truncateProcessHistoryCmd.OnExecute(() =>
                 {
-                    var (site, sitePassword) = siteAndPasswordFromCmd();
+                    var site = siteArgument.Value;
+                    var sitePassword = passwordFromSite(site);
 
                     var report =
                         TruncateProcessHistory(
@@ -524,8 +525,6 @@ namespace elm_fullstack
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "truncate-process-history.json");
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(truncateProcessHistoryCmd);
             });
 
         static CommandLineApplication AddCompileAppCmd(CommandLineApplication app) =>
@@ -534,11 +533,11 @@ namespace elm_fullstack
                 compileAppCmd.Description = "Compile app source code the same way as would be done when deploying.";
                 compileAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var fromOption = compileAppCmd.Option("--from", "Path to the app source code.", CommandOptionType.SingleValue).IsRequired(allowEmptyStrings: false);
+                var sourceArgument = compileAppCmd.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
 
                 compileAppCmd.OnExecute(() =>
                 {
-                    var sourcePath = fromOption.Value();
+                    var sourcePath = sourceArgument.Value;
 
                     var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
 
@@ -624,8 +623,6 @@ namespace elm_fullstack
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "compile-app.json");
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(compileAppCmd);
             });
 
         static CommandLineApplication AddInteractiveCmd(CommandLineApplication app) =>
@@ -705,8 +702,6 @@ namespace elm_fullstack
                         Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
                     }
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(enterInteractiveCmd);
             });
 
         static CommandLineApplication AddDescribeCmd(CommandLineApplication app) =>
@@ -754,25 +749,19 @@ namespace elm_fullstack
 
                     return 0;
                 });
-
-                CommandExtension.AddHelpCommandOnCommand(describeCmd);
             });
 
-        static Func<(string site, string sitePassword)> SiteAndSitePasswordOptionsOnCommand(CommandLineApplication cmd)
+        static Func<string, string> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(CommandLineApplication cmd)
         {
-            var siteOption = cmd.Option("--site", "Site where to apply the changes. Can be an URL to the admin interface of a server or a path in the local file system.", CommandOptionType.SingleValue).IsRequired();
-            var sitePasswordOption = cmd.Option("--site-password", "Password to access the site where to apply the changes.", CommandOptionType.SingleValue);
+            var sitePasswordOption = cmd.Option("--site-password", "Password to access the site.", CommandOptionType.SingleValue);
 
-            return () =>
-            {
-                var site = MapSiteForCommandLineArgument(siteOption.Value());
-
-                var sitePassword =
-                    sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
-
-                return (site, sitePassword);
-            };
+            return site => sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
         }
+
+        static CommandArgument ProcessSiteArgumentOnCommand(CommandLineApplication cmd) =>
+            cmd
+            .Argument("process-site", "Path to the admin interface of the server running the process.")
+            .IsRequired(allowEmptyStrings: false);
 
         static public string ElmMakeHomeDirectoryPath =>
             Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
