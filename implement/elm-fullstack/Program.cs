@@ -48,12 +48,12 @@ namespace elm_fullstack
 
             var runServerCmd = AddRunServerCmd(app);
 
-            var deployAppCmd = AddDeployAppCmd(app);
+            var deployAppCmd = AddDeployCmd(app);
             var setAppStateCmd = AddSetAppStateCmd(app);
             var archiveProcessCmd = AddArchiveProcessCmd(app);
             var truncateProcessHistoryCmd = AddTruncateProcessHistoryCmd(app);
 
-            var compileAppCmd = AddCompileAppCmd(app);
+            var compileAppCmd = AddCompileCmd(app);
             var enterInteractiveCmd = AddInteractiveCmd(app);
             var describeCmd = AddDescribeCmd(app);
 
@@ -249,7 +249,7 @@ namespace elm_fullstack
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
                 var replicateProcessOption = runServerCmd.Option("--replicate-process", "Path to a process to replicate. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
                 var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-admin-password", "Used together with '--replicate-process' if that location requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployAppOption = runServerCmd.Option("--deploy-app", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy-app` command. Can be combined with '--replicate-process'.", CommandOptionType.SingleValue);
+                var deployOption = runServerCmd.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--replicate-process'.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -329,13 +329,13 @@ namespace elm_fullstack
 
                     var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
-                    if (deployAppOption.HasValue())
+                    if (deployOption.HasValue())
                     {
                         Console.WriteLine("Loading app config to deploy...");
 
                         var appConfigZipArchive =
                             ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                                sourcePath: deployAppOption.Value()).configZipArchive;
+                                sourcePath: deployOption.Value()).configZipArchive;
 
                         var appConfigTree =
                             Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
@@ -402,20 +402,20 @@ namespace elm_fullstack
                 });
             });
 
-        static CommandLineApplication AddDeployAppCmd(CommandLineApplication app) =>
-            app.Command("deploy-app", deployAppCmd =>
+        static CommandLineApplication AddDeployCmd(CommandLineApplication app) =>
+            app.Command("deploy", deployCmd =>
             {
-                deployAppCmd.Description = "Deploy an app to an Elm Fullstack process. Deployment implies migration from the previous app state if not specified otherwise.";
-                deployAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                deployCmd.Description = "Deploy an app to an Elm Fullstack backend process. Deployment implies migration from the previous app state if not specified otherwise.";
+                deployCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var sourceArgument = deployAppCmd.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
+                var sourceArgument = deployCmd.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
 
-                var siteArgument = ProcessSiteArgumentOnCommand(deployAppCmd);
-                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(deployAppCmd);
+                var siteArgument = ProcessSiteArgumentOnCommand(deployCmd);
+                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(deployCmd);
 
-                var initAppStateOption = deployAppCmd.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
+                var initAppStateOption = deployCmd.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
 
-                deployAppCmd.OnExecute(() =>
+                deployCmd.OnExecute(() =>
                 {
                     var site = siteArgument.Value;
                     var sitePassword = passwordFromSite(site);
@@ -430,7 +430,7 @@ namespace elm_fullstack
 
                     WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
-                        reportKind: "deploy-app.json");
+                        reportKind: "deploy.json");
                 });
             });
 
@@ -527,15 +527,15 @@ namespace elm_fullstack
                 });
             });
 
-        static CommandLineApplication AddCompileAppCmd(CommandLineApplication app) =>
-            app.Command("compile-app", compileAppCmd =>
+        static CommandLineApplication AddCompileCmd(CommandLineApplication app) =>
+            app.Command("compile", compileCmd =>
             {
-                compileAppCmd.Description = "Compile app source code the same way as would be done when deploying.";
-                compileAppCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                compileCmd.Description = "Compile app source code the same way as would be done when deploying.";
+                compileCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var sourceArgument = compileAppCmd.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
+                var sourceArgument = compileCmd.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
 
-                compileAppCmd.OnExecute(() =>
+                compileCmd.OnExecute(() =>
                 {
                     var sourcePath = sourceArgument.Value;
 
@@ -621,7 +621,7 @@ namespace elm_fullstack
 
                     WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
-                        reportKind: "compile-app.json");
+                        reportKind: "compile.json");
                 });
             });
 
@@ -901,9 +901,9 @@ namespace elm_fullstack
                         (site.TrimEnd('/')) +
                         (initElmAppState
                         ?
-                        ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState
+                        ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAndInitAppState
                         :
-                        ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState);
+                        ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAndMigrateAppState);
 
                     Console.WriteLine("Attempting to deploy app '" + filteredSourceCompositionId + "' to '" + deployAddress + "'...");
 

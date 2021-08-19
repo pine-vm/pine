@@ -17,7 +17,7 @@ FROM binaries AS build-default-config
 
 COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
-RUN dotnet "/elm-fullstack/dotnet/elm-fs.dll"  deploy-app  /docker-image-default-app/  /elm-fullstack/process-store  --init-app-state
+RUN dotnet "/elm-fullstack/dotnet/elm-fs.dll"  deploy  /docker-image-default-app/  /elm-fullstack/process-store  --init-app-state
 
 WORKDIR /elm-fullstack
 

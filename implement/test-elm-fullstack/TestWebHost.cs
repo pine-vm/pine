@@ -629,10 +629,10 @@ namespace test_elm_fullstack
                     testSetup.BuildAdminInterfaceHttpClient()))
                 {
                     var deployAppConfigResponse = adminClient.PostAsync(
-                        StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState,
+                        StartupAdminInterface.PathApiDeployAndInitAppState,
                         new ByteArrayContent(webAppConfigZipArchive)).Result;
 
-                    Assert.IsTrue(deployAppConfigResponse.IsSuccessStatusCode, "deploy-app-config response IsSuccessStatusCode");
+                    Assert.IsTrue(deployAppConfigResponse.IsSuccessStatusCode, "deploy response IsSuccessStatusCode");
 
                     var getAppConfigResponse = adminClient.GetAsync(StartupAdminInterface.PathApiGetDeployedAppConfig).Result;
 
@@ -666,7 +666,7 @@ namespace test_elm_fullstack
                     testSetup.BuildAdminInterfaceHttpClient()))
                 {
                     var deployHttpResponse = adminClient.PostAsync(
-                        StartupAdminInterface.PathApiDeployAppConfigAndInitElmAppState,
+                        StartupAdminInterface.PathApiDeployAndInitAppState,
                         new ByteArrayContent(webAppConfigZipArchive)).Result;
                 }
             }
@@ -679,7 +679,7 @@ namespace test_elm_fullstack
                     testSetup.BuildAdminInterfaceHttpClient()))
                 {
                     var deployHttpResponse = adminClient.PostAsync(
-                        StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
+                        StartupAdminInterface.PathApiDeployAndMigrateAppState,
                         new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                     Assert.IsTrue(deployHttpResponse.IsSuccessStatusCode, "deploy response IsSuccessStatusCode");
@@ -738,7 +738,7 @@ namespace test_elm_fullstack
                 testSetup.BuildAdminInterfaceHttpClient()))
             {
                 var migrateHttpResponse = adminClient.PostAsync(
-                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
+                    StartupAdminInterface.PathApiDeployAndMigrateAppState,
                     new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                 Assert.AreEqual(
@@ -778,7 +778,7 @@ namespace test_elm_fullstack
                 testSetup.BuildAdminInterfaceHttpClient()))
             {
                 var migrateHttpResponse = adminClient.PostAsync(
-                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
+                    StartupAdminInterface.PathApiDeployAndMigrateAppState,
                     new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                 Assert.IsTrue(
@@ -835,7 +835,7 @@ namespace test_elm_fullstack
                 testSetup.BuildAdminInterfaceHttpClient()))
             {
                 var deployAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
-                    StartupAdminInterface.PathApiDeployAppConfigAndMigrateElmAppState,
+                    StartupAdminInterface.PathApiDeployAndMigrateAppState,
                     new ByteArrayContent(migrateAndSecondAppWebAppConfigZipArchive)).Result;
 
                 Assert.IsTrue(
