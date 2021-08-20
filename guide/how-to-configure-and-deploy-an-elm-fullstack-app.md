@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-17/elm-fullstack-bin-c1e11e96d4151b4cd0a1a2693edb1bd235398f92-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-17/elm-fullstack-bin-c1e11e96d4151b4cd0a1a2693edb1bd235398f92-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-19/elm-fullstack-bin-d11cc234e6daa35d8a213a23976500341f1c0ed4-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-08-19/elm-fullstack-bin-d11cc234e6daa35d8a213a23976500341f1c0ed4-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -36,7 +36,7 @@ Here is an example app containing back-end and front-end: https://github.com/elm
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy-app=https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -263,29 +263,29 @@ But we don't need a web browser to interact with the admin interface. The comman
 
 ## Deploy an App to an Existing Server
 
-Use the `elm-fs  deploy-app` command to deploy an app to a running server in an atomic operation.
+Use the `elm-fs  deploy` command to deploy an app to a running server in an atomic operation.
 
 With this command, we need to specify the path to the app to deploy and the destination site to deploy to.
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy-app  --site=http://localhost:4000  --from=https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app  --init-app-state
+elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/ba6abfc96a31d5eb87e2345a06d4854778ba80c3/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
-The `--init-app-state` option means we do not migrate the previous backend state but initialize the backend state from the init function.
+The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
 
 Since the server requires us to authenticate for deployment, we will get this prompt when running the command from above:
 
 ```text
-The server at 'http://localhost:4000/api/deploy-app-config-and-init-elm-app-state' is asking for authentication. Please enter the password we should use to authenticate there:
+The server at 'http://localhost:4000/api/deploy-and-init-app-state' is asking for authentication. Please enter the password we should use to authenticate there:
 >
 ```
 
 We enter the same password we gave with the `--admin-password` option on the command to run the server.
 
-The `deploy-app` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
+The `elm-fs  deploy` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
 ```text
-Saved report to file 'C:\Users\John\elm-fullstack-tool\report\2020-05-26T09-26-34_deploy-app.json'.
+Saved report to file 'C:\Users\John\elm-fullstack-tool\report\2021-08-20T06-36-09_deploy.json'.
 ```
 In this report, we can see if the deployment was successful and how much time it took. If a migration fails, we also find a description of the problem in this report.
 

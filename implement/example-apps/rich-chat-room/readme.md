@@ -15,13 +15,13 @@ You can find the source code for this example at [https://github.com/elm-fullsta
 To run the app with the default source code, use the `run-server` command as follows:
 
 ```cmd
-elm-fs  run-server  --deploy-app=https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room
+elm-fs  run-server  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room
 ```
 
 If you have copied (and modified) the code on your local file system, you can run the app with this command:
 
 ```cmd
-elm-fs  run-server  --deploy-app=.
+elm-fs  run-server  --deploy=.
 ```
 
 ## Fast Distribution of Messages in the Chat Room Using Long-Polling
