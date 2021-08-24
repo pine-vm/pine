@@ -117,14 +117,25 @@ state_type_name_from_root_elm_module =
     , interfaceToHost_processEvent
     )
 
-type alias State = {}
+type alias State = { field_name : Int }
 
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    InterfaceToHost.wrapForSerialInterface_processEvent processEvent
+
+backendMain : ElmFullstack.BackendConfig State
+backendMain =
+    { init = ( {}, [] )
+    , subscriptions = subscriptions
+    }
+
+
+subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions _ =
+    { httpRequest = always (\\s -> ( s, [] ))
+    , posixTimeIsPast = Nothing
+    }
 """
       , Ok
-            ( CompileFullstackApp.RecordElmType { fields = [] }
+            ( CompileFullstackApp.RecordElmType
+                { fields = [ ( "field_name", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ] }
             , Dict.empty
             )
       )
@@ -164,7 +175,6 @@ interfaceToHost_processEvent =
                                     CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
                                         sourceModules
                                         ( moduleFilePath, parsedModule )
-                                        |> Result.map Tuple.second
                                         |> Expect.equal expectedResult
                                 )
                             |> Result.Extra.unpack Expect.fail identity
