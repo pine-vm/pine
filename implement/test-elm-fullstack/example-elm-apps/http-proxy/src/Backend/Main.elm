@@ -130,8 +130,8 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                             , headersToAdd = []
                             }
 
-                        Ok requestToVolatileHostComplete ->
-                            case requestToVolatileHostComplete.exceptionToString of
+                        Ok requestToVolatileProcessComplete ->
+                            case requestToVolatileProcessComplete.exceptionToString of
                                 Just exceptionToString ->
                                     { statusCode = 500
                                     , bodyAsBase64 = bodyFromString ("Exception in volatile process: " ++ exceptionToString)
@@ -141,7 +141,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                 Nothing ->
                                     let
                                         returnValueAsHttpResponseResult =
-                                            requestToVolatileHostComplete.returnValueToString
+                                            requestToVolatileProcessComplete.returnValueToString
                                                 |> Maybe.withDefault ""
                                                 |> Json.Decode.decodeString HttpViaVolatileProcess.decodeVolatileProcessHttpResponse
                                     in
@@ -153,14 +153,14 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                             , headersToAdd = []
                                             }
 
-                                        Ok volatileHostHttpResponse ->
+                                        Ok volatileProcessHttpResponse ->
                                             let
                                                 headersToAdd =
-                                                    volatileHostHttpResponse.headers
+                                                    volatileProcessHttpResponse.headers
                                                         |> List.filter (.name >> String.toLower >> (/=) "transfer-encoding")
                                             in
                                             { statusCode = 200
-                                            , bodyAsBase64 = volatileHostHttpResponse.bodyAsBase64
+                                            , bodyAsBase64 = volatileProcessHttpResponse.bodyAsBase64
                                             , headersToAdd = headersToAdd
                                             }
             in

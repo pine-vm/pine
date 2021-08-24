@@ -77,7 +77,7 @@ namespace ElmFullstack.WebHost
         {
             var httpHeaders =
                 httpRequest.Headers
-                .Select(header => new InterfaceToHost.HttpHeader { name = header.Key, values = header.Value.ToArray() })
+                .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray()))
                 .ToArray();
 
             byte[] httpRequestBody = null;
@@ -90,12 +90,12 @@ namespace ElmFullstack.WebHost
             }
 
             return new InterfaceToHost.HttpRequest
-            {
-                method = httpRequest.Method,
-                uri = httpRequest.GetDisplayUrl(),
-                bodyAsBase64 = httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
-                headers = httpHeaders,
-            };
+            (
+                method: httpRequest.Method,
+                uri: httpRequest.GetDisplayUrl(),
+                bodyAsBase64: httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
+                headers: httpHeaders
+            );
         }
     }
 }
