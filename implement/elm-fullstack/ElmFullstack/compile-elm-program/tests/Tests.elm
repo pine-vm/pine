@@ -375,6 +375,23 @@ parse_elm_type_annotation =
                 )
       , rootTypeAnnotationText = " WithCustom.CustomType Int "
       }
+    , { testName = "Parameterized record alias instance"
+      , modulesTexts =
+            [ [ "module WithAlias exposing (..)"
+              , ""
+              , "type alias RecordAlias a = { parameterized_field : a }"
+              ]
+                |> String.join "\n"
+            ]
+      , rootTypeAnnotationText = " WithAlias.RecordAlias Int "
+      , expectedResult =
+            Ok
+                ( CompileFullstackApp.RecordElmType
+                    { fields = [ ( "parameterized_field", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ]
+                    }
+                , Dict.empty
+                )
+      }
     , { testName = "Record field List instance"
       , modulesTexts =
             [ [ "module Main exposing (..)"

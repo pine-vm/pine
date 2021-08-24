@@ -109,6 +109,7 @@ initState =
     , empty_record = {}
     , empty_tuple = ()
     , customTypeInstance = CustomTypeWithTypeParameter 4
+    , record_instance = { field_a = 123, field_parameterized = "test arg" }
     , listDict =
         [ ( { orig = 1, dest = 3 }, "Edge A" )
         , ( { orig = 3, dest = 4 }, "Edge B" )

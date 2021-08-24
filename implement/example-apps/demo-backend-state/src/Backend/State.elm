@@ -30,6 +30,7 @@ type alias State =
     , empty_record : {}
     , empty_tuple : ()
     , customTypeInstance : CustomTypeWithTypeParameter Int
+    , record_instance : RecordAliasWithTypeParameter String
     , listDict :
         ListDict.Dict
             { orig : Int
@@ -72,3 +73,9 @@ type CustomType
 
 type CustomTypeWithTypeParameter a
     = CustomTypeWithTypeParameter a
+
+
+type alias RecordAliasWithTypeParameter typeParamInRecord =
+    { field_a : Int
+    , field_parameterized : typeParamInRecord
+    }

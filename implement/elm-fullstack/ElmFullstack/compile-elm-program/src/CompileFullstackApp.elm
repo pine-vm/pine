@@ -39,6 +39,7 @@ import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Module
+import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.Signature
@@ -48,6 +49,7 @@ import Elm.Syntax.TypeAnnotation
 import JaroWinkler
 import Json.Encode
 import List
+import List.Extra
 import Maybe
 import Parser
 import Result.Extra
@@ -2068,223 +2070,10 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal :
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( currentModule, typeAnnotation ) =
     case typeAnnotation of
         Elm.Syntax.TypeAnnotation.Typed instantiatedNode argumentsNodes ->
-            let
-                ( instantiatedModuleAlias, instantiatedLocalName ) =
-                    Elm.Syntax.Node.value instantiatedNode
-
-                instantiatedResult =
-                    case
-                        parseElmTypeLeavesNames
-                            |> Dict.get (instantiatedModuleAlias ++ [ instantiatedLocalName ] |> String.join ".")
-                    of
-                        Just leaf ->
-                            Ok ( LeafElmType leaf, Dict.empty )
-
-                        Nothing ->
-                            let
-                                maybeInstantiatedModule =
-                                    if instantiatedModuleAlias == [] then
-                                        currentModule.imports
-                                            |> List.map Elm.Syntax.Node.value
-                                            |> List.filterMap
-                                                (\moduleImport ->
-                                                    case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
-                                                        Nothing ->
-                                                            Nothing
-
-                                                        Just importExposing ->
-                                                            let
-                                                                containsMatchingExposition =
-                                                                    case importExposing of
-                                                                        Elm.Syntax.Exposing.All _ ->
-                                                                            -- TODO: Add lookup into that module
-                                                                            False
-
-                                                                        Elm.Syntax.Exposing.Explicit topLevelExpositions ->
-                                                                            topLevelExpositions
-                                                                                |> List.any
-                                                                                    (\topLevelExpose ->
-                                                                                        case Elm.Syntax.Node.value topLevelExpose of
-                                                                                            Elm.Syntax.Exposing.InfixExpose _ ->
-                                                                                                False
-
-                                                                                            Elm.Syntax.Exposing.FunctionExpose _ ->
-                                                                                                False
-
-                                                                                            Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasExpose ->
-                                                                                                typeOrAliasExpose == instantiatedLocalName
-
-                                                                                            Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                                                                                                typeExpose.name == instantiatedLocalName
-                                                                                    )
-                                                            in
-                                                            if containsMatchingExposition then
-                                                                modules |> Dict.get (Elm.Syntax.Node.value moduleImport.moduleName |> String.join ".")
-
-                                                            else
-                                                                Nothing
-                                                )
-                                            |> List.head
-                                            |> Maybe.withDefault currentModule
-                                            |> Just
-
-                                    else
-                                        currentModule.imports
-                                            |> List.map Elm.Syntax.Node.value
-                                            |> List.filter
-                                                (\moduleImport ->
-                                                    moduleImport.moduleAlias
-                                                        |> Maybe.withDefault moduleImport.moduleName
-                                                        |> Elm.Syntax.Node.value
-                                                        |> (==) instantiatedModuleAlias
-                                                )
-                                            |> List.head
-                                            |> Maybe.andThen
-                                                (\matchingImport ->
-                                                    modules |> Dict.get (String.join "." (Elm.Syntax.Node.value matchingImport.moduleName))
-                                                )
-                            in
-                            case maybeInstantiatedModule of
-                                Nothing ->
-                                    Err ("Did not find referenced module '" ++ String.join "." instantiatedModuleAlias ++ "'")
-
-                                Just instantiatedModule ->
-                                    instantiatedModule.declarations
-                                        |> List.map Elm.Syntax.Node.value
-                                        |> List.filterMap
-                                            (\declaration ->
-                                                case declaration of
-                                                    Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-                                                        if Elm.Syntax.Node.value aliasDeclaration.name /= instantiatedLocalName then
-                                                            Nothing
-
-                                                        else
-                                                            Just (AliasDeclaration aliasDeclaration)
-
-                                                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                                        if Elm.Syntax.Node.value customTypeDeclaration.name /= instantiatedLocalName then
-                                                            Nothing
-
-                                                        else
-                                                            Just (CustomTypeDeclaration customTypeDeclaration)
-
-                                                    _ ->
-                                                        Nothing
-                                            )
-                                        |> List.head
-                                        |> Maybe.map
-                                            (\declaration ->
-                                                case declaration of
-                                                    AliasDeclaration aliasDeclaration ->
-                                                        case
-                                                            parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
-                                                                stack
-                                                                modules
-                                                                ( instantiatedModule, Elm.Syntax.Node.value aliasDeclaration.typeAnnotation )
-                                                        of
-                                                            Err error ->
-                                                                Err
-                                                                    ("Failed to parse alias '"
-                                                                        ++ Elm.Syntax.Node.value aliasDeclaration.name
-                                                                        ++ "' type annotation: "
-                                                                        ++ error
-                                                                    )
-
-                                                            Ok ( aliasedType, aliasedTypeDeps ) ->
-                                                                Ok ( aliasedType, aliasedTypeDeps )
-
-                                                    CustomTypeDeclaration customTypeDeclaration ->
-                                                        let
-                                                            typeName =
-                                                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value instantiatedModule.moduleDefinition)
-                                                                    ++ [ Elm.Syntax.Node.value customTypeDeclaration.name ]
-                                                                    |> String.join "."
-
-                                                            parameters =
-                                                                customTypeDeclaration.generics
-                                                                    |> List.map Elm.Syntax.Node.value
-                                                        in
-                                                        if stack.typesToIgnore |> Set.member typeName then
-                                                            Ok ( CustomElmType typeName, Dict.empty )
-
-                                                        else
-                                                            customTypeDeclaration.constructors
-                                                                |> List.map Elm.Syntax.Node.value
-                                                                |> List.map
-                                                                    (\constructor ->
-                                                                        constructor.arguments
-                                                                            |> List.map
-                                                                                (\constructorArgument ->
-                                                                                    parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
-                                                                                        { typesToIgnore = stack.typesToIgnore |> Set.insert typeName }
-                                                                                        modules
-                                                                                        ( instantiatedModule, Elm.Syntax.Node.value constructorArgument )
-                                                                                        |> Result.mapError ((++) "Failed to parse argument: ")
-                                                                                )
-                                                                            |> Result.Extra.combine
-                                                                            |> Result.mapError
-                                                                                ((++)
-                                                                                    ("Failed to parse constructor '"
-                                                                                        ++ Elm.Syntax.Node.value constructor.name
-                                                                                        ++ "': "
-                                                                                    )
-                                                                                )
-                                                                            |> Result.map listTupleSecondDictUnion
-                                                                            |> Result.map
-                                                                                (\( argumentsTypes, argumentsDeps ) ->
-                                                                                    ( ( Elm.Syntax.Node.value constructor.name
-                                                                                      , argumentsTypes
-                                                                                      )
-                                                                                    , argumentsDeps
-                                                                                    )
-                                                                                )
-                                                                    )
-                                                                |> Result.Extra.combine
-                                                                |> Result.map listTupleSecondDictUnion
-                                                                |> Result.map
-                                                                    (\( constructors, constructorsDeps ) ->
-                                                                        ( CustomElmType typeName
-                                                                        , constructorsDeps
-                                                                            |> Dict.insert
-                                                                                typeName
-                                                                                { parameters = parameters
-                                                                                , tags = constructors |> Dict.fromList
-                                                                                }
-                                                                        )
-                                                                    )
-                                            )
-                                        |> Maybe.withDefault
-                                            (Err
-                                                ("Did not find declaration of '"
-                                                    ++ instantiatedLocalName
-                                                    ++ "' in module '"
-                                                    ++ String.join "." instantiatedModuleAlias
-                                                    ++ "'"
-                                                )
-                                            )
-            in
-            instantiatedResult
-                |> Result.andThen
-                    (\( instantiatedType, instantiatedDependencies ) ->
-                        argumentsNodes
-                            |> List.map (Elm.Syntax.Node.value >> Tuple.pair currentModule)
-                            |> List.map (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
-                            |> Result.Extra.combine
-                            |> Result.map listTupleSecondDictUnion
-                            |> Result.map
-                                (\( instanceArguments, instanceArgumentsDeps ) ->
-                                    if instanceArguments == [] then
-                                        ( instantiatedType, instantiatedDependencies )
-
-                                    else
-                                        ( InstanceElmType
-                                            { instantiated = instantiatedType
-                                            , arguments = instanceArguments
-                                            }
-                                        , instanceArgumentsDeps |> Dict.union instantiatedDependencies
-                                        )
-                                )
-                    )
+            parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped
+                stack
+                modules
+                ( currentModule, ( instantiatedNode, argumentsNodes ) )
 
         Elm.Syntax.TypeAnnotation.Record fieldsNodes ->
             fieldsNodes
@@ -2333,6 +2122,293 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
 
         Elm.Syntax.TypeAnnotation.GenericRecord _ _ ->
             Err "GenericRecord not implemented"
+
+
+parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped :
+    { typesToIgnore : Set.Set String }
+    -> Dict.Dict String Elm.Syntax.File.File
+    -> ( Elm.Syntax.File.File, ( Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ), List (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) ) )
+    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules ( currentModule, ( instantiatedNode, argumentsNodes ) ) =
+    let
+        ( instantiatedModuleAlias, instantiatedLocalName ) =
+            Elm.Syntax.Node.value instantiatedNode
+
+        instantiatedResult : Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct, List String )
+        instantiatedResult =
+            case
+                parseElmTypeLeavesNames
+                    |> Dict.get (instantiatedModuleAlias ++ [ instantiatedLocalName ] |> String.join ".")
+            of
+                Just leaf ->
+                    Ok ( LeafElmType leaf, Dict.empty, [] )
+
+                Nothing ->
+                    let
+                        maybeInstantiatedModule =
+                            if instantiatedModuleAlias == [] then
+                                currentModule.imports
+                                    |> List.map Elm.Syntax.Node.value
+                                    |> List.filterMap
+                                        (\moduleImport ->
+                                            case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
+                                                Nothing ->
+                                                    Nothing
+
+                                                Just importExposing ->
+                                                    let
+                                                        containsMatchingExposition =
+                                                            case importExposing of
+                                                                Elm.Syntax.Exposing.All _ ->
+                                                                    -- TODO: Add lookup into that module
+                                                                    False
+
+                                                                Elm.Syntax.Exposing.Explicit topLevelExpositions ->
+                                                                    topLevelExpositions
+                                                                        |> List.any
+                                                                            (\topLevelExpose ->
+                                                                                case Elm.Syntax.Node.value topLevelExpose of
+                                                                                    Elm.Syntax.Exposing.InfixExpose _ ->
+                                                                                        False
+
+                                                                                    Elm.Syntax.Exposing.FunctionExpose _ ->
+                                                                                        False
+
+                                                                                    Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasExpose ->
+                                                                                        typeOrAliasExpose == instantiatedLocalName
+
+                                                                                    Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                                                                                        typeExpose.name == instantiatedLocalName
+                                                                            )
+                                                    in
+                                                    if containsMatchingExposition then
+                                                        modules |> Dict.get (Elm.Syntax.Node.value moduleImport.moduleName |> String.join ".")
+
+                                                    else
+                                                        Nothing
+                                        )
+                                    |> List.head
+                                    |> Maybe.withDefault currentModule
+                                    |> Just
+
+                            else
+                                currentModule.imports
+                                    |> List.map Elm.Syntax.Node.value
+                                    |> List.filter
+                                        (\moduleImport ->
+                                            moduleImport.moduleAlias
+                                                |> Maybe.withDefault moduleImport.moduleName
+                                                |> Elm.Syntax.Node.value
+                                                |> (==) instantiatedModuleAlias
+                                        )
+                                    |> List.head
+                                    |> Maybe.andThen
+                                        (\matchingImport ->
+                                            modules |> Dict.get (String.join "." (Elm.Syntax.Node.value matchingImport.moduleName))
+                                        )
+                    in
+                    case maybeInstantiatedModule of
+                        Nothing ->
+                            Err ("Did not find referenced module '" ++ String.join "." instantiatedModuleAlias ++ "'")
+
+                        Just instantiatedModule ->
+                            instantiatedModule.declarations
+                                |> List.map Elm.Syntax.Node.value
+                                |> List.filterMap
+                                    (\declaration ->
+                                        case declaration of
+                                            Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
+                                                if Elm.Syntax.Node.value aliasDeclaration.name /= instantiatedLocalName then
+                                                    Nothing
+
+                                                else
+                                                    Just (AliasDeclaration aliasDeclaration)
+
+                                            Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                                                if Elm.Syntax.Node.value customTypeDeclaration.name /= instantiatedLocalName then
+                                                    Nothing
+
+                                                else
+                                                    Just (CustomTypeDeclaration customTypeDeclaration)
+
+                                            _ ->
+                                                Nothing
+                                    )
+                                |> List.head
+                                |> Maybe.map
+                                    (\declaration ->
+                                        case declaration of
+                                            AliasDeclaration aliasDeclaration ->
+                                                case
+                                                    parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
+                                                        stack
+                                                        modules
+                                                        ( instantiatedModule, Elm.Syntax.Node.value aliasDeclaration.typeAnnotation )
+                                                of
+                                                    Err error ->
+                                                        Err
+                                                            ("Failed to parse alias '"
+                                                                ++ Elm.Syntax.Node.value aliasDeclaration.name
+                                                                ++ "' type annotation: "
+                                                                ++ error
+                                                            )
+
+                                                    Ok ( aliasedType, aliasedTypeDeps ) ->
+                                                        Ok
+                                                            ( aliasedType
+                                                            , aliasedTypeDeps
+                                                            , aliasDeclaration.generics |> List.map Elm.Syntax.Node.value
+                                                            )
+
+                                            CustomTypeDeclaration customTypeDeclaration ->
+                                                let
+                                                    typeName =
+                                                        Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value instantiatedModule.moduleDefinition)
+                                                            ++ [ Elm.Syntax.Node.value customTypeDeclaration.name ]
+                                                            |> String.join "."
+
+                                                    genericsNames =
+                                                        customTypeDeclaration.generics
+                                                            |> List.map Elm.Syntax.Node.value
+                                                in
+                                                if stack.typesToIgnore |> Set.member typeName then
+                                                    Ok ( CustomElmType typeName, Dict.empty, genericsNames )
+
+                                                else
+                                                    customTypeDeclaration.constructors
+                                                        |> List.map Elm.Syntax.Node.value
+                                                        |> List.map
+                                                            (\constructor ->
+                                                                constructor.arguments
+                                                                    |> List.map
+                                                                        (\constructorArgument ->
+                                                                            parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
+                                                                                { typesToIgnore = stack.typesToIgnore |> Set.insert typeName }
+                                                                                modules
+                                                                                ( instantiatedModule, Elm.Syntax.Node.value constructorArgument )
+                                                                                |> Result.mapError ((++) "Failed to parse argument: ")
+                                                                        )
+                                                                    |> Result.Extra.combine
+                                                                    |> Result.mapError
+                                                                        ((++)
+                                                                            ("Failed to parse constructor '"
+                                                                                ++ Elm.Syntax.Node.value constructor.name
+                                                                                ++ "': "
+                                                                            )
+                                                                        )
+                                                                    |> Result.map listTupleSecondDictUnion
+                                                                    |> Result.map
+                                                                        (\( argumentsTypes, argumentsDeps ) ->
+                                                                            ( ( Elm.Syntax.Node.value constructor.name
+                                                                              , argumentsTypes
+                                                                              )
+                                                                            , argumentsDeps
+                                                                            )
+                                                                        )
+                                                            )
+                                                        |> Result.Extra.combine
+                                                        |> Result.map listTupleSecondDictUnion
+                                                        |> Result.map
+                                                            (\( constructors, constructorsDeps ) ->
+                                                                ( CustomElmType typeName
+                                                                , constructorsDeps
+                                                                    |> Dict.insert
+                                                                        typeName
+                                                                        { parameters = genericsNames
+                                                                        , tags = constructors |> Dict.fromList
+                                                                        }
+                                                                , genericsNames
+                                                                )
+                                                            )
+                                    )
+                                |> Maybe.withDefault
+                                    (Err
+                                        ("Did not find declaration of '"
+                                            ++ instantiatedLocalName
+                                            ++ "' in module '"
+                                            ++ String.join "." instantiatedModuleAlias
+                                            ++ "'"
+                                        )
+                                    )
+    in
+    instantiatedResult
+        |> Result.andThen
+            (\( instantiatedType, instantiatedDependencies, genericsNames ) ->
+                argumentsNodes
+                    |> List.map (Elm.Syntax.Node.value >> Tuple.pair currentModule)
+                    |> List.map (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
+                    |> Result.Extra.combine
+                    |> Result.map listTupleSecondDictUnion
+                    |> Result.andThen
+                        (\( instanceArguments, instanceArgumentsDeps ) ->
+                            if instanceArguments == [] then
+                                Ok ( instantiatedType, instantiatedDependencies )
+
+                            else
+                                case instantiatedType of
+                                    RecordElmType recordType ->
+                                        (if List.length genericsNames /= List.length instanceArguments then
+                                            Err "Mismatch between lengths of genericsNames and instanceArguments"
+
+                                         else
+                                            tryConcretizeRecordInstance
+                                                (Dict.fromList (List.Extra.zip genericsNames instanceArguments))
+                                                recordType
+                                                |> Result.map
+                                                    (\concretizedRecord ->
+                                                        ( RecordElmType concretizedRecord
+                                                        , instanceArgumentsDeps |> Dict.union instantiatedDependencies
+                                                        )
+                                                    )
+                                        )
+                                            |> Result.mapError ((++) "Failed to concretize record instance: ")
+
+                                    _ ->
+                                        Ok
+                                            ( InstanceElmType
+                                                { instantiated = instantiatedType
+                                                , arguments = instanceArguments
+                                                }
+                                            , instanceArgumentsDeps |> Dict.union instantiatedDependencies
+                                            )
+                        )
+            )
+
+
+tryConcretizeRecordInstance :
+    Dict.Dict String ElmTypeAnnotation
+    -> { fields : List ( String, ElmTypeAnnotation ) }
+    -> Result String { fields : List ( String, ElmTypeAnnotation ) }
+tryConcretizeRecordInstance typeArguments recordType =
+    let
+        tryConcretizeFieldType fieldType =
+            case fieldType of
+                GenericType genericName ->
+                    case Dict.get genericName typeArguments of
+                        Nothing ->
+                            Err ("Did not find type for '" ++ genericName ++ "'")
+
+                        Just typeArgument ->
+                            Ok typeArgument
+
+                _ ->
+                    Ok fieldType
+    in
+    recordType.fields
+        |> List.foldl
+            (\( fieldName, fieldType ) prevAggregate ->
+                prevAggregate
+                    |> Result.andThen
+                        (\prevFields ->
+                            tryConcretizeFieldType fieldType
+                                |> Result.map
+                                    (\concretizedFieldType ->
+                                        ( fieldName, concretizedFieldType ) :: prevFields
+                                    )
+                        )
+            )
+            (Ok [])
+        |> Result.map (\fields -> { fields = fields })
 
 
 jsonCodingExpressionFromType :
