@@ -2271,8 +2271,19 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
             else
                 Just "⚠️ File contents changed since compiling"
 
+        offerToggleInspection =
+            case compilationCompleted of
+                CompilationFailedLowering _ ->
+                    False
+
+                ElmMakeRequestCompleted (Err _) ->
+                    True
+
+                ElmMakeRequestCompleted (Ok elmMakeResult) ->
+                    elmMakeResult.compiledHtmlDocument /= Nothing
+
         ( toggleInspectionLabel, toggleInspectionEvent ) =
-            if workspace.enableInspectionOnCompile then
+            if elmMakeRequest.makeOptionDebug then
                 ( "Disable Inspection", UserInputSetInspectionOnCompile False )
 
             else
@@ -2292,7 +2303,11 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
                             ]
 
                 Nothing ->
-                    buttonElement { label = toggleInspectionLabel, onPress = Just toggleInspectionEvent }
+                    if offerToggleInspection then
+                        buttonElement { label = toggleInspectionLabel, onPress = Just toggleInspectionEvent }
+
+                    else
+                        Element.none
 
         outputElementFromPlainText outputText =
             [ outputText
