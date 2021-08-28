@@ -67,28 +67,15 @@ type alias CompilationArguments =
 
 
 type alias ElmAppInterfaceConvention =
-    { initialStateFunctionName : String
-    , processSerializedEventFunctionName : String
-
-    {-
-       TODO: Remove initialStateFunctionName and processSerializedEventFunctionName after migrating apps in production to `backendMainDeclarationName`
-    -}
-    , backendMainDeclarationName : String
+    { backendMainDeclarationName : String
     , serializeStateFunctionName : String
     , deserializeStateFunctionName : String
     }
 
 
-type InterfaceToHostVersion
-    = InterfaceToHostVersion_Before_2021_08
-    | InterfaceToHostVersion_2021_08
-
-
 elmAppInterfaceConvention : ElmAppInterfaceConvention
 elmAppInterfaceConvention =
-    { initialStateFunctionName = "interfaceToHost_processEvent"
-    , processSerializedEventFunctionName = "interfaceToHost_processEvent"
-    , backendMainDeclarationName = "backendMain"
+    { backendMainDeclarationName = "backendMain"
     , serializeStateFunctionName = "interfaceToHost_serializeState"
     , deserializeStateFunctionName = "interfaceToHost_deserializeState"
     }
@@ -266,7 +253,7 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, or
                 parseAppStateElmTypeAndDependenciesRecursively originalSourceModules backendMainModule
                     |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type name: "))
                     |> Result.map
-                        (\( interfaceVersion, ( stateTypeAnnotation, stateTypeDependencies ) ) ->
+                        (\( stateTypeAnnotation, stateTypeDependencies ) ->
                             let
                                 ( appFiles, { generatedModuleName, modulesToImport } ) =
                                     mapAppFilesToSupportJsonCoding
@@ -290,7 +277,6 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, or
 
                                 rootElmModuleText =
                                     composeAppRootElmModuleText
-                                        interfaceVersion
                                         { interfaceToHostRootModuleName = String.join "." interfaceToHostRootModuleName
                                         , rootModuleNameBeforeLowering = String.join "." rootModuleName
                                         , stateTypeAnnotation = stateTypeAnnotation
@@ -372,7 +358,7 @@ loweredForAppStateMigration { originalSourceModules } sourceFiles =
                     |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
 
 
-parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String ( List String, Elm.Syntax.File.File ) -> ( List String, Elm.Syntax.File.File ) -> Result (LocatedInSourceFiles String) ( InterfaceToHostVersion, ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct ) )
+parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String ( List String, Elm.Syntax.File.File ) -> ( List String, Elm.Syntax.File.File ) -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
 parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
     stateTypeAnnotationFromRootElmModule parsedModule
         |> Result.mapError
@@ -383,11 +369,10 @@ parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFileP
                     }
             )
         |> Result.andThen
-            (\( interfaceVersion, stateTypeAnnotation ) ->
+            (\stateTypeAnnotation ->
                 parseElmTypeAndDependenciesRecursivelyFromAnnotation
                     sourceModules
                     ( ( parsedModuleFilePath, parsedModule ), stateTypeAnnotation )
-                    |> Result.map (Tuple.pair interfaceVersion)
             )
 
 
@@ -421,23 +406,8 @@ parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModu
             )
 
 
-stateTypeAnnotationFromRootElmModule : Elm.Syntax.File.File -> Result String ( InterfaceToHostVersion, Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
+stateTypeAnnotationFromRootElmModule : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
 stateTypeAnnotationFromRootElmModule parsedModule =
-    case stateTypeAnnotationFromRootElmModule_2021_08 parsedModule of
-        Ok typeAnnotation ->
-            Ok ( InterfaceToHostVersion_2021_08, typeAnnotation )
-
-        Err newError ->
-            case stateTypeAnnotationFromRootElmModule_Before_2021_08 parsedModule of
-                Err oldError ->
-                    Err newError
-
-                Ok typeAnnotation ->
-                    Ok ( InterfaceToHostVersion_Before_2021_08, typeAnnotation )
-
-
-stateTypeAnnotationFromRootElmModule_2021_08 : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
-stateTypeAnnotationFromRootElmModule_2021_08 parsedModule =
     parsedModule.declarations
         |> List.filterMap
             (\declaration ->
@@ -476,48 +446,6 @@ stateTypeAnnotationFromRootElmModule_2021_08 parsedModule =
                                 Err "Unexpected type annotation: Not an instance"
             )
         |> Maybe.withDefault (Err ("Did not find declaration with name '" ++ elmAppInterfaceConvention.backendMainDeclarationName ++ "'"))
-
-
-stateTypeAnnotationFromRootElmModule_Before_2021_08 : Elm.Syntax.File.File -> Result String (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
-stateTypeAnnotationFromRootElmModule_Before_2021_08 parsedModule =
-    parsedModule.declarations
-        |> List.filterMap
-            (\declaration ->
-                case Elm.Syntax.Node.value declaration of
-                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                        if
-                            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                                == elmAppInterfaceConvention.processSerializedEventFunctionName
-                        then
-                            Just functionDeclaration
-
-                        else
-                            Nothing
-
-                    _ ->
-                        Nothing
-            )
-        |> List.head
-        |> Maybe.map
-            (\functionDeclaration ->
-                case functionDeclaration.signature of
-                    Nothing ->
-                        Err "Missing function signature"
-
-                    Just functionSignature ->
-                        case Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).typeAnnotation of
-                            Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ afterFirstArg ->
-                                case Elm.Syntax.Node.value afterFirstArg of
-                                    Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation secondArgument _ ->
-                                        Ok secondArgument
-
-                                    _ ->
-                                        Err "Unexpected type annotation in second argument"
-
-                            _ ->
-                                Err "Unexpected type annotation"
-            )
-        |> Maybe.withDefault (Err "Did not find function with matching name")
 
 
 migrateStateTypeAnnotationFromElmModule :
@@ -573,26 +501,6 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
 
 
 composeAppRootElmModuleText :
-    InterfaceToHostVersion
-    ->
-        { interfaceToHostRootModuleName : String
-        , rootModuleNameBeforeLowering : String
-        , stateTypeAnnotation : ElmTypeAnnotation
-        , modulesToImport : List (List String)
-        , encodeFunction : String
-        , decodeFunction : String
-        }
-    -> String
-composeAppRootElmModuleText interfaceVersion config =
-    case interfaceVersion of
-        InterfaceToHostVersion_2021_08 ->
-            composeAppRootElmModuleText_2021_08 config
-
-        InterfaceToHostVersion_Before_2021_08 ->
-            composeAppRootElmModuleText_Before_2021_08 config
-
-
-composeAppRootElmModuleText_2021_08 :
     { interfaceToHostRootModuleName : String
     , rootModuleNameBeforeLowering : String
     , stateTypeAnnotation : ElmTypeAnnotation
@@ -601,7 +509,7 @@ composeAppRootElmModuleText_2021_08 :
     , decodeFunction : String
     }
     -> String
-composeAppRootElmModuleText_2021_08 { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
+composeAppRootElmModuleText { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
     "module " ++ interfaceToHostRootModuleName ++ """ exposing
     ( State
     , interfaceToHost_deserializeState
@@ -1308,119 +1216,6 @@ decodeOptionalField fieldName decoder =
     Json.Decode.value
         |> Json.Decode.andThen finishDecoding
 """
-
-
-composeAppRootElmModuleText_Before_2021_08 :
-    { interfaceToHostRootModuleName : String
-    , rootModuleNameBeforeLowering : String
-    , stateTypeAnnotation : ElmTypeAnnotation
-    , modulesToImport : List (List String)
-    , encodeFunction : String
-    , decodeFunction : String
-    }
-    -> String
-composeAppRootElmModuleText_Before_2021_08 { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
-    "module " ++ interfaceToHostRootModuleName ++ """ exposing
-    ( State
-    , interfaceToHost_deserializeState
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
-    , interfaceToHost_serializeState
-    , main
-    )
-
-import """ ++ rootModuleNameBeforeLowering ++ """
-""" ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> String.join "\n") ++ """
-import Platform
-
-type alias DeserializedState =
-    (""" ++ buildTypeAnnotationText stateTypeAnnotation ++ """)
-
-
-type State
-    = DeserializeFailed String
-    | DeserializeSuccessful DeserializedState
-
-
-interfaceToHost_initState = """ ++ rootModuleNameBeforeLowering ++ """.interfaceToHost_initState |> DeserializeSuccessful
-
-
-interfaceToHost_processEvent hostEvent stateBefore =
-    case stateBefore of
-        DeserializeFailed _ ->
-            ( stateBefore, "[]" )
-
-        DeserializeSuccessful deserializedState ->
-            deserializedState
-                |> """ ++ rootModuleNameBeforeLowering ++ """.interfaceToHost_processEvent hostEvent
-                |> Tuple.mapFirst DeserializeSuccessful
-
-
-interfaceToHost_serializeState = jsonEncodeState >> Json.Encode.encode 0
-
-
-interfaceToHost_deserializeState = deserializeState
-
-
--- Support function-level dead code elimination (https://elm-lang.org/blog/small-assets-without-the-headache) Elm code needed to inform the Elm compiler about our entry points.
-
-
-main : Program Int State String
-main =
-    Platform.worker
-        { init = \\_ -> ( interfaceToHost_initState, Cmd.none )
-        , update =
-            \\event stateBefore ->
-                interfaceToHost_processEvent event (stateBefore |> interfaceToHost_serializeState |> interfaceToHost_deserializeState) |> Tuple.mapSecond (always Cmd.none)
-        , subscriptions = \\_ -> Sub.none
-        }
-
-
--- Inlined helpers -->
-
-
-{-| Turn a `Result e a` to an `a`, by applying the conversion
-function specified to the `e`.
--}
-result_Extra_Extract : (e -> a) -> Result e a -> a
-result_Extra_Extract f x =
-    case x of
-        Ok a ->
-            a
-
-        Err e ->
-            f e
-
-
--- Remember and communicate errors from state deserialization -->
-
-
-jsonEncodeState : State -> Json.Encode.Value
-jsonEncodeState state =
-    case state of
-        DeserializeFailed error ->
-            [ ( "Interface_DeserializeFailed", [ ( "error", error |> Json.Encode.string ) ] |> Json.Encode.object ) ] |> Json.Encode.object
-
-        DeserializeSuccessful deserializedState ->
-            deserializedState |> jsonEncodeDeserializedState
-
-
-deserializeState : String -> State
-deserializeState serializedState =
-    serializedState
-        |> Json.Decode.decodeString jsonDecodeState
-        |> Result.mapError Json.Decode.errorToString
-        |> result_Extra_Extract DeserializeFailed
-
-
-jsonDecodeState : Json.Decode.Decoder State
-jsonDecodeState =
-    Json.Decode.oneOf
-        [ Json.Decode.field "Interface_DeserializeFailed" (Json.Decode.field "error" Json.Decode.string |> Json.Decode.map DeserializeFailed)
-        , jsonDecodeDeserializedState |> Json.Decode.map DeserializeSuccessful
-        ]
-
-""" ++ encodeFunction ++ "\n\n" ++ decodeFunction
 
 
 composeStateMigrationModuleText :

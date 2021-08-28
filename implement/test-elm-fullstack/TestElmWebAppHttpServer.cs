@@ -23,8 +23,6 @@ namespace test_elm_fullstack
         [TestMethod]
         public void Restore_counter_http_web_app_on_server_restart()
         {
-            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: CounterWebApp);
-
             var eventsAndExpectedResponses =
                 TestSetup.CounterProcessTestEventsAndExpectedResponses(
                     new (int addition, int expectedResponse)[]
@@ -41,6 +39,8 @@ namespace test_elm_fullstack
             var eventsAndExpectedResponsesBatches = eventsAndExpectedResponses.Batch(3).ToList();
 
             Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
+
+            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: CounterWebApp);
 
             foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
             {
