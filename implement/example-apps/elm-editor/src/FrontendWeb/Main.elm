@@ -1414,7 +1414,7 @@ view state =
 
                                         closeEditorElement =
                                             Element.Input.button
-                                                [ Element.mouseOver [ Element.Background.color (Element.rgba 0 0.5 0.8 0.5) ]
+                                                [ Element.mouseOver [ Element.Background.color (Element.rgba 1 1 1 0.2) ]
                                                 , Element.padding 4
                                                 , Element.scale 0.8
                                                 , Element.centerY
@@ -1495,7 +1495,7 @@ view state =
                             ]
 
         logoElement =
-            [ Visuals.elmEditorIconSvg "1.2em" |> Element.html |> Element.el []
+            [ Visuals.elmEditorIconSvg "1.4em" |> Element.html |> Element.el []
             , "Elm Editor" |> Element.text |> Element.el [ Element.Font.semiBold ]
             ]
                 |> Element.row
@@ -1719,11 +1719,11 @@ toggleEnlargedPaneButton state pane =
                 ( Visuals.GrowActionIcon, Nothing )
 
         iconSize =
-            24
+            20
     in
     Element.Input.button
         [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
-        , Element.mouseOver [ Element.Background.color buttonMouseOverColor ]
+        , Element.mouseOver [ Element.Background.color (Element.rgb 0.3 0.3 0.3) ]
         , Element.padding 4
         ]
         { label =
@@ -2746,20 +2746,20 @@ styledTextFromElmMakeReportMessageListItem elmMakeReportMessageListItem =
 buttonElement : { label : String, onPress : Maybe event } -> Element.Element event
 buttonElement buttonConfig =
     Element.Input.button
-        [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
-        , Element.mouseOver [ Element.Background.color buttonMouseOverColor ]
+        [ Element.Background.color buttonBackgroundColor.default
+        , Element.mouseOver [ Element.Background.color buttonBackgroundColor.mouseOver ]
         , Element.paddingXY defaultFontSize (defaultFontSize // 2)
-        , Element.Border.widthEach { left = 0, right = 0, top = 0, bottom = 2 }
-        , Element.Border.color buttonMouseOverColor
         ]
         { label = Element.text buttonConfig.label
         , onPress = buttonConfig.onPress
         }
 
 
-buttonMouseOverColor : Element.Color
-buttonMouseOverColor =
-    Element.rgb 0 0.278 0.443
+buttonBackgroundColor : { default : Element.Color, mouseOver : Element.Color }
+buttonBackgroundColor =
+    { default = Element.rgb 0.055 0.388 0.612
+    , mouseOver = Element.rgb 0.067 0.467 0.733
+    }
 
 
 titlebarMenuEntryButton : State -> TitlebarMenuEntry -> Element.Element Event
@@ -2771,12 +2771,15 @@ titlebarMenuEntryButton state menuEntry =
         isHighlighted =
             state.popup == Just (TitlebarMenu menuEntry False) || isOpen
 
-        buttonBackgroundColor =
+        greyFromLightness l =
+            Element.rgb l l l
+
+        entryBackgroundColor =
             if isHighlighted then
-                buttonMouseOverColor
+                greyFromLightness 0.3
 
             else
-                Element.rgb 0.2 0.2 0.2
+                greyFromLightness 0.2
 
         dropdownAttributes =
             if not isOpen then
@@ -2788,10 +2791,8 @@ titlebarMenuEntryButton state menuEntry =
                 ]
     in
     Element.Input.button
-        [ Element.Background.color buttonBackgroundColor
+        [ Element.Background.color entryBackgroundColor
         , Element.paddingXY defaultFontSize (defaultFontSize // 2)
-        , Element.Border.widthEach { left = 0, right = 0, top = 0, bottom = 2 }
-        , Element.Border.color buttonMouseOverColor
         , Element.Events.onMouseEnter (UserInputMouseOverTitleBarMenu (Just menuEntry))
         , Element.Events.onMouseLeave (UserInputMouseOverTitleBarMenu Nothing)
         ]
@@ -2854,7 +2855,7 @@ titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
     let
         mouseOverAttributes =
             if isEnabled then
-                [ Element.mouseOver [ Element.Background.color buttonMouseOverColor ] ]
+                [ Element.mouseOver [ Element.Background.color (Element.rgb255 9 71 113) ] ]
 
             else
                 []
@@ -3029,7 +3030,7 @@ attributeMonospaceFont =
 
 defaultFontSize : Int
 defaultFontSize =
-    16
+    14
 
 
 backgroundColor : Element.Color
