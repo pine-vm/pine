@@ -1,8 +1,7 @@
 # Elm Full-Stack
 
-Elm Fullstack is a tool helping us avoid non-essential complexity when developing web services or full-stack web applications. As it evolves, Elm Fullstack automates more and more activities in software development that humans had performed in the past.
-
-It supports writing web services and frontends using the [Elm programming language](https://elm-lang.org), thus enabling us to benefit from the tools and libraries in the Elm ecosystem.
+Elm Fullstack is a tool for developing web services and full-stack web applications. It leverages the [Elm programming language](https://elm-lang.org) and its ecosystem of tools and libraries.
+As it evolves, Elm Fullstack automates more and more activities in software development that humans had performed in the past.
 
 Elm Fullstack currently offers:
 
