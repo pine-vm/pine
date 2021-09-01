@@ -81,9 +81,9 @@ elmAppInterfaceConvention =
     }
 
 
-appStateMigrationInterfaceModulesNames : List String
-appStateMigrationInterfaceModulesNames =
-    [ "Backend.MigrateState", "MigrateBackendState" ]
+appStateMigrationInterfaceModuleName : String
+appStateMigrationInterfaceModuleName =
+    "Backend.MigrateState"
 
 
 appStateMigrationRootModuleName : String
@@ -302,14 +302,7 @@ loweredForAppStateMigration { originalSourceModules } sourceFiles =
         interfaceToHostRootFilePath =
             filePathFromElmModuleName appStateMigrationRootModuleName
     in
-    case
-        appStateMigrationInterfaceModulesNames
-            |> List.filterMap
-                (\appStateMigrationInterfaceModuleName ->
-                    Dict.get appStateMigrationInterfaceModuleName originalSourceModules
-                )
-            |> List.head
-    of
+    case Dict.get appStateMigrationInterfaceModuleName originalSourceModules of
         Nothing ->
             -- App contains no migrate module.
             Ok sourceFiles
