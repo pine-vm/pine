@@ -486,7 +486,13 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
                                     Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ _ ->
                                         Err "Too many parameters."
 
+                                    Elm.Syntax.TypeAnnotation.Tupled [ stateTypeAnnotation, _ ] ->
+                                        Ok ( inputType, stateTypeAnnotation )
+
                                     _ ->
+                                        {- TODO: After migrating apps in production: Switch to:
+                                           Err "Unexpected return type: Not a tuple."
+                                        -}
                                         Ok ( inputType, returnType )
 
                             _ ->
@@ -614,7 +620,7 @@ type alias TaskId =
 
 interfaceToHost_initState =
     """ ++ rootModuleNameBeforeLowering ++ """.backendMain.init
-        -- TODO: Expand the runtime to consider the tasks from init.
+        -- TODO: Expand the runtime to forward the cmds from init.
         |> Tuple.first
         |> initDeserializedStateWithTaskFramework
         |> DeserializeSuccessful
@@ -1240,7 +1246,8 @@ import Json.Encode
 decodeMigrateAndEncode : String -> Result String String
 decodeMigrateAndEncode =
     Json.Decode.decodeString """ ++ generatedModuleName ++ "." ++ decodeOrigTypeFunctionName ++ """
-        >> Result.map (""" ++ migrateModuleName ++ "." ++ appStateMigrationInterfaceFunctionName ++ """ >>  """ ++ generatedModuleName ++ "." ++ encodeDestTypeFunctionName ++ """ >> Json.Encode.encode 0)
+        -- TODO: Expand the runtime to forward the cmds from migrate.
+        >> Result.map (""" ++ migrateModuleName ++ "." ++ appStateMigrationInterfaceFunctionName ++ """ >> Tuple.first >> """ ++ generatedModuleName ++ "." ++ encodeDestTypeFunctionName ++ """ >> Json.Encode.encode 0)
         >> Result.mapError Json.Decode.errorToString
 
 
