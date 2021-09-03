@@ -21,7 +21,7 @@
             "elm-community/result-extra": "2.4.0",
             "folkertdev/elm-sha2": "1.0.0",
             "mdgriffith/elm-ui": "1.1.8",
-            "stil4m/elm-syntax": "7.2.5",
+            "stil4m/elm-syntax": "7.2.7",
             "z5h/jaro-winkler": "1.0.2"
         },
         "indirect": {

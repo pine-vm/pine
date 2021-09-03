@@ -2038,42 +2038,85 @@ mapExpressionForOperatorPrecedence originalExpression =
     case originalExpression of
         Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightExpr ->
             let
+                operatorPriority =
+                    operatorPrecendencePriority |> Dict.get operator |> Maybe.withDefault 0
+
+                mappedLeftExpr =
+                    Elm.Syntax.Node.Node (Elm.Syntax.Node.range leftExpr)
+                        (mapExpressionForOperatorPrecedence (Elm.Syntax.Node.value leftExpr))
+
                 mappedRightExpr =
                     Elm.Syntax.Node.Node (Elm.Syntax.Node.range rightExpr)
                         (mapExpressionForOperatorPrecedence (Elm.Syntax.Node.value rightExpr))
+
+                orderedLeft =
+                    case Elm.Syntax.Node.value mappedLeftExpr of
+                        Elm.Syntax.Expression.OperatorApplication leftOperator _ leftLeftExpr leftRightExpr ->
+                            let
+                                operatorLeftPriority =
+                                    operatorPrecendencePriority |> Dict.get leftOperator |> Maybe.withDefault 0
+
+                                areStillOrderedBySyntaxRange =
+                                    compareLocations
+                                        (Elm.Syntax.Node.range leftExpr).start
+                                        (Elm.Syntax.Node.range leftLeftExpr).start
+                                        == LT
+                            in
+                            if
+                                (operatorLeftPriority < operatorPriority)
+                                    || ((operatorLeftPriority == operatorPriority) && areStillOrderedBySyntaxRange)
+                            then
+                                mapExpressionForOperatorPrecedence
+                                    (Elm.Syntax.Expression.OperatorApplication leftOperator
+                                        direction
+                                        leftLeftExpr
+                                        (Elm.Syntax.Node.Node
+                                            (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftRightExpr, Elm.Syntax.Node.range rightExpr ])
+                                            (Elm.Syntax.Expression.OperatorApplication operator direction leftRightExpr rightExpr)
+                                        )
+                                    )
+
+                            else
+                                originalExpression
+
+                        _ ->
+                            originalExpression
             in
-            case Elm.Syntax.Node.value mappedRightExpr of
-                Elm.Syntax.Expression.OperatorApplication rightOperator _ rightLeftExpr rightRightExpr ->
-                    let
-                        operatorPriority =
-                            operatorPrecendencePriority |> Dict.get operator |> Maybe.withDefault 0
+            if mappedLeftExpr /= leftExpr || mappedRightExpr /= rightExpr then
+                mapExpressionForOperatorPrecedence (Elm.Syntax.Expression.OperatorApplication operator direction mappedLeftExpr mappedRightExpr)
 
-                        operatorRightPriority =
-                            operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0
+            else
+                case Elm.Syntax.Node.value mappedRightExpr of
+                    Elm.Syntax.Expression.OperatorApplication rightOperator _ rightLeftExpr rightRightExpr ->
+                        let
+                            operatorRightPriority =
+                                operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0
 
-                        areStillOrderedBySyntaxRange =
-                            compareLocations
-                                (Elm.Syntax.Node.range leftExpr).start
-                                (Elm.Syntax.Node.range rightLeftExpr).start
-                                == LT
-                    in
-                    if
-                        (operatorRightPriority < operatorPriority)
-                            || ((operatorRightPriority == operatorPriority) && areStillOrderedBySyntaxRange)
-                    then
-                        Elm.Syntax.Expression.OperatorApplication rightOperator
-                            direction
-                            (Elm.Syntax.Node.Node
-                                (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftExpr, Elm.Syntax.Node.range rightLeftExpr ])
-                                (Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightLeftExpr)
-                            )
-                            rightRightExpr
+                            areStillOrderedBySyntaxRange =
+                                compareLocations
+                                    (Elm.Syntax.Node.range leftExpr).start
+                                    (Elm.Syntax.Node.range rightLeftExpr).start
+                                    == LT
+                        in
+                        if
+                            (operatorRightPriority < operatorPriority)
+                                || ((operatorRightPriority == operatorPriority) && areStillOrderedBySyntaxRange)
+                        then
+                            mapExpressionForOperatorPrecedence
+                                (Elm.Syntax.Expression.OperatorApplication rightOperator
+                                    direction
+                                    (Elm.Syntax.Node.Node
+                                        (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftExpr, Elm.Syntax.Node.range rightLeftExpr ])
+                                        (Elm.Syntax.Expression.OperatorApplication operator direction leftExpr rightLeftExpr)
+                                    )
+                                    rightRightExpr
+                                )
 
-                    else
-                        Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
+                        else
+                            orderedLeft
 
-                _ ->
-                    Elm.Syntax.Expression.OperatorApplication operator direction leftExpr mappedRightExpr
+                    _ ->
+                        orderedLeft
 
         _ ->
             originalExpression

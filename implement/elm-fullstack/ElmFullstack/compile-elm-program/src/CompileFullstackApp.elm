@@ -515,10 +515,7 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
                                         Ok ( inputType, stateTypeAnnotation )
 
                                     _ ->
-                                        {- TODO: After migrating apps in production: Switch to:
-                                           Err "Unexpected return type: Not a tuple."
-                                        -}
-                                        Ok ( inputType, returnType )
+                                        Err "Unexpected return type: Not a tuple."
 
                             _ ->
                                 Err "Unexpected type annotation"

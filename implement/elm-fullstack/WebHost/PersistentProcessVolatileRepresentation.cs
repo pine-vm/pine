@@ -367,12 +367,8 @@ namespace ElmFullstack.WebHost.PersistentProcess
 
                 var appConfig = compositionEvent.DeployAppConfigAndMigrateElmAppState;
 
-                var processFromWebAppConfigTask = System.Threading.Tasks.Task.Run(() =>
-                    ProcessFromWebAppConfig(
-                        appConfig,
-                        overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig));
-
-                var (newElmAppProcess, buildArtifacts) = processFromWebAppConfigTask.Result;
+                var (newElmAppProcess, buildArtifacts) =
+                    ProcessFromWebAppConfig(appConfig, overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
                 var migrateEventResult = AttemptProcessEvent(
                     newElmAppProcess,

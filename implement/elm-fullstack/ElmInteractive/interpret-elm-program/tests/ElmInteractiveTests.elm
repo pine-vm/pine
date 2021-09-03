@@ -315,12 +315,20 @@ named_literal =
                     , expectedValueElmExpression = "\"a b c\""
                     }
         , Test.describe "Operator precedence"
-            [ Test.test "Operator asterisk precedes operator plus" <|
+            [ Test.test "Operator asterisk precedes operator plus left and right" <|
                 \_ ->
                     expectationForElmInteractiveScenario
                         { context = DefaultContext
                         , previousSubmissions = []
                         , submission = """ 4 + 4 * 3 + 1 """
+                        , expectedValueElmExpression = 17 |> Json.Encode.int |> Json.Encode.encode 0
+                        }
+            , Test.test "Operator asterisk precedes operator plus left" <|
+                \_ ->
+                    expectationForElmInteractiveScenario
+                        { context = DefaultContext
+                        , previousSubmissions = []
+                        , submission = """ 5 + 3 * 4 """
                         , expectedValueElmExpression = 17 |> Json.Encode.int |> Json.Encode.encode 0
                         }
             , Test.test "Parentheses override operator precedence" <|

@@ -73,6 +73,27 @@ type alias ElmAppInterfaceConvention =
     }
 
 
+type alias MigrationConfig =
+    { inputType : ElmTypeAnnotation
+    , returnType : ElmTypeAnnotation
+    , dependencies : Dict.Dict String ElmCustomTypeStruct
+    , migrateFunctionModuleName : List String
+    , migrateFunctionDeclarationLocalName : String
+    }
+
+
+type alias BackendRootModuleConfig =
+    { interfaceToHostRootModuleName : String
+    , rootModuleNameBeforeLowering : String
+    , stateTypeAnnotation : ElmTypeAnnotation
+    , modulesToImport : List (List String)
+    , stateEncodeFunction : String
+    , stateDecodeFunction : String
+    , stateFromStringExpression : String
+    , migrateFromStringExpression : String
+    }
+
+
 elmAppInterfaceConvention : ElmAppInterfaceConvention
 elmAppInterfaceConvention =
     { backendMainDeclarationName = "backendMain"
@@ -84,11 +105,6 @@ elmAppInterfaceConvention =
 appStateMigrationInterfaceModuleName : String
 appStateMigrationInterfaceModuleName =
     "Backend.MigrateState"
-
-
-appStateMigrationRootModuleName : String
-appStateMigrationRootModuleName =
-    "Backend.MigrateState_Root"
 
 
 appStateMigrationInterfaceFunctionName : String
@@ -172,13 +188,12 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
         |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
         |> Result.andThen (loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies)
         |> Result.andThen
-            (loweredForAppStateSerializer
+            (loweredForBackendApp
                 { originalSourceModules = sourceModules
                 , rootModuleName = rootModuleName
                 , interfaceToHostRootModuleName = interfaceToHostRootModuleName
                 }
             )
-        |> Result.andThen (loweredForAppStateMigration { originalSourceModules = sourceModules })
 
 
 loweredForSourceFiles : List String -> AppFiles -> Result (LocatedInSourceFiles String) AppFiles
@@ -227,14 +242,14 @@ loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceF
             (Ok sourceFiles)
 
 
-loweredForAppStateSerializer :
+loweredForBackendApp :
     { rootModuleName : List String
     , interfaceToHostRootModuleName : List String
     , originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File )
     }
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
-loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, originalSourceModules } sourceFiles =
+loweredForBackendApp { rootModuleName, interfaceToHostRootModuleName, originalSourceModules } sourceFiles =
     let
         interfaceToHostRootFilePath =
             filePathFromElmModuleName (String.join "." interfaceToHostRootModuleName)
@@ -252,103 +267,120 @@ loweredForAppStateSerializer { rootModuleName, interfaceToHostRootModuleName, or
             else
                 parseAppStateElmTypeAndDependenciesRecursively originalSourceModules backendMainModule
                     |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type name: "))
-                    |> Result.map
-                        (\( stateTypeAnnotation, stateTypeDependencies ) ->
-                            let
-                                ( appFiles, { generatedModuleName, modulesToImport } ) =
-                                    mapAppFilesToSupportJsonCoding
-                                        { generatedModuleNamePrefix = interfaceToHostRootModuleName }
-                                        [ stateTypeAnnotation ]
-                                        stateTypeDependencies
-                                        sourceFiles
-
-                                functionsNamesInGeneratedModules =
-                                    buildJsonCodingFunctionsForTypeAnnotation stateTypeAnnotation
-
-                                encodeFunction =
-                                    "jsonEncodeDeserializedState =\n"
-                                        ++ indentElmCodeLines 1
-                                            (generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.encodeFunction.name)
-
-                                decodeFunction =
-                                    "jsonDecodeDeserializedState =\n"
-                                        ++ indentElmCodeLines 1
-                                            (generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.decodeFunction.name)
-
-                                rootElmModuleText =
-                                    composeAppRootElmModuleText
-                                        { interfaceToHostRootModuleName = String.join "." interfaceToHostRootModuleName
-                                        , rootModuleNameBeforeLowering = String.join "." rootModuleName
-                                        , stateTypeAnnotation = stateTypeAnnotation
-                                        , modulesToImport = modulesToImport
-                                        , encodeFunction = encodeFunction
-                                        , decodeFunction = decodeFunction
-                                        }
-                            in
-                            appFiles
-                                |> updateFileContentAtPath
-                                    (always (fileContentFromString rootElmModuleText))
-                                    interfaceToHostRootFilePath
-                        )
                     |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
+                    |> Result.andThen
+                        (\( stateTypeAnnotation, stateTypeDependencies ) ->
+                            parseMigrationConfig { originalSourceModules = originalSourceModules }
+                                |> Result.map
+                                    (\maybeMigrationConfig ->
+                                        let
+                                            stateAndMigrationTypeDependencies =
+                                                stateTypeDependencies
+                                                    |> Dict.union
+                                                        (maybeMigrationConfig
+                                                            |> Maybe.map .dependencies
+                                                            |> Maybe.withDefault Dict.empty
+                                                        )
+
+                                            typeToGenerateSerializersFor =
+                                                stateTypeAnnotation :: typeToGenerateSerializersForMigration
+
+                                            ( appFiles, generateSerializersResult ) =
+                                                mapAppFilesToSupportJsonCoding
+                                                    { generatedModuleNamePrefix = interfaceToHostRootModuleName }
+                                                    typeToGenerateSerializersFor
+                                                    stateAndMigrationTypeDependencies
+                                                    sourceFiles
+
+                                            modulesToImport =
+                                                generateSerializersResult.modulesToImport
+                                                    ++ (maybeMigrationConfig
+                                                            |> Maybe.map (.migrateFunctionModuleName >> List.singleton)
+                                                            |> Maybe.withDefault []
+                                                       )
+
+                                            functionsNamesInGeneratedModules =
+                                                buildJsonCodingFunctionsForTypeAnnotation stateTypeAnnotation
+
+                                            encodeFunction =
+                                                "jsonEncodeDeserializedState =\n"
+                                                    ++ indentElmCodeLines 1
+                                                        (generateSerializersResult.generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.encodeFunction.name)
+
+                                            decodeFunction =
+                                                "jsonDecodeDeserializedState =\n"
+                                                    ++ indentElmCodeLines 1
+                                                        (generateSerializersResult.generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.decodeFunction.name)
+
+                                            ( migrateFromStringExpressionFromGenerateModuleName, typeToGenerateSerializersForMigration ) =
+                                                case maybeMigrationConfig of
+                                                    Nothing ->
+                                                        ( always "always (Err \"Did not find a migration function in the program code\")"
+                                                        , []
+                                                        )
+
+                                                    Just migrationConfig ->
+                                                        let
+                                                            inputTypeFunctionNames =
+                                                                buildJsonCodingFunctionsForTypeAnnotation migrationConfig.inputType
+                                                        in
+                                                        ( \generatedModuleName ->
+                                                            [ "Json.Decode.decodeString " ++ (generatedModuleName ++ "." ++ inputTypeFunctionNames.decodeFunction.name)
+                                                            , ">> Result.mapError Json.Decode.errorToString"
+                                                            , ">> Result.map " ++ String.join "." (migrationConfig.migrateFunctionModuleName ++ [ migrationConfig.migrateFunctionDeclarationLocalName ])
+                                                            ]
+                                                                |> String.join "\n"
+                                                        , [ migrationConfig.inputType, migrationConfig.returnType ]
+                                                        )
+
+                                            stateFromStringExpression =
+                                                [ "Json.Decode.decodeString " ++ (generateSerializersResult.generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.decodeFunction.name)
+                                                , ">> Result.mapError Json.Decode.errorToString"
+                                                ]
+                                                    |> String.join "\n"
+
+                                            rootElmModuleText =
+                                                composeBackendRootElmModuleText
+                                                    { interfaceToHostRootModuleName = String.join "." interfaceToHostRootModuleName
+                                                    , rootModuleNameBeforeLowering = String.join "." rootModuleName
+                                                    , stateTypeAnnotation = stateTypeAnnotation
+                                                    , modulesToImport = modulesToImport
+                                                    , stateEncodeFunction = encodeFunction
+                                                    , stateDecodeFunction = decodeFunction
+                                                    , stateFromStringExpression = stateFromStringExpression
+                                                    , migrateFromStringExpression = migrateFromStringExpressionFromGenerateModuleName generateSerializersResult.generatedModuleName
+                                                    }
+                                        in
+                                        appFiles
+                                            |> updateFileContentAtPath
+                                                (always (fileContentFromString rootElmModuleText))
+                                                interfaceToHostRootFilePath
+                                    )
+                        )
 
 
-loweredForAppStateMigration :
+parseMigrationConfig :
     { originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File ) }
-    -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
-loweredForAppStateMigration { originalSourceModules } sourceFiles =
-    let
-        interfaceToHostRootFilePath =
-            filePathFromElmModuleName appStateMigrationRootModuleName
-    in
+    -> Result (List (LocatedInSourceFiles CompilationError)) (Maybe MigrationConfig)
+parseMigrationConfig { originalSourceModules } =
     case Dict.get appStateMigrationInterfaceModuleName originalSourceModules of
         Nothing ->
-            -- App contains no migrate module.
-            Ok sourceFiles
+            Ok Nothing
 
         Just ( originalInterfaceModuleFilePath, originalInterfaceModule ) ->
-            if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
-                -- Support integrating applications supplying their own lowered version.
-                Ok sourceFiles
-
-            else
-                parseAppStateMigrateElmTypeAndDependenciesRecursively originalSourceModules ( originalInterfaceModuleFilePath, originalInterfaceModule )
-                    |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type name: "))
-                    |> Result.map
-                        (\( ( inputType, returnType ), stateTypeDependencies ) ->
-                            let
-                                migrateModuleName =
-                                    Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value originalInterfaceModule.moduleDefinition)
-
-                                ( appFiles, { generatedModuleName, modulesToImport } ) =
-                                    mapAppFilesToSupportJsonCoding
-                                        { generatedModuleNamePrefix = String.split "." appStateMigrationRootModuleName }
-                                        [ inputType, returnType ]
-                                        stateTypeDependencies
-                                        sourceFiles
-
-                                inputTypeNamesInGeneratedModules =
-                                    buildJsonCodingFunctionsForTypeAnnotation inputType
-
-                                returnTypeNamesInGeneratedModules =
-                                    buildJsonCodingFunctionsForTypeAnnotation returnType
-
-                                rootElmModuleText =
-                                    composeStateMigrationModuleText
-                                        { migrateModuleName = String.join "." migrateModuleName
-                                        , generatedModuleName = generatedModuleName
-                                        , decodeOrigTypeFunctionName = inputTypeNamesInGeneratedModules.decodeFunction.name
-                                        , encodeDestTypeFunctionName = returnTypeNamesInGeneratedModules.encodeFunction.name
-                                        , modulesToImport = modulesToImport
-                                        }
-                            in
-                            appFiles
-                                |> updateFileContentAtPath
-                                    (always (fileContentFromString rootElmModuleText))
-                                    interfaceToHostRootFilePath
-                        )
-                    |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
+            parseAppStateMigrateElmTypeAndDependenciesRecursively originalSourceModules ( originalInterfaceModuleFilePath, originalInterfaceModule )
+                |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse migration state type name: "))
+                |> Result.map
+                    (\( ( inputType, returnType ), stateTypeDependencies ) ->
+                        Just
+                            { inputType = inputType
+                            , returnType = returnType
+                            , dependencies = stateTypeDependencies
+                            , migrateFunctionModuleName = String.split "." appStateMigrationInterfaceModuleName
+                            , migrateFunctionDeclarationLocalName = appStateMigrationInterfaceFunctionName
+                            }
+                    )
+                |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
 
 
 parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String ( List String, Elm.Syntax.File.File ) -> ( List String, Elm.Syntax.File.File ) -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
@@ -483,10 +515,7 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
                                         Ok ( inputType, stateTypeAnnotation )
 
                                     _ ->
-                                        {- TODO: After migrating apps in production: Switch to:
-                                           Err "Unexpected return type: Not a tuple."
-                                        -}
-                                        Ok ( inputType, returnType )
+                                        Err "Unexpected return type: Not a tuple."
 
                             _ ->
                                 Err "Unexpected type annotation"
@@ -499,17 +528,9 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
             )
 
 
-composeAppRootElmModuleText :
-    { interfaceToHostRootModuleName : String
-    , rootModuleNameBeforeLowering : String
-    , stateTypeAnnotation : ElmTypeAnnotation
-    , modulesToImport : List (List String)
-    , encodeFunction : String
-    , decodeFunction : String
-    }
-    -> String
-composeAppRootElmModuleText { interfaceToHostRootModuleName, rootModuleNameBeforeLowering, stateTypeAnnotation, modulesToImport, encodeFunction, decodeFunction } =
-    "module " ++ interfaceToHostRootModuleName ++ """ exposing
+composeBackendRootElmModuleText : BackendRootModuleConfig -> String
+composeBackendRootElmModuleText config =
+    "module " ++ config.interfaceToHostRootModuleName ++ """ exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -518,14 +539,14 @@ composeAppRootElmModuleText { interfaceToHostRootModuleName, rootModuleNameBefor
     , main
     )
 
-import """ ++ rootModuleNameBeforeLowering ++ """
-""" ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> String.join "\n") ++ """
+import """ ++ config.rootModuleNameBeforeLowering ++ """
+""" ++ (config.modulesToImport |> List.map (String.join "." >> (++) "import ") |> String.join "\n") ++ """
 import Platform
 import ElmFullstack exposing (..)
 
 
 type alias DeserializedState =
-    (""" ++ buildTypeAnnotationText stateTypeAnnotation ++ """)
+    (""" ++ buildTypeAnnotationText config.stateTypeAnnotation ++ """)
 
 
 type alias DeserializedStateWithTaskFramework =
@@ -563,12 +584,16 @@ type BackendEvent
     = HttpRequestEvent ElmFullstack.HttpRequestEventStruct
     | TaskCompleteEvent TaskCompleteEventStruct
     | PosixTimeHasArrivedEvent { posixTimeMilli : Int }
+    | InitStateEvent
+    | SetStateEvent String
+    | MigrateStateEvent String
 
 
 type alias BackendEventResponse =
     { startTasks : List StartTaskStructure
     , notifyWhenPosixTimeHasArrived : Maybe { minimumPosixTimeMilli : Int }
     , completeHttpResponses : List RespondToHttpRequestStruct
+    , migrateResult : Maybe (Result String ())
     }
 
 
@@ -612,8 +637,7 @@ type alias TaskId =
 
 
 interfaceToHost_initState =
-    """ ++ rootModuleNameBeforeLowering ++ """.backendMain.init
-        -- TODO: Expand the runtime to forward the cmds from init.
+    """ ++ config.rootModuleNameBeforeLowering ++ """.backendMain.init
         |> Tuple.first
         |> initDeserializedStateWithTaskFramework
         |> DeserializeSuccessful
@@ -838,6 +862,60 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                                 stateBefore.terminateVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
                         }
 
+        InitStateEvent ->
+            continueWithUpdateToTasks (always Backend.Main.backendMain.init) stateBefore
+
+        SetStateEvent stateString ->
+            let
+                ( ( state, responseBeforeAddingMigrateResult ), migrateResult ) =
+                    case setStateFromString stateString of
+                        Err migrateError ->
+                            ( continueWithState
+                                stateBefore
+                            , Err migrateError
+                            )
+
+                        Ok appState ->
+                            ( continueWithUpdateToTasks
+                                (always ( appState, [] ))
+                                stateBefore
+                            , Ok ()
+                            )
+            in
+            ( state
+            , { responseBeforeAddingMigrateResult | migrateResult = Just migrateResult }
+            )
+
+        MigrateStateEvent stateString ->
+            let
+                ( ( state, responseBeforeAddingMigrateResult ), migrateResult ) =
+                    case migrateFromString stateString of
+                        Err migrateError ->
+                            ( continueWithState
+                                stateBefore
+                            , Err migrateError
+                            )
+
+                        Ok stateAndCmds ->
+                            ( continueWithUpdateToTasks
+                                (always stateAndCmds)
+                                stateBefore
+                            , Ok ()
+                            )
+            in
+            ( state
+            , { responseBeforeAddingMigrateResult | migrateResult = Just migrateResult }
+            )
+
+
+setStateFromString : String -> Result String DeserializedState
+setStateFromString =
+""" ++ indentElmCodeLines 1 config.stateFromStringExpression ++ """
+
+migrateFromString : String -> Result String ( DeserializedState, BackendCmds DeserializedState )
+migrateFromString =
+""" ++ indentElmCodeLines 1 config.migrateFromStringExpression ++ """
+
 
 backendEventResponseFromRuntimeTasksAndSubscriptions :
     (DeserializedState -> BackendSubs DeserializedState)
@@ -867,6 +945,7 @@ backendEventResponseFromSubscriptions subscriptions =
     , notifyWhenPosixTimeHasArrived =
         subscriptions.posixTimeIsPast
             |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
+    , migrateResult = Nothing
     }
 
 
@@ -974,6 +1053,7 @@ concatBackendEventResponse responses =
     { notifyWhenPosixTimeHasArrived = notifyWhenPosixTimeHasArrived
     , startTasks = startTasks
     , completeHttpResponses = completeHttpResponses
+    , migrateResult = Nothing
     }
 
 
@@ -982,6 +1062,7 @@ passiveBackendEventResponse =
     { startTasks = []
     , completeHttpResponses = []
     , notifyWhenPosixTimeHasArrived = Nothing
+    , migrateResult = Nothing
     }
 
 
@@ -1004,6 +1085,9 @@ decodeBackendEvent =
             |> Json.Decode.map (\\posixTimeMilli -> PosixTimeHasArrivedEvent { posixTimeMilli = posixTimeMilli })
         , Json.Decode.field "TaskCompleteEvent" decodeTaskCompleteEventStructure |> Json.Decode.map TaskCompleteEvent
         , Json.Decode.field "HttpRequestEvent" decodeHttpRequestEventStruct |> Json.Decode.map HttpRequestEvent
+        , Json.Decode.field "InitStateEvent" (jsonDecodeSucceedWhenNotNull InitStateEvent)
+        , Json.Decode.field "SetStateEvent" (Json.Decode.map SetStateEvent Json.Decode.string)
+        , Json.Decode.field "MigrateStateEvent" (Json.Decode.map MigrateStateEvent Json.Decode.string)
         ]
 
 
@@ -1096,14 +1180,15 @@ encodeResponseOverSerialInterface responseOverSerialInterface =
 
 
 encodeBackendEventResponse : BackendEventResponse -> Json.Encode.Value
-encodeBackendEventResponse request =
+encodeBackendEventResponse response =
     [ ( "notifyWhenPosixTimeHasArrived"
-      , request.notifyWhenPosixTimeHasArrived
+      , response.notifyWhenPosixTimeHasArrived
             |> Maybe.map (\\time -> [ ( "minimumPosixTimeMilli", time.minimumPosixTimeMilli |> Json.Encode.int ) ] |> Json.Encode.object)
             |> Maybe.withDefault Json.Encode.null
       )
-    , ( "startTasks", request.startTasks |> Json.Encode.list encodeStartTask )
-    , ( "completeHttpResponses", request.completeHttpResponses |> Json.Encode.list encodeHttpResponseRequest )
+    , ( "startTasks", response.startTasks |> Json.Encode.list encodeStartTask )
+    , ( "completeHttpResponses", response.completeHttpResponses |> Json.Encode.list encodeHttpResponseRequest )
+    , ( "migrateResult", response.migrateResult |> jsonEncode__generic_Maybe (jsonEncode__generic_Result Json.Encode.string (always (Json.Encode.object []))) )
     ]
         |> Json.Encode.object
 
@@ -1176,7 +1261,28 @@ encodeHttpHeader httpHeader =
         |> Json.Encode.object
 
 
-""" ++ encodeFunction ++ "\n\n" ++ decodeFunction ++ """
+""" ++ config.stateEncodeFunction ++ "\n\n" ++ config.stateDecodeFunction ++ """
+
+
+jsonEncode__generic_Result : (a -> Json.Encode.Value) -> (b -> Json.Encode.Value) -> Result a b -> Json.Encode.Value
+jsonEncode__generic_Result encodeErr encodeOk valueToEncode =
+    case valueToEncode of
+        Err valueToEncodeError ->
+            [ ( "Err", encodeErr valueToEncodeError ) ] |> Json.Encode.object
+
+        Ok valueToEncodeOk ->
+            [ ( "Ok", encodeOk valueToEncodeOk ) ] |> Json.Encode.object
+
+
+jsonEncode__generic_Maybe : (a -> Json.Encode.Value) -> Maybe a -> Json.Encode.Value
+jsonEncode__generic_Maybe encodeJust valueToEncode =
+    case valueToEncode of
+        Nothing ->
+            [ ( "Nothing", [] |> Json.Encode.list identity ) ] |> Json.Encode.object
+
+        Just just ->
+            [ ( "Just", encodeJust just ) ] |> Json.Encode.object
+
 
 decodeResult : Json.Decode.Decoder error -> Json.Decode.Decoder ok -> Json.Decode.Decoder (Result error ok)
 decodeResult errorDecoder okDecoder =
@@ -1214,62 +1320,6 @@ decodeOptionalField fieldName decoder =
     in
     Json.Decode.value
         |> Json.Decode.andThen finishDecoding
-"""
-
-
-composeStateMigrationModuleText :
-    { migrateModuleName : String
-    , generatedModuleName : String
-    , decodeOrigTypeFunctionName : String
-    , encodeDestTypeFunctionName : String
-    , modulesToImport : List (List String)
-    }
-    -> String
-composeStateMigrationModuleText { migrateModuleName, generatedModuleName, decodeOrigTypeFunctionName, encodeDestTypeFunctionName, modulesToImport } =
-    String.trimLeft """
-module """ ++ appStateMigrationRootModuleName ++ """ exposing (decodeMigrateAndEncodeAndSerializeResult, main)
-
-import """ ++ migrateModuleName ++ """
-import """ ++ generatedModuleName ++ """
-""" ++ (modulesToImport |> List.map (String.join "." >> (++) "import ") |> List.sort |> String.join "\n") ++ """
-import Json.Decode
-import Json.Encode
-
-
-decodeMigrateAndEncode : String -> Result String String
-decodeMigrateAndEncode =
-    Json.Decode.decodeString """ ++ generatedModuleName ++ "." ++ decodeOrigTypeFunctionName ++ """
-        -- TODO: Expand the runtime to forward the cmds from migrate.
-        >> Result.map (""" ++ migrateModuleName ++ "." ++ appStateMigrationInterfaceFunctionName ++ """ >> Tuple.first >> """ ++ generatedModuleName ++ "." ++ encodeDestTypeFunctionName ++ """ >> Json.Encode.encode 0)
-        >> Result.mapError Json.Decode.errorToString
-
-
-decodeMigrateAndEncodeAndSerializeResult : String -> String
-decodeMigrateAndEncodeAndSerializeResult =
-    decodeMigrateAndEncode
-        >> jsonEncodeResult Json.Encode.string Json.Encode.string
-        >> Json.Encode.encode 0
-
-
-jsonEncodeResult : (err -> Json.Encode.Value) -> (ok -> Json.Encode.Value) -> Result err ok -> Json.Encode.Value
-jsonEncodeResult encodeErr encodeOk valueToEncode =
-    case valueToEncode of
-        Err valueToEncodeError ->
-            [ ( "Err", [ valueToEncodeError ] |> Json.Encode.list encodeErr ) ] |> Json.Encode.object
-
-        Ok valueToEncodeOk ->
-            [ ( "Ok", [ valueToEncodeOk ] |> Json.Encode.list encodeOk ) ] |> Json.Encode.object
-
-
-main : Program Int {} String
-main =
-    Platform.worker
-        { init = \\_ -> ( {}, Cmd.none )
-        , update =
-            \\_ _ ->
-                ( decodeMigrateAndEncodeAndSerializeResult |> always {}, Cmd.none )
-        , subscriptions = \\_ -> Sub.none
-        }
 """
 
 
