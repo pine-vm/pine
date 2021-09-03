@@ -478,7 +478,7 @@ namespace test_elm_fullstack
                 var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                 var echoRequestStructure =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.HttpRequest>(responseContentString);
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.HttpRequest>(responseContentString);
 
                 Assert.AreEqual(
                     Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
@@ -520,7 +520,7 @@ namespace test_elm_fullstack
                 var responseContentString = response.Content.ReadAsStringAsync().Result;
 
                 var echoRequestStructure =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.HttpRequest>(responseContentString);
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.HttpRequest>(responseContentString);
 
                 var observedContentType =
                     echoRequestStructure.headers
@@ -712,7 +712,7 @@ namespace test_elm_fullstack
             using var server = testSetup.StartWebHost();
 
             var stateToTriggerInvalidMigration =
-                @"{""attemptSetMaybeStringOnMigration"":true,""maybeString"":{""Nothing"":[]},""otherState"":""""}";
+                @"{""maybeString"":{""Just"":[""a string""]},""otherState"":""""}";
 
             using (var client = testSetup.BuildPublicAppHttpClient())
             {
@@ -742,12 +742,12 @@ namespace test_elm_fullstack
                     new ByteArrayContent(webAppConfigZipArchive)).Result;
 
                 Assert.AreEqual(
-                    System.Net.HttpStatusCode.BadRequest,
+                    HttpStatusCode.BadRequest,
                     migrateHttpResponse.StatusCode,
                     "migrate-elm-state response status code is BadRequest");
 
                 Assert.IsTrue(
-                    (migrateHttpResponse.Content?.ReadAsStringAsync().Result ?? "").Contains("Failed to load the migrated serialized state"),
+                    (migrateHttpResponse.Content?.ReadAsStringAsync().Result ?? "").Contains("maybeString"),
                     "HTTP response content contains matching message");
             }
 
@@ -762,7 +762,7 @@ namespace test_elm_fullstack
             }
 
             var stateNotTriggeringInvalidMigration =
-                @"{""attemptSetMaybeStringOnMigration"":false,""maybeString"":{""Nothing"":[]},""otherState"":""sometext""}";
+                @"{""maybeString"":{""Nothing"":[]},""otherState"":""sometext""}";
 
             using (var client = testSetup.BuildPublicAppHttpClient())
             {
@@ -1313,7 +1313,7 @@ namespace test_elm_fullstack
                 ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
                     new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                         new FileStoreFromSystemIOFile(testDirectory)),
-                        _ => { }))
+                        _ => { }).process)
             {
                 var restoredProcessLastDeployedAppComponent = restoredProcess.lastAppConfig?.appConfigComponent;
 

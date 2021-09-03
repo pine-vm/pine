@@ -181,11 +181,11 @@ namespace test_elm_fullstack
             new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                 BuildProcessStoreFileStoreReaderInFileDirectory());
 
-        public IEnumerable<ElmFullstack.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
+        public IEnumerable<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
         {
             var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-            ElmFullstack.InterfaceToHost.AppEventStructure eventLogEntry(ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
+            ElmFullstack.WebHost.InterfaceToHost.AppEventStructure eventLogEntry(ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
             {
                 var component =
                     logEntry.LiteralStringUtf8 != null
@@ -202,7 +202,7 @@ namespace test_elm_fullstack
 
                 var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
-                return JsonConvert.DeserializeObject<ElmFullstack.InterfaceToHost.AppEventStructure>(eventString);
+                return JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString);
             }
 
             return

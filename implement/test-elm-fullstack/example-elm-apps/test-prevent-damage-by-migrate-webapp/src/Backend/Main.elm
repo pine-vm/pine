@@ -15,23 +15,19 @@ import Json.Encode
 
 
 type alias State =
-    { attemptSetMaybeStringOnMigration : Bool
-    , maybeString : Maybe String
-    , otherState : String
-    }
+    Backend.StateType.State
 
 
-backendMain : ElmFullstack.BackendConfig Backend.StateType.State
+backendMain : ElmFullstack.BackendConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-initState : Backend.StateType.State
+initState : State
 initState =
     { maybeString = Nothing
-    , attemptSetMaybeStringOnMigration = False
     , otherState = ""
     }
 

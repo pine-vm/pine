@@ -1,18 +1,28 @@
 ﻿using System;
 
-namespace ElmFullstack.InterfaceToHost
+namespace ElmFullstack.WebHost.InterfaceToHost
 {
     public record AppEventStructure(
         ArrivedAtTimeEventStructure ArrivedAtTimeEvent = null,
         HttpRequestEvent HttpRequestEvent = null,
-        ResultFromTaskWithId TaskCompleteEvent = null);
+        ResultFromTaskWithId TaskCompleteEvent = null,
+        object InitStateEvent = null,
+        string SetStateEvent = null,
+        string MigrateStateEvent = null)
+    {
+        static public readonly Newtonsoft.Json.JsonSerializerSettings JsonSerializerSettings = new()
+        {
+            DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
+        };
+    }
 
     public record ResponseOverSerialInterface(string DecodeEventError = null, AppEventResponseStructure DecodeEventSuccess = null);
 
     public record AppEventResponseStructure(
         NotifyWhenPosixTimeHasArrivedRequestStructure notifyWhenPosixTimeHasArrived,
         StartTask[] startTasks,
-        HttpResponseRequest[] completeHttpResponses);
+        HttpResponseRequest[] completeHttpResponses,
+        Maybe<Result<string, object>> migrateResult);
 
     public record HttpRequestEvent(Int64 posixTimeMilli, string httpRequestId, HttpRequestContext requestContext, HttpRequest request);
 
@@ -44,6 +54,8 @@ namespace ElmFullstack.InterfaceToHost
             :
             new Result<NewErrT, OkT> { Err = mapError(Err) };
     }
+
+    public record Maybe<JustT>(object Nothing = default, JustT Just = default);
 
     public record ResultFromTaskWithId(string taskId, TaskResult taskResult);
 

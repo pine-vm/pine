@@ -37,7 +37,7 @@ namespace ElmFullstack.WebHost
             if (getDateTimeOffset == null)
             {
                 getDateTimeOffset = () => DateTimeOffset.UtcNow;
-                services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset);
+                services.AddSingleton(getDateTimeOffset);
             }
 
             var webAppAndElmAppConfig = serviceProvider.GetService<WebAppAndElmAppConfig>();
@@ -247,10 +247,23 @@ namespace ElmFullstack.WebHost
                 prepareProcessEvent.processEventAndResultingRequests();
             }
 
+            void forwardTasksFromResponseCmds(InterfaceToHost.AppEventResponseStructure response)
+            {
+                foreach (var startTask in response.startTasks)
+                {
+                    System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(startTask), applicationStoppingCancellationTokenSource.Token);
+                }
+
+                foreach (var completeHttpResponse in response.completeHttpResponses)
+                {
+                    appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] = completeHttpResponse.response;
+                }
+            }
+
             (string serializedInterfaceEvent, Action processEventAndResultingRequests) prepareProcessEventAndResultingRequests(
                 InterfaceToHost.AppEventStructure interfaceEvent)
             {
-                var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, jsonSerializerSettings);
+                var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
 
                 var processEvent = new Action(() =>
                 {
@@ -301,16 +314,7 @@ namespace ElmFullstack.WebHost
                             });
                     }
 
-                    foreach (var startTask in structuredResponse.DecodeEventSuccess.startTasks)
-                    {
-                        System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(startTask));
-                    }
-
-                    foreach (var completeHttpResponse in structuredResponse.DecodeEventSuccess.completeHttpResponses)
-                    {
-                        appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] =
-                            completeHttpResponse.response;
-                    }
+                    forwardTasksFromResponseCmds(structuredResponse.DecodeEventSuccess);
                 });
 
                 return (serializedInterfaceEvent, processEvent);
@@ -367,6 +371,9 @@ namespace ElmFullstack.WebHost
                 state: null,
                 dueTime: TimeSpan.Zero,
                 period: TimeSpan.FromMilliseconds(10));
+
+            if (webAppAndElmAppConfig.InitOrMigrateCmds != null)
+                forwardTasksFromResponseCmds(webAppAndElmAppConfig.InitOrMigrateCmds);
 
             processEventTimeHasArrived();
 
@@ -455,11 +462,6 @@ namespace ElmFullstack.WebHost
                 });
         }
 
-        static readonly Newtonsoft.Json.JsonSerializerSettings jsonSerializerSettings = new Newtonsoft.Json.JsonSerializerSettings
-        {
-            DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
-        };
-
         static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEvent> AsPersistentProcessInterfaceHttpRequestEvent(
             HttpContext httpContext,
             string httpRequestId,
@@ -479,12 +481,9 @@ namespace ElmFullstack.WebHost
         }
     }
 
-    public class WebAppAndElmAppConfig
-    {
-        public WebAppConfigurationJsonStructure WebAppConfiguration;
-
-        public Func<string, string> ProcessEventInElmApp;
-
-        public Composition.Component SourceComposition;
-    }
+    public record WebAppAndElmAppConfig(
+        WebAppConfigurationJsonStructure WebAppConfiguration,
+        Func<string, string> ProcessEventInElmApp,
+        Composition.Component SourceComposition,
+        InterfaceToHost.AppEventResponseStructure InitOrMigrateCmds);
 }

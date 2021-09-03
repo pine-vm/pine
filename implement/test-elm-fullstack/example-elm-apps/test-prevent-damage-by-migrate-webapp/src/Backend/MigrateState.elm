@@ -5,26 +5,22 @@ The `maybeString` field has a different type.
 As long as that field has the value `Nothing`, the different type is not apparent in the serialized representation.
 -}
 
+import Backend.Main
 import ElmFullstack
 
 
 type alias BackendState =
-    { attemptSetMaybeStringOnMigration : Bool
-    , maybeString : Maybe Int
+    { maybeString : Maybe Int
     , otherState : String
     }
 
 
-migrate : BackendState -> ( BackendState, ElmFullstack.BackendCmds BackendState )
+migrate : BackendState -> ( Backend.Main.State, ElmFullstack.BackendCmds Backend.Main.State )
 migrate originalState =
     let
         state =
-            { originalState
-                | otherState = originalState.otherState ++ (originalState.otherState |> String.length |> String.fromInt)
+            { otherState = originalState.otherState ++ (originalState.otherState |> String.length |> String.fromInt)
+            , maybeString = Nothing
             }
     in
-    if state.attemptSetMaybeStringOnMigration then
-        ( { state | maybeString = Just 123 }, [] )
-
-    else
-        ( state, [] )
+    ( state, [] )

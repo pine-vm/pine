@@ -133,10 +133,12 @@ namespace ElmFullstack.WebHost
 
                     logger.LogInformation("Begin to build the process volatile representation.");
 
-                    var processVolatileRepresentation =
+                    var restoreProcessResult =
                         PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
-                            new ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(processStoreFileStore),
+                            new ProcessStoreReaderInFileStore(processStoreFileStore),
                             logger: logEntry => logger.LogInformation(logEntry));
+
+                    var processVolatileRepresentation = restoreProcessResult.process;
 
                     logger.LogInformation("Completed building the process volatile representation.");
 
@@ -218,11 +220,10 @@ namespace ElmFullstack.WebHost
                             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                             .ConfigureServices(services =>
                             {
-                                services.AddSingleton<WebAppAndElmAppConfig>(
-                                    new WebAppAndElmAppConfig
-                                    {
-                                        WebAppConfiguration = webAppConfiguration,
-                                        ProcessEventInElmApp = serializedEvent =>
+                                services.AddSingleton(
+                                    new WebAppAndElmAppConfig(
+                                        WebAppConfiguration: webAppConfiguration,
+                                        ProcessEventInElmApp: serializedEvent =>
                                         {
                                             lock (avoidConcurrencyLock)
                                             {
@@ -235,8 +236,9 @@ namespace ElmFullstack.WebHost
                                                 return elmEventResponse;
                                             }
                                         },
-                                        SourceComposition = processVolatileRepresentation.lastAppConfig.Value.appConfigComponent,
-                                    });
+                                        SourceComposition: processVolatileRepresentation.lastAppConfig.Value.appConfigComponent,
+                                        InitOrMigrateCmds: restoreProcessResult.initOrMigrateCmds
+                                    ));
                             })
                             .Build();
                     }
