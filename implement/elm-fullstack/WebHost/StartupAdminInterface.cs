@@ -129,7 +129,7 @@ namespace ElmFullstack.WebHost
 
                     var newPublicAppConfig = new PublicHostConfiguration { };
 
-                    logger.LogInformation("Begin to build the process volatile representation.");
+                    logger.LogInformation("Begin to build the process live representation.");
 
                     var restoreProcessResult =
                         PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
@@ -138,7 +138,7 @@ namespace ElmFullstack.WebHost
 
                     var processVolatileRepresentation = restoreProcessResult.process;
 
-                    logger.LogInformation("Completed building the process volatile representation.");
+                    logger.LogInformation("Completed building the process live representation.");
 
                     var cyclicReductionStoreLock = new object();
                     DateTimeOffset? cyclicReductionStoreLastTime = null;
@@ -459,6 +459,18 @@ namespace ElmFullstack.WebHost
                         },
                         new ApiRoute
                         {
+                            path = PathApiDeployAndInitAppState,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true)),
+                        },
+                        new ApiRoute
+                        {
+                            path = PathApiDeployAndMigrateAppState,
+                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false)),
+                        },
+                        new ApiRoute
+                        {
                             path = PathApiReplaceProcessHistory,
                             methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
                             .Add("post", async (context, publicAppHost) =>
@@ -491,18 +503,6 @@ namespace ElmFullstack.WebHost
                                 context.Response.StatusCode = 200;
                                 await context.Response.WriteAsync("Successfully replaced the process history.");
                             }),
-                        },
-                        new ApiRoute
-                        {
-                            path = PathApiDeployAndInitAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true)),
-                        },
-                        new ApiRoute
-                        {
-                            path = PathApiDeployAndMigrateAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false)),
                         },
                     };
 
