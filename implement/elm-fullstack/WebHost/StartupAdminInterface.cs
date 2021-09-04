@@ -20,10 +20,8 @@ namespace ElmFullstack.WebHost
     public class StartupAdminInterface
     {
         static public string PathApiDeployAndInitAppState => "/api/deploy-and-init-app-state";
-        static public string Old_PathApiDeployAndInitAppState => "/api/deploy-app-config-and-init-elm-app-state";
 
         static public string PathApiDeployAndMigrateAppState => "/api/deploy-and-migrate-app-state";
-        static public string Old_PathApiDeployAndMigrateAppState => "/api/deploy-app-config-and-migrate-elm-app-state";
 
         static public string PathApiRevertProcessTo => "/api/revert-process-to";
 
@@ -503,18 +501,6 @@ namespace ElmFullstack.WebHost
                         new ApiRoute
                         {
                             path = PathApiDeployAndMigrateAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false)),
-                        },
-                        new ApiRoute
-                        {
-                            path = Old_PathApiDeployAndInitAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true)),
-                        },
-                        new ApiRoute
-                        {
-                            path = Old_PathApiDeployAndMigrateAppState,
                             methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
                             .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false)),
                         },
