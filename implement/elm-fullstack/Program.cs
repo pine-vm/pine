@@ -358,8 +358,7 @@ namespace elm_fullstack
                             };
 
                         var initElmAppState =
-                            (deletePreviousProcessOption.HasValue() && !replicateProcessOption.HasValue()) ||
-                            processStorePath == null;
+                            deletePreviousProcessOption.HasValue() && !replicateProcessOption.HasValue();
 
                         var compositionLogEvent =
                             ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
