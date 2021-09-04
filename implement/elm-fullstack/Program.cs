@@ -49,8 +49,8 @@ namespace elm_fullstack
             var runServerCmd = AddRunServerCmd(app);
 
             var deployAppCmd = AddDeployCmd(app);
-            var setAppStateCmd = AddSetAppStateCmd(app);
-            var archiveProcessCmd = AddArchiveProcessCmd(app);
+            var copyAppStateCmd = AddCopyAppStateCmd(app);
+            var copyProcessCmd = AddCopyProcessCmd(app);
             var truncateProcessHistoryCmd = AddTruncateProcessHistoryCmd(app);
 
             var compileAppCmd = AddCompileCmd(app);
@@ -113,13 +113,13 @@ namespace elm_fullstack
                     },
                     new
                     {
-                        title = "operate servers and maintain production systems",
+                        title = "operate servers and maintain live systems",
                         commands = new[]
                         {
                             runServerCmd,
                             deployAppCmd,
-                            setAppStateCmd,
-                            archiveProcessCmd,
+                            copyAppStateCmd,
+                            copyProcessCmd,
                             truncateProcessHistoryCmd,
                         }
                     },
@@ -190,7 +190,7 @@ namespace elm_fullstack
                         {
                             app.Description,
                             "Usage: " + elmFsCommandName + " [command] [options]",
-                            "These are common Elm-fs commands used in various situations:",
+                            "These are common elm-fs commands used in various situations:",
                             string.Join("\n\n", groupsTexts),
                             "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.",
                         });
@@ -247,9 +247,8 @@ namespace elm_fullstack
                 var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
                 var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
                 var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
-                var replicateProcessOption = runServerCmd.Option("--replicate-process", "Path to a process to replicate. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
-                var replicateProcessAdminPasswordOption = runServerCmd.Option("--replicate-admin-password", "Used together with '--replicate-process' if that location requires a password to authenticate.", CommandOptionType.SingleValue);
-                var deployOption = runServerCmd.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--replicate-process'.", CommandOptionType.SingleValue);
+                var copyProcessOption = runServerCmd.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
+                var deployOption = runServerCmd.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
 
                 runServerCmd.OnExecute(() =>
                 {
@@ -259,12 +258,9 @@ namespace elm_fullstack
                         publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
                         publicWebHostUrlsDefault;
 
-                    var replicateProcess = replicateProcessOption.Value();
+                    var copyProcess = copyProcessOption.Value();
 
-                    var replicateProcessAdminPassword =
-                        replicateProcessAdminPasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(replicateProcess);
-
-                    if ((deletePreviousProcessOption.HasValue() || replicateProcess != null) && processStorePath != null)
+                    if ((deletePreviousProcessOption.HasValue() || copyProcess != null) && processStorePath != null)
                     {
                         Console.WriteLine("Deleting the previous process state from '" + processStorePath + "'...");
 
@@ -316,14 +312,14 @@ namespace elm_fullstack
                         processStoreFileStore = new FileStoreFromSystemIOFile(processStorePath);
                     }
 
-                    if (replicateProcess != null)
+                    if (copyProcess != null)
                     {
-                        var replicateFiles =
+                        var copyFiles =
                             LoadFilesForRestoreFromPathAndLogToConsole(
-                                sourcePath: replicateProcess,
-                                sourcePassword: replicateProcessAdminPassword);
+                                sourcePath: copyProcess,
+                                sourcePassword: null);
 
-                        foreach (var file in replicateFiles)
+                        foreach (var file in copyFiles)
                             processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
                     }
 
@@ -358,7 +354,7 @@ namespace elm_fullstack
                             };
 
                         var initElmAppState =
-                            deletePreviousProcessOption.HasValue() && !replicateProcessOption.HasValue();
+                            deletePreviousProcessOption.HasValue() && !copyProcessOption.HasValue();
 
                         var compositionLogEvent =
                             ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
@@ -404,7 +400,7 @@ namespace elm_fullstack
         static CommandLineApplication AddDeployCmd(CommandLineApplication app) =>
             app.Command("deploy", deployCmd =>
             {
-                deployCmd.Description = "Deploy an app to an Elm Fullstack backend process. Deployment implies migration from the previous app state if not specified otherwise.";
+                deployCmd.Description = "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.";
                 deployCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
                 var sourceArgument = deployCmd.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
@@ -433,45 +429,54 @@ namespace elm_fullstack
                 });
             });
 
-        static CommandLineApplication AddSetAppStateCmd(CommandLineApplication app) =>
-            app.Command("set-app-state", setAppStateCmd =>
+        static CommandLineApplication AddCopyAppStateCmd(CommandLineApplication app) =>
+            app.Command("copy-app-state", copyAppStateCmd =>
             {
-                setAppStateCmd.Description = "Set the state of the backend Elm app in the given process.";
-                setAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                copyAppStateCmd.Description = "Copy the state of an Elm backend app.";
+                copyAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var sourceArgument = setAppStateCmd.Argument("source", "Path to the serialized state representation to load.").IsRequired(allowEmptyStrings: false);
+                var sourceArgument = copyAppStateCmd.Argument("source", "Can be a URL to an admin interface or a file with a serialized representation.").IsRequired(allowEmptyStrings: false);
+                var destinationArgument = copyAppStateCmd.Argument("destination", "Can be a URL to an admin interface or a file path.");
 
-                var siteArgument = ProcessSiteArgumentOnCommand(setAppStateCmd);
-                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(setAppStateCmd);
+                var passwordFromSource = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCmd, "source");
+                var passwordFromDestination = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCmd, "destination");
 
-                setAppStateCmd.OnExecute(() =>
+                copyAppStateCmd.OnExecute(() =>
                 {
-                    var site = siteArgument.Value;
-                    var sitePassword = passwordFromSite(site);
+                    var source = sourceArgument.Value;
+                    var sourcePassword = passwordFromSource(source);
 
-                    var attemptReport =
-                        SetElmAppState(
-                            site: site,
-                            siteDefaultPassword: sitePassword,
-                            sourcePath: sourceArgument.Value,
-                            promptForPasswordOnConsole: true);
+                    var destination = destinationArgument.Value;
+                    var destinationPassword = passwordFromSource(destination);
+
+                    var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var report = CopyElmAppState(
+                        source: source,
+                        sourceDefaultPassword: sourcePassword,
+                        destination: destination,
+                        destinationDefaultPassword: destinationPassword)
+                    with
+                    {
+                        totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+                    };
 
                     WriteReportToFileInReportDirectory(
-                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport, Newtonsoft.Json.Formatting.Indented),
-                        reportKind: "set-app-state.json");
+                        reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
+                        reportKind: "copy-app-state.json");
                 });
             });
 
-        static CommandLineApplication AddArchiveProcessCmd(CommandLineApplication app) =>
-            app.Command("archive-process", archiveProcessCmd =>
+        static CommandLineApplication AddCopyProcessCmd(CommandLineApplication app) =>
+            app.Command("copy-process", copyProcessCmd =>
             {
-                archiveProcessCmd.Description = "Copy all files needed to restore or replicate a process and store them in a zip archive.";
-                archiveProcessCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+                copyProcessCmd.Description = "Copy all files needed to restore a process and store them in a zip archive.";
+                copyProcessCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-                var siteArgument = ProcessSiteArgumentOnCommand(archiveProcessCmd);
-                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(archiveProcessCmd);
+                var siteArgument = ProcessSiteArgumentOnCommand(copyProcessCmd);
+                var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyProcessCmd);
 
-                archiveProcessCmd.OnExecute(() =>
+                copyProcessCmd.OnExecute(() =>
                 {
                     var site = MapSiteForCommandLineArgument(siteArgument.Value);
                     var sitePassword = passwordFromSite(site);
@@ -750,9 +755,11 @@ namespace elm_fullstack
                 });
             });
 
-        static Func<string, string> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(CommandLineApplication cmd)
+        static Func<string, string> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(CommandLineApplication cmd, string siteName = null)
         {
-            var sitePasswordOption = cmd.Option("--site-password", "Password to access the site.", CommandOptionType.SingleValue);
+            siteName ??= "site";
+
+            var sitePasswordOption = cmd.Option("--" + siteName + "-password", "Password to access the " + siteName + ".", CommandOptionType.SingleValue);
 
             return site => sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
         }
@@ -1109,47 +1116,126 @@ namespace elm_fullstack
             return builder.Uri;
         }
 
-        class SetElmAppStateReport
+        [Newtonsoft.Json.JsonObject(ItemNullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        record CopyElmAppStateReport(
+            string beginTime,
+            string source,
+            string destination,
+            AppStateSummary appStateSummary = null,
+            ResponseFromServerStruct destinationResponseFromServer = null,
+            string destinationFileReport = null,
+            int? totalTimeSpentMilli = null,
+            object error = null);
+
+        public record ResponseFromServerStruct(int? statusCode, object body);
+
+        public record AppStateSummary(string hash, int length);
+
+        static CopyElmAppStateReport CopyElmAppState(
+            string source,
+            string sourceDefaultPassword,
+            string destination,
+            string destinationDefaultPassword)
         {
-            public string beginTime;
+            var report = new CopyElmAppStateReport
+            (
+                source: source,
+                destination: destination,
+                beginTime: CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow)
+            );
 
-            public string elmAppStateSourcePath;
-
-            public string elmAppStateId;
-
-            public string site;
-
-            public ResponseFromServerStruct responseFromServer;
-
-            public int totalTimeSpentMilli;
-
-            public class ResponseFromServerStruct
+            CopyElmAppStateReport returnWithErrorMessage(string error)
             {
-                public int? statusCode;
-
-                public object body;
+                Console.WriteLine("Error: " + error);
+                return report with { error = error };
             }
+
+            byte[] appStateSerial;
+
+            if (LooksLikeLocalSite(source))
+            {
+                if (File.Exists(source))
+                {
+                    appStateSerial = File.ReadAllBytes(source);
+                }
+                else
+                {
+                    return returnWithErrorMessage("Source looks like a local site, but I did not find a file at " + source);
+                }
+            }
+            else
+            {
+                appStateSerial = GetElmAppStateViaAdminInterface(source, sourceDefaultPassword, promptForPasswordOnConsole: true);
+            }
+
+            if (appStateSerial == null)
+            {
+                return returnWithErrorMessage("Failed to read from source.");
+            }
+
+            var appStateComponent = Composition.Component.Blob(appStateSerial);
+            var appStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appStateComponent));
+
+            report = report with { appStateSummary = new AppStateSummary(hash: appStateId, length: appStateSerial.Length) };
+
+            Console.WriteLine("Got app state " + appStateId + " from the source. It is " + appStateSerial.Length + " bytes long.");
+
+            string saveToFile(string filePath)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
+                File.WriteAllBytes(filePath, appStateSerial);
+
+                var message = "Saved to file '" + filePath + "'";
+
+                Console.WriteLine(message);
+
+                return message;
+            }
+
+            if (destination == null)
+            {
+                return returnWithErrorMessage("I got no argument for the destination. To copy the app state to a file or a live process, Run the copy command with an argument for the destination.");
+            }
+
+            if (LooksLikeLocalSite(destination))
+            {
+                var filePath =
+                    Directory.Exists(destination)
+                    ?
+                    Path.Combine(destination, appStateId + "app-state.json")
+                    :
+                    destination;
+
+                return report with { destinationFileReport = saveToFile(filePath) };
+            }
+
+            return
+                report with
+                {
+                    destinationResponseFromServer =
+                        SetElmAppStateViaAdminInterface(
+                            site: destination,
+                            siteDefaultPassword: destinationDefaultPassword,
+                            elmAppStateSerialized: appStateSerial,
+                            promptForPasswordOnConsole: true)
+                };
+
         }
 
-        static SetElmAppStateReport SetElmAppState(
+        static ResponseFromServerStruct SetElmAppStateViaAdminInterface(
             string site,
             string siteDefaultPassword,
-            string sourcePath,
+            byte[] elmAppStateSerialized,
             bool promptForPasswordOnConsole)
         {
             var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            // For now only support a file as source.
-
-            var elmAppStateSerialized = File.ReadAllBytes(sourcePath);
-
             var elmAppStateComponent = Composition.Component.Blob(elmAppStateSerialized);
 
             var elmAppStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent));
-
-            SetElmAppStateReport.ResponseFromServerStruct responseFromServer = null;
 
             var httpResponse = AttemptHttpRequest(() =>
                 {
@@ -1182,21 +1268,39 @@ namespace elm_fullstack
             }
             catch { }
 
-            responseFromServer = new SetElmAppStateReport.ResponseFromServerStruct
-            {
-                statusCode = (int)httpResponse.StatusCode,
-                body = responseBodyReport,
-            };
+            return new ResponseFromServerStruct
+            (
+                statusCode: (int)httpResponse.StatusCode,
+                body: responseBodyReport
+            );
+        }
 
-            return new SetElmAppStateReport
-            {
-                beginTime = beginTime,
-                elmAppStateSourcePath = sourcePath,
-                elmAppStateId = elmAppStateId,
-                site = site,
-                responseFromServer = responseFromServer,
-                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-            };
+        static byte[] GetElmAppStateViaAdminInterface(
+            string site,
+            string siteDefaultPassword,
+            bool promptForPasswordOnConsole)
+        {
+            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+            var httpResponse = AttemptHttpRequest(() =>
+                {
+                    return new System.Net.Http.HttpRequestMessage
+                    {
+                        Method = System.Net.Http.HttpMethod.Get,
+                        RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState),
+                    };
+                },
+                defaultPassword: siteDefaultPassword,
+                promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
+
+            Console.WriteLine("Server response status code: " + httpResponse.StatusCode);
+
+            var elmAppStateSerialized = httpResponse.Content.ReadAsByteArrayAsync().Result;
+
+            var elmAppStateComponent = Composition.Component.Blob(elmAppStateSerialized);
+            var elmAppStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent));
+
+            return elmAppStateSerialized;
         }
 
         class TruncateProcessHistoryReport
