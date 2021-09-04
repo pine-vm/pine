@@ -205,13 +205,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
         */
         static protected string LiteralElementSubdirectory => "literal-element";
 
-        // TODO: Remove 'ComponentSubdirectory' to complete migration.
-        static protected string ComponentSubdirectory => "component";
-
         static protected string DeflatedLiteralElementSubdirectory => "deflated-literal-element";
-
-        // TODO: Remove 'DeflatedComponentSubdirectory' to complete migration.
-        static protected string DeflatedComponentSubdirectory => "deflated-component";
 
         static protected string ProvisionalReductionSubdirectory => "provisional-reduction";
 
@@ -240,12 +234,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
         protected IFileStoreReader LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
-        //  Plain Pine component.
-        protected IFileStoreReader ComponentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
-
         protected IFileStoreReader DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
-
-        protected IFileStoreReader DeflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
 
         protected IFileStoreReader ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
@@ -264,15 +253,11 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
             var filePath =
                 GetFilePathForComponentInComponentFileStore(componentHashBase16);
 
-            var originalFile =
-                LiteralElementFileStore.GetFileContent(filePath) ??
-                ComponentFileStore.GetFileContent(filePath);
+            var originalFile = LiteralElementFileStore.GetFileContent(filePath);
 
             if (originalFile == null)
             {
-                var deflatedFile =
-                    DeflatedLiteralElementFileStore.GetFileContent(filePath) ??
-                    DeflatedComponentFileStore.GetFileContent(filePath);
+                var deflatedFile = DeflatedLiteralElementFileStore.GetFileContent(filePath);
 
                 if (deflatedFile != null)
                     return CommonConversion.Inflate(deflatedFile);
@@ -465,12 +450,7 @@ namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations
 
         protected IFileStoreWriter LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
-        //  Plain Kalmit component.
-        protected IFileStoreWriter ComponentFileStore => fileStore.ForSubdirectory(ComponentSubdirectory);
-
         protected IFileStoreWriter DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
-
-        protected IFileStoreWriter DeflatedComponentFileStore => fileStore.ForSubdirectory(DeflatedComponentSubdirectory);
 
         protected IFileStoreWriter ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
