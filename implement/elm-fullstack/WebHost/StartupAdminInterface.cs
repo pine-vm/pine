@@ -65,7 +65,7 @@ namespace ElmFullstack.WebHost
 
         class PublicHostConfiguration
         {
-            public PersistentProcess.PersistentProcessVolatileRepresentation processVolatileRepresentation;
+            public PersistentProcess.PersistentProcessLiveRepresentation processLiveRepresentation;
 
             public IWebHost webHost;
         }
@@ -104,7 +104,7 @@ namespace ElmFullstack.WebHost
 
                         publicAppHost?.webHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
                         publicAppHost?.webHost?.Dispose();
-                        publicAppHost?.processVolatileRepresentation?.Dispose();
+                        publicAppHost?.processLiveRepresentation?.Dispose();
                         publicAppHost = null;
                     }
                 }
@@ -132,11 +132,11 @@ namespace ElmFullstack.WebHost
                     logger.LogInformation("Begin to build the process live representation.");
 
                     var restoreProcessResult =
-                        PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
+                        PersistentProcess.PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                             new ProcessStoreReaderInFileStore(processStoreFileStore),
                             logger: logEntry => logger.LogInformation(logEntry));
 
-                    var processVolatileRepresentation = restoreProcessResult.process;
+                    var processLiveRepresentation = restoreProcessResult.process;
 
                     logger.LogInformation("Completed building the process live representation.");
 
@@ -164,7 +164,7 @@ namespace ElmFullstack.WebHost
 
                                     lock (avoidConcurrencyLock)
                                     {
-                                        var (reductionRecord, _) = processVolatileRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
+                                        var (reductionRecord, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
                                     }
 
                                     cyclicReductionStoreLastTime = currentDateTime;
@@ -181,7 +181,7 @@ namespace ElmFullstack.WebHost
                     IWebHost buildWebHost()
                     {
                         var appConfigTree = Composition.ParseAsTreeWithStringPath(
-                            processVolatileRepresentation.lastAppConfig.Value.appConfigComponent).Ok;
+                            processLiveRepresentation.lastAppConfig.Value.appConfigComponent).Ok;
 
                         var appConfigFilesNamesAndContents =
                             appConfigTree.EnumerateBlobsTransitive();
@@ -226,7 +226,7 @@ namespace ElmFullstack.WebHost
                                             lock (avoidConcurrencyLock)
                                             {
                                                 var elmEventResponse =
-                                                    processVolatileRepresentation.ProcessElmAppEvent(
+                                                    processLiveRepresentation.ProcessElmAppEvent(
                                                         processStoreWriter, serializedEvent);
 
                                                 maintainStoreReductions();
@@ -234,7 +234,7 @@ namespace ElmFullstack.WebHost
                                                 return elmEventResponse;
                                             }
                                         },
-                                        SourceComposition: processVolatileRepresentation.lastAppConfig.Value.appConfigComponent,
+                                        SourceComposition: processLiveRepresentation.lastAppConfig.Value.appConfigComponent,
                                         InitOrMigrateCmds: restoreProcessResult.initOrMigrateCmds
                                     ));
                             })
@@ -242,13 +242,13 @@ namespace ElmFullstack.WebHost
                     }
 
                     var webHost =
-                        processVolatileRepresentation?.lastAppConfig?.appConfigComponent == null
+                        processLiveRepresentation?.lastAppConfig?.appConfigComponent == null
                         ?
                         null
                         :
                         buildWebHost();
 
-                    newPublicAppConfig.processVolatileRepresentation = processVolatileRepresentation;
+                    newPublicAppConfig.processLiveRepresentation = processLiveRepresentation;
                     newPublicAppConfig.webHost = webHost;
 
                     webHost?.StartAsync(appLifetime.ApplicationStopping).Wait();
@@ -358,7 +358,7 @@ namespace ElmFullstack.WebHost
                             methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
                             .Add("get", async (context, publicAppHost) =>
                             {
-                                var appConfig = publicAppHost?.processVolatileRepresentation?.lastAppConfig?.appConfigComponent;
+                                var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig?.appConfigComponent;
 
                                 if (appConfig == null)
                                 {
@@ -396,7 +396,7 @@ namespace ElmFullstack.WebHost
                                     return;
                                 }
 
-                                var processVolatileRepresentation = publicAppHost?.processVolatileRepresentation;
+                                var processLiveRepresentation = publicAppHost?.processLiveRepresentation;
 
                                 var components = new List<Composition.Component>();
 
@@ -408,7 +408,7 @@ namespace ElmFullstack.WebHost
                                 };
 
                                 var reductionRecord =
-                                    processVolatileRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
+                                    processLiveRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
 
                                 if (reductionRecord == null)
                                 {
@@ -595,14 +595,14 @@ namespace ElmFullstack.WebHost
                             var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                             var storeReductionReport =
-                                publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+                                publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                             storeReductionStopwatch.Stop();
 
                             var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                             var filesForRestore =
-                                PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(
+                                PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
                                     processStoreFileStore).files
                                 .Select(filePathAndContent => filePathAndContent.Key)
                                 .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>());
@@ -727,7 +727,7 @@ namespace ElmFullstack.WebHost
                             var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                             var storeReductionReport =
-                                publicAppHost?.processVolatileRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+                                publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                             storeReductionStopwatch.Stop();
 
@@ -823,7 +823,7 @@ namespace ElmFullstack.WebHost
 
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var testContinueResult = PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
+            var testContinueResult = PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                 compositionLogEvent: compositionLogEvent,
                 fileStoreReader: processStoreFileStore);
 

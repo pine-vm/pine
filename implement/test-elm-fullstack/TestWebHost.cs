@@ -1310,7 +1310,7 @@ namespace test_elm_fullstack
                 promptForPasswordOnConsole: false);
 
             using (var restoredProcess =
-                ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.LoadFromStoreAndRestoreProcess(
+                ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                     new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                         new FileStoreFromSystemIOFile(testDirectory)),
                         _ => { }).process)

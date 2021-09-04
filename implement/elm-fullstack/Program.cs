@@ -365,7 +365,7 @@ namespace elm_fullstack
                                 appConfigValueInFile: appConfigValueInFile,
                                 initElmAppState: initElmAppState);
 
-                        var testDeployResult = ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.TestContinueWithCompositionEvent(
+                        var testDeployResult = ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                             compositionLogEvent: compositionLogEvent,
                             fileStoreReader: processStoreFileStore);
 
@@ -1314,7 +1314,7 @@ namespace elm_fullstack
                 }
             };
 
-            return ElmFullstack.WebHost.PersistentProcess.PersistentProcessVolatileRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
+            return ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
         }
 
         static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
