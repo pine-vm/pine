@@ -97,8 +97,8 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
         firstSubmission :: remainingPreviousSubmissions ->
             case submissionInInteractiveInPineContext initialContext firstSubmission of
-                Err error ->
-                    Err ("Failed to apply previous submission: " ++ error)
+                Err _ ->
+                    submissionWithHistoryInInteractive initialContext remainingPreviousSubmissions submission
 
                 Ok ( expressionContext, _ ) ->
                     submissionWithHistoryInInteractive expressionContext remainingPreviousSubmissions submission
