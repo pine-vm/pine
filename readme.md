@@ -25,7 +25,7 @@ For a guide on installation and configuration options, see [How to Configure and
 
 ### elm-fs Executable File
 
-The `elm-fs` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-fullstack/elm-fullstack/releases) on Github.
+The `elm-fs` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-fullstack/elm-fullstack/releases) on GitHub.
 
 ### Docker Image
 
@@ -39,9 +39,9 @@ To learn more about these artifacts' interfaces, see [How to Configure and Deplo
 
 ## Building from Source
 
-The easiest way to test a change in the source code is to trigger the Github action workflow in [`.github/workflows/test-and-publish.yml`](./.github/workflows/test-and-publish.yml). This workflow gets you the results of automated tests and your version of the executable files. Push to your fork on Github to trigger this action.
+The easiest way to test a change in the source code is to trigger the GitHub action workflow in [`.github/workflows/test-and-publish.yml`](./.github/workflows/test-and-publish.yml). This workflow gets you the results of automated tests and your version of the executable files. Push to your fork on GitHub to trigger this action.
 
-As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), the project uses .NET core 3.1 to run tests and build the executable file. You can download the `dotnet` tool from https://dotnet.microsoft.com/download/dotnet-core to build and test locally.
+As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), the project uses .NET 5 to build the executable file and run tests. You can download the `dotnet` tool from https://dotnet.microsoft.com/download/dotnet to build and test locally.
 
 ## Example Apps
 
