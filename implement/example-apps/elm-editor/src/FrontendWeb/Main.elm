@@ -1967,7 +1967,7 @@ viewLoadFromGitDialog dialogState =
                 |> Maybe.withDefault Element.none
 
         exampleUrl =
-            "https://github.com/onlinegamemaker/making-online-games/tree/fd35d23d89a50014097e64d362f1a991a8af206f/games-program-codes/simple-snake"
+            "https://github.com/onlinegamemaker/making-online-games/tree/b245b088c7e8a7067bf78a782ec0354b8c82a0c9/games-program-codes/simple-snake"
     in
     { title = "Load Project from Git Repository"
     , titleIcon = Just FontAwesome.Solid.cloudDownloadAlt
