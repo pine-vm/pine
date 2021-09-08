@@ -25,12 +25,12 @@ import File
 import File.Download
 import File.Select
 import FileTree
+import FileTreeInWorkspace as FileTreeInWorkspace
 import FontAwesome.Icon
 import FontAwesome.Solid
 import FontAwesome.Styles
 import FrontendBackendInterface
 import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
-import FrontendWeb.FileTreeInWorkspace as FileTreeInWorkspace
 import FrontendWeb.MonacoEditor
 import FrontendWeb.ProjectStateInUrl
 import FrontendWeb.Visuals as Visuals
@@ -42,6 +42,7 @@ import Json.Decode
 import Json.Encode
 import Keyboard.Event
 import Keyboard.Key
+import LanguageService
 import List.Extra
 import ProjectState_2021_01
 import Result.Extra
@@ -98,6 +99,7 @@ type alias WorkingProjectStateStructure =
     , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
+    , languageServiceState : LanguageService.LanguageServiceState
     }
 
 
@@ -751,6 +753,11 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                         FrontendWeb.MonacoEditor.EditorActionCompileEvent ->
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile stateBefore
 
+                        FrontendWeb.MonacoEditor.RequestCompletionItemsEvent requestCompletionItems ->
+                            stateBefore
+                                |> provideCompletionItems requestCompletionItems
+                                |> Tuple.mapSecond provideCompletionItemsInMonacoEditorCmd
+
         UserInputFormat ->
             ( stateBefore, elmFormatCmd stateBefore |> Maybe.withDefault Cmd.none )
 
@@ -845,6 +852,31 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
             else
                 updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile state
+
+
+provideCompletionItems :
+    FrontendWeb.MonacoEditor.RequestCompletionItemsStruct
+    -> WorkingProjectStateStructure
+    -> ( WorkingProjectStateStructure, List FrontendWeb.MonacoEditor.MonacoCompletionItem )
+provideCompletionItems request stateBefore =
+    let
+        languageServiceState =
+            LanguageService.updateLanguageServiceState stateBefore.fileTree stateBefore.languageServiceState
+
+        state =
+            { stateBefore | languageServiceState = languageServiceState }
+
+        completionItems =
+            case state.editing.filePathOpenedInEditor of
+                Nothing ->
+                    []
+
+                Just filePathOpenedInEditor ->
+                    LanguageService.provideCompletionItems
+                        { filePathOpenedInEditor = filePathOpenedInEditor, textUntilPosition = request.textUntilPosition }
+                        languageServiceState
+    in
+    ( state, completionItems )
 
 
 processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
@@ -2925,6 +2957,13 @@ setModelMarkersInMonacoEditorCmd =
         >> sendMessageToMonacoFrame
 
 
+provideCompletionItemsInMonacoEditorCmd : List FrontendWeb.MonacoEditor.MonacoCompletionItem -> Cmd WorkspaceEventStructure
+provideCompletionItemsInMonacoEditorCmd =
+    FrontendWeb.MonacoEditor.ProvideCompletionItemsEvent
+        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> sendMessageToMonacoFrame
+
+
 monacoEditorElement : State -> Element.Element event
 monacoEditorElement _ =
     Html.iframe
@@ -2955,6 +2994,7 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     , elmFormatResult = Nothing
     , viewEnlargedPane = Nothing
     , enableInspectionOnCompile = False
+    , languageServiceState = LanguageService.initLanguageServiceState
     }
 
 

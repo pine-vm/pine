@@ -138,6 +138,27 @@ mapBlobs mapBlob node =
             BlobNode (mapBlob blob)
 
 
+mapBlobsWithPath : (( List String, a ) -> b) -> FileTreeNode a -> FileTreeNode b
+mapBlobsWithPath =
+    mapBlobsWithPathWithPrefix []
+
+
+mapBlobsWithPathWithPrefix : List String -> (( List String, a ) -> b) -> FileTreeNode a -> FileTreeNode b
+mapBlobsWithPathWithPrefix pathPrefix mapBlobWithPath node =
+    case node of
+        TreeNode tree ->
+            TreeNode
+                (tree
+                    |> List.map
+                        (\( nodeName, nodeValue ) ->
+                            ( nodeName, mapBlobsWithPathWithPrefix (pathPrefix ++ [ nodeName ]) mapBlobWithPath nodeValue )
+                        )
+                )
+
+        BlobNode blob ->
+            BlobNode (mapBlobWithPath ( pathPrefix, blob ))
+
+
 isBlobNode : FileTreeNode a -> Bool
 isBlobNode node =
     case node of

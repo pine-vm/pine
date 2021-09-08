@@ -57,5 +57,6 @@ The code editor is a central part of an IDE. Elm Editor integrates the [Monaco E
 + Text search with options for case sensitivity, regular expressions, and replacing matches.
 + Visual markers in the code to quickly find locations of problems.
 + Showing error descriptions on mouse hover.
++ Completion suggestions to discover available declarations and explore useful codes.
 + Command palette to discover new functionality and keyboard shortcuts.
 + Minimap for improved navigation of large documents.

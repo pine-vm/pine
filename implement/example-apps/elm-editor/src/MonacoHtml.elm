@@ -28,6 +28,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
 <script>
 
+    getCompletionItemsTimeoutMilliseconds = 1000;
+    provideCompletionItemsEventFromElm = function(){};
+
     function getEditorModel() {
         if(typeof monaco != "object")
             return null;
@@ -81,6 +84,41 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             return monaco?.MarkerSeverity.Hint;
     }
 
+    function monacoCompletionItemFromElmMonacoCompletionItem(range, completionItem) {
+        return {
+                label: completionItem.label,
+                kind: monacoCompletionItemKindFromElmCompletionItemKind(completionItem.kind),
+
+                // https://github.com/microsoft/monaco-editor/issues/1074#issuecomment-423956977
+                documentation: { value : completionItem.documentation },
+
+                insertText: completionItem.insertText,
+                range: range
+            };
+    }
+
+    function monacoCompletionItemKindFromElmCompletionItemKind(completionItemKind) {
+        if (typeof monaco === 'undefined')
+            return -1;
+
+        if (completionItemKind.ConstructorCompletionItemKind != null)
+            return monaco?.languages.CompletionItemKind.Constructor;
+
+        if (completionItemKind.EnumCompletionItemKind != null)
+            return monaco?.languages.CompletionItemKind.Enum;
+
+        if (completionItemKind.EnumMemberCompletionItemKind != null)
+            return monaco?.languages.CompletionItemKind.EnumMember;
+
+        if (completionItemKind.FunctionCompletionItemKind != null)
+            return monaco?.languages.CompletionItemKind.Function;
+
+        if (completionItemKind.ModuleCompletionItemKind != null)
+            return monaco?.languages.CompletionItemKind.Module;
+
+        console.error("Unexpected shape of completionItemKind: " + JSON.stringify(completionItemKind));
+    }
+
     function dispatchMessage(message) {
         if(message.SetValue)
             monacoEditorSetValue(message.SetValue[0]);
@@ -90,6 +128,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         if(message.RevealPositionInCenter)
             monacoEditorRevealPositionInCenter(message.RevealPositionInCenter[0]);
+
+        if(message.ProvideCompletionItemsEvent)
+            provideCompletionItemsEventFromElm(message.ProvideCompletionItemsEvent[0]);
     }
 
     function tryCompleteSetup() {
@@ -123,6 +164,32 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         parent?.messageFromMonacoFrame?.({"EditorActionCompileEvent":[]});
     }
 
+    function editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition) {
+
+        return new Promise(function (resolve, reject) {
+
+            provideCompletionItemsEventFromElm = function(completionItemsFromElm)
+            {
+                var completionItemsForMonaco =
+                    completionItemsFromElm.map(item => monacoCompletionItemFromElmMonacoCompletionItem(range, item));
+
+                resolve({ suggestions: completionItemsForMonaco ?? [] });
+
+                provideCompletionItemsEventFromElm = function(){};
+            }
+
+            parent?.messageFromMonacoFrame?.({"RequestCompletionItemsEvent":[{"textUntilPosition":textUntilPosition}]});
+
+            setTimeout(() => {
+                var message = "Did not get completion items from Elm within " + getCompletionItemsTimeoutMilliseconds + " milliseconds.";
+
+                console.error(message);
+                reject(message);
+                return;
+            }, getCompletionItemsTimeoutMilliseconds);
+        });
+    }
+
 
 </script>
 
@@ -149,11 +216,31 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
       )}`;
     }
   };
+
     require(['vs/editor/editor.main'], function() {
 
         monaco.languages.register({ id: 'Elm' });
 
         monaco.languages.setMonarchTokensProvider('Elm', window.elm_monarch);
+
+        monaco.languages.registerCompletionItemProvider('Elm', {
+            provideCompletionItems: function(model, position) {
+                // find out if we are completing a property in the 'dependencies' object.
+                var textUntilPosition = model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+
+                var word = model.getWordUntilPosition(position);
+                var range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn
+                };
+
+                return editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition);
+            },
+
+            triggerCharacters: ["."]
+        });
 
         monaco.editor.defineTheme('dark-plus', {
             base: 'vs-dark',
@@ -170,7 +257,27 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             language: 'Elm',
             automaticLayout: true,
             scrollBeyondLastLine: false,
-            theme: "dark-plus"
+            theme: "dark-plus",
+        }, {
+            // https://github.com/microsoft/monaco-editor/issues/2241#issuecomment-764694521
+            // https://stackoverflow.com/questions/54795603/always-show-the-show-more-section-in-monaco-editor/59040199#59040199
+            storageService: {
+                get(key) {
+                },
+                remove() { },
+                getBoolean(key) {
+                    if (key === 'expandSuggestionDocs') {
+                        return true;
+                    }
+                    return false;
+                },
+                getNumber(key) {
+                    return 0;
+                },
+                store() { },
+                onWillSaveState() { },
+                onDidChangeStorage() { }
+            }
         });
 
         editor.addAction({

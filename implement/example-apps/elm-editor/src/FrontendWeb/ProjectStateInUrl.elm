@@ -5,9 +5,9 @@ import Bytes
 import Bytes.Encode
 import Common
 import CompilationInterface.GenerateJsonCoders
+import FileTreeInWorkspace as FileTreeInWorkspace
 import Flate
 import FrontendBackendInterface
-import FrontendWeb.FileTreeInWorkspace as FileTreeInWorkspace
 import Json.Decode
 import Json.Encode
 import LZ77

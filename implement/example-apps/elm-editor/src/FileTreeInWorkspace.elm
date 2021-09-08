@@ -1,4 +1,4 @@
-module FrontendWeb.FileTreeInWorkspace exposing (..)
+module FileTreeInWorkspace exposing (..)
 
 {-| This module contains file tree representations specialized in reducing runtime expenses in frontend scenarios, where we see frequent edits.
 -}

@@ -5,6 +5,7 @@ type MessageToEditor
     = SetValue String
     | SetModelMarkers (List EditorMarker)
     | RevealPositionInCenter { lineNumber : Int, column : Int }
+    | ProvideCompletionItemsEvent (List MonacoCompletionItem)
 
 
 type MessageFromEditor
@@ -13,6 +14,11 @@ type MessageFromEditor
     | EditorActionCloseEditorEvent
     | EditorActionFormatDocumentEvent
     | EditorActionCompileEvent
+    | RequestCompletionItemsEvent RequestCompletionItemsStruct
+
+
+type alias RequestCompletionItemsStruct =
+    { textUntilPosition : String }
 
 
 {-| <https://microsoft.github.io/monaco-editor/api/interfaces/monaco.editor.imarkerdata.html>
@@ -33,3 +39,21 @@ type EditorMarkerSeverity
     | WarningSeverity
     | InfoSeverity
     | HintSeverity
+
+
+{-| <https://microsoft.github.io/monaco-editor/api/interfaces/monaco.languages.completionitem.html>
+-}
+type alias MonacoCompletionItem =
+    { label : String
+    , kind : CompletionItemKind
+    , documentation : String
+    , insertText : String
+    }
+
+
+type CompletionItemKind
+    = ConstructorCompletionItemKind
+    | EnumCompletionItemKind
+    | EnumMemberCompletionItemKind
+    | FunctionCompletionItemKind
+    | ModuleCompletionItemKind

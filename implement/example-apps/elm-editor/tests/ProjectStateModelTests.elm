@@ -5,15 +5,15 @@ import Bytes
 import Bytes.Encode
 import Expect
 import FileTree
-import FrontendWeb.FileTreeInWorkspace
+import FileTreeInWorkspace
 import ProjectState_2021_01
 import SHA256
 import Test
 
 
-demoProject : String -> FrontendWeb.FileTreeInWorkspace.FileTreeNode
+demoProject : String -> FileTreeInWorkspace.FileTreeNode
 demoProject elmModuleText =
-    FrontendWeb.FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
+    FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
         [ ( [ "src", "TestModule.elm" ]
           , elmModuleText |> Bytes.Encode.string |> Bytes.Encode.encode
           )
@@ -255,7 +255,7 @@ renderToHtml gameState =
                     baseProjectModuleText
                 )
     in
-    case FrontendWeb.FileTreeInWorkspace.searchProjectStateDifference_2021_01 editedProject { baseComposition = baseProject } of
+    case FileTreeInWorkspace.searchProjectStateDifference_2021_01 editedProject { baseComposition = baseProject } of
         Err error ->
             Test.test testName <|
                 \_ ->
@@ -264,8 +264,8 @@ renderToHtml gameState =
         Ok projectStateDiffModel ->
             case
                 baseProject
-                    |> FrontendWeb.FileTreeInWorkspace.mapBlobsToBytes
-                    |> FrontendWeb.FileTreeInWorkspace.applyProjectStateDifference_2021_01 projectStateDiffModel
+                    |> FileTreeInWorkspace.mapBlobsToBytes
+                    |> FileTreeInWorkspace.applyProjectStateDifference_2021_01 projectStateDiffModel
             of
                 Err applyDiffError ->
                     Test.test "Try apply diff to restore project state" <|
@@ -298,9 +298,9 @@ renderToHtml gameState =
                         ]
 
 
-compositionHashFromProject : FrontendWeb.FileTreeInWorkspace.FileTreeNode -> String
+compositionHashFromProject : FileTreeInWorkspace.FileTreeNode -> String
 compositionHashFromProject =
-    FrontendWeb.FileTreeInWorkspace.compositionHashFromFileTreeNode >> SHA256.toHex
+    FileTreeInWorkspace.compositionHashFromFileTreeNode >> SHA256.toHex
 
 
 approximateSizeOfProjectStateDifferenceModel_2021_01 : ProjectState_2021_01.ProjectStateDifference -> Int
