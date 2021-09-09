@@ -1,8 +1,10 @@
 module LanguageService exposing (..)
 
 import Common
+import CompilationInterface.SourceFiles
 import CompileFullstackApp
 import Elm.Syntax.Declaration
+import Elm.Syntax.Exposing
 import Elm.Syntax.File
 import Elm.Syntax.Module
 import Elm.Syntax.Node
@@ -15,6 +17,7 @@ import Maybe.Extra
 
 type alias LanguageServiceState =
     { fileTreeParseCache : FileTree.FileTreeNode LanguageServiceStateFileTreeNodeBlob
+    , coreModulesCache : List ParsedModuleCache
     }
 
 
@@ -36,7 +39,9 @@ type alias ParsedModuleCache =
 
 initLanguageServiceState : LanguageServiceState
 initLanguageServiceState =
-    { fileTreeParseCache = FileTree.TreeNode [] }
+    { fileTreeParseCache = FileTree.TreeNode []
+    , coreModulesCache = coreModulesParseResults
+    }
 
 
 provideCompletionItems :
@@ -76,7 +81,21 @@ provideCompletionItems request languageServiceState =
                                         |> Maybe.map Char.isUpper
                                         |> Maybe.withDefault True
 
-                        importedModules =
+                        implicitlyImportedModules =
+                            languageServiceState.coreModulesCache
+                                |> List.map
+                                    (\coreModule ->
+                                        let
+                                            canonicalName =
+                                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value coreModule.syntax.moduleDefinition)
+                                        in
+                                        { canonicalName = canonicalName
+                                        , importedName = canonicalName
+                                        , parsedModule = Just coreModule
+                                        }
+                                    )
+
+                        explicitlyImportedModules =
                             parsedFileLastSuccess.syntax.imports
                                 |> List.map Elm.Syntax.Node.value
                                 |> List.map
@@ -114,12 +133,86 @@ provideCompletionItems request languageServiceState =
                                         }
                                     )
 
+                        importedModules =
+                            implicitlyImportedModules ++ explicitlyImportedModules
+
                         localDeclarations =
                             completionItemsFromModule parsedFileLastSuccess
 
+                        importExposings =
+                            parsedFileLastSuccess.syntax.imports
+                                |> List.map Elm.Syntax.Node.value
+                                |> List.concatMap
+                                    (\importSyntax ->
+                                        case importSyntax.exposingList of
+                                            Nothing ->
+                                                []
+
+                                            Just exposingList ->
+                                                let
+                                                    canonicalName =
+                                                        Elm.Syntax.Node.value importSyntax.moduleName
+                                                in
+                                                case
+                                                    languageServiceState.fileTreeParseCache
+                                                        |> FileTree.flatListOfBlobsFromFileTreeNode
+                                                        |> List.filterMap
+                                                            (\( _, fileCache ) ->
+                                                                case fileCache.parsedFileLastSuccess of
+                                                                    Nothing ->
+                                                                        Nothing
+
+                                                                    Just moduleCandidate ->
+                                                                        if Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleCandidate.syntax.moduleDefinition) == canonicalName then
+                                                                            Just moduleCandidate
+
+                                                                        else
+                                                                            Nothing
+                                                            )
+                                                        |> List.head
+                                                of
+                                                    Nothing ->
+                                                        []
+
+                                                    Just importedParsedModule ->
+                                                        let
+                                                            importedModuleItems =
+                                                                completionItemsFromModule importedParsedModule
+                                                        in
+                                                        case Elm.Syntax.Node.value exposingList of
+                                                            Elm.Syntax.Exposing.All _ ->
+                                                                importedModuleItems
+
+                                                            Elm.Syntax.Exposing.Explicit topLevelExposings ->
+                                                                topLevelExposings
+                                                                    |> List.concatMap
+                                                                        (\topLevelExpose ->
+                                                                            let
+                                                                                exposedName =
+                                                                                    case Elm.Syntax.Node.value topLevelExpose of
+                                                                                        Elm.Syntax.Exposing.InfixExpose name ->
+                                                                                            name
+
+                                                                                        Elm.Syntax.Exposing.FunctionExpose name ->
+                                                                                            name
+
+                                                                                        Elm.Syntax.Exposing.TypeOrAliasExpose name ->
+                                                                                            name
+
+                                                                                        Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                                                                                            typeExpose.name
+                                                                            in
+                                                                            importedModuleItems
+                                                                                |> List.filter (.insertText >> (==) exposedName)
+                                                                        )
+                                    )
+
+                        localDeclarationsAndImportExposings =
+                            localDeclarations ++ importExposings
+
                         localDeclarationsAfterPrefix =
                             if completionPrefix == [] then
-                                localDeclarations
+                                localDeclarationsAndImportExposings
 
                             else
                                 case
@@ -155,6 +248,36 @@ provideCompletionItems request languageServiceState =
                                 |> List.map
                                     (\( importedModuleNameRestAfterPrefix, importedModule ) ->
                                         let
+                                            documentationStringFromSyntax =
+                                                case importedModule.parsedModule of
+                                                    Nothing ->
+                                                        Nothing
+
+                                                    Just importedParsedModule ->
+                                                        let
+                                                            moduleDefinitionRange =
+                                                                Elm.Syntax.Node.range importedParsedModule.syntax.moduleDefinition
+
+                                                            importsAndDeclarationsRange =
+                                                                List.map Elm.Syntax.Node.range importedParsedModule.syntax.imports
+                                                                    ++ List.map Elm.Syntax.Node.range importedParsedModule.syntax.declarations
+                                                                    |> Elm.Syntax.Range.combine
+
+                                                            maybeModuleComment =
+                                                                importedParsedModule.syntax.comments
+                                                                    |> List.filter
+                                                                        (\comment ->
+                                                                            (Elm.Syntax.Node.range comment).start.row
+                                                                                > moduleDefinitionRange.start.row
+                                                                                && (Elm.Syntax.Node.range comment).start.row
+                                                                                < importsAndDeclarationsRange.start.row
+                                                                        )
+                                                                    |> List.sortBy (Elm.Syntax.Node.range >> .start >> .row)
+                                                                    |> List.head
+                                                        in
+                                                        maybeModuleComment
+                                                            |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+
                                             insertText =
                                                 String.join "." importedModuleNameRestAfterPrefix
                                         in
@@ -164,7 +287,7 @@ provideCompletionItems request languageServiceState =
 
                                             else
                                                 String.join "." importedModule.canonicalName ++ " as " ++ insertText
-                                        , documentation = ""
+                                        , documentation = Maybe.withDefault "" documentationStringFromSyntax
                                         , insertText = insertText
                                         , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
                                         }
@@ -193,12 +316,50 @@ completionItemsFromModule moduleCache =
                 |> listMapFirstElement (String.dropLeft (range.start.column - 1))
 
         documentationMarkdownFromCodeLinesAndDocumentation codeLines maybeDocumentation =
-            ([ String.join "\n"
-                ("```Elm" :: codeLines ++ [ "```" ])
-             ]
-                ++ Maybe.withDefault [] (Maybe.map List.singleton maybeDocumentation)
+            (String.join "\n" ("```Elm" :: codeLines ++ [ "```" ])
+                :: Maybe.withDefault [] (Maybe.map List.singleton maybeDocumentation)
             )
                 |> String.join "\n\n"
+
+        exposingList =
+            Elm.Syntax.Node.value
+                (case Elm.Syntax.Node.value moduleCache.syntax.moduleDefinition of
+                    Elm.Syntax.Module.EffectModule effectModule ->
+                        effectModule.exposingList
+
+                    Elm.Syntax.Module.NormalModule normalModule ->
+                        normalModule.exposingList
+
+                    Elm.Syntax.Module.PortModule portModule ->
+                        portModule.exposingList
+                )
+
+        exposesFunction functionName =
+            Elm.Syntax.Exposing.exposesFunction functionName exposingList
+
+        exposesTypeOrAlias name =
+            case exposingList of
+                Elm.Syntax.Exposing.All _ ->
+                    True
+
+                Elm.Syntax.Exposing.Explicit topLovelExposings ->
+                    topLovelExposings
+                        |> List.map Elm.Syntax.Node.value
+                        |> List.any
+                            (\topLevelExpose ->
+                                case topLevelExpose of
+                                    Elm.Syntax.Exposing.TypeOrAliasExpose exposedName ->
+                                        exposedName == name
+
+                                    Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                                        typeExpose.name == name
+
+                                    Elm.Syntax.Exposing.InfixExpose _ ->
+                                        False
+
+                                    Elm.Syntax.Exposing.FunctionExpose functionName ->
+                                        name == functionName
+                            )
     in
     moduleCache.syntax.declarations
         |> List.concatMap
@@ -221,12 +382,16 @@ completionItemsFromModule moduleCache =
                             codeLines =
                                 codeSignatureLines
                         in
-                        [ { label = functionName
-                          , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                          , insertText = functionName
-                          , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
-                          }
-                        ]
+                        if exposesFunction functionName then
+                            [ { label = functionName
+                              , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                              , insertText = functionName
+                              , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                              }
+                            ]
+
+                        else
+                            []
 
                     Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
                         let
@@ -247,12 +412,16 @@ completionItemsFromModule moduleCache =
                             codeLines =
                                 getTextLinesFromRange codeRange
                         in
-                        [ { label = aliasName
-                          , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                          , insertText = aliasName
-                          , kind = FrontendWeb.MonacoEditor.ConstructorCompletionItemKind
-                          }
-                        ]
+                        if exposesTypeOrAlias aliasName then
+                            [ { label = aliasName
+                              , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                              , insertText = aliasName
+                              , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                              }
+                            ]
+
+                        else
+                            []
 
                     Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
                         let
@@ -288,12 +457,16 @@ completionItemsFromModule moduleCache =
                                             }
                                         )
                         in
-                        { label = customTypeName
-                        , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                        , insertText = customTypeName
-                        , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
-                        }
-                            :: fromTags
+                        if exposesTypeOrAlias customTypeName then
+                            { label = customTypeName
+                            , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                            , insertText = customTypeName
+                            , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                            }
+                                :: fromTags
+
+                        else
+                            []
 
                     Elm.Syntax.Declaration.Destructuring _ _ ->
                         []
@@ -344,7 +517,31 @@ updateLanguageServiceState fileTree state =
                     else
                         buildNewEntry ()
     in
-    { fileTreeParseCache = fileTree |> FileTree.mapBlobsWithPath compileFileCacheEntry }
+    { state
+        | fileTreeParseCache = fileTree |> FileTree.mapBlobsWithPath compileFileCacheEntry
+    }
+
+
+coreModulesTexts : List String
+coreModulesTexts =
+    [ CompilationInterface.SourceFiles.file__utf8____elm_core_modules_List_elm
+    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_String_elm
+    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_Maybe_elm
+    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_Result_elm
+    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_Tuple_elm
+    ]
+
+
+coreModulesParseResults : List ParsedModuleCache
+coreModulesParseResults =
+    coreModulesTexts
+        |> List.filterMap
+            (\asString ->
+                asString
+                    |> CompileFullstackApp.parseElmModuleText
+                    |> Result.toMaybe
+                    |> Maybe.map (\syntax -> { text = asString, syntax = syntax })
+            )
 
 
 expandRangeToLineStart : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range

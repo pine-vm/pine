@@ -116,6 +116,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         if (completionItemKind.ModuleCompletionItemKind != null)
             return monaco?.languages.CompletionItemKind.Module;
 
+        if (completionItemKind.StructCompletionItemKind != null)
+            return monaco?.languages.CompletionItemKind.Struct;
+
         console.error("Unexpected shape of completionItemKind: " + JSON.stringify(completionItemKind));
     }
 
@@ -194,6 +197,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 </script>
 
 <script>
+  monacoStorageSettingExpandSuggestionDocs = true;
+
   require.config({ paths: { 'vs': '"""
         ++ cdnUrlToMin
         ++ """/vs' }});
@@ -263,18 +268,28 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             // https://stackoverflow.com/questions/54795603/always-show-the-show-more-section-in-monaco-editor/59040199#59040199
             storageService: {
                 get(key) {
+                    // console.log("storageService.get: " + key);
                 },
                 remove() { },
                 getBoolean(key) {
+                    // console.log("storageService.getBoolean: " + key);
+
                     if (key === 'expandSuggestionDocs') {
-                        return true;
+                        return monacoStorageSettingExpandSuggestionDocs;
                     }
-                    return false;
                 },
                 getNumber(key) {
-                    return 0;
+                    // console.log("storageService.getNumber: " + key);
                 },
-                store() { },
+                store(key, value) {
+                    // console.log("storageService.store: " + key);
+
+                    if (key === 'expandSuggestionDocs')
+                        monacoStorageSettingExpandSuggestionDocs = value;
+                },
+                set(key) {
+                    // console.log("storageService.set: " + key);
+                },
                 onWillSaveState() { },
                 onDidChangeStorage() { }
             }

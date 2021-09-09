@@ -17,6 +17,8 @@ provide_completion_items =
               , """
 module Alpha exposing (..)
 
+{-| Documentation comment on module Alpha
+-}
 
 from_alpha = 123
 
@@ -25,7 +27,7 @@ from_alpha = 123
               )
             , ( [ "src", "Beta.elm" ]
               , """
-module Beta exposing (..)
+module Beta exposing (from_beta, from_beta_function)
 
 
 from_beta = "a string literal"
@@ -35,6 +37,9 @@ from_beta_function : Int -> String
 from_beta_function arg =
   String.fromInt arg
 
+
+from_beta_not_exposed : String
+from_beta_not_exposed = "literal"
 
 """
               )
@@ -55,7 +60,7 @@ from_beta_gamma = 567
             , """
 module Main exposing (..)
 
-import Alpha
+import Alpha exposing (from_alpha)
 import Beta
 import Beta.Gamma
 import Delta as ModuleAlias
@@ -86,7 +91,7 @@ init =
                     fileOpenedInEditor
                     { textUntilPosition = "previousline\n" }
                     [ { label = "Alpha"
-                      , documentation = ""
+                      , documentation = "Documentation comment on module Alpha"
                       , insertText = "Alpha"
                       , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
                       }
@@ -136,7 +141,13 @@ type alias State =
 Comment on declaration
 """
                       , insertText = "State"
-                      , kind = FrontendWeb.MonacoEditor.ConstructorCompletionItemKind
+                      , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                      }
+                    , { label = "from_alpha"
+                      , documentation = """```Elm
+```"""
+                      , insertText = "from_alpha"
+                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "init"
                       , documentation = String.trim """
@@ -177,6 +188,8 @@ from_beta_function : Int -> String
                       , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
+
+        {- TODO: Add test for completion items out of core modules like List, Maybe, Result, etc. -}
         ]
 
 

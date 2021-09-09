@@ -51,9 +51,12 @@ type alias MonacoCompletionItem =
     }
 
 
+{-| <https://microsoft.github.io/monaco-editor/api/enums/monaco.languages.completionitemkind.html>
+-}
 type CompletionItemKind
     = ConstructorCompletionItemKind
     | EnumCompletionItemKind
     | EnumMemberCompletionItemKind
     | FunctionCompletionItemKind
     | ModuleCompletionItemKind
+    | StructCompletionItemKind
