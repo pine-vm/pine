@@ -58,14 +58,27 @@ provideCompletionItems request languageServiceState =
                 Nothing ->
                     []
 
-                Just parsedFileLastSuccess ->
+                Just fileOpenedInEditor ->
                     let
-                        completionPrefix =
+                        fileOpenedInEditorModuleName =
+                            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value fileOpenedInEditor.syntax.moduleDefinition)
+
+                        lineUntilPosition =
                             request.textUntilPosition
                                 |> String.lines
                                 |> List.reverse
                                 |> List.head
-                                |> Maybe.andThen (String.trim >> String.split " " >> List.reverse >> List.head)
+                                |> Maybe.withDefault ""
+
+                        lineUntilPositionWords =
+                            lineUntilPosition
+                                |> String.trim
+                                |> String.split " "
+
+                        completionPrefix =
+                            lineUntilPositionWords
+                                |> List.reverse
+                                |> List.head
                                 |> Maybe.map (String.split "." >> List.reverse >> List.drop 1 >> List.reverse)
                                 |> Maybe.withDefault []
 
@@ -96,7 +109,7 @@ provideCompletionItems request languageServiceState =
                                     )
 
                         explicitlyImportedModules =
-                            parsedFileLastSuccess.syntax.imports
+                            fileOpenedInEditor.syntax.imports
                                 |> List.map Elm.Syntax.Node.value
                                 |> List.map
                                     (\importSyntax ->
@@ -133,15 +146,34 @@ provideCompletionItems request languageServiceState =
                                         }
                                     )
 
+                        moduleNamesToNotSuggestForImport =
+                            fileOpenedInEditorModuleName
+                                :: List.map .canonicalName explicitlyImportedModules
+
+                        availableModulesNotImportedYet =
+                            languageServiceState.fileTreeParseCache
+                                |> FileTree.flatListOfBlobsFromFileTreeNode
+                                |> List.filterMap (Tuple.second >> .parsedFileLastSuccess >> Maybe.map .syntax)
+                                |> List.filter
+                                    (\availableModule ->
+                                        not
+                                            (List.any
+                                                ((==)
+                                                    (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value availableModule.moduleDefinition))
+                                                )
+                                                moduleNamesToNotSuggestForImport
+                                            )
+                                    )
+
                         importedModules =
                             implicitlyImportedModules ++ explicitlyImportedModules
 
                         localDeclarations =
-                            completionItemsFromModule parsedFileLastSuccess
+                            completionItemsFromModule fileOpenedInEditor
                                 |> List.map .completionItem
 
                         importExposings =
-                            parsedFileLastSuccess.syntax.imports
+                            fileOpenedInEditor.syntax.imports
                                 |> List.map Elm.Syntax.Node.value
                                 |> List.concatMap
                                     (\importSyntax ->
@@ -250,59 +282,81 @@ provideCompletionItems request languageServiceState =
 
                         fromImports =
                             importedModulesAfterPrefix
-                                |> List.map
+                                |> List.filterMap
                                     (\( importedModuleNameRestAfterPrefix, importedModule ) ->
-                                        let
-                                            documentationStringFromSyntax =
-                                                case importedModule.parsedModule of
-                                                    Nothing ->
-                                                        Nothing
-
-                                                    Just importedParsedModule ->
-                                                        let
-                                                            moduleDefinitionRange =
-                                                                Elm.Syntax.Node.range importedParsedModule.syntax.moduleDefinition
-
-                                                            importsAndDeclarationsRange =
-                                                                List.map Elm.Syntax.Node.range importedParsedModule.syntax.imports
-                                                                    ++ List.map Elm.Syntax.Node.range importedParsedModule.syntax.declarations
-                                                                    |> Elm.Syntax.Range.combine
-
-                                                            maybeModuleComment =
-                                                                importedParsedModule.syntax.comments
-                                                                    |> List.filter
-                                                                        (\comment ->
-                                                                            (Elm.Syntax.Node.range comment).start.row
-                                                                                > moduleDefinitionRange.start.row
-                                                                                && (Elm.Syntax.Node.range comment).start.row
-                                                                                < importsAndDeclarationsRange.start.row
-                                                                        )
-                                                                    |> List.sortBy (Elm.Syntax.Node.range >> .start >> .row)
-                                                                    |> List.head
-                                                        in
-                                                        maybeModuleComment
-                                                            |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
-
-                                            insertText =
-                                                String.join "." importedModuleNameRestAfterPrefix
-                                        in
-                                        { label =
-                                            if importedModule.importedName == importedModule.canonicalName then
-                                                insertText
-
-                                            else
-                                                String.join "." importedModule.canonicalName ++ " as " ++ insertText
-                                        , documentation = Maybe.withDefault "" documentationStringFromSyntax
-                                        , insertText = insertText
-                                        , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
-                                        }
+                                        importedModule.parsedModule
+                                            |> Maybe.map
+                                                (.syntax
+                                                    >> moduleCompletionItemFromModuleSyntax
+                                                        { importedName = Just importedModule.importedName
+                                                        , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
+                                                        }
+                                                )
                                     )
                     in
-                    if completionPrefixIsNamespace then
+                    if List.head lineUntilPositionWords == Just "import" then
+                        availableModulesNotImportedYet
+                            |> List.map
+                                (moduleCompletionItemFromModuleSyntax
+                                    { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
+                                )
+
+                    else if completionPrefixIsNamespace then
                         fromImports ++ List.sortBy .insertText localDeclarationsAfterPrefix
 
                     else
                         []
+
+
+moduleCompletionItemFromModuleSyntax :
+    { importedModuleNameRestAfterPrefix : Maybe (List String), importedName : Maybe (List String) }
+    -> Elm.Syntax.File.File
+    -> FrontendWeb.MonacoEditor.MonacoCompletionItem
+moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, importedName } moduleSyntax =
+    let
+        canonicalName =
+            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleSyntax.moduleDefinition)
+
+        insertText =
+            String.join "." (Maybe.withDefault canonicalName importedModuleNameRestAfterPrefix)
+    in
+    { label =
+        if Maybe.withDefault canonicalName importedName == canonicalName then
+            insertText
+
+        else
+            String.join "." canonicalName ++ " as " ++ insertText
+    , documentation = Maybe.withDefault "" (documentationStringFromModuleSyntax moduleSyntax)
+    , insertText = insertText
+    , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+    }
+
+
+documentationStringFromModuleSyntax : Elm.Syntax.File.File -> Maybe String
+documentationStringFromModuleSyntax parsedModule =
+    let
+        moduleDefinitionRange =
+            Elm.Syntax.Node.range parsedModule.moduleDefinition
+
+        importsAndDeclarationsRange =
+            List.map Elm.Syntax.Node.range parsedModule.imports
+                ++ List.map Elm.Syntax.Node.range parsedModule.declarations
+                |> Elm.Syntax.Range.combine
+
+        maybeModuleComment =
+            parsedModule.comments
+                |> List.filter
+                    (\comment ->
+                        (Elm.Syntax.Node.range comment).start.row
+                            > moduleDefinitionRange.start.row
+                            && (Elm.Syntax.Node.range comment).start.row
+                            < importsAndDeclarationsRange.start.row
+                    )
+                |> List.sortBy (Elm.Syntax.Node.range >> .start >> .row)
+                |> List.head
+    in
+    maybeModuleComment
+        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
 
 
 completionItemsFromModule : ParsedModuleCache -> List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, isExposed : Bool }

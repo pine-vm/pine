@@ -53,6 +53,26 @@ from_beta_gamma = 567
 
 """
               )
+            , ( [ "src", "Delta.elm" ]
+              , """
+module Delta exposing (..)
+
+
+from_delta = (1, 3)
+
+
+"""
+              )
+            , ( [ "src", "Beta", "Epsilon.elm" ]
+              , """
+module Epsilon exposing (..)
+
+
+from_epsilon = ""
+
+
+"""
+              )
             ]
 
         fileOpenedInEditor =
@@ -202,6 +222,30 @@ from_beta_function : Int -> String
 """
                       , insertText = "from_beta_function"
                       , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      }
+                    ]
+        , Test.test "Right of 'import '" <|
+            \_ ->
+                expectationFromScenario
+                    otherFiles
+                    fileOpenedInEditor
+                    { textUntilPosition = "previousline\nimport " }
+                    [ { label = "Epsilon"
+                      , documentation = ""
+                      , insertText = "Epsilon"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    ]
+        , Test.test "Right of 'import E'" <|
+            \_ ->
+                expectationFromScenario
+                    otherFiles
+                    fileOpenedInEditor
+                    { textUntilPosition = "previousline\nimport E" }
+                    [ { label = "Epsilon"
+                      , documentation = ""
+                      , insertText = "Epsilon"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
                       }
                     ]
 

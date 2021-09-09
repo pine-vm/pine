@@ -244,7 +244,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 return editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition);
             },
 
-            triggerCharacters: ["."]
+            triggerCharacters: ["."," "]
         });
 
         monaco.editor.defineTheme('dark-plus', {
