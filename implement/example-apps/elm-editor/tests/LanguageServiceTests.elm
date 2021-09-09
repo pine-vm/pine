@@ -111,7 +111,15 @@ init =
                       , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Decrement"
-                      , documentation = "`Decrement` is a variant of `Event`"
+                      , documentation = String.trim """
+`Decrement` is a variant of `Event`
+
+```Elm
+type Event
+    = Increment
+    | Decrement
+```
+"""
                       , insertText = "Decrement"
                       , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
                       }
@@ -127,7 +135,15 @@ type Event
                       , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
                       }
                     , { label = "Increment"
-                      , documentation = "`Increment` is a variant of `Event`"
+                      , documentation = String.trim """
+`Increment` is a variant of `Event`
+
+```Elm
+type Event
+    = Increment
+    | Decrement
+```
+"""
                       , insertText = "Increment"
                       , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
                       }

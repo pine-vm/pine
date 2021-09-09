@@ -320,8 +320,11 @@ completionItemsFromModule moduleCache =
                 |> List.reverse
                 |> listMapFirstElement (String.dropLeft (range.start.column - 1))
 
+        markdownElmCodeBlockFromCodeLines codeLines =
+            String.join "\n" ("```Elm" :: codeLines ++ [ "```" ])
+
         documentationMarkdownFromCodeLinesAndDocumentation codeLines maybeDocumentation =
-            (String.join "\n" ("```Elm" :: codeLines ++ [ "```" ])
+            (markdownElmCodeBlockFromCodeLines codeLines
                 :: Maybe.withDefault [] (Maybe.map List.singleton maybeDocumentation)
             )
                 |> String.join "\n\n"
@@ -452,10 +455,16 @@ completionItemsFromModule moduleCache =
                                                 tagName =
                                                     Elm.Syntax.Node.value
                                                         (Elm.Syntax.Node.value constructorNode).name
+
+                                                documentation =
+                                                    [ "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
+                                                    , markdownElmCodeBlockFromCodeLines codeLines
+                                                    ]
+                                                        |> String.join "\n\n"
                                             in
                                             { completionItem =
                                                 { label = tagName
-                                                , documentation = "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
+                                                , documentation = documentation
                                                 , insertText = tagName
                                                 , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
                                                 }
