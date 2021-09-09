@@ -58,7 +58,7 @@ from_beta_gamma = 567
         fileOpenedInEditor =
             ( [ "src", "Main.elm" ]
             , """
-module Main exposing (..)
+module Main exposing (State)
 
 import Alpha exposing (from_alpha)
 import Beta

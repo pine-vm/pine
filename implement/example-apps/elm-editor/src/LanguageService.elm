@@ -138,6 +138,7 @@ provideCompletionItems request languageServiceState =
 
                         localDeclarations =
                             completionItemsFromModule parsedFileLastSuccess
+                                |> List.map .completionItem
 
                         importExposings =
                             parsedFileLastSuccess.syntax.imports
@@ -178,6 +179,8 @@ provideCompletionItems request languageServiceState =
                                                         let
                                                             importedModuleItems =
                                                                 completionItemsFromModule importedParsedModule
+                                                                    |> List.filter .isExposed
+                                                                    |> List.map .completionItem
                                                         in
                                                         case Elm.Syntax.Node.value exposingList of
                                                             Elm.Syntax.Exposing.All _ ->
@@ -226,6 +229,8 @@ provideCompletionItems request languageServiceState =
 
                                     Just referencedModule ->
                                         completionItemsFromModule referencedModule
+                                            |> List.filter .isExposed
+                                            |> List.map .completionItem
 
                         importedModulesAfterPrefix =
                             importedModules
@@ -300,7 +305,7 @@ provideCompletionItems request languageServiceState =
                         []
 
 
-completionItemsFromModule : ParsedModuleCache -> List FrontendWeb.MonacoEditor.MonacoCompletionItem
+completionItemsFromModule : ParsedModuleCache -> List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
 completionItemsFromModule moduleCache =
     let
         textLines =
@@ -382,16 +387,15 @@ completionItemsFromModule moduleCache =
                             codeLines =
                                 codeSignatureLines
                         in
-                        if exposesFunction functionName then
-                            [ { label = functionName
-                              , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                              , insertText = functionName
-                              , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
-                              }
-                            ]
-
-                        else
-                            []
+                        [ { completionItem =
+                                { label = functionName
+                                , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                                , insertText = functionName
+                                , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                                }
+                          , isExposed = exposesFunction functionName
+                          }
+                        ]
 
                     Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
                         let
@@ -412,16 +416,15 @@ completionItemsFromModule moduleCache =
                             codeLines =
                                 getTextLinesFromRange codeRange
                         in
-                        if exposesTypeOrAlias aliasName then
-                            [ { label = aliasName
-                              , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                              , insertText = aliasName
-                              , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
-                              }
-                            ]
-
-                        else
-                            []
+                        [ { completionItem =
+                                { label = aliasName
+                                , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                                , insertText = aliasName
+                                , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                                }
+                          , isExposed = exposesTypeOrAlias aliasName
+                          }
+                        ]
 
                     Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
                         let
@@ -450,23 +453,25 @@ completionItemsFromModule moduleCache =
                                                     Elm.Syntax.Node.value
                                                         (Elm.Syntax.Node.value constructorNode).name
                                             in
-                                            { label = tagName
-                                            , documentation = "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
-                                            , insertText = tagName
-                                            , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                                            { completionItem =
+                                                { label = tagName
+                                                , documentation = "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
+                                                , insertText = tagName
+                                                , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                                                }
+                                            , isExposed = exposesTypeOrAlias customTypeName
                                             }
                                         )
                         in
-                        if exposesTypeOrAlias customTypeName then
+                        { completionItem =
                             { label = customTypeName
                             , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
                             , insertText = customTypeName
                             , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
                             }
-                                :: fromTags
-
-                        else
-                            []
+                        , isExposed = exposesTypeOrAlias customTypeName
+                        }
+                            :: fromTags
 
                     Elm.Syntax.Declaration.Destructuring _ _ ->
                         []
