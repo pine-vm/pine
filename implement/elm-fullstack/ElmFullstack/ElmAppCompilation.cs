@@ -8,14 +8,12 @@ using Pine;
 
 namespace ElmFullstack
 {
-    public struct ElmAppInterfaceConfig
+    public record ElmAppInterfaceConfig(string RootModuleName)
     {
-        public string RootModuleName;
-
-        static public ElmAppInterfaceConfig Default => new ElmAppInterfaceConfig
-        {
-            RootModuleName = "Backend.Main"
-        };
+        static public ElmAppInterfaceConfig Default => new
+        (
+            RootModuleName: "Backend.Main"
+        );
     }
 
     public struct ElmAppInterfaceConvention
@@ -35,8 +33,7 @@ namespace ElmFullstack
     {
         static readonly System.Diagnostics.Stopwatch cacheItemTimeSource = System.Diagnostics.Stopwatch.StartNew();
 
-        static readonly ConcurrentDictionary<string, (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache =
-            new ConcurrentDictionary<string, (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>, TimeSpan)>();
+        static readonly ConcurrentDictionary<string, (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache = new();
 
         static void ElmAppCompilationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -121,14 +118,14 @@ namespace ElmFullstack
             var compilationSuccess = compilationResult.Ok?.FirstOrDefault();
 
             var currentIterationReport = new CompilationIterationReport
-            {
-                compilation = compilationReport,
-            };
+            (
+                compilation: compilationReport,
+                dependenciesReports: null,
+                totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+            );
 
             if (compilationSuccess != null)
             {
-                currentIterationReport.totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds;
-
                 return (compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport));
             }
 
@@ -192,21 +189,11 @@ namespace ElmFullstack
                     var elmMakeRequest =
                         dependencyKey.ElmMakeDependency.FirstOrDefault();
 
-                    var dependencyReport = new CompilationIterationDependencyReport
-                    {
-                    };
-
-                    CompilationIterationDependencyReport completeDependencyReport()
-                    {
-                        dependencyReport.totalTimeSpentMilli = (int)dependencyTotalStopwatch.ElapsedMilliseconds;
-
-                        return dependencyReport;
-                    };
+                    TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
+                        new TimedReport<CompilationIterationDependencyReport>(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
 
                     if (elmMakeRequest != null)
                     {
-                        dependencyReport.dependencyKeySummary = "ElmMake";
-
                         var elmMakeRequestFiles =
                             elmMakeRequest.files
                             .ToImmutableDictionary(
@@ -222,16 +209,19 @@ namespace ElmFullstack
 
                         return (
                             (key: dependencyKey, (IReadOnlyList<byte>)value),
-                            completeDependencyReport());
+                            completeDependencyReport(new CompilationIterationDependencyReport(dependencyKeySummary: "ElmMake")));
                     }
 
                     throw new Exception("Unknown type of dependency: " + DescribeCompilationError(error));
                 })
                 .ToImmutableList();
 
-            currentIterationReport.dependenciesReports = newDependencies.Select(depAndReport => depAndReport.Item2).ToImmutableList();
-
-            currentIterationReport.totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds;
+            currentIterationReport =
+                currentIterationReport with
+                {
+                    dependenciesReports = newDependencies.Select(depAndReport => depAndReport.Item2).ToImmutableList(),
+                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+                };
 
             var newStackFrame =
                 (newDependencies.Select(depAndReport => depAndReport.Item1).ToImmutableList(), currentIterationReport);
@@ -243,8 +233,7 @@ namespace ElmFullstack
                 stack: stack.Push(newStackFrame));
         }
 
-        static readonly ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache =
-            new ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>, TimeSpan)>();
+        static readonly ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache = new();
 
         static void ElmAppCompilationIterationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -266,10 +255,10 @@ namespace ElmFullstack
             var sourceFilesJson =
                 sourceFiles
                 .Select(appCodeFile => new CompilerSerialInterface.AppCodeEntry
-                {
-                    path = appCodeFile.Key,
-                    content = new CompilerSerialInterface.BytesJson { AsBase64 = Convert.ToBase64String(appCodeFile.Value.ToArray()) },
-                })
+                (
+                    path: appCodeFile.Key,
+                    content: CompilerSerialInterface.BytesJson.AsJson(appCodeFile.Value)
+                ))
                 .ToImmutableList();
 
             var dependenciesJson =
@@ -352,13 +341,13 @@ namespace ElmFullstack
             return
                 (result.compilationResult,
                 new CompilationIterationCompilationReport
-                {
-                    serializeTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds,
-                    prepareJsEngineTimeSpentMilli = (int?)prepareJsEngineStopwatch?.ElapsedMilliseconds,
-                    inJsEngineTimeSpentMilli = (int?)inJsEngineStopwatch?.ElapsedMilliseconds,
-                    deserializeTimeSpentMilli = (int?)deserializeStopwatch?.ElapsedMilliseconds,
-                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                });
+                (
+                    serializeTimeSpentMilli: (int)serializeStopwatch.ElapsedMilliseconds,
+                    prepareJsEngineTimeSpentMilli: (int?)prepareJsEngineStopwatch?.ElapsedMilliseconds,
+                    inJsEngineTimeSpentMilli: (int?)inJsEngineStopwatch?.ElapsedMilliseconds,
+                    deserializeTimeSpentMilli: (int?)deserializeStopwatch?.ElapsedMilliseconds,
+                    totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+                ));
         }
 
         static public IImmutableList<string> FilePathFromModuleName(IReadOnlyList<string> moduleName)
@@ -388,8 +377,7 @@ namespace ElmFullstack
                 _ => CreateJsEngineToCompileFileTree(compilerElmProgramCodeFiles));
         }
 
-        static readonly ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine> FileTreeCompilerJsEngineCache =
-            new ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine>();
+        static readonly ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine> FileTreeCompilerJsEngineCache = new();
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine CreateJsEngineToCompileFileTree(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilerElmProgramCodeFiles)
@@ -426,8 +414,8 @@ namespace ElmFullstack
                     listFunctionToPublish);
         }
 
-        static public Lazy<IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
-            new Lazy<IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
+        static readonly public Lazy<IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
+            new(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
 
         static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
             ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
@@ -488,93 +476,51 @@ namespace ElmFullstack
         static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.ElmMakeRequestStructure elmMakeRequest) =>
             elmMakeRequest?.files?.Sum(file => file.content.AsBase64.Length) ?? 0;
 
-        public class CompilationIterationReport
-        {
-            public CompilationIterationCompilationReport compilation;
+        public record CompilationIterationReport(
+            CompilationIterationCompilationReport compilation,
+            IReadOnlyList<TimedReport<CompilationIterationDependencyReport>> dependenciesReports,
+            int? totalTimeSpentMilli);
 
-            public IReadOnlyList<CompilationIterationDependencyReport> dependenciesReports;
+        public record CompilationIterationCompilationReport(
+            int serializeTimeSpentMilli,
+            int? prepareJsEngineTimeSpentMilli,
+            int? inJsEngineTimeSpentMilli,
+            int? deserializeTimeSpentMilli,
+            int totalTimeSpentMilli);
 
-            public int totalTimeSpentMilli;
-        }
+        public record CompilationIterationDependencyReport(string dependencyKeySummary);
 
-        public class CompilationIterationCompilationReport
-        {
-            public int serializeTimeSpentMilli;
-
-            public int? prepareJsEngineTimeSpentMilli;
-
-            public int? inJsEngineTimeSpentMilli;
-
-            public int? deserializeTimeSpentMilli;
-
-            public int totalTimeSpentMilli;
-        }
-
-        public class CompilationIterationDependencyReport
-        {
-            public string dependencyKeySummary;
-
-            public int totalTimeSpentMilli;
-        }
+        public record TimedReport<T>(T report, int totalTimeSpentMilli);
     }
 
     namespace CompilerSerialInterface
     {
-        class CompilationError
+        record CompilationError(
+            IReadOnlyList<string> OtherCompilationError = null,
+            IReadOnlyList<DependencyKey> MissingDependencyError = null);
+
+        record LocatedCompilationError(LocationInSourceFiles location, CompilationError error);
+
+        record LocationInSourceFiles(IReadOnlyList<string> filePath);
+
+        record DependencyKey(IReadOnlyList<ElmMakeRequestStructure> ElmMakeDependency);
+
+        record ElmMakeRequestStructure(
+            IReadOnlyList<AppCodeEntry> files,
+            IReadOnlyList<string> entryPointFilePath,
+            ElmMakeOutputType outputType,
+            bool enableDebug);
+
+        record ElmMakeOutputType(
+            IReadOnlyList<object> ElmMakeOutputTypeHtml = null,
+            IReadOnlyList<object> ElmMakeOutputTypeJs = null);
+
+        record AppCodeEntry(IReadOnlyList<string> path, BytesJson content);
+
+        record BytesJson(string AsBase64)
         {
-            public IReadOnlyList<string> OtherCompilationError;
-
-            public IReadOnlyList<DependencyKey> MissingDependencyError;
-        }
-
-        class LocatedCompilationError
-        {
-            public LocationInSourceFiles location;
-
-            public CompilationError error;
-        }
-
-        class LocationInSourceFiles
-        {
-            public IReadOnlyList<string> filePath;
-        }
-
-        struct DependencyKey
-        {
-            public IReadOnlyList<ElmMakeRequestStructure> ElmMakeDependency;
-        }
-
-        class ElmMakeRequestStructure
-        {
-            public IReadOnlyList<AppCodeEntry> files;
-
-            public IReadOnlyList<string> entryPointFilePath;
-
-            public ElmMakeOutputType outputType;
-
-            public bool enableDebug;
-        }
-
-        struct ElmMakeOutputType
-        {
-            public IReadOnlyList<object> ElmMakeOutputTypeHtml;
-
-            public IReadOnlyList<object> ElmMakeOutputTypeJs;
-        }
-
-        struct AppCodeEntry
-        {
-            public IReadOnlyList<string> path;
-
-            public BytesJson content;
-        }
-
-        struct BytesJson
-        {
-            public string AsBase64;
-
             static public BytesJson AsJson(IReadOnlyList<byte> bytes) =>
-                new BytesJson { AsBase64 = Convert.ToBase64String(bytes as byte[] ?? bytes.ToArray()) };
+                new(AsBase64: Convert.ToBase64String(bytes as byte[] ?? bytes.ToArray()));
         }
     }
 }
