@@ -147,10 +147,9 @@ provideCompletionItems request languageServiceState =
                                     )
 
                         moduleNamesToNotSuggestForImport =
-                            fileOpenedInEditorModuleName
-                                :: List.map .canonicalName explicitlyImportedModules
+                            [ fileOpenedInEditorModuleName ]
 
-                        availableModulesNotImportedYet =
+                        modulesToSuggestForImport =
                             languageServiceState.fileTreeParseCache
                                 |> FileTree.flatListOfBlobsFromFileTreeNode
                                 |> List.filterMap (Tuple.second >> .parsedFileLastSuccess >> Maybe.map .syntax)
@@ -163,6 +162,12 @@ provideCompletionItems request languageServiceState =
                                                 )
                                                 moduleNamesToNotSuggestForImport
                                             )
+                                    )
+                                |> List.sortBy
+                                    (.moduleDefinition
+                                        >> Elm.Syntax.Node.value
+                                        >> Elm.Syntax.Module.moduleName
+                                        >> String.join "."
                                     )
 
                         importedModules =
@@ -295,7 +300,7 @@ provideCompletionItems request languageServiceState =
                                     )
                     in
                     if List.head lineUntilPositionWords == Just "import" then
-                        availableModulesNotImportedYet
+                        modulesToSuggestForImport
                             |> List.map
                                 (moduleCompletionItemFromModuleSyntax
                                     { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }

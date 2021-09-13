@@ -230,7 +230,27 @@ from_beta_function : Int -> String
                     otherFiles
                     fileOpenedInEditor
                     { textUntilPosition = "previousline\nimport " }
-                    [ { label = "Epsilon"
+                    [ { label = "Alpha"
+                      , documentation = "Documentation comment on module Alpha"
+                      , insertText = "Alpha"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Beta"
+                      , documentation = ""
+                      , insertText = "Beta"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Beta.Gamma"
+                      , documentation = ""
+                      , insertText = "Beta.Gamma"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Delta"
+                      , documentation = ""
+                      , insertText = "Delta"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Epsilon"
                       , documentation = ""
                       , insertText = "Epsilon"
                       , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
@@ -242,7 +262,27 @@ from_beta_function : Int -> String
                     otherFiles
                     fileOpenedInEditor
                     { textUntilPosition = "previousline\nimport E" }
-                    [ { label = "Epsilon"
+                    [ { label = "Alpha"
+                      , documentation = "Documentation comment on module Alpha"
+                      , insertText = "Alpha"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Beta"
+                      , documentation = ""
+                      , insertText = "Beta"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Beta.Gamma"
+                      , documentation = ""
+                      , insertText = "Beta.Gamma"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Delta"
+                      , documentation = ""
+                      , insertText = "Delta"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Epsilon"
                       , documentation = ""
                       , insertText = "Epsilon"
                       , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
