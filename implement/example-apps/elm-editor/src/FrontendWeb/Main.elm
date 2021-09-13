@@ -873,7 +873,10 @@ provideCompletionItems request stateBefore =
 
                 Just filePathOpenedInEditor ->
                     LanguageService.provideCompletionItems
-                        { filePathOpenedInEditor = filePathOpenedInEditor, textUntilPosition = request.textUntilPosition }
+                        { filePathOpenedInEditor = filePathOpenedInEditor
+                        , textUntilPosition = request.textUntilPosition
+                        , cursorLineNumber = request.cursorLineNumber
+                        }
                         languageServiceState
     in
     ( state, completionItems )

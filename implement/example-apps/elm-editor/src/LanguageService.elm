@@ -5,6 +5,7 @@ import CompilationInterface.SourceFiles
 import CompileFullstackApp
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
+import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Module
 import Elm.Syntax.Node
@@ -45,7 +46,7 @@ initLanguageServiceState =
 
 
 provideCompletionItems :
-    { filePathOpenedInEditor : List String, textUntilPosition : String }
+    { filePathOpenedInEditor : List String, cursorLineNumber : Int, textUntilPosition : String }
     -> LanguageServiceState
     -> List FrontendWeb.MonacoEditor.MonacoCompletionItem
 provideCompletionItems request languageServiceState =
@@ -173,8 +174,16 @@ provideCompletionItems request languageServiceState =
                         importedModules =
                             implicitlyImportedModules ++ explicitlyImportedModules
 
-                        localDeclarations =
+                        currentModuleDeclarations =
                             completionItemsFromModule fileOpenedInEditor
+
+                        fromLetBlocks =
+                            currentModuleDeclarations.fromLetBlocks
+                                |> List.filter
+                                    (\fromLetBlock ->
+                                        (fromLetBlock.scope.start.row <= request.cursorLineNumber)
+                                            && (request.cursorLineNumber <= fromLetBlock.scope.end.row)
+                                    )
                                 |> List.map .completionItem
 
                         importExposings =
@@ -215,7 +224,7 @@ provideCompletionItems request languageServiceState =
                                                     Just importedParsedModule ->
                                                         let
                                                             importedModuleItems =
-                                                                completionItemsFromModule importedParsedModule
+                                                                (completionItemsFromModule importedParsedModule).topLevel
                                                                     |> List.filter .isExposed
                                                                     |> List.map .completionItem
                                                         in
@@ -248,7 +257,7 @@ provideCompletionItems request languageServiceState =
                                     )
 
                         localDeclarationsAndImportExposings =
-                            localDeclarations ++ importExposings
+                            List.map .completionItem currentModuleDeclarations.topLevel ++ importExposings ++ fromLetBlocks
 
                         localDeclarationsAfterPrefix =
                             if completionPrefix == [] then
@@ -265,7 +274,7 @@ provideCompletionItems request languageServiceState =
                                         []
 
                                     Just referencedModule ->
-                                        completionItemsFromModule referencedModule
+                                        (completionItemsFromModule referencedModule).topLevel
                                             |> List.filter .isExposed
                                             |> List.map .completionItem
 
@@ -364,7 +373,12 @@ documentationStringFromModuleSyntax parsedModule =
         |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
 
 
-completionItemsFromModule : ParsedModuleCache -> List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
+completionItemsFromModule :
+    ParsedModuleCache
+    ->
+        { topLevel : List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
+        , fromLetBlocks : List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, scope : Elm.Syntax.Range.Range }
+        }
 completionItemsFromModule moduleCache =
     let
         textLines =
@@ -378,15 +392,6 @@ completionItemsFromModule moduleCache =
                 |> listMapFirstElement (String.left (range.end.column - 1))
                 |> List.reverse
                 |> listMapFirstElement (String.dropLeft (range.start.column - 1))
-
-        markdownElmCodeBlockFromCodeLines codeLines =
-            String.join "\n" ("```Elm" :: codeLines ++ [ "```" ])
-
-        documentationMarkdownFromCodeLinesAndDocumentation codeLines maybeDocumentation =
-            (markdownElmCodeBlockFromCodeLines codeLines
-                :: Maybe.withDefault [] (Maybe.map List.singleton maybeDocumentation)
-            )
-                |> String.join "\n\n"
 
         exposingList =
             Elm.Syntax.Node.value
@@ -427,129 +432,181 @@ completionItemsFromModule moduleCache =
                                     Elm.Syntax.Exposing.FunctionExpose functionName ->
                                         name == functionName
                             )
+
+        fromLetBlocks =
+            listLetBlocksInFile moduleCache.syntax
+                |> List.concatMap
+                    (\letBlock ->
+                        (Elm.Syntax.Node.value letBlock).declarations
+                            |> List.concatMap
+                                (\letDeclaration ->
+                                    case Elm.Syntax.Node.value letDeclaration of
+                                        Elm.Syntax.Expression.LetFunction letFunction ->
+                                            [ (completionItemFromFunctionSyntax letFunction).buildCompletionItem getTextLinesFromRange
+                                            ]
+
+                                        Elm.Syntax.Expression.LetDestructuring _ _ ->
+                                            []
+                                )
+                            |> List.map
+                                (\completionItem ->
+                                    { completionItem = completionItem
+                                    , scope = Elm.Syntax.Node.range letBlock
+                                    }
+                                )
+                    )
     in
-    moduleCache.syntax.declarations
-        |> List.concatMap
-            (\declaration ->
-                case Elm.Syntax.Node.value declaration of
-                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                        let
-                            functionName =
-                                Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+    { topLevel =
+        moduleCache.syntax.declarations
+            |> List.concatMap
+                (\declaration ->
+                    case Elm.Syntax.Node.value declaration of
+                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                            let
+                                { functionName, buildCompletionItem } =
+                                    completionItemFromFunctionSyntax functionDeclaration
+                            in
+                            [ { completionItem = buildCompletionItem getTextLinesFromRange
+                              , isExposed = exposesFunction functionName
+                              }
+                            ]
 
-                            documentationStringFromSyntax =
-                                functionDeclaration.documentation
-                                    |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+                        Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
+                            let
+                                aliasName =
+                                    Elm.Syntax.Node.value aliasDeclaration.name
 
-                            codeSignatureLines =
-                                functionDeclaration.signature
-                                    |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange)
-                                    |> Maybe.withDefault []
+                                documentationStringFromSyntax =
+                                    aliasDeclaration.documentation
+                                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
 
-                            codeLines =
-                                codeSignatureLines
-                        in
-                        [ { completionItem =
-                                { label = functionName
-                                , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                                , insertText = functionName
-                                , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
-                                }
-                          , isExposed = exposesFunction functionName
-                          }
-                        ]
+                                codeRange =
+                                    [ Elm.Syntax.Node.range aliasDeclaration.name
+                                    , Elm.Syntax.Node.range aliasDeclaration.typeAnnotation
+                                    ]
+                                        |> Elm.Syntax.Range.combine
+                                        |> expandRangeToLineStart
 
-                    Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-                        let
-                            aliasName =
-                                Elm.Syntax.Node.value aliasDeclaration.name
+                                codeLines =
+                                    getTextLinesFromRange codeRange
+                            in
+                            [ { completionItem =
+                                    { label = aliasName
+                                    , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                                    , insertText = aliasName
+                                    , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                                    }
+                              , isExposed = exposesTypeOrAlias aliasName
+                              }
+                            ]
 
-                            documentationStringFromSyntax =
-                                aliasDeclaration.documentation
-                                    |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+                        Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                            let
+                                documentationStringFromSyntax =
+                                    customTypeDeclaration.documentation
+                                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
 
-                            codeRange =
-                                [ Elm.Syntax.Node.range aliasDeclaration.name
-                                , Elm.Syntax.Node.range aliasDeclaration.typeAnnotation
-                                ]
-                                    |> Elm.Syntax.Range.combine
-                                    |> expandRangeToLineStart
+                                codeRange =
+                                    Elm.Syntax.Node.range customTypeDeclaration.name
+                                        :: List.map Elm.Syntax.Node.range customTypeDeclaration.constructors
+                                        |> Elm.Syntax.Range.combine
+                                        |> expandRangeToLineStart
 
-                            codeLines =
-                                getTextLinesFromRange codeRange
-                        in
-                        [ { completionItem =
-                                { label = aliasName
-                                , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                                , insertText = aliasName
-                                , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
-                                }
-                          , isExposed = exposesTypeOrAlias aliasName
-                          }
-                        ]
+                                codeLines =
+                                    getTextLinesFromRange codeRange
 
-                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                        let
-                            documentationStringFromSyntax =
-                                customTypeDeclaration.documentation
-                                    |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+                                customTypeName =
+                                    Elm.Syntax.Node.value customTypeDeclaration.name
 
-                            codeRange =
-                                Elm.Syntax.Node.range customTypeDeclaration.name
-                                    :: List.map Elm.Syntax.Node.range customTypeDeclaration.constructors
-                                    |> Elm.Syntax.Range.combine
-                                    |> expandRangeToLineStart
+                                fromTags =
+                                    customTypeDeclaration.constructors
+                                        |> List.map
+                                            (\constructorNode ->
+                                                let
+                                                    tagName =
+                                                        Elm.Syntax.Node.value
+                                                            (Elm.Syntax.Node.value constructorNode).name
 
-                            codeLines =
-                                getTextLinesFromRange codeRange
-
-                            customTypeName =
-                                Elm.Syntax.Node.value customTypeDeclaration.name
-
-                            fromTags =
-                                customTypeDeclaration.constructors
-                                    |> List.map
-                                        (\constructorNode ->
-                                            let
-                                                tagName =
-                                                    Elm.Syntax.Node.value
-                                                        (Elm.Syntax.Node.value constructorNode).name
-
-                                                documentation =
-                                                    [ "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
-                                                    , markdownElmCodeBlockFromCodeLines codeLines
-                                                    ]
-                                                        |> String.join "\n\n"
-                                            in
-                                            { completionItem =
-                                                { label = tagName
-                                                , documentation = documentation
-                                                , insertText = tagName
-                                                , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                                                    documentation =
+                                                        [ "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
+                                                        , markdownElmCodeBlockFromCodeLines codeLines
+                                                        ]
+                                                            |> String.join "\n\n"
+                                                in
+                                                { completionItem =
+                                                    { label = tagName
+                                                    , documentation = documentation
+                                                    , insertText = tagName
+                                                    , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                                                    }
+                                                , isExposed = exposesTypeOrAlias customTypeName
                                                 }
-                                            , isExposed = exposesTypeOrAlias customTypeName
-                                            }
-                                        )
-                        in
-                        { completionItem =
-                            { label = customTypeName
-                            , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                            , insertText = customTypeName
-                            , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                                            )
+                            in
+                            { completionItem =
+                                { label = customTypeName
+                                , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                                , insertText = customTypeName
+                                , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                                }
+                            , isExposed = exposesTypeOrAlias customTypeName
                             }
-                        , isExposed = exposesTypeOrAlias customTypeName
-                        }
-                            :: fromTags
+                                :: fromTags
 
-                    Elm.Syntax.Declaration.Destructuring _ _ ->
-                        []
+                        Elm.Syntax.Declaration.Destructuring _ _ ->
+                            []
 
-                    Elm.Syntax.Declaration.PortDeclaration _ ->
-                        []
+                        Elm.Syntax.Declaration.PortDeclaration _ ->
+                            []
 
-                    Elm.Syntax.Declaration.InfixDeclaration _ ->
-                        []
-            )
+                        Elm.Syntax.Declaration.InfixDeclaration _ ->
+                            []
+                )
+    , fromLetBlocks = fromLetBlocks |> List.sortBy (.completionItem >> .label)
+    }
+
+
+completionItemFromFunctionSyntax : Elm.Syntax.Expression.Function -> { functionName : String, buildCompletionItem : (Elm.Syntax.Range.Range -> List String) -> FrontendWeb.MonacoEditor.MonacoCompletionItem }
+completionItemFromFunctionSyntax functionSyntax =
+    let
+        functionName =
+            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSyntax.declaration).name
+    in
+    { functionName = functionName
+    , buildCompletionItem =
+        \getTextLinesFromRange ->
+            let
+                documentationStringFromSyntax =
+                    functionSyntax.documentation
+                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+
+                codeSignatureLines =
+                    functionSyntax.signature
+                        |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange)
+                        |> Maybe.withDefault []
+
+                codeLines =
+                    codeSignatureLines
+            in
+            { label = functionName
+            , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+            , insertText = functionName
+            , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+            }
+    }
+
+
+documentationMarkdownFromCodeLinesAndDocumentation : List String -> Maybe String -> String
+documentationMarkdownFromCodeLinesAndDocumentation codeLines maybeDocumentation =
+    (markdownElmCodeBlockFromCodeLines codeLines
+        :: Maybe.withDefault [] (Maybe.map List.singleton maybeDocumentation)
+    )
+        |> String.join "\n\n"
+
+
+markdownElmCodeBlockFromCodeLines : List String -> String
+markdownElmCodeBlockFromCodeLines codeLines =
+    String.join "\n" ("```Elm" :: codeLines ++ [ "```" ])
 
 
 updateLanguageServiceState : FileTreeInWorkspace.FileTreeNode -> LanguageServiceState -> LanguageServiceState
@@ -615,6 +672,123 @@ coreModulesParseResults =
                     |> Result.toMaybe
                     |> Maybe.map (\syntax -> { text = asString, syntax = syntax })
             )
+
+
+listLetBlocksInFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
+listLetBlocksInFile file =
+    file.declarations
+        |> List.concatMap (Elm.Syntax.Node.value >> listLetBlocksInDeclaration)
+
+
+listLetBlocksInDeclaration : Elm.Syntax.Declaration.Declaration -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
+listLetBlocksInDeclaration declaration =
+    case declaration of
+        Elm.Syntax.Declaration.FunctionDeclaration function ->
+            listLetBlocksInExpression (Elm.Syntax.Node.value function.declaration).expression
+
+        Elm.Syntax.Declaration.AliasDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.PortDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.InfixDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.Destructuring _ _ ->
+            []
+
+
+listLetBlocksInLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
+listLetBlocksInLetDeclaration declaration =
+    case declaration of
+        Elm.Syntax.Expression.LetFunction function ->
+            listLetBlocksInExpression (Elm.Syntax.Node.value function.declaration).expression
+
+        Elm.Syntax.Expression.LetDestructuring _ letDestructuring ->
+            listLetBlocksInExpression letDestructuring
+
+
+listLetBlocksInExpression : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
+listLetBlocksInExpression expressionNode =
+    case Elm.Syntax.Node.value expressionNode of
+        Elm.Syntax.Expression.UnitExpr ->
+            []
+
+        Elm.Syntax.Expression.Application application ->
+            application |> List.concatMap listLetBlocksInExpression
+
+        Elm.Syntax.Expression.OperatorApplication _ _ leftExpr rightExpr ->
+            [ leftExpr, rightExpr ] |> List.concatMap listLetBlocksInExpression
+
+        Elm.Syntax.Expression.FunctionOrValue _ _ ->
+            []
+
+        Elm.Syntax.Expression.IfBlock ifExpr thenExpr elseExpr ->
+            [ ifExpr, thenExpr, elseExpr ] |> List.concatMap listLetBlocksInExpression
+
+        Elm.Syntax.Expression.PrefixOperator _ ->
+            []
+
+        Elm.Syntax.Expression.Operator _ ->
+            []
+
+        Elm.Syntax.Expression.Integer _ ->
+            []
+
+        Elm.Syntax.Expression.Hex _ ->
+            []
+
+        Elm.Syntax.Expression.Floatable _ ->
+            []
+
+        Elm.Syntax.Expression.Negation negation ->
+            listLetBlocksInExpression negation
+
+        Elm.Syntax.Expression.Literal _ ->
+            []
+
+        Elm.Syntax.Expression.CharLiteral _ ->
+            []
+
+        Elm.Syntax.Expression.TupledExpression tupled ->
+            tupled |> List.concatMap listLetBlocksInExpression
+
+        Elm.Syntax.Expression.ParenthesizedExpression parenthesized ->
+            listLetBlocksInExpression parenthesized
+
+        Elm.Syntax.Expression.LetExpression letBlock ->
+            List.concatMap (Elm.Syntax.Node.value >> listLetBlocksInLetDeclaration) letBlock.declarations
+                ++ listLetBlocksInExpression letBlock.expression
+                ++ [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range expressionNode) letBlock ]
+
+        Elm.Syntax.Expression.CaseExpression caseBlock ->
+            listLetBlocksInExpression caseBlock.expression
+                ++ (caseBlock.cases |> List.concatMap (Tuple.second >> listLetBlocksInExpression))
+
+        Elm.Syntax.Expression.LambdaExpression lambda ->
+            listLetBlocksInExpression lambda.expression
+
+        Elm.Syntax.Expression.RecordExpr recordExpr ->
+            recordExpr |> List.concatMap (Elm.Syntax.Node.value >> Tuple.second >> listLetBlocksInExpression)
+
+        Elm.Syntax.Expression.ListExpr listExpr ->
+            listExpr |> List.concatMap listLetBlocksInExpression
+
+        Elm.Syntax.Expression.RecordAccess recordAccess _ ->
+            listLetBlocksInExpression recordAccess
+
+        Elm.Syntax.Expression.RecordAccessFunction _ ->
+            []
+
+        Elm.Syntax.Expression.RecordUpdateExpression _ recordUpdateExpression ->
+            recordUpdateExpression |> List.concatMap (Elm.Syntax.Node.value >> Tuple.second >> listLetBlocksInExpression)
+
+        Elm.Syntax.Expression.GLSLExpression _ ->
+            []
 
 
 expandRangeToLineStart : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range

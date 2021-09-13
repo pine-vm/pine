@@ -18,7 +18,9 @@ type MessageFromEditor
 
 
 type alias RequestCompletionItemsStruct =
-    { textUntilPosition : String }
+    { textUntilPosition : String
+    , cursorLineNumber : Int
+    }
 
 
 {-| <https://microsoft.github.io/monaco-editor/api/interfaces/monaco.editor.imarkerdata.html>

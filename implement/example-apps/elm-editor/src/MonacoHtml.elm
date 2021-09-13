@@ -167,7 +167,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         parent?.messageFromMonacoFrame?.({"EditorActionCompileEvent":[]});
     }
 
-    function editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition) {
+    function editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition, cursorLineNumber) {
 
         return new Promise(function (resolve, reject) {
 
@@ -181,7 +181,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 provideCompletionItemsEventFromElm = function(){};
             }
 
-            parent?.messageFromMonacoFrame?.({"RequestCompletionItemsEvent":[{"textUntilPosition":textUntilPosition}]});
+            parent?.messageFromMonacoFrame?.({
+                "RequestCompletionItemsEvent":
+                    [{"textUntilPosition":textUntilPosition,"cursorLineNumber":cursorLineNumber}]});
 
             setTimeout(() => {
                 var message = "Did not get completion items from Elm within " + getCompletionItemsTimeoutMilliseconds + " milliseconds.";
@@ -241,7 +243,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                     endColumn: word.endColumn
                 };
 
-                return editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition);
+                return editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition, position.lineNumber);
             },
 
             triggerCharacters: ["."," "]
