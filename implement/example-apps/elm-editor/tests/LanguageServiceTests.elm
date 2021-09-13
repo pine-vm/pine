@@ -246,6 +246,105 @@ from_beta_function : Int -> String
                       , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
+        , Test.test "In application expression after function" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import Alpha
+import Beta
+
+
+type alias State =
+    Int
+
+name = Alpha.from_alpha ✂➕
+
+type Event
+    = Increment
+    | Decrement
+
+
+init : State
+init =
+    0
+"""
+                    [ { label = "Alpha"
+                      , documentation = "Documentation comment on module Alpha"
+                      , insertText = "Alpha"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Beta"
+                      , documentation = ""
+                      , insertText = "Beta"
+                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      }
+                    , { label = "Decrement"
+                      , documentation = String.trim """
+`Decrement` is a variant of `Event`
+
+```Elm
+type Event
+    = Increment
+    | Decrement
+```
+"""
+                      , insertText = "Decrement"
+                      , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                      }
+                    , { label = "Event"
+                      , documentation = String.trim """
+```Elm
+type Event
+    = Increment
+    | Decrement
+```
+"""
+                      , insertText = "Event"
+                      , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                      }
+                    , { label = "Increment"
+                      , documentation = String.trim """
+`Increment` is a variant of `Event`
+
+```Elm
+type Event
+    = Increment
+    | Decrement
+```
+"""
+                      , insertText = "Increment"
+                      , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                      }
+                    , { label = "State"
+                      , documentation = String.trim """
+```Elm
+type alias State =
+    Int
+```
+"""
+                      , insertText = "State"
+                      , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                      }
+                    , { label = "init"
+                      , documentation = String.trim """
+```Elm
+init : State
+```
+"""
+                      , insertText = "init"
+                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      }
+                    , { label = "name"
+                      , documentation = String.trim """
+```Elm
+```
+"""
+                      , insertText = "name"
+                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      }
+                    ]
         , Test.test "Right of 'import '" <|
             \_ ->
                 expectationFromScenarioInMain

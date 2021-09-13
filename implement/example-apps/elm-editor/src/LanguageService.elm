@@ -72,9 +72,7 @@ provideCompletionItems request languageServiceState =
                                 |> Maybe.withDefault ""
 
                         lineUntilPositionWords =
-                            lineUntilPosition
-                                |> String.trim
-                                |> String.split " "
+                            String.split " " lineUntilPosition
 
                         completionPrefix =
                             lineUntilPositionWords
