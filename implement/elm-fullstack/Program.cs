@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-09-13";
+        static public string AppVersionId => "2021-09-14";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -354,7 +354,7 @@ namespace elm_fullstack
                             };
 
                         var initElmAppState =
-                            deletePreviousProcessOption.HasValue() && !copyProcessOption.HasValue();
+                            (deletePreviousProcessOption.HasValue() || processStorePath == null) && !copyProcessOption.HasValue();
 
                         var compositionLogEvent =
                             ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
