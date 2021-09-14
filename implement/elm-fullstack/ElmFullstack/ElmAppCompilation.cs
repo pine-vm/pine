@@ -33,7 +33,7 @@ namespace ElmFullstack
     {
         static readonly System.Diagnostics.Stopwatch cacheItemTimeSource = System.Diagnostics.Stopwatch.StartNew();
 
-        static readonly ConcurrentDictionary<string, (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache = new();
+        static readonly ConcurrentDictionary<string, (Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache = new();
 
         static void ElmAppCompilationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -42,7 +42,7 @@ namespace ElmFullstack
                 item => item.Value.lastUseTime,
                 retainedSizeLimit);
 
-        static public (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
+        static public Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig)
         {
@@ -57,33 +57,37 @@ namespace ElmFullstack
                         interfaceConfig,
                     }))));
 
-            IImmutableList<CompilationIterationReport> newCompilationIterationsReports = null;
-
-            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compileNew()
-            {
-                var (compiledAppFiles, iterationsReports) =
+            Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compileNew() =>
                     AsCompletelyLoweredElmApp(
                         sourceFiles,
                         rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
                         interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
-                newCompilationIterationsReports = iterationsReports;
+            (Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
+                Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> previousEntryCompilationResult)
+            {
+                if (previousEntryCompilationResult?.Ok != null)
+                    return (previousEntryCompilationResult, cacheItemTimeSource.Elapsed);
 
-                return compiledAppFiles;
+                return (compileNew(), cacheItemTimeSource.Elapsed);
             }
 
             var (compilationResult, _) =
                 ElmAppCompilationCache.AddOrUpdate(
                     compilationHash,
-                    _ => (compileNew(), cacheItemTimeSource.Elapsed),
-                    (_, previousEntry) => (previousEntry.compilationResult, cacheItemTimeSource.Elapsed));
+                    _ => BuildNextCacheEntry(null),
+                    (_, previousEntry) => BuildNextCacheEntry(previousEntry.compilationResult));
 
             ElmAppCompilationCacheRemoveOlderItems(50_000_000);
 
-            return (compilationResult, newCompilationIterationsReports);
+            return compilationResult;
         }
 
-        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles, IImmutableList<CompilationIterationReport> iterationsReports) AsCompletelyLoweredElmApp(
+        public record CompilationSuccess(
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles,
+            IImmutableList<CompilationIterationReport> iterationsReports);
+
+        static Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName) =>
@@ -93,7 +97,7 @@ namespace ElmFullstack
                 interfaceToHostRootModuleName,
                 ImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies, CompilationIterationReport previousIterationsReports)>.Empty);
 
-        static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>, IImmutableList<CompilationIterationReport>) AsCompletelyLoweredElmApp(
+        static Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
@@ -126,7 +130,8 @@ namespace ElmFullstack
 
             if (compilationSuccess != null)
             {
-                return (compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport));
+                return new Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
+                    Ok: new CompilationSuccess(compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport)));
             }
 
             var compilationErrors =
@@ -146,17 +151,8 @@ namespace ElmFullstack
 
             if (0 < otherErrors.Count)
             {
-                var otherErrorsText =
-                    string.Join("\n", otherErrors.Select(DescribeCompilationError));
-
-                /*
-                 * TODO: To clean up the appearance in the (CL) user interface, avoid burying the error message in a large stack trace:
-                 * Propagate the errors further without runtime exception.
-                 * New C# features might help simplify the syntax to implement this so that implementation might be easier after switching to .NET 6.
-                 * Until then, add line breaks to the message to help spot this within a larger output.
-                 * */
-
-                throw new Exception("Failed compilation with " + compilationErrors.Count + " errors:\n" + otherErrorsText + "\n\n");
+                return new Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
+                    Err: otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
             }
 
             byte[] ElmMake(
@@ -190,29 +186,41 @@ namespace ElmFullstack
                         dependencyKey.ElmMakeDependency.FirstOrDefault();
 
                     TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
-                        new TimedReport<CompilationIterationDependencyReport>(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
+                        new(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
 
                     if (elmMakeRequest != null)
                     {
-                        var elmMakeRequestFiles =
-                            elmMakeRequest.files
-                            .ToImmutableDictionary(
-                                entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                                entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                            .WithComparers(EnumerableExtension.EqualityComparer<string>());
+                        Composition.Result<string, IReadOnlyList<byte>> buildResultValue()
+                        {
+                            try
+                            {
+                                var elmMakeRequestFiles =
+                                    elmMakeRequest.files
+                                    .ToImmutableDictionary(
+                                        entry => (IImmutableList<string>)entry.path.ToImmutableList(),
+                                        entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
+                                    .WithComparers(EnumerableExtension.EqualityComparer<string>());
 
-                        var value = ElmMake(
-                            elmCodeFiles: elmMakeRequestFiles,
-                            pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
-                            makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
-                            enableDebug: elmMakeRequest.enableDebug);
+                                var value = ElmMake(
+                                    elmCodeFiles: elmMakeRequestFiles,
+                                    pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
+                                    makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
+                                    enableDebug: elmMakeRequest.enableDebug);
+
+                                return Composition.Result<string, IReadOnlyList<byte>>.ok(value);
+                            }
+                            catch (Exception e)
+                            {
+                                return Composition.Result<string, IReadOnlyList<byte>>.err("Failed with runtime exception: " + e.ToString());
+                            }
+                        }
 
                         return (
-                            (key: dependencyKey, (IReadOnlyList<byte>)value),
+                            (key: dependencyKey, result: buildResultValue()),
                             completeDependencyReport(new CompilationIterationDependencyReport(dependencyKeySummary: "ElmMake")));
                     }
 
-                    throw new Exception("Unknown type of dependency: " + DescribeCompilationError(error));
+                    throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error));
                 })
                 .ToImmutableList();
 
@@ -223,8 +231,24 @@ namespace ElmFullstack
                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
                 };
 
+            var newDependenciesWithError =
+                newDependencies.Where(dep => dep.Item1.result.Ok == null).ToImmutableList();
+
+            /*
+             * TODO: Instead of returning here, probably forward the result back into the compiler for packaging, for example adding location info.
+             * This implies expansion of the dependencies API to model the error cases.
+             * */
+            if (0 < newDependenciesWithError.Count)
+            {
+                return Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
+                    newDependenciesWithError.Select(dep => new LocatedCompilationError(
+                        location: null,
+                        error: new CompilationError(DependencyError: dep.Item2.report.dependencyKeySummary + " " + dep.Item1.result.Err)))
+                    .ToImmutableList());
+            }
+
             var newStackFrame =
-                (newDependencies.Select(depAndReport => depAndReport.Item1).ToImmutableList(), currentIterationReport);
+                (newDependencies.Select(depAndReport => (depAndReport.Item1.key, depAndReport.Item1.result.Ok)).ToImmutableList(), currentIterationReport);
 
             return AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
@@ -434,9 +458,41 @@ namespace ElmFullstack
             return memoryStream.ToArray();
         }
 
+        static public string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError> compilationErrors)
+        {
+            var errorsText =
+                string.Join("\n\n", compilationErrors?.Select(DescribeCompilationError));
+
+            return "Compilation failed with " + compilationErrors?.Count + " error" + (compilationErrors?.Count == 1 ? "" : "s") + ":\n\n" + errorsText;
+        }
+
+        static public string DescribeCompilationError(LocatedCompilationError locatedCompilationError) =>
+            (locatedCompilationError.location == null ? "without location information" :
+            "in file " + string.Join('/', locatedCompilationError.location.filePath)) + ": " +
+            DescribeCompilationError(locatedCompilationError.error);
+
         static string DescribeCompilationError(CompilerSerialInterface.LocatedCompilationError locatedCompilationError) =>
             "in file " + string.Join('/', locatedCompilationError.location.filePath) + ": " +
             DescribeCompilationError(locatedCompilationError.error);
+
+        static string DescribeCompilationError(CompilationError compilationError)
+        {
+            if (compilationError.OtherError != null)
+                return compilationError.OtherError;
+
+            if (compilationError.DependencyError != null)
+                return "Dependency Error: " + compilationError.DependencyError;
+
+            throw new Exception("Unexpected shape of value " +
+                Newtonsoft.Json.JsonConvert.SerializeObject(
+                    compilationError,
+                    Newtonsoft.Json.Formatting.Indented,
+                    new Newtonsoft.Json.JsonSerializerSettings
+                    {
+                        NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+                        DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Include
+                    }));
+        }
 
         static string DescribeCompilationError(CompilerSerialInterface.CompilationError compilationError)
         {
@@ -458,17 +514,30 @@ namespace ElmFullstack
         }
 
         static long EstimateCacheItemSizeInMemory(ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> item) =>
-            (item.Err?.Sum(err => err.Sum(EstimateCacheItemSizeInMemory)) ?? 0) +
-            (item.Ok?.Sum(EstimateCacheItemSizeInMemory) ?? 0);
+               (item.Err?.Sum(err => err.Sum(EstimateCacheItemSizeInMemory)) ?? 0) +
+               (item.Ok?.Sum(EstimateCacheItemSizeInMemory) ?? 0);
+
+        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.LocatedCompilationError compilationError) =>
+            100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) + EstimateCacheItemSizeInMemory(compilationError.error);
+
+        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.CompilationError compilationError) =>
+            compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
+
+        static long EstimateCacheItemSizeInMemory(Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> item) =>
+            (item.Err?.Sum(err => EstimateCacheItemSizeInMemory(err)) ?? 0) +
+            (item.Ok != null ? EstimateCacheItemSizeInMemory(item.Ok) : 0);
+
+        static long EstimateCacheItemSizeInMemory(CompilationSuccess compilationSuccess) =>
+            EstimateCacheItemSizeInMemory(compilationSuccess.compiledAppFiles);
 
         static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> item) =>
             (item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Count)) ?? 0;
 
-        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.LocatedCompilationError compilationError) =>
-            100 + compilationError.location.filePath.Sum(e => e.Length) + EstimateCacheItemSizeInMemory(compilationError.error);
+        static long EstimateCacheItemSizeInMemory(LocatedCompilationError compilationError) =>
+            100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) + EstimateCacheItemSizeInMemory(compilationError.error);
 
-        static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.CompilationError compilationError) =>
-            compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
+        static long EstimateCacheItemSizeInMemory(CompilationError compilationError) =>
+            compilationError.DependencyError != null ? compilationError.DependencyError.Length * 2 : 0;
 
         static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.DependencyKey dependencyKey) =>
             dependencyKey.ElmMakeDependency?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
@@ -491,33 +560,52 @@ namespace ElmFullstack
         public record CompilationIterationDependencyReport(string dependencyKeySummary);
 
         public record TimedReport<T>(T report, int totalTimeSpentMilli);
+
+        public record CompilationError(
+            string DependencyError = null,
+            string OtherError = null)
+        {
+            static public CompilationError AsCompilationError(CompilerSerialInterface.CompilationError compilationError)
+            {
+                var missingDependencyError = compilationError.MissingDependencyError?.FirstOrDefault();
+
+                if (missingDependencyError != null)
+                    return new CompilationError(DependencyError: "Missing dependency: " + DescribeCompilationError(compilationError));
+
+                return new CompilationError(OtherError: compilationError.OtherCompilationError?.FirstOrDefault());
+            }
+        }
+
+        public record LocatedCompilationError(CompilerSerialInterface.LocationInSourceFiles location, CompilationError error);
     }
 
     namespace CompilerSerialInterface
     {
-        record CompilationError(
+        public record CompilationError(
             IReadOnlyList<string> OtherCompilationError = null,
             IReadOnlyList<DependencyKey> MissingDependencyError = null);
 
+        record LocatedInSourceFilesRecord(LocationInSourceFiles location);
+
         record LocatedCompilationError(LocationInSourceFiles location, CompilationError error);
 
-        record LocationInSourceFiles(IReadOnlyList<string> filePath);
+        public record LocationInSourceFiles(IReadOnlyList<string> filePath);
 
-        record DependencyKey(IReadOnlyList<ElmMakeRequestStructure> ElmMakeDependency);
+        public record DependencyKey(IReadOnlyList<ElmMakeRequestStructure> ElmMakeDependency);
 
-        record ElmMakeRequestStructure(
+        public record ElmMakeRequestStructure(
             IReadOnlyList<AppCodeEntry> files,
             IReadOnlyList<string> entryPointFilePath,
             ElmMakeOutputType outputType,
             bool enableDebug);
 
-        record ElmMakeOutputType(
+        public record ElmMakeOutputType(
             IReadOnlyList<object> ElmMakeOutputTypeHtml = null,
             IReadOnlyList<object> ElmMakeOutputTypeJs = null);
 
-        record AppCodeEntry(IReadOnlyList<string> path, BytesJson content);
+        public record AppCodeEntry(IReadOnlyList<string> path, BytesJson content);
 
-        record BytesJson(string AsBase64)
+        public record BytesJson(string AsBase64)
         {
             static public BytesJson AsJson(IReadOnlyList<byte> bytes) =>
                 new(AsBase64: Convert.ToBase64String(bytes as byte[] ?? bytes.ToArray()));

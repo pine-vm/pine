@@ -19,13 +19,8 @@ namespace test_elm_fullstack
             Path.Combine(path.ToArray());
 
         static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetLoweredElmAppFromDirectoryPath(
-            IImmutableList<string> directoryPath)
-        {
-            return
-                ElmAppCompilation.AsCompletelyLoweredElmApp(
-                    sourceFiles: TestSetup.GetElmAppFromDirectoryPath(directoryPath),
-                    ElmAppInterfaceConfig.Default).compiledAppFiles;
-        }
+            IImmutableList<string> directoryPath) =>
+            TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromDirectoryPath(directoryPath));
 
         /*
         Get the value from `tests` in the Elm module `Main`.

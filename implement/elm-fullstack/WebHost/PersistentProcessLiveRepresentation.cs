@@ -78,9 +78,14 @@ namespace ElmFullstack.WebHost.PersistentProcess
         {
             var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(appConfig);
 
-            var (loweredAppFiles, _) = ElmAppCompilation.AsCompletelyLoweredElmApp(
+            var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
                 ElmAppInterfaceConfig.Default);
+
+            if (compilationResult.Ok == null)
+                throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err));
+
+            var (loweredAppFiles, _) = compilationResult.Ok;
 
             var (process, buildArtifacts) =
                 ProcessFromElm019Code.ProcessFromElmCodeFiles(

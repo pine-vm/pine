@@ -541,93 +541,107 @@ namespace elm_fullstack
 
                 compileCmd.OnExecute(() =>
                 {
-                    var sourcePath = sourceArgument.Value;
-
-                    var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
-
-                    if (loadFromPathResult?.Ok == null)
-                    {
-                        throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
-                    }
-
-                    var sourceComposition = Composition.FromTreeWithStringPath(loadFromPathResult.Ok.tree);
-
-                    var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadFromPathResult.Ok.tree);
-
-                    Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'. Starting to compile...");
-
-                    var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    var sourceFiles =
-                        Composition.TreeToFlatDictionaryWithPathComparer(loadFromPathResult.Ok.tree);
-
-                    string compilationException = null;
-                    Composition.TreeWithStringPath compiledTree = null;
-                    IImmutableList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports = null;
-
-                    try
-                    {
-                        var (compiledAppFiles, iterationsReports) = ElmFullstack.ElmAppCompilation.AsCompletelyLoweredElmApp(
-                            sourceFiles: sourceFiles,
-                            ElmFullstack.ElmAppInterfaceConfig.Default);
-
-                        compilationIterationsReports = iterationsReports;
-
-                        compiledTree =
-                            Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
-                    }
-                    catch (Exception e)
-                    {
-                        compilationException = e.ToString();
-                    }
-
-                    compilationStopwatch.Stop();
-
-                    Console.WriteLine("Compilation completed in " + (int)compilationStopwatch.Elapsed.TotalSeconds + " seconds.");
-
-                    var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
-
-                    var compiledComposition =
-                        compiledTree == null ? null : Composition.FromTreeWithStringPath(compiledTree);
-
-                    var compiledCompositionId =
-                        compiledComposition == null ? null :
-                        CommonConversion.StringBase16FromByteArray(Composition.GetHash(compiledComposition));
-
-                    if (compiledTree != null)
-                    {
-                        var compiledFiles =
-                            Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
-
-                        var compiledCompositionArchive =
-                            ZipArchive.ZipArchiveFromEntries(compiledFiles);
-
-                        var outputCompositionFileName = compiledCompositionId + ".zip";
-
-                        var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
-
-                        Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath));
-                        File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
-                        Console.WriteLine("Saved compiled composition " + compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
-                    }
-
-                    var compileReport = new CompileAppReport
-                    {
-                        engineVersion = AppVersionId,
-                        sourcePath = sourcePath,
-                        sourceCompositionId = sourceCompositionId,
-                        sourceSummary = sourceSummary,
-                        compilationIterationsReports = compilationIterationsReports,
-                        compilationException = compilationException,
-                        compilationTimeSpentMilli = (int)compilationTimeSpentMilli,
-                        compiledCompositionId = compiledCompositionId,
-                    };
+                    var compileReport = CompileApp(sourceArgument.Value);
 
                     WriteReportToFileInReportDirectory(
                         reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
                         reportKind: "compile.json");
                 });
             });
+
+        static CompileAppReport CompileApp(string sourcePath)
+        {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var report = new CompileAppReport
+            (
+                beginTime: CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow),
+                engineVersion: AppVersionId,
+                sourcePath: sourcePath,
+                sourceCompositionId: null,
+                sourceSummary: null,
+                compilationIterationsReports: null,
+                compilationErrors: null,
+                compilationException: null,
+                compilationTimeSpentMilli: null,
+                compiledCompositionId: null,
+                totalTimeSpentMilli: null
+            );
+
+            var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
+
+            if (loadFromPathResult?.Ok == null)
+            {
+                throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
+            }
+
+            var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadFromPathResult.Ok.tree);
+
+            report = report with { sourceCompositionId = sourceCompositionId, sourceSummary = sourceSummary };
+
+            Console.WriteLine("Loaded source composition " + sourceCompositionId + " from '" + sourcePath + "'. Starting to compile...");
+
+            var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                var sourceFiles =
+                    Composition.TreeToFlatDictionaryWithPathComparer(loadFromPathResult.Ok.tree);
+
+                var compilationResult = ElmFullstack.ElmAppCompilation.AsCompletelyLoweredElmApp(
+                    sourceFiles: sourceFiles,
+                    ElmFullstack.ElmAppInterfaceConfig.Default);
+
+                var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
+
+                report = report with { compilationTimeSpentMilli = (int)compilationTimeSpentMilli };
+
+                if (compilationResult.Ok == null)
+                {
+                    Console.WriteLine("\n" + ElmFullstack.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err) + "\n");
+
+                    return report with { compilationErrors = compilationResult.Err, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds };
+                }
+
+                var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compilationResult.Ok.compiledAppFiles);
+                var compiledComposition = Composition.FromTreeWithStringPath(compiledTree);
+                var compiledCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(compiledComposition));
+
+                compilationStopwatch.Stop();
+
+                Console.WriteLine(
+                    "\nCompilation completed in " + (int)compilationStopwatch.Elapsed.TotalSeconds +
+                    " seconds, resulting in composition " + compiledCompositionId + ".");
+
+                var compiledFiles =
+                    Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
+
+                var compiledCompositionArchive =
+                    ZipArchive.ZipArchiveFromEntries(compiledFiles);
+
+                var outputCompositionFileName = compiledCompositionId + ".zip";
+
+                var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
+
+                Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath));
+                File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
+                Console.WriteLine("\nSaved compiled composition " + compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
+
+                return report with
+                {
+                    compilationIterationsReports = compilationResult.Ok.iterationsReports,
+                    compiledCompositionId = compiledCompositionId,
+                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+                };
+            }
+            catch (Exception e)
+            {
+                report = report with { compilationTimeSpentMilli = (int)compilationStopwatch.Elapsed.TotalMilliseconds };
+
+                Console.WriteLine("Compilation failed with runtime exception: " + e.ToString());
+                return report with { compilationException = e.ToString(), totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds };
+            }
+        }
 
         static CommandLineApplication AddInteractiveCmd(CommandLineApplication app) =>
             app.Command("interactive", enterInteractiveCmd =>
@@ -803,28 +817,18 @@ namespace elm_fullstack
             });
         }
 
-        public class CompileAppReport
-        {
-            public string engineVersion;
-
-            public string beginTime;
-
-            public string sourcePath;
-
-            public string sourceCompositionId;
-
-            public SourceSummaryStructure sourceSummary;
-
-            public IImmutableList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports;
-
-            public string compilationException;
-
-            public int compilationTimeSpentMilli;
-
-            public string compiledCompositionId;
-
-            public int totalTimeSpentMilli;
-        }
+        public record CompileAppReport(
+            string engineVersion,
+            string beginTime,
+            string sourcePath,
+            string sourceCompositionId,
+            SourceSummaryStructure sourceSummary,
+            IReadOnlyList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports,
+            IReadOnlyList<ElmFullstack.ElmAppCompilation.LocatedCompilationError> compilationErrors,
+            string compilationException,
+            int? compilationTimeSpentMilli,
+            string compiledCompositionId,
+            int? totalTimeSpentMilli);
 
         public class SourceSummaryStructure
         {

@@ -94,10 +94,18 @@ namespace test_elm_fullstack
                     .OrderBy(file => string.Join('/', file.path)));
 
         static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> AsLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> originalAppFiles) =>
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> originalAppFiles)
+        {
+            var compilationResult =
                 ElmAppCompilation.AsCompletelyLoweredElmApp(
                     sourceFiles: originalAppFiles,
-                    ElmAppInterfaceConfig.Default).compiledAppFiles;
+                    ElmAppInterfaceConfig.Default);
+
+            if (compilationResult.Ok == null)
+                throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err));
+
+            return compilationResult.Ok.compiledAppFiles;
+        }
 
         static public IProcessStoreReader EmptyProcessStoreReader() =>
             new ProcessStoreReaderFromDelegates
