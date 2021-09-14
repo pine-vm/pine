@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-01/elm-fullstack-bin-c2c44f466fab0e57ca8a4fa85c2d299a379e0d45-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-01/elm-fullstack-bin-c2c44f466fab0e57ca8a4fa85c2d299a379e0d45-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-14/elm-fullstack-bin-c0bb8e5b8f0d82fc49f4b1515c58a8838b7651f9-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-14/elm-fullstack-bin-c0bb8e5b8f0d82fc49f4b1515c58a8838b7651f9-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -257,7 +257,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-06-16.
+Welcome to the Elm Fullstack admin interface version 2021-09-14.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
