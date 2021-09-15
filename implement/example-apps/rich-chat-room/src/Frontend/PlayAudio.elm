@@ -1,4 +1,4 @@
-module FrontendWeb.PlayAudio exposing (PlaybackState, State, init, renderHtml, startPlayback)
+module Frontend.PlayAudio exposing (PlaybackState, State, init, renderHtml, startPlayback)
 
 import Dict
 import Html

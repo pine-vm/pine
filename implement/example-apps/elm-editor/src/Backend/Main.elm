@@ -243,10 +243,10 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                     (httpResponseOkWithBodyAsBase64
                         (Just
                             (if debug then
-                                CompilationInterface.ElmMake.elm_make__debug__javascript__base64____src_FrontendWeb_Main_elm
+                                CompilationInterface.ElmMake.elm_make__debug__javascript__base64____src_Frontend_Main_elm
 
                              else
-                                CompilationInterface.ElmMake.elm_make__javascript__base64____src_FrontendWeb_Main_elm
+                                CompilationInterface.ElmMake.elm_make__javascript__base64____src_Frontend_Main_elm
                             )
                         )
                         (staticContentHttpHeaders "text/javascript")
@@ -463,7 +463,7 @@ frontendHtmlDocument { debug } =
 
 <script type="text/javascript">
 
-var app = Elm.FrontendWeb.Main.init({
+var app = Elm.Frontend.Main.init({
     node: document.getElementById('elm-app-container')
 });
 

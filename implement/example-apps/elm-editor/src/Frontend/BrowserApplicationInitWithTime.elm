@@ -1,4 +1,4 @@
-module FrontendWeb.BrowserApplicationInitWithTime exposing (..)
+module Frontend.BrowserApplicationInitWithTime exposing (..)
 
 {-| This module provides an extension of `Browser.application` to add the current time as parameter for the `init` function.
 -}

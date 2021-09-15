@@ -96,21 +96,21 @@ The `ElmMake` module provides an interface to run the `elm make` command and use
 For each name in this module, the full-stack compiler replaces the value with the output from `elm  make`.
 
 Using the name in the Elm module, we specify the source file name and optional flags for `elm  make`. By default, the value we get is of type `Bytes.Bytes`.
-Here is an example that depends on the source file located at path `src/FrontendWeb/Main.elm`:
+Here is an example that depends on the source file located at path `src/Frontend/Main.elm`:
 
 ```Elm
 module CompilationInterface.ElmMake exposing (..)
 
 
-elm_make____src_FrontendWeb_Main_elm : Bytes.Bytes
-elm_make____src_FrontendWeb_Main_elm =
+elm_make____src_Frontend_Main_elm : Bytes.Bytes
+elm_make____src_Frontend_Main_elm =
     "The compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
 
 
-elm_make__debug____src_FrontendWeb_Main_elm : Bytes.Bytes
-elm_make__debug____src_FrontendWeb_Main_elm =
+elm_make__debug____src_Frontend_Main_elm : Bytes.Bytes
+elm_make__debug____src_Frontend_Main_elm =
     "The compiler replaces this value."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
@@ -119,8 +119,8 @@ elm_make__debug____src_FrontendWeb_Main_elm =
 We can also get the value encoded as a base64 string instead of `Bytes.Bytes`, by adding the `base64` flag:
 
 ```Elm
-elm_make__base64____src_FrontendWeb_Main_elm : String
-elm_make__base64____src_FrontendWeb_Main_elm =
+elm_make__base64____src_Frontend_Main_elm : String
+elm_make__base64____src_Frontend_Main_elm =
     "The compiler replaces this value."
 ```
 

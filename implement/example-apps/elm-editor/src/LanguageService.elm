@@ -12,7 +12,7 @@ import Elm.Syntax.Node
 import Elm.Syntax.Range
 import FileTree
 import FileTreeInWorkspace
-import FrontendWeb.MonacoEditor
+import Frontend.MonacoEditor
 import Maybe.Extra
 
 
@@ -48,7 +48,7 @@ initLanguageServiceState =
 provideCompletionItems :
     { filePathOpenedInEditor : List String, cursorLineNumber : Int, textUntilPosition : String }
     -> LanguageServiceState
-    -> List FrontendWeb.MonacoEditor.MonacoCompletionItem
+    -> List Frontend.MonacoEditor.MonacoCompletionItem
 provideCompletionItems request languageServiceState =
     case languageServiceState.fileTreeParseCache |> FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor of
         Nothing ->
@@ -323,7 +323,7 @@ provideCompletionItems request languageServiceState =
 moduleCompletionItemFromModuleSyntax :
     { importedModuleNameRestAfterPrefix : Maybe (List String), importedName : Maybe (List String) }
     -> Elm.Syntax.File.File
-    -> FrontendWeb.MonacoEditor.MonacoCompletionItem
+    -> Frontend.MonacoEditor.MonacoCompletionItem
 moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, importedName } moduleSyntax =
     let
         canonicalName =
@@ -340,7 +340,7 @@ moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, import
             String.join "." canonicalName ++ " as " ++ insertText
     , documentation = Maybe.withDefault "" (documentationStringFromModuleSyntax moduleSyntax)
     , insertText = insertText
-    , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+    , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
     }
 
 
@@ -374,8 +374,8 @@ documentationStringFromModuleSyntax parsedModule =
 completionItemsFromModule :
     ParsedModuleCache
     ->
-        { topLevel : List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
-        , fromLetBlocks : List { completionItem : FrontendWeb.MonacoEditor.MonacoCompletionItem, scope : Elm.Syntax.Range.Range }
+        { topLevel : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
+        , fromLetBlocks : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, scope : Elm.Syntax.Range.Range }
         }
 completionItemsFromModule moduleCache =
     let
@@ -492,7 +492,7 @@ completionItemsFromModule moduleCache =
                                     { label = aliasName
                                     , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
                                     , insertText = aliasName
-                                    , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                                    , kind = Frontend.MonacoEditor.StructCompletionItemKind
                                     }
                               , isExposed = exposesTypeOrAlias aliasName
                               }
@@ -535,7 +535,7 @@ completionItemsFromModule moduleCache =
                                                     { label = tagName
                                                     , documentation = documentation
                                                     , insertText = tagName
-                                                    , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                                                    , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                                                     }
                                                 , isExposed = exposesTypeOrAlias customTypeName
                                                 }
@@ -545,7 +545,7 @@ completionItemsFromModule moduleCache =
                                 { label = customTypeName
                                 , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
                                 , insertText = customTypeName
-                                , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                                , kind = Frontend.MonacoEditor.EnumCompletionItemKind
                                 }
                             , isExposed = exposesTypeOrAlias customTypeName
                             }
@@ -564,7 +564,7 @@ completionItemsFromModule moduleCache =
     }
 
 
-completionItemFromFunctionSyntax : Elm.Syntax.Expression.Function -> { functionName : String, buildCompletionItem : (Elm.Syntax.Range.Range -> List String) -> FrontendWeb.MonacoEditor.MonacoCompletionItem }
+completionItemFromFunctionSyntax : Elm.Syntax.Expression.Function -> { functionName : String, buildCompletionItem : (Elm.Syntax.Range.Range -> List String) -> Frontend.MonacoEditor.MonacoCompletionItem }
 completionItemFromFunctionSyntax functionSyntax =
     let
         functionName =
@@ -589,7 +589,7 @@ completionItemFromFunctionSyntax functionSyntax =
             { label = functionName
             , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
             , insertText = functionName
-            , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+            , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
             }
     }
 

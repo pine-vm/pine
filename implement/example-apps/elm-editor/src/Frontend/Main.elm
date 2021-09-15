@@ -1,4 +1,4 @@
-port module FrontendWeb.Main exposing (Event(..), State, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
+port module Frontend.Main exposing (Event(..), State, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
 
 import Base64
 import Browser
@@ -29,11 +29,11 @@ import FileTreeInWorkspace as FileTreeInWorkspace
 import FontAwesome.Icon
 import FontAwesome.Solid
 import FontAwesome.Styles
+import Frontend.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
+import Frontend.MonacoEditor
+import Frontend.ProjectStateInUrl
+import Frontend.Visuals as Visuals
 import FrontendBackendInterface
-import FrontendWeb.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
-import FrontendWeb.MonacoEditor
-import FrontendWeb.ProjectStateInUrl
-import FrontendWeb.Visuals as Visuals
 import Html
 import Html.Attributes as HA
 import Html.Events
@@ -380,7 +380,7 @@ update event stateBefore =
 
                                         url =
                                             stateBefore.url
-                                                |> FrontendWeb.ProjectStateInUrl.setProjectStateInUrl
+                                                |> Frontend.ProjectStateInUrl.setProjectStateInUrl
                                                     workingState.fileTree
                                                     baseToUse
                                                     { filePathToOpen = workingState.editing.filePathOpenedInEditor }
@@ -516,7 +516,7 @@ update event stateBefore =
                                 |> Result.map
                                     (\fileTree ->
                                         { fileTree = fileTree
-                                        , compositionIdCache = FrontendWeb.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes fileTree)
+                                        , compositionIdCache = Frontend.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes fileTree)
                                         }
                                     )
                     in
@@ -738,22 +738,22 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
                 Ok decodedMonacoEditorEvent ->
                     case decodedMonacoEditorEvent of
-                        FrontendWeb.MonacoEditor.DidChangeContentEvent content ->
+                        Frontend.MonacoEditor.DidChangeContentEvent content ->
                             stateBefore |> updateWorkspaceWithoutCmdToUpdateEditor updateConfig (UserInputChangeTextInEditor content)
 
-                        FrontendWeb.MonacoEditor.CompletedSetupEvent ->
+                        Frontend.MonacoEditor.CompletedSetupEvent ->
                             ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
 
-                        FrontendWeb.MonacoEditor.EditorActionCloseEditorEvent ->
+                        Frontend.MonacoEditor.EditorActionCloseEditorEvent ->
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCloseEditor stateBefore
 
-                        FrontendWeb.MonacoEditor.EditorActionFormatDocumentEvent ->
+                        Frontend.MonacoEditor.EditorActionFormatDocumentEvent ->
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputFormat stateBefore
 
-                        FrontendWeb.MonacoEditor.EditorActionCompileEvent ->
+                        Frontend.MonacoEditor.EditorActionCompileEvent ->
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile stateBefore
 
-                        FrontendWeb.MonacoEditor.RequestCompletionItemsEvent requestCompletionItems ->
+                        Frontend.MonacoEditor.RequestCompletionItemsEvent requestCompletionItems ->
                             stateBefore
                                 |> provideCompletionItems requestCompletionItems
                                 |> Tuple.mapSecond provideCompletionItemsInMonacoEditorCmd
@@ -855,9 +855,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
 
 provideCompletionItems :
-    FrontendWeb.MonacoEditor.RequestCompletionItemsStruct
+    Frontend.MonacoEditor.RequestCompletionItemsStruct
     -> WorkingProjectStateStructure
-    -> ( WorkingProjectStateStructure, List FrontendWeb.MonacoEditor.MonacoCompletionItem )
+    -> ( WorkingProjectStateStructure, List Frontend.MonacoEditor.MonacoCompletionItem )
 provideCompletionItems request stateBefore =
     let
         languageServiceState =
@@ -886,16 +886,16 @@ processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
 processEventUrlChanged url stateBefore =
     let
         projectStateExpectedCompositionHash =
-            FrontendWeb.ProjectStateInUrl.projectStateHashFromUrl url
+            Frontend.ProjectStateInUrl.projectStateHashFromUrl url
 
         filePathToOpen =
-            FrontendWeb.ProjectStateInUrl.filePathToOpenFromUrl url
+            Frontend.ProjectStateInUrl.filePathToOpenFromUrl url
                 |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
 
         projectWithMatchingStateHashAlreadyLoaded =
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
-                    Just (FrontendWeb.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes workingState.fileTree))
+                    Just (Frontend.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes workingState.fileTree))
                         == projectStateExpectedCompositionHash
 
                 _ ->
@@ -908,7 +908,7 @@ processEventUrlChanged url stateBefore =
                 }
                 stateBefore
     in
-    case FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl url of
+    case Frontend.ProjectStateInUrl.projectStateDescriptionFromUrl url of
         Nothing ->
             ( stateBefore, Cmd.none )
 
@@ -925,7 +925,7 @@ processEventUrlChanged url stateBefore =
 
             else
                 case projectStateDescription of
-                    FrontendWeb.ProjectStateInUrl.LiteralProjectState fileTreeFromUrl ->
+                    Frontend.ProjectStateInUrl.LiteralProjectState fileTreeFromUrl ->
                         updateForLoadedProjectState
                             { expectedCompositionHash = projectStateExpectedCompositionHash
                             , filePathToOpen = filePathToOpen
@@ -934,13 +934,13 @@ processEventUrlChanged url stateBefore =
                             ProjectState_2021_01.noDifference
                             stateBefore
 
-                    FrontendWeb.ProjectStateInUrl.LinkProjectState linkToProjectState ->
+                    Frontend.ProjectStateInUrl.LinkProjectState linkToProjectState ->
                         continueWithDiffProjectState
                             { base = linkToProjectState
                             , differenceFromBase = ProjectState_2021_01.noDifference
                             }
 
-                    FrontendWeb.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
+                    Frontend.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
                         continueWithDiffProjectState diffProjectState
 
 
@@ -1034,7 +1034,7 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
         Ok composedProjectState ->
             let
                 composedProjectStateHashBase16 =
-                    FrontendWeb.ProjectStateInUrl.projectStateCompositionHash composedProjectState
+                    Frontend.ProjectStateInUrl.projectStateCompositionHash composedProjectState
 
                 continueIfHashOk =
                     { stateBefore
@@ -1786,7 +1786,7 @@ viewGetLinkToProjectDialog dialogState projectState =
                     case
                         urlToProject
                             |> Url.fromString
-                            |> Maybe.andThen FrontendWeb.ProjectStateInUrl.projectStateDescriptionFromUrl
+                            |> Maybe.andThen Frontend.ProjectStateInUrl.projectStateDescriptionFromUrl
                     of
                         Nothing ->
                             Nothing
@@ -1796,13 +1796,13 @@ viewGetLinkToProjectDialog dialogState projectState =
 
                         Just (Ok projectDescription) ->
                             case projectDescription of
-                                FrontendWeb.ProjectStateInUrl.LiteralProjectState _ ->
+                                Frontend.ProjectStateInUrl.LiteralProjectState _ ->
                                     Nothing
 
-                                FrontendWeb.ProjectStateInUrl.LinkProjectState link ->
+                                Frontend.ProjectStateInUrl.LinkProjectState link ->
                                     Just link
 
-                                FrontendWeb.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
+                                Frontend.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
                                     Just diffProjectState.base
 
                 dependenciesDescriptionLines =
@@ -2626,7 +2626,7 @@ viewElementFromElmMakeCompileErrorMessage =
 editorDocumentMarkersFromFailedLowering :
     { compileRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
     -> List CompileFullstackApp.LocatedCompilationError
-    -> List FrontendWeb.MonacoEditor.EditorMarker
+    -> List Frontend.MonacoEditor.EditorMarker
 editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } compileErrors =
     let
         filePathOpenedInEditor =
@@ -2663,7 +2663,7 @@ editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } c
 editorDocumentMarkersFromElmMakeReport :
     { elmMakeRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
     -> Maybe (Result String ElmMakeExecutableFile.ElmMakeReportFromJson)
-    -> List FrontendWeb.MonacoEditor.EditorMarker
+    -> List Frontend.MonacoEditor.EditorMarker
 editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } maybeReportFromJson =
     case maybeReportFromJson of
         Nothing ->
@@ -2722,18 +2722,18 @@ elmMakeReportTextFromMessageItem messageItem =
             styled.string
 
 
-editorDocumentMarkerFromLoweringCompileError : ( ElmMakeExecutableFile.ElmMakeReportRegion, CompileFullstackApp.CompilationError ) -> FrontendWeb.MonacoEditor.EditorMarker
+editorDocumentMarkerFromLoweringCompileError : ( ElmMakeExecutableFile.ElmMakeReportRegion, CompileFullstackApp.CompilationError ) -> Frontend.MonacoEditor.EditorMarker
 editorDocumentMarkerFromLoweringCompileError ( region, error ) =
     { message = loweringCompilationErrorDisplayText error
     , startLineNumber = region.start.line
     , startColumn = region.start.column
     , endLineNumber = region.end.line
     , endColumn = region.end.column
-    , severity = FrontendWeb.MonacoEditor.ErrorSeverity
+    , severity = Frontend.MonacoEditor.ErrorSeverity
     }
 
 
-editorDocumentMarkerFromElmMakeProblem : ElmMakeExecutableFile.ElmMakeReportProblem -> FrontendWeb.MonacoEditor.EditorMarker
+editorDocumentMarkerFromElmMakeProblem : ElmMakeExecutableFile.ElmMakeReportProblem -> Frontend.MonacoEditor.EditorMarker
 editorDocumentMarkerFromElmMakeProblem elmMakeProblem =
     { message =
         "# "
@@ -2744,7 +2744,7 @@ editorDocumentMarkerFromElmMakeProblem elmMakeProblem =
     , startColumn = elmMakeProblem.region.start.column
     , endLineNumber = elmMakeProblem.region.end.line
     , endColumn = elmMakeProblem.region.end.column
-    , severity = FrontendWeb.MonacoEditor.ErrorSeverity
+    , severity = Frontend.MonacoEditor.ErrorSeverity
     }
 
 
@@ -2941,28 +2941,28 @@ titlebarMenuEntryLabel menuEntry =
 
 setTextInMonacoEditorCmd : String -> Cmd WorkspaceEventStructure
 setTextInMonacoEditorCmd =
-    FrontendWeb.MonacoEditor.SetValue
+    Frontend.MonacoEditor.SetValue
         >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd WorkspaceEventStructure
 revealPositionInCenterInMonacoEditorCmd =
-    FrontendWeb.MonacoEditor.RevealPositionInCenter
+    Frontend.MonacoEditor.RevealPositionInCenter
         >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
-setModelMarkersInMonacoEditorCmd : List FrontendWeb.MonacoEditor.EditorMarker -> Cmd WorkspaceEventStructure
+setModelMarkersInMonacoEditorCmd : List Frontend.MonacoEditor.EditorMarker -> Cmd WorkspaceEventStructure
 setModelMarkersInMonacoEditorCmd =
-    FrontendWeb.MonacoEditor.SetModelMarkers
+    Frontend.MonacoEditor.SetModelMarkers
         >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
-provideCompletionItemsInMonacoEditorCmd : List FrontendWeb.MonacoEditor.MonacoCompletionItem -> Cmd WorkspaceEventStructure
+provideCompletionItemsInMonacoEditorCmd : List Frontend.MonacoEditor.MonacoCompletionItem -> Cmd WorkspaceEventStructure
 provideCompletionItemsInMonacoEditorCmd =
-    FrontendWeb.MonacoEditor.ProvideCompletionItemsEvent
+    Frontend.MonacoEditor.ProvideCompletionItemsEvent
         >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 

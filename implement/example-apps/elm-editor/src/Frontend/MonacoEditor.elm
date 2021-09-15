@@ -1,4 +1,4 @@
-module FrontendWeb.MonacoEditor exposing (..)
+module Frontend.MonacoEditor exposing (..)
 
 
 type MessageToEditor

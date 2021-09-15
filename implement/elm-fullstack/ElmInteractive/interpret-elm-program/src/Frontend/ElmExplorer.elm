@@ -1,4 +1,4 @@
-module FrontendWeb.ElmExplorer exposing (State, main)
+module Frontend.ElmExplorer exposing (State, main)
 
 import Browser
 import Element

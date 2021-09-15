@@ -1,4 +1,4 @@
-module FrontendWeb.ProjectStateInUrl exposing (..)
+module Frontend.ProjectStateInUrl exposing (..)
 
 import Base64
 import Bytes

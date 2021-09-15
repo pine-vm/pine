@@ -1,4 +1,4 @@
-module FrontendWeb.Main exposing (Event(..), State, init, main, update, view)
+module Frontend.Main exposing (Event(..), State, init, main, update, view)
 
 import Browser
 import Browser.Dom
@@ -7,9 +7,9 @@ import CompilationInterface.GenerateJsonCoders
 import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
+import Frontend.PlayAudio as PlayAudio
+import Frontend.Visuals as Visuals exposing (HtmlStyle, htmlAttributesStyles)
 import FrontendBackendInterface
-import FrontendWeb.PlayAudio as PlayAudio
-import FrontendWeb.Visuals as Visuals exposing (HtmlStyle, htmlAttributesStyles)
 import Html
 import Html.Attributes as HA
 import Html.Events as HE

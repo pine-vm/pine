@@ -1,4 +1,4 @@
-module FrontendWeb.Visuals exposing (..)
+module Frontend.Visuals exposing (..)
 
 import Dict
 import Element

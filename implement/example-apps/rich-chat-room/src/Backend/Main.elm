@@ -166,10 +166,10 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                         , bodyAsBase64 =
                             Just
                                 (if enableInspector then
-                                    CompilationInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
+                                    CompilationInterface.ElmMake.elm_make__debug__base64____src_Frontend_Main_elm
 
                                  else
-                                    CompilationInterface.ElmMake.elm_make__base64____src_FrontendWeb_Main_elm
+                                    CompilationInterface.ElmMake.elm_make__base64____src_Frontend_Main_elm
                                 )
                         , headersToAdd = []
                         }

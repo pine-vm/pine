@@ -4,7 +4,7 @@ import Bytes
 import Bytes.Encode
 import Expect
 import FileTreeInWorkspace
-import FrontendWeb.MonacoEditor
+import Frontend.MonacoEditor
 import LanguageService
 import Test
 
@@ -113,22 +113,22 @@ init =
                     [ { label = "Alpha"
                       , documentation = "Documentation comment on module Alpha"
                       , insertText = "Alpha"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta"
                       , documentation = ""
                       , insertText = "Beta"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta.Gamma"
                       , documentation = ""
                       , insertText = "Beta.Gamma"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Delta as ModuleAlias"
                       , documentation = ""
                       , insertText = "ModuleAlias"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Decrement"
                       , documentation = String.trim """
@@ -141,7 +141,7 @@ type Event
 ```
 """
                       , insertText = "Decrement"
-                      , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                      , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "Event"
                       , documentation = String.trim """
@@ -152,7 +152,7 @@ type Event
 ```
 """
                       , insertText = "Event"
-                      , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                      , kind = Frontend.MonacoEditor.EnumCompletionItemKind
                       }
                     , { label = "Increment"
                       , documentation = String.trim """
@@ -165,7 +165,7 @@ type Event
 ```
 """
                       , insertText = "Increment"
-                      , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                      , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "State"
                       , documentation = String.trim """
@@ -177,13 +177,13 @@ type alias State =
 Comment on declaration
 """
                       , insertText = "State"
-                      , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                      , kind = Frontend.MonacoEditor.StructCompletionItemKind
                       }
                     , { label = "from_alpha"
                       , documentation = """```Elm
 ```"""
                       , insertText = "from_alpha"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "init"
                       , documentation = String.trim """
@@ -192,7 +192,7 @@ init : State
 ```
 """
                       , insertText = "init"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
         , Test.test "In top-level declaration after equals sign and Module referece" <|
@@ -226,7 +226,7 @@ init =
                     [ { label = "Gamma"
                       , documentation = ""
                       , insertText = "Gamma"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "from_beta"
                       , documentation = String.trim """
@@ -234,7 +234,7 @@ init =
 ```
 """
                       , insertText = "from_beta"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "from_beta_function"
                       , documentation = String.trim """
@@ -243,7 +243,7 @@ from_beta_function : Int -> String
 ```
 """
                       , insertText = "from_beta_function"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
         , Test.test "In application expression after function" <|
@@ -273,12 +273,12 @@ init =
                     [ { label = "Alpha"
                       , documentation = "Documentation comment on module Alpha"
                       , insertText = "Alpha"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta"
                       , documentation = ""
                       , insertText = "Beta"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Decrement"
                       , documentation = String.trim """
@@ -291,7 +291,7 @@ type Event
 ```
 """
                       , insertText = "Decrement"
-                      , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                      , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "Event"
                       , documentation = String.trim """
@@ -302,7 +302,7 @@ type Event
 ```
 """
                       , insertText = "Event"
-                      , kind = FrontendWeb.MonacoEditor.EnumCompletionItemKind
+                      , kind = Frontend.MonacoEditor.EnumCompletionItemKind
                       }
                     , { label = "Increment"
                       , documentation = String.trim """
@@ -315,7 +315,7 @@ type Event
 ```
 """
                       , insertText = "Increment"
-                      , kind = FrontendWeb.MonacoEditor.EnumMemberCompletionItemKind
+                      , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "State"
                       , documentation = String.trim """
@@ -325,7 +325,7 @@ type alias State =
 ```
 """
                       , insertText = "State"
-                      , kind = FrontendWeb.MonacoEditor.StructCompletionItemKind
+                      , kind = Frontend.MonacoEditor.StructCompletionItemKind
                       }
                     , { label = "init"
                       , documentation = String.trim """
@@ -334,7 +334,7 @@ init : State
 ```
 """
                       , insertText = "init"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "name"
                       , documentation = String.trim """
@@ -342,7 +342,7 @@ init : State
 ```
 """
                       , insertText = "name"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
         , Test.test "Right of 'import '" <|
@@ -359,27 +359,27 @@ local_decl = 123
                     [ { label = "Alpha"
                       , documentation = "Documentation comment on module Alpha"
                       , insertText = "Alpha"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta"
                       , documentation = ""
                       , insertText = "Beta"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta.Gamma"
                       , documentation = ""
                       , insertText = "Beta.Gamma"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Delta"
                       , documentation = ""
                       , insertText = "Delta"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Epsilon"
                       , documentation = ""
                       , insertText = "Epsilon"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     ]
         , Test.test "Right of 'import E'" <|
@@ -396,27 +396,27 @@ local_decl = 123
                     [ { label = "Alpha"
                       , documentation = "Documentation comment on module Alpha"
                       , insertText = "Alpha"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta"
                       , documentation = ""
                       , insertText = "Beta"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Beta.Gamma"
                       , documentation = ""
                       , insertText = "Beta.Gamma"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Delta"
                       , documentation = ""
                       , insertText = "Delta"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Epsilon"
                       , documentation = ""
                       , insertText = "Epsilon"
-                      , kind = FrontendWeb.MonacoEditor.ModuleCompletionItemKind
+                      , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     ]
         , Test.test "In declaration in let-block after equals sign" <|
@@ -445,17 +445,17 @@ beta =
                     [ { label = "alpha"
                       , documentation = "```Elm\n```"
                       , insertText = "alpha"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "beta"
                       , documentation = "```Elm\n```"
                       , insertText = "beta"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "delta"
                       , documentation = "```Elm\n```"
                       , insertText = "delta"
-                      , kind = FrontendWeb.MonacoEditor.FunctionCompletionItemKind
+                      , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
 
@@ -466,7 +466,7 @@ beta =
 expectationFromScenario :
     List ( List String, String )
     -> ( List String, String )
-    -> List FrontendWeb.MonacoEditor.MonacoCompletionItem
+    -> List Frontend.MonacoEditor.MonacoCompletionItem
     -> Expect.Expectation
 expectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
     case String.split "✂➕" fileOpenedInEditorText of
@@ -483,7 +483,7 @@ expectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorT
 expectationFromScenarioDescribingOpenFile :
     List ( List String, String )
     -> { filePath : List String, textUntilCursor : String, textAfterCursor : String }
-    -> List FrontendWeb.MonacoEditor.MonacoCompletionItem
+    -> List Frontend.MonacoEditor.MonacoCompletionItem
     -> Expect.Expectation
 expectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor expectedItems =
     let

@@ -1,7 +1,7 @@
 module CompilationInterface.GenerateJsonCoders exposing (..)
 
+import Frontend.MonacoEditor
 import FrontendBackendInterface
-import FrontendWeb.MonacoEditor
 import Json.Decode
 import Json.Encode
 import ProjectState_2021_01
@@ -22,12 +22,12 @@ jsonDecodeResponseStructure =
     Json.Decode.fail "The compiler replaces this function."
 
 
-jsonEncodeMessageToMonacoEditor : FrontendWeb.MonacoEditor.MessageToEditor -> Json.Encode.Value
+jsonEncodeMessageToMonacoEditor : Frontend.MonacoEditor.MessageToEditor -> Json.Encode.Value
 jsonEncodeMessageToMonacoEditor =
     always (Json.Encode.string "The compiler replaces this function.")
 
 
-jsonDecodeMessageFromMonacoEditor : Json.Decode.Decoder FrontendWeb.MonacoEditor.MessageFromEditor
+jsonDecodeMessageFromMonacoEditor : Json.Decode.Decoder Frontend.MonacoEditor.MessageFromEditor
 jsonDecodeMessageFromMonacoEditor =
     Json.Decode.fail "The compiler replaces this function."
 
