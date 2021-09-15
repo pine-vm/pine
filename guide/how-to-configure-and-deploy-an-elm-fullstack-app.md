@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-14/elm-fullstack-bin-c0bb8e5b8f0d82fc49f4b1515c58a8838b7651f9-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-14/elm-fullstack-bin-c0bb8e5b8f0d82fc49f4b1515c58a8838b7651f9-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-15/elm-fullstack-bin-874016fa9c9f7e1df2b38ea4052badb5d05055d3-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-15/elm-fullstack-bin-874016fa9c9f7e1df2b38ea4052badb5d05055d3-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -31,12 +31,12 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 
 To deploy an Elm Fullstack app, we place a front-end and back-end app in a single Elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/874016fa9c9f7e1df2b38ea4052badb5d05055d3/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy an app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/874016fa9c9f7e1df2b38ea4052badb5d05055d3/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -44,10 +44,10 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition af6648e6a0aad25ffffafa96bfa3ae207a03417fd94023277bd22e1a602f060b from 'https://github.com/elm-fullstack/elm-fullstack/tree/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/example-apps/docker-image-default-app'.
+Loaded source composition af6648e6a0aad25ffffafa96bfa3ae207a03417fd94023277bd22e1a602f060b from 'https://github.com/elm-fullstack/elm-fullstack/tree/874016fa9c9f7e1df2b38ea4052badb5d05055d3/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Begin to build the process volatile representation.
+      Begin to build the process live representation.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to restore the process state.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
@@ -55,7 +55,7 @@ info: ElmFullstack.WebHost.StartupAdminInterface[0]
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Restored the process state in 7 seconds.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Completed building the process volatile representation.
+      Completed building the process live representation.
 info: ElmFullstack.WebHost.StartupPublicApp[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
@@ -257,7 +257,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-09-14.
+Welcome to the Elm Fullstack admin interface version 2021-09-15.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
