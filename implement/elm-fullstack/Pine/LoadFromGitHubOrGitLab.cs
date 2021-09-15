@@ -73,11 +73,13 @@ namespace Pine
 
             var regexMatch = Regex.Match(
                 objectUrl,
+                "^" +
                 GitHubOrGitLabRegexPattern(
                     repositoryGroupName: repositoryGroupName,
                     typeGroupName: typeGroupName,
                     refGroupName: refGroupName,
-                    pathGroupName: pathGroupName));
+                    pathGroupName: pathGroupName) +
+                    "$");
 
             if (!regexMatch.Success)
                 return null;

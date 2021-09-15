@@ -197,6 +197,8 @@ namespace Pine
             static public TreeWithStringPath Tree(IImmutableList<(string name, TreeWithStringPath component)> treeContent) =>
                 new TreeWithStringPath(treeContent: treeContent);
 
+            static public TreeWithStringPath EmptyTree => Tree(ImmutableList<(string name, TreeWithStringPath component)>.Empty);
+
 
             public IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> EnumerateBlobsTransitive()
             {
@@ -211,6 +213,72 @@ namespace Pine
                         treeEntry.component.EnumerateBlobsTransitive()
                         .Select(child => (child.path.Insert(0, treeEntry.name), child.blobContent)))
                     .ToImmutableList();
+            }
+
+            public IReadOnlyList<byte> GetBlobAtPath(IReadOnlyList<string> path) =>
+                GetNodeAtPath(path)?.BlobContent;
+
+            public TreeWithStringPath GetNodeAtPath(IReadOnlyList<string> path)
+            {
+                if (path.Count == 0)
+                    return this;
+
+                if (TreeContent == null)
+                    return null;
+
+                var pathFirstElement = path[0];
+
+                return
+                    TreeContent
+                    .Where(treeNode => treeNode.name == pathFirstElement)
+                    .Select(treeNode => treeNode.component.GetNodeAtPath(path.Skip(1).ToImmutableList()))
+                    .FirstOrDefault();
+            }
+
+            public TreeWithStringPath RemoveNodeAtPath(IReadOnlyList<string> path)
+            {
+                if (path.Count == 0)
+                    return null;
+
+                if (TreeContent == null)
+                    return null;
+
+                var pathFirstElement = path[0];
+
+                var treeContent =
+                    TreeContent.SelectMany(treeNode =>
+                    {
+                        if (treeNode.name != pathFirstElement)
+                            return new[] { treeNode };
+
+                        if (path.Count == 1)
+                            return Array.Empty<(string name, TreeWithStringPath component)>();
+
+                        return new[] { (treeNode.name, treeNode.component.RemoveNodeAtPath(path.Skip(1).ToImmutableArray())) };
+                    }).ToImmutableList();
+
+                return Tree(treeContent);
+            }
+
+            public TreeWithStringPath SetNodeAtPathSorted(IReadOnlyList<string> path, TreeWithStringPath node)
+            {
+                if (path.Count == 0)
+                    return node;
+
+                var pathFirstElement = path[0];
+
+                var childNodeBefore = GetNodeAtPath(new[] { pathFirstElement });
+
+                var childNode =
+                    (childNodeBefore ?? EmptyTree).SetNodeAtPathSorted(path.Skip(1).ToImmutableList(), node);
+
+                var treeEntries =
+                    (TreeContent?.Where(treeNode => treeNode.name != pathFirstElement) ?? ImmutableList<(string name, TreeWithStringPath component)>.Empty)
+                    .Concat(new[] { (pathFirstElement, childNode) })
+                    .OrderBy(treeEntry => treeEntry.Item1)
+                    .ToImmutableList();
+
+                return Tree(treeEntries);
             }
 
             public bool Equals(TreeWithStringPath other)
@@ -584,6 +652,14 @@ namespace Pine
                     return Result<ErrT, MappedOkT>.err(Err);
 
                 return Result<ErrT, MappedOkT>.ok(okMap(Ok));
+            }
+
+            public Result<MappedErrT, OkT> mapError<MappedErrT>(Func<ErrT, MappedErrT> errMap)
+            {
+                if (Ok == null)
+                    return Result<MappedErrT, OkT>.err(errMap(Err));
+
+                return Result<MappedErrT, OkT>.ok(Ok);
             }
         }
 

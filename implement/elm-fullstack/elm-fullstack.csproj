@@ -5,8 +5,8 @@
     <TargetFramework>net5.0</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2021.0914.0.0</AssemblyVersion>
-    <FileVersion>2021.0914.0.0</FileVersion>
+    <AssemblyVersion>2021.0915.0.0</AssemblyVersion>
+    <FileVersion>2021.0915.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,6 +29,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="System.Collections.Immutable" Version="1.7.1" />
+    <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 
   <ItemGroup>
