@@ -29,11 +29,12 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 
 ## Running a Server and Deploying an App
 
-To deploy an Elm Fullstack app, we place a front-end and back-end app in a single Elm project, sharing an `elm.json` file. As long as we put the apps entry points in the right Elm modules, the Elm Fullstack tooling can deploy these together.
+As part of a deployment, Elm Fullstack compiles the app program code.
+The compiler requires the program code to contain the entry point for a back-end app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
 Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/874016fa9c9f7e1df2b38ea4052badb5d05055d3/implement/example-apps/docker-image-default-app
 
-We can use this command to run a server and deploy an app:
+We can use this command to run a server and deploy this app:
 
 ```cmd
 elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/874016fa9c9f7e1df2b38ea4052badb5d05055d3/implement/example-apps/docker-image-default-app
