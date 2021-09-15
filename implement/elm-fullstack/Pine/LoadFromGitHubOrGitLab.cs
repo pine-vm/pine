@@ -39,29 +39,16 @@ namespace Pine
             "[^/]+/[^/]+)/(-/|)(?<" + typeGroupName + ">blob|tree)/" +
             "(?<" + refGroupName + ">[^/]+)($|/(?<" + pathGroupName + ">.*))";
 
-        public class ParseObjectUrlResult
+        public record ParseObjectUrlResult(
+            string repository,
+            GitObjectType objectType,
+            string @ref,
+            string path);
+
+        public enum GitObjectType
         {
-            public string repository;
-
-            public GitObjectType objectType;
-
-            public string @ref;
-
-            public string path;
-
-            public enum GitObjectType
-            {
-                blob = 1,
-                tree = 2,
-            }
-
-            public ParseObjectUrlResult WithRef(string @ref) => new ParseObjectUrlResult
-            {
-                repository = repository,
-                objectType = objectType,
-                @ref = @ref,
-                path = path
-            };
+            blob = 1,
+            tree = 2,
         }
 
         static public ParseObjectUrlResult ParsePathFromUrl(string objectUrl)
@@ -85,12 +72,12 @@ namespace Pine
                 return null;
 
             return new ParseObjectUrlResult
-            {
-                repository = regexMatch.Groups[repositoryGroupName].Value,
-                objectType = Enum.Parse<ParseObjectUrlResult.GitObjectType>(regexMatch.Groups[typeGroupName].Value),
-                @ref = regexMatch.Groups[refGroupName].Value,
-                path = regexMatch.Groups[pathGroupName].Value,
-            };
+            (
+                repository: regexMatch.Groups[repositoryGroupName].Value,
+                objectType: Enum.Parse<GitObjectType>(regexMatch.Groups[typeGroupName].Value),
+                @ref: regexMatch.Groups[refGroupName].Value,
+                path: regexMatch.Groups[pathGroupName].Value
+            );
         }
 
         static public string BackToUrl(ParseObjectUrlResult parseObjectUrlResult) =>
@@ -99,15 +86,13 @@ namespace Pine
             parseObjectUrlResult.@ref + "/" +
             parseObjectUrlResult.path;
 
-        static public LoadFromUrlResult LoadFromUrl(string sourceUrl)
+        static public Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl)
         {
             var parsedUrl = ParsePathFromUrl(sourceUrl);
 
             if (parsedUrl == null)
-                return new LoadFromUrlResult
-                {
-                    Error = "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab object URL.",
-                };
+                return Result<string, LoadFromUrlSuccess>.err(
+                    "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab object URL.");
 
             var refLooksLikeCommit = Regex.IsMatch(parsedUrl.@ref, "[A-Fa-f0-9]{40}");
 
@@ -142,12 +127,10 @@ namespace Pine
                 var commit = gitRepository.Lookup(parsedUrl.@ref) as Commit;
 
                 if (commit == null)
-                    return new LoadFromUrlResult
-                    {
-                        Error = "I did not find the commit for ref '" + parsedUrl.@ref + "'.",
-                    };
+                    return Result<string, LoadFromUrlSuccess>.err(
+                        "I did not find the commit for ref '" + parsedUrl.@ref + "'.");
 
-                urlInCommit = BackToUrl(parsedUrl.WithRef(commit.Sha));
+                urlInCommit = BackToUrl(parsedUrl with { @ref = commit.Sha });
 
                 rootCommit = GetCommitHashAndContent(commit);
 
@@ -156,13 +139,11 @@ namespace Pine
                 var findGitObjectResult =
                     FindGitObjectAtPath(commit.Tree, pathNodesNames);
 
-                var linkedObject = findGitObjectResult?.Success;
+                var linkedObject = findGitObjectResult?.Ok;
 
                 if (linkedObject == null)
-                    return new LoadFromUrlResult
-                    {
-                        Error = "I did not find an object at path '" + parsedUrl.path + "' in " + commit.Sha,
-                    };
+                    return Result<string, LoadFromUrlSuccess>.err(
+                        "I did not find an object at path '" + parsedUrl.path + "' in " + commit.Sha);
 
                 IEnumerable<Commit> traceBackTreeParents()
                 {
@@ -176,7 +157,7 @@ namespace Pine
 
                         foreach (var parent in currentCommit.Parents)
                         {
-                            if (FindGitObjectAtPath(parent.Tree, pathNodesNames)?.Success?.Sha != linkedObject?.Sha)
+                            if (FindGitObjectAtPath(parent.Tree, pathNodesNames)?.Ok?.Sha != linkedObject?.Sha)
                                 continue;
 
                             queue.Enqueue(parent);
@@ -188,7 +169,7 @@ namespace Pine
                     GetCommitHashAndContent(traceBackTreeParents().OrderBy(commit => commit.Author.When).First());
 
                 urlInFirstParentCommitWithSameValueAtThisPath =
-                    BackToUrl(parsedUrl.WithRef(firstParentCommitWithSameTree.Value.hash));
+                    BackToUrl(parsedUrl with { @ref = firstParentCommitWithSameTree.Value.hash });
 
                 static Composition.TreeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
                 {
@@ -235,10 +216,7 @@ namespace Pine
                 }
                 catch (Exception e)
                 {
-                    return new LoadFromUrlResult
-                    {
-                        Error = "Failed to convert from git object:\n" + e.ToString(),
-                    };
+                    return Result<string, LoadFromUrlSuccess>.err("Failed to convert from git object:\n" + e.ToString());
                 }
             }
 
@@ -255,46 +233,38 @@ namespace Pine
                 */
             }
 
-            return new LoadFromUrlResult
-            {
-                Success = new LoadFromUrlSuccess
-                {
-                    tree = literalNodeObject,
-                    urlInCommit = urlInCommit,
-                    urlInFirstParentCommitWithSameValueAtThisPath = urlInFirstParentCommitWithSameValueAtThisPath,
-                    rootCommit = rootCommit.Value,
-                    firstParentCommitWithSameTree = firstParentCommitWithSameTree.Value,
-                }
-            };
+            return Result<string, LoadFromUrlSuccess>.ok(
+                new LoadFromUrlSuccess
+                (
+                    tree: literalNodeObject,
+                    urlInCommit: urlInCommit,
+                    urlInFirstParentCommitWithSameValueAtThisPath: urlInFirstParentCommitWithSameValueAtThisPath,
+                    rootCommit: rootCommit.Value,
+                    firstParentCommitWithSameTree: firstParentCommitWithSameTree.Value
+                )
+            );
         }
 
         static public (string hash, CommitContent content) GetCommitHashAndContent(Commit commit)
         {
             return (commit.Sha, new CommitContent
-            {
-                message = commit.Message,
-                author = GetParticipantSignature(commit.Author),
-                committer = GetParticipantSignature(commit.Committer),
-            });
+            (
+                message: commit.Message,
+                author: GetParticipantSignature(commit.Author),
+                committer: GetParticipantSignature(commit.Committer)
+            ));
         }
 
         static public GitParticipantSignature GetParticipantSignature(Signature signature)
         {
             return new GitParticipantSignature
-            {
-                name = signature.Name,
-                email = signature.Email,
-            };
+            (
+                name: signature.Name,
+                email: signature.Email
+            );
         }
 
-        class FollowGitPathResult
-        {
-            public GitObject Success;
-
-            public object Error;
-        }
-
-        static FollowGitPathResult FindGitObjectAtPath(Tree root, IEnumerable<string> nodesNames)
+        static Result<object, GitObject> FindGitObjectAtPath(Tree root, IEnumerable<string> nodesNames)
         {
             if (root == null)
                 return null;
@@ -306,10 +276,7 @@ namespace Pine
                 var currentTree = currentObject as Tree;
 
                 if (currentTree == null)
-                    return new FollowGitPathResult
-                    {
-                        Error = new object(),
-                    };
+                    return Result<object, GitObject>.err(new object());
 
                 var treeEntry = currentTree?[nodeName];
 
@@ -321,10 +288,7 @@ namespace Pine
                     treeEntry.Target;
             }
 
-            return new FollowGitPathResult
-            {
-                Success = currentObject,
-            };
+            return Result<object, GitObject>.ok(currentObject);
         }
 
         static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)
@@ -337,43 +301,24 @@ namespace Pine
             return hasher.ComputeHash(hashedValue);
         }
 
-        public class LoadFromUrlResult
+        public record LoadFromUrlSuccess(
+            Composition.TreeWithStringPath tree,
+            string urlInCommit,
+            string urlInFirstParentCommitWithSameValueAtThisPath,
+            (string hash, CommitContent content) rootCommit,
+            (string hash, CommitContent content) firstParentCommitWithSameTree)
         {
-            public object Error;
-
-            public LoadFromUrlSuccess Success;
-        }
-
-        public class LoadFromUrlSuccess
-        {
-            public Composition.TreeWithStringPath tree;
-
-            public string urlInCommit;
-
-            public string urlInFirstParentCommitWithSameValueAtThisPath;
-
-            public (string hash, CommitContent content) rootCommit;
-
-            public (string hash, CommitContent content) firstParentCommitWithSameTree;
-
             public IReadOnlyList<byte> AsBlob => tree?.BlobContent;
         }
 
-        public class CommitContent
-        {
-            public string message;
+        public record CommitContent(
+            string message,
+            GitParticipantSignature author,
+            GitParticipantSignature committer);
 
-            public GitParticipantSignature author;
-
-            public GitParticipantSignature committer;
-        }
-
-        public class GitParticipantSignature
-        {
-            public string name;
-
-            public string email;
-        }
+        public record GitParticipantSignature(
+            string name,
+            string email);
 
         /// <summary>
         /// https://github.com/libgit2/libgit2sharp/issues/769#issuecomment-198833179

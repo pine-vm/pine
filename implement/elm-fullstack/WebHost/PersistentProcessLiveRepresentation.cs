@@ -551,9 +551,7 @@ namespace ElmFullstack.WebHost.PersistentProcess
             throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
         }
 
-        public record Result<ErrT, OkT>(ErrT Err = default, OkT Ok = default);
-
-        static public Composition.Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>
+        static public Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>
             TestContinueWithCompositionEvent(
                 CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
                 IFileStoreReader fileStoreReader)
@@ -569,11 +567,11 @@ namespace ElmFullstack.WebHost.PersistentProcess
             }
             catch (Exception e)
             {
-                return Composition.Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.err(
+                return Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.err(
                     "Failed with exception: " + e.ToString());
             }
 
-            return Composition.Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.ok(
+            return Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.ok(
                 projectionResult);
         }
 

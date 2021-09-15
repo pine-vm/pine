@@ -168,7 +168,7 @@ namespace Pine
         }
 
         static public System.Numerics.BigInteger UnsignedIntegerFromBlobValue(Span<byte> blobValue) =>
-            new System.Numerics.BigInteger(blobValue.ToArray(), isUnsigned: true, isBigEndian: true);
+            new(blobValue.ToArray(), isUnsigned: true, isBigEndian: true);
 
         public class TreeWithStringPath : IEquatable<TreeWithStringPath>
         {
@@ -189,13 +189,13 @@ namespace Pine
             }
 
             static public TreeWithStringPath Blob(byte[] blobContent) =>
-                new TreeWithStringPath(blobContent: blobContent);
+                new(blobContent: blobContent);
 
             static public TreeWithStringPath Blob(IReadOnlyList<byte> blobContent) =>
-                new TreeWithStringPath(blobContent: blobContent as byte[] ?? blobContent.ToArray());
+                new(blobContent: blobContent as byte[] ?? blobContent.ToArray());
 
             static public TreeWithStringPath Tree(IImmutableList<(string name, TreeWithStringPath component)> treeContent) =>
-                new TreeWithStringPath(treeContent: treeContent);
+                new(treeContent: treeContent);
 
             static public TreeWithStringPath EmptyTree => Tree(ImmutableList<(string name, TreeWithStringPath component)>.Empty);
 
@@ -636,31 +636,6 @@ namespace Pine
             }
 
             return null;
-        }
-
-        public record Result<ErrT, OkT>(ErrT Err = default, OkT Ok = default)
-        {
-            static public Result<ErrT, OkT> err(ErrT err) =>
-                new() { Err = err };
-
-            static public Result<ErrT, OkT> ok(OkT ok) =>
-                new() { Ok = ok };
-
-            public Result<ErrT, MappedOkT> map<MappedOkT>(Func<OkT, MappedOkT> okMap)
-            {
-                if (Ok == null)
-                    return Result<ErrT, MappedOkT>.err(Err);
-
-                return Result<ErrT, MappedOkT>.ok(okMap(Ok));
-            }
-
-            public Result<MappedErrT, OkT> mapError<MappedErrT>(Func<ErrT, MappedErrT> errMap)
-            {
-                if (Ok == null)
-                    return Result<MappedErrT, OkT>.err(errMap(Err));
-
-                return Result<MappedErrT, OkT>.ok(Ok);
-            }
         }
 
         public record ParseAsTreeWithStringPathResult : Result<IImmutableList<(int index, string name)>, TreeWithStringPath>

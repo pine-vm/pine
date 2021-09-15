@@ -33,7 +33,7 @@ namespace ElmFullstack
     {
         static readonly System.Diagnostics.Stopwatch cacheItemTimeSource = System.Diagnostics.Stopwatch.StartNew();
 
-        static readonly ConcurrentDictionary<string, (Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache = new();
+        static readonly ConcurrentDictionary<string, (Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache = new();
 
         static void ElmAppCompilationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -42,7 +42,7 @@ namespace ElmFullstack
                 item => item.Value.lastUseTime,
                 retainedSizeLimit);
 
-        static public Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
+        static public Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig)
         {
@@ -57,14 +57,14 @@ namespace ElmFullstack
                         interfaceConfig,
                     }))));
 
-            Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compileNew() =>
+            Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compileNew() =>
                     AsCompletelyLoweredElmApp(
                         sourceFiles,
                         rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
                         interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
-            (Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
-                Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> previousEntryCompilationResult)
+            (Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
+                Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> previousEntryCompilationResult)
             {
                 if (previousEntryCompilationResult?.Ok != null)
                     return (previousEntryCompilationResult, cacheItemTimeSource.Elapsed);
@@ -87,7 +87,7 @@ namespace ElmFullstack
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles,
             IImmutableList<CompilationIterationReport> iterationsReports);
 
-        static Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
+        static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName) =>
@@ -97,7 +97,7 @@ namespace ElmFullstack
                 interfaceToHostRootModuleName,
                 ImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies, CompilationIterationReport previousIterationsReports)>.Empty);
 
-        static Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
+        static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
@@ -130,7 +130,7 @@ namespace ElmFullstack
 
             if (compilationSuccess != null)
             {
-                return new Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
+                return new Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
                     Ok: new CompilationSuccess(compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport)));
             }
 
@@ -151,7 +151,7 @@ namespace ElmFullstack
 
             if (0 < otherErrors.Count)
             {
-                return new Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
+                return new Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
                     Err: otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
             }
 
@@ -190,7 +190,7 @@ namespace ElmFullstack
 
                     if (elmMakeRequest != null)
                     {
-                        Composition.Result<string, IReadOnlyList<byte>> buildResultValue()
+                        Result<string, IReadOnlyList<byte>> buildResultValue()
                         {
                             try
                             {
@@ -207,11 +207,11 @@ namespace ElmFullstack
                                     makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
                                     enableDebug: elmMakeRequest.enableDebug);
 
-                                return Composition.Result<string, IReadOnlyList<byte>>.ok(value);
+                                return Result<string, IReadOnlyList<byte>>.ok(value);
                             }
                             catch (Exception e)
                             {
-                                return Composition.Result<string, IReadOnlyList<byte>>.err("Failed with runtime exception: " + e.ToString());
+                                return Result<string, IReadOnlyList<byte>>.err("Failed with runtime exception: " + e.ToString());
                             }
                         }
 
@@ -240,7 +240,7 @@ namespace ElmFullstack
              * */
             if (0 < newDependenciesWithError.Count)
             {
-                return Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
+                return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
                     newDependenciesWithError.Select(dep => new LocatedCompilationError(
                         location: null,
                         error: new CompilationError(DependencyError: dep.Item2.report.dependencyKeySummary + " " + dep.Item1.result.Err)))
@@ -523,7 +523,7 @@ namespace ElmFullstack
         static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.CompilationError compilationError) =>
             compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
 
-        static long EstimateCacheItemSizeInMemory(Composition.Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> item) =>
+        static long EstimateCacheItemSizeInMemory(Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> item) =>
             (item.Err?.Sum(err => EstimateCacheItemSizeInMemory(err)) ?? 0) +
             (item.Ok != null ? EstimateCacheItemSizeInMemory(item.Ok) : 0);
 

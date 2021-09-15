@@ -150,25 +150,25 @@ namespace Pine
             }
         }
 
-        static public Composition.Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl)
+        static public Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl)
         {
             var parsedUrl = ParseUrl(sourceUrl);
 
             if (parsedUrl == null)
-                return Composition.Result<string, LoadFromUrlSuccess>.err("Failed to parse string '" + sourceUrl + "' as Elm Editor URL.");
+                return Result<string, LoadFromUrlSuccess>.err("Failed to parse string '" + sourceUrl + "' as Elm Editor URL.");
 
             if (LoadFromGitHubOrGitLab.ParsePathFromUrl(parsedUrl.projectStateString) != null)
             {
                 var loadFromGitHost =
                     LoadFromGitHubOrGitLab.LoadFromUrl(parsedUrl.projectStateString);
 
-                if (loadFromGitHost?.Success == null)
+                if (loadFromGitHost?.Ok == null)
                 {
-                    return Composition.Result<string, LoadFromUrlSuccess>.err(
-                        "Failed to load from Git host: " + loadFromGitHost?.Error?.ToString());
+                    return Result<string, LoadFromUrlSuccess>.err(
+                        "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
                 }
 
-                return Composition.Result<string, LoadFromUrlSuccess>.ok(new LoadFromUrlSuccess(tree: loadFromGitHost.Success.tree));
+                return loadFromGitHost.map(loadFromGitHostSuccess => new LoadFromUrlSuccess(tree: loadFromGitHostSuccess.tree));
             }
 
             // Support parsing tuples: https://github.com/arogozine/TupleAsJsonArray/tree/e59f8c4edee070b096220b6cab77eba997b19d3a
@@ -193,7 +193,7 @@ namespace Pine
             throw new Exception("Project state has an unexpected shape: " + parsedUrl.projectStateString);
         }
 
-        static public Composition.Result<string, LoadFromUrlSuccess> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
+        static public Result<string, LoadFromUrlSuccess> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
         {
             Composition.TreeWithStringPath baseComposition = null;
 
@@ -202,13 +202,13 @@ namespace Pine
                 var loadFromGitHost =
                     LoadFromGitHubOrGitLab.LoadFromUrl(projectState.@base);
 
-                if (loadFromGitHost?.Success == null)
+                if (loadFromGitHost?.Ok == null)
                 {
-                    return Composition.Result<string, LoadFromUrlSuccess>.err(
-                        "Failed to load from Git host: " + loadFromGitHost?.Error?.ToString());
+                    return Result<string, LoadFromUrlSuccess>.err(
+                        "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
                 }
 
-                baseComposition = loadFromGitHost.Success.tree;
+                baseComposition = loadFromGitHost.Ok.tree;
             }
 
             return
@@ -222,7 +222,7 @@ namespace Pine
         /// 
         /// applyProjectStateDifference_2021_01 : ProjectState_2021_01.ProjectStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
         /// </summary>
-        static public Composition.Result<string, Composition.TreeWithStringPath> ApplyProjectStateDifference_2021_01(
+        static public Result<string, Composition.TreeWithStringPath> ApplyProjectStateDifference_2021_01(
             ProjectState_2021_01.ProjectStateDifference differenceFromBase,
             Composition.TreeWithStringPath baseComposition)
         {
@@ -245,7 +245,7 @@ namespace Pine
                         return previousComposition.SetNodeAtPathSorted(blobChange.Item1, Composition.TreeWithStringPath.Blob(changedBlobValue));
                     });
 
-            return Composition.Result<string, Composition.TreeWithStringPath>.ok(projectStateAfterChangeBlobs);
+            return Result<string, Composition.TreeWithStringPath>.ok(projectStateAfterChangeBlobs);
         }
     }
 }

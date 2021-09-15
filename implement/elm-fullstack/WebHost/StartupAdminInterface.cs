@@ -838,7 +838,7 @@ namespace ElmFullstack.WebHost
                     beginTime = beginTime,
                     compositionEvent = compositionLogEvent,
                     totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                    result = Composition.Result<string, string>.err(testContinueResult.Err),
+                    result = Result<string, string>.err(testContinueResult.Err),
                 });
             }
 
@@ -851,7 +851,7 @@ namespace ElmFullstack.WebHost
                 beginTime = beginTime,
                 compositionEvent = compositionLogEvent,
                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                result = Composition.Result<string, string>.ok("Successfully applied this composition event to the process."),
+                result = Result<string, string>.ok("Successfully applied this composition event to the process."),
             });
         }
     }
@@ -868,7 +868,7 @@ namespace ElmFullstack.WebHost
 
         public int totalTimeSpentMilli;
 
-        public Composition.Result<string, string> result;
+        public Result<string, string> result;
     }
 
     public class TruncateProcessHistoryReport

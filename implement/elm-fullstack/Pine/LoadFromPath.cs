@@ -11,14 +11,13 @@ namespace Pine
                 var loadFromGitHost =
                     LoadFromGitHubOrGitLab.LoadFromUrl(path);
 
-                if (loadFromGitHost?.Success == null)
+                if (loadFromGitHost?.Ok == null)
                 {
                     return Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)>.err(
-                        "Failed to load from Git host: " + loadFromGitHost?.Error?.ToString());
+                        "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
                 }
 
-                return Result<string, (TreeWithStringPath tree, bool comesFromLocalFilesystem)>.ok(
-                    (loadFromGitHost.Success.tree, comesFromLocalFilesystem: false));
+                return loadFromGitHost.map(loadFromGitHostOk => (loadFromGitHostOk.tree, comesFromLocalFilesystem: false));
             }
 
             if (LoadFromElmEditor.ParseUrl(path) != null)

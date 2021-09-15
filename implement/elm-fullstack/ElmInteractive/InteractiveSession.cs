@@ -20,7 +20,7 @@ namespace elm_fullstack.ElmInteractive
             this.appCodeTree = appCodeTree;
         }
 
-        public Result<string, ElmInteractive.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
+        public Pine.Result<string, ElmInteractive.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
         {
             var result =
                 ElmInteractive.EvaluateSubmissionAndGetResultingValue(

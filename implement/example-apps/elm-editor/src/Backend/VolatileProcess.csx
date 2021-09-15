@@ -11,8 +11,8 @@
 //  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
 #r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
-// from elm-fullstack-separate-assemblies-289b468ee441567ea57dd964e8a74c2c0a690e2b-linux-x64.zip
-#r "sha256:cae11397edf179c7c59608270c6bad6c6834d345427083e9b0fc7268ccfe3d45"
+// from elm-fullstack-separate-assemblies-4505d5fa0951dbb5d83383b17058704c58ebc674-linux-x64.zip
+#r "sha256:67d1550a5b06e9b361fdc9220062dd960e036e7daaa063e92380d186f93089cf"
 
 using System;
 using System.Collections.Generic;
@@ -153,16 +153,16 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
 
         var loadFromGitResult = Pine.LoadFromGitHubOrGitLab.LoadFromUrl(sourcePath);
 
-        if (loadFromGitResult?.Success == null)
+        if (loadFromGitResult?.Ok == null)
         {
             return new ResponseStructure
             {
                 ErrorResponse = ImmutableList.Create(
-                    "Failed to load from path '" + sourcePath + "': " + loadFromGitResult?.Error)
+                    "Failed to load from path '" + sourcePath + "': " + loadFromGitResult?.Err)
             };
         }
 
-        if (loadFromGitResult?.Success?.tree == null)
+        if (loadFromGitResult?.Ok?.tree == null)
         {
             return new ResponseStructure
             {
@@ -170,15 +170,15 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
             };
         }
 
-        var composition = Pine.Composition.FromTreeWithStringPath(loadFromGitResult.Success.tree);
+        var composition = Pine.Composition.FromTreeWithStringPath(loadFromGitResult.Ok.tree);
 
         var compositionId = Pine.CommonConversion.StringBase16FromByteArray(Pine.Composition.GetHash(composition));
 
         var blobs =
-            loadFromGitResult.Success.tree.EnumerateBlobsTransitive()
+            loadFromGitResult.Ok.tree.EnumerateBlobsTransitive()
             .ToImmutableList();
 
-        var urlInCommit = loadFromGitResult.Success.urlInCommit;
+        var urlInCommit = loadFromGitResult.Ok.urlInCommit;
 
         ResponseStructure responseErrorExceedingLimit(string limitName)
         {
