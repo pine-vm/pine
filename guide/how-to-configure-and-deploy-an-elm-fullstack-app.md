@@ -124,7 +124,7 @@ elm_make__base64____src_Frontend_Main_elm =
     "The compiler replaces this value."
 ```
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/e692d9dec494523d0e1e4e8dbf39a007bf932750/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -135,7 +135,7 @@ Backend apps often use the output from `elm make` send the frontend to web brows
                 |> Maybe.withDefault False
         then
             { statusCode = 200
-            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make__debug__base64____src_FrontendWeb_Main_elm
+            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make__debug__base64____src_Frontend_Main_elm
             , headersToAdd = []
             }
 
