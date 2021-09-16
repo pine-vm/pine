@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v1
     - uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: '5.0.400'
+        dotnet-version: '6.0.100-rc.1.21458.32'
     - name: Try use dotnet core 3
       run: dotnet --info
     - uses: actions/checkout@v1
@@ -42,7 +42,7 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: elm-fullstack-bin-${{github.sha}}-${{ matrix.publish-runtime-id }}
-        path: ./implement/elm-fullstack/bin/Debug/net5.0/${{ matrix.publish-runtime-id }}/publish
+        path: ./implement/elm-fullstack/bin/Debug/net6.0/${{ matrix.publish-runtime-id }}/publish
     - name: dotnet publish with separate assemblies
       run: dotnet publish -c Debug ./implement/elm-fullstack --output ./publish-separate-assemblies
     - name: Publish artifacts with separate assemblies
