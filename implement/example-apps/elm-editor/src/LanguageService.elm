@@ -526,7 +526,8 @@ completionItemsFromModule moduleCache =
                                                             (Elm.Syntax.Node.value constructorNode).name
 
                                                     documentation =
-                                                        [ "`" ++ tagName ++ "` is a variant of `" ++ customTypeName ++ "`"
+                                                        [ markdownElmCodeBlockFromCodeLines [ tagName ]
+                                                        , "A variant of the union type `" ++ customTypeName ++ "`"
                                                         , markdownElmCodeBlockFromCodeLines codeLines
                                                         ]
                                                             |> String.join "\n\n"

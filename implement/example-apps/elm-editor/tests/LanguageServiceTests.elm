@@ -132,7 +132,11 @@ init =
                       }
                     , { label = "Decrement"
                       , documentation = String.trim """
-`Decrement` is a variant of `Event`
+```Elm
+Decrement
+```
+
+A variant of the union type `Event`
 
 ```Elm
 type Event
@@ -156,7 +160,11 @@ type Event
                       }
                     , { label = "Increment"
                       , documentation = String.trim """
-`Increment` is a variant of `Event`
+```Elm
+Increment
+```
+
+A variant of the union type `Event`
 
 ```Elm
 type Event
@@ -282,7 +290,11 @@ init =
                       }
                     , { label = "Decrement"
                       , documentation = String.trim """
-`Decrement` is a variant of `Event`
+```Elm
+Decrement
+```
+
+A variant of the union type `Event`
 
 ```Elm
 type Event
@@ -306,7 +318,11 @@ type Event
                       }
                     , { label = "Increment"
                       , documentation = String.trim """
-`Increment` is a variant of `Event`
+```Elm
+Increment
+```
+
+A variant of the union type `Event`
 
 ```Elm
 type Event
