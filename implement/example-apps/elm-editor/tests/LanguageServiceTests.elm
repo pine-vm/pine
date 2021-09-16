@@ -131,56 +131,44 @@ init =
                       , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Decrement"
-                      , documentation = String.trim """
-```Elm
-Decrement
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    Decrement
 
 A variant of the union type `Event`
 
-```Elm
-type Event
-    = Increment
-    | Decrement
-```
+    type Event
+        = Increment
+        | Decrement
 """
                       , insertText = "Decrement"
                       , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "Event"
-                      , documentation = String.trim """
-```Elm
-type Event
-    = Increment
-    | Decrement
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    type Event
+        = Increment
+        | Decrement
 """
                       , insertText = "Event"
                       , kind = Frontend.MonacoEditor.EnumCompletionItemKind
                       }
                     , { label = "Increment"
-                      , documentation = String.trim """
-```Elm
-Increment
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    Increment
 
 A variant of the union type `Event`
 
-```Elm
-type Event
-    = Increment
-    | Decrement
-```
+    type Event
+        = Increment
+        | Decrement
 """
                       , insertText = "Increment"
                       , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "State"
-                      , documentation = String.trim """
-```Elm
-type alias State =
-    Int
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    type alias State =
+        Int
 
 Comment on declaration
 """
@@ -188,16 +176,13 @@ Comment on declaration
                       , kind = Frontend.MonacoEditor.StructCompletionItemKind
                       }
                     , { label = "from_alpha"
-                      , documentation = """```Elm
-```"""
+                      , documentation = ""
                       , insertText = "from_alpha"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "init"
-                      , documentation = String.trim """
-```Elm
-init : State
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    init : State
 """
                       , insertText = "init"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
@@ -237,18 +222,14 @@ init =
                       , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "from_beta"
-                      , documentation = String.trim """
-```Elm
-```
+                      , documentation = stringTrimUpToLineBreaks """
 """
                       , insertText = "from_beta"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "from_beta_function"
-                      , documentation = String.trim """
-```Elm
-from_beta_function : Int -> String
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    from_beta_function : Int -> String
 """
                       , insertText = "from_beta_function"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
@@ -289,74 +270,57 @@ init =
                       , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
                       }
                     , { label = "Decrement"
-                      , documentation = String.trim """
-```Elm
-Decrement
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    Decrement
 
 A variant of the union type `Event`
 
-```Elm
-type Event
-    = Increment
-    | Decrement
-```
+    type Event
+        = Increment
+        | Decrement
 """
                       , insertText = "Decrement"
                       , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "Event"
-                      , documentation = String.trim """
-```Elm
-type Event
-    = Increment
-    | Decrement
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    type Event
+        = Increment
+        | Decrement
 """
                       , insertText = "Event"
                       , kind = Frontend.MonacoEditor.EnumCompletionItemKind
                       }
                     , { label = "Increment"
-                      , documentation = String.trim """
-```Elm
-Increment
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    Increment
 
 A variant of the union type `Event`
 
-```Elm
-type Event
-    = Increment
-    | Decrement
-```
+    type Event
+        = Increment
+        | Decrement
 """
                       , insertText = "Increment"
                       , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                       }
                     , { label = "State"
-                      , documentation = String.trim """
-```Elm
-type alias State =
-    Int
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    type alias State =
+        Int
 """
                       , insertText = "State"
                       , kind = Frontend.MonacoEditor.StructCompletionItemKind
                       }
                     , { label = "init"
-                      , documentation = String.trim """
-```Elm
-init : State
-```
+                      , documentation = stringTrimUpToLineBreaks """
+    init : State
 """
                       , insertText = "init"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "name"
-                      , documentation = String.trim """
-```Elm
-```
-"""
+                      , documentation = ""
                       , insertText = "name"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
@@ -459,17 +423,17 @@ beta =
 
 """
                     [ { label = "alpha"
-                      , documentation = "```Elm\n```"
+                      , documentation = ""
                       , insertText = "alpha"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "beta"
-                      , documentation = "```Elm\n```"
+                      , documentation = ""
                       , insertText = "beta"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "delta"
-                      , documentation = "```Elm\n```"
+                      , documentation = ""
                       , insertText = "delta"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
@@ -551,3 +515,22 @@ buildLanguageServiceStateFindingParsableModuleText { maxLinesToRemoveBeforeCurso
 fileContentFromString : String -> Bytes.Bytes
 fileContentFromString =
     Bytes.Encode.string >> Bytes.Encode.encode
+
+
+stringTrimUpToLineBreaks : String -> String
+stringTrimUpToLineBreaks string =
+    case String.lines string of
+        [] ->
+            string
+
+        firstLine :: afterFirstLine ->
+            let
+                right =
+                    case List.reverse afterFirstLine of
+                        lastLine :: middleLinesReversed ->
+                            String.join "\n" (List.reverse middleLinesReversed) ++ String.trimRight lastLine
+
+                        [] ->
+                            ""
+            in
+            String.trimLeft firstLine ++ right

@@ -605,7 +605,7 @@ documentationMarkdownFromCodeLinesAndDocumentation codeLines maybeDocumentation 
 
 markdownElmCodeBlockFromCodeLines : List String -> String
 markdownElmCodeBlockFromCodeLines codeLines =
-    String.join "\n" ("```Elm" :: codeLines ++ [ "```" ])
+    String.join "\n" (List.map ((++) "    ") codeLines)
 
 
 updateLanguageServiceState : FileTreeInWorkspace.FileTreeNode -> LanguageServiceState -> LanguageServiceState
