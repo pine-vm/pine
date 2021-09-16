@@ -72,7 +72,7 @@ provideCompletionItems request languageServiceState =
                                 |> Maybe.withDefault ""
 
                         lineUntilPositionWords =
-                            String.split " " lineUntilPosition
+                            stringSplitByChar (\c -> not (charIsAllowedInDeclarationName c || c == '.')) lineUntilPosition
 
                         completionPrefix =
                             lineUntilPositionWords
@@ -826,6 +826,12 @@ removeWrappingFromMultilineComment withWrapping =
         )
 
 
+charIsAllowedInDeclarationName : Char -> Bool
+charIsAllowedInDeclarationName char =
+    -- https://github.com/stil4m/elm-syntax/blob/8728aa02778780b1a9bba33a27ecf0a37300a4a0/src/Elm/Parser/Tokens.elm#L245
+    Char.isAlphaNum char || char == '_'
+
+
 listMapFirstElement : (a -> a) -> List a -> List a
 listMapFirstElement mapElement list =
     case list of
@@ -834,3 +840,22 @@ listMapFirstElement mapElement list =
 
         _ ->
             list
+
+
+stringSplitByChar : (Char -> Bool) -> String -> List String
+stringSplitByChar charSplits =
+    String.toList >> listCharSplitByChar charSplits >> List.map String.fromList
+
+
+listCharSplitByChar : (Char -> Bool) -> List Char -> List (List Char)
+listCharSplitByChar charSplits =
+    List.foldl
+        (\char ( completed, current ) ->
+            if charSplits char then
+                ( List.reverse current :: completed, [] )
+
+            else
+                ( completed, char :: current )
+        )
+        ( [], [] )
+        >> (\( completed, current ) -> List.reverse (List.reverse current :: completed))

@@ -225,7 +225,7 @@ type Event
     = Increment
     | Decrement
 
-name = Beta.✂➕
+name =Beta.✂➕
 
 init : State
 init =
