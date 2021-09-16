@@ -70,13 +70,15 @@ namespace Pine
 
             foreach (var entry in fclZipArchive.Entries)
             {
-                var entryContent = new byte[entry.Length];
+                using var entryStream = entry.Open();
+                using var memoryStream = new MemoryStream();
 
-                using (var entryStream = entry.Open())
-                {
-                    if (entryStream.Read(entryContent, 0, entryContent.Length) != entryContent.Length)
-                        throw new NotImplementedException();
-                }
+                entryStream.CopyTo(memoryStream);
+
+                var entryContent = memoryStream.ToArray();
+
+                if (entryContent.Length != entry.Length)
+                    throw new Exception("Error trying to read entry '" + entry.FullName + "': got " + entryContent.Length + " bytes from entry instead of " + entry.Length);
 
                 yield return (entry.FullName, entryContent);
             }
