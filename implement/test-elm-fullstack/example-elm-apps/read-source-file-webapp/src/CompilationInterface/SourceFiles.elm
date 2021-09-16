@@ -4,11 +4,17 @@ import Bytes
 import Bytes.Encode
 
 
-file____static_content_demo_file_mp3 : Bytes.Bytes
-file____static_content_demo_file_mp3 =
-    "The compiler replaces this value."
+type FileTreeNode blobStructure
+    = BlobNode blobStructure
+    | TreeNode (List ( String, FileTreeNode blobStructure ))
+
+
+file_tree____static_content : FileTreeNode Bytes.Bytes
+file_tree____static_content =
+    "The compiler replaces this declaration."
         |> Bytes.Encode.string
         |> Bytes.Encode.encode
+        |> BlobNode
 
 
 file__utf8____readme_md : String

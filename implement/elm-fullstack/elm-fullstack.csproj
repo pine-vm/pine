@@ -5,8 +5,8 @@
     <TargetFramework>net5.0</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2021.0915.0.0</AssemblyVersion>
-    <FileVersion>2021.0915.0.0</FileVersion>
+    <AssemblyVersion>2021.0916.0.0</AssemblyVersion>
+    <FileVersion>2021.0916.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="ElmFullstack\compile-elm-program\elm.json" />
+    <EmbeddedResource Include="ElmFullstack\compile-elm-program\src\FileTree.elm" />
     <EmbeddedResource Include="ElmFullstack\compile-elm-program\src\CompileFullstackApp.elm" />
     <EmbeddedResource Include="ElmFullstack\compile-elm-program\src\Main.elm" />
   </ItemGroup>

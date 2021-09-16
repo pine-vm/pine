@@ -100,16 +100,33 @@ namespace test_elm_fullstack
         {
             var defaultAppSourceFiles = TestSetup.ReadSourceFileWebApp;
 
-            var demoSourceFilePath = ImmutableList.Create("static-content", "demo-file.mp3");
-
-            var staticContent =
-                Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
-                .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
-                .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem)))
-                .ToImmutableList();
+            var demoFiles = new[]
+            {
+                new
+                {
+                    path= ImmutableList.Create("demo-file.mp3"),
+                    content= Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
+                        .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
+                        .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem)))
+                        .ToImmutableList()
+                },
+                new
+                {
+                    path= ImmutableList.Create("alpha", "beta","demo-file-gamma.text"),
+                    content= System.Text.Encoding.UTF8.GetBytes("Some file content").ToImmutableList()
+                }
+            };
 
             var webAppSourceFiles =
-                defaultAppSourceFiles.SetItem(demoSourceFilePath, staticContent);
+                demoFiles
+                .Aggregate(
+                    seed: defaultAppSourceFiles,
+                    (prev, demoFile) =>
+                    {
+                        var demoSourceFilePath = ImmutableList.Create("static-content").AddRange(demoFile.path);
+
+                        return prev.SetItem(demoSourceFilePath, demoFile.content);
+                    });
 
             var webAppSource =
                 Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
@@ -118,15 +135,18 @@ namespace test_elm_fullstack
             using var server = testSetup.StartWebHost();
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
+            foreach (var demoFile in demoFiles)
             {
-                var httpResponse = publicAppClient.GetAsync("bytes").Result;
+                var httpResponse = publicAppClient.GetAsync(string.Join("/", demoFile.path)).Result;
 
                 Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
 
                 var responseContent =
                     httpResponse.Content.ReadAsByteArrayAsync().Result;
 
-                CollectionAssert.AreEqual(staticContent, responseContent);
+                var inspectResponseContent = System.Text.Encoding.UTF8.GetString(responseContent);
+
+                CollectionAssert.AreEqual(demoFile.content, responseContent);
             }
 
             {

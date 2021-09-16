@@ -53,6 +53,35 @@ parseCompilationInterfaceElmMakeFunctionName =
         |> Test.describe "parse Compilation Interface Elm Make function name"
 
 
+parseCompilationInterfaceSourceFilesFunctionName : Test.Test
+parseCompilationInterfaceSourceFilesFunctionName =
+    [ ( "file__utf8____readme_md"
+      , Ok
+            ( "readme_md"
+            , { variant = CompileFullstackApp.SourceFile
+              , encoding = Just CompileFullstackApp.Utf8Encoding
+              }
+            )
+      )
+    , ( "file_tree____static_content"
+      , Ok
+            ( "static_content"
+            , { variant = CompileFullstackApp.SourceFileTree
+              , encoding = Nothing
+              }
+            )
+      )
+    ]
+        |> List.map
+            (\( functionName, expectedResult ) ->
+                Test.test functionName <|
+                    \() ->
+                        CompileFullstackApp.parseSourceFileFunctionName functionName
+                            |> Expect.equal expectedResult
+            )
+        |> Test.describe "parse Compilation Interface Source Files function name"
+
+
 dependencies_encoding_roundtrip : Test.Test
 dependencies_encoding_roundtrip =
     [ ( "ElmMakeDependency Empty "

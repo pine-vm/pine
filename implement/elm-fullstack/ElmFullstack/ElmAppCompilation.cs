@@ -445,6 +445,7 @@ namespace ElmFullstack
             ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
             .WithComparers(EnumerableExtension.EqualityComparer<string>())
             .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.elm.json"))
+            .SetItem(ImmutableList.Create("src", "FileTree.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.FileTree.elm"))
             .SetItem(ImmutableList.Create("src", "CompileFullstackApp.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.CompileFullstackApp.elm"))
             .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.Main.elm"));
 

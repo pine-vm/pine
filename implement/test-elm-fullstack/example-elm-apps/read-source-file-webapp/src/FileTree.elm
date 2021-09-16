@@ -64,25 +64,6 @@ getNodeAtPathFromFileTree path treeNode =
                             getNodeAtPathFromFileTree pathRest subNode
 
 
-listNodesWithPath : FileTreeNode b -> List ( List String, FileTreeNode b )
-listNodesWithPath node =
-    let
-        childNodes =
-            case node of
-                BlobNode _ ->
-                    []
-
-                TreeNode treeEntries ->
-                    treeEntries
-                        |> List.concatMap
-                            (\( entryName, childNode ) ->
-                                listNodesWithPath childNode
-                                    |> List.map (Tuple.mapFirst ((::) entryName))
-                            )
-    in
-    ( [], node ) :: childNodes
-
-
 setNodeAtPathInSortedFileTree : ( List String, FileTreeNode b ) -> FileTreeNode b -> FileTreeNode b
 setNodeAtPathInSortedFileTree ( path, nodeAtPath ) nodeBefore =
     case path of
