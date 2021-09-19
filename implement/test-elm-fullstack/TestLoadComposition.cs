@@ -7,7 +7,7 @@ using Pine;
 namespace test_elm_fullstack
 {
     [TestClass]
-    public class TestCompositionInterop
+    public class TestLoadComposition
     {
         [TestMethod]
         public void Composition_from_link_in_elm_editor()
@@ -35,13 +35,14 @@ namespace test_elm_fullstack
             {
                 try
                 {
-                    var loadResult = LoadFromPath.LoadTreeFromPath(testCase.input);
+                    var loadCompositionResult =
+                        LoadComposition.LoadFromPathResolvingNetworkDependencies(testCase.input).LogToList();
 
-                    if (loadResult.Ok.tree == null)
-                        throw new Exception("Failed to load from path: " + loadResult.Err);
+                    if (loadCompositionResult.result.Ok.tree == null)
+                        throw new Exception("Failed to load from path: " + loadCompositionResult.result.Err);
 
                     var inspectComposition =
-                        loadResult.Ok.tree.EnumerateBlobsTransitive()
+                        loadCompositionResult.result.Ok.tree.EnumerateBlobsTransitive()
                         .Select(blobAtPath =>
                         {
                             string utf8 = null;
@@ -62,7 +63,7 @@ namespace test_elm_fullstack
                         })
                         .ToImmutableList();
 
-                    var composition = Composition.FromTreeWithStringPath(loadResult.Ok.tree);
+                    var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.tree);
                     var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
 
                     Assert.AreEqual(testCase.expectedCompositionId, compositionId);

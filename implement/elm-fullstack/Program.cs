@@ -14,7 +14,7 @@ namespace elm_fullstack
 {
     public class Program
     {
-        static public string AppVersionId => "2021-09-16";
+        static public string AppVersionId => "2021-09-19";
 
         static int AdminInterfaceDefaultPort => 4000;
 
@@ -568,14 +568,16 @@ namespace elm_fullstack
                 totalTimeSpentMilli: null
             );
 
-            var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
+            var loadCompositionResult =
+                LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
+                .LogToActions(Console.WriteLine);
 
-            if (loadFromPathResult?.Ok == null)
+            if (loadCompositionResult?.Ok == null)
             {
-                throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
+                throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
             }
 
-            var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadFromPathResult.Ok.tree);
+            var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadCompositionResult.Ok.tree);
 
             report = report with { sourceCompositionId = sourceCompositionId, sourceSummary = sourceSummary };
 
@@ -586,7 +588,7 @@ namespace elm_fullstack
             try
             {
                 var sourceFiles =
-                    Composition.TreeToFlatDictionaryWithPathComparer(loadFromPathResult.Ok.tree);
+                    Composition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.Ok.tree);
 
                 var compilationResult = ElmFullstack.ElmAppCompilation.AsCompletelyLoweredElmApp(
                     sourceFiles: sourceFiles,
@@ -675,7 +677,9 @@ namespace elm_fullstack
 
                     if (contextAppPath != null)
                     {
-                        var loadContextAppResult = LoadFromPath.LoadTreeFromPath(contextAppPath);
+                        var loadContextAppResult =
+                            LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
+                            .LogToActions(Console.WriteLine);
 
                         if (loadContextAppResult?.Ok == null)
                         {
@@ -737,30 +741,32 @@ namespace elm_fullstack
                 {
                     var sourcePath = sourcePathParameter.Value;
 
-                    var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
+                    var loadCompositionResult =
+                        LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
+                        .LogToActions(Console.WriteLine);
 
-                    if (loadFromPathResult?.Ok.tree == null)
+                    if (loadCompositionResult?.Ok.tree == null)
                     {
-                        throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
+                        throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
                     }
 
-                    var composition = Composition.FromTreeWithStringPath(loadFromPathResult?.Ok.tree);
+                    var composition = Composition.FromTreeWithStringPath(loadCompositionResult?.Ok.tree);
 
                     var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
 
                     Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
                     var blobs =
-                        loadFromPathResult?.Ok.tree.EnumerateBlobsTransitive()
+                        loadCompositionResult?.Ok.tree.EnumerateBlobsTransitive()
                         .ToImmutableList();
 
                     var compositionDescription =
-                        loadFromPathResult?.Ok.tree.BlobContent == null
+                        loadCompositionResult?.Ok.tree.BlobContent == null
                         ?
                         ("a tree containing " + blobs.Count + " blobs:\n" +
                         string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path))))
                         :
-                        "a blob containing " + loadFromPathResult?.Ok.tree.BlobContent.Length + " bytes";
+                        "a blob containing " + loadCompositionResult?.Ok.tree.BlobContent.Length + " bytes";
 
                     Console.WriteLine(
                         "Composition " + compositionId + " is " + compositionDescription);

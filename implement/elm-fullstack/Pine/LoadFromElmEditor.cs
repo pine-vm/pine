@@ -107,7 +107,9 @@ namespace Pine
 
         public record ProjectState(ProjectState_2021_01.ProjectState version_2021_01);
 
-        public record LoadFromUrlSuccess(Composition.TreeWithStringPath tree);
+        public record LoadFromUrlSuccess(
+            ParseUrlResult parsedUrl,
+            Composition.TreeWithStringPath tree);
 
         /// <summary>
         /// Sample addresses:
@@ -157,6 +159,9 @@ namespace Pine
             if (parsedUrl == null)
                 return Result<string, LoadFromUrlSuccess>.err("Failed to parse string '" + sourceUrl + "' as Elm Editor URL.");
 
+            LoadFromUrlSuccess returnValueFromTree(Composition.TreeWithStringPath tree) =>
+                new LoadFromUrlSuccess(parsedUrl: parsedUrl, tree: tree);
+
             if (LoadFromGitHubOrGitLab.ParsePathFromUrl(parsedUrl.projectStateString) != null)
             {
                 var loadFromGitHost =
@@ -168,7 +173,7 @@ namespace Pine
                         "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
                 }
 
-                return loadFromGitHost.map(loadFromGitHostSuccess => new LoadFromUrlSuccess(tree: loadFromGitHostSuccess.tree));
+                return loadFromGitHost.map(loadFromGitHostSuccess => returnValueFromTree(loadFromGitHostSuccess.tree));
             }
 
             // Support parsing tuples: https://github.com/arogozine/TupleAsJsonArray/tree/e59f8c4edee070b096220b6cab77eba997b19d3a
@@ -187,24 +192,25 @@ namespace Pine
 
             if (projectState.version_2021_01 != null)
             {
-                return LoadProjectState(projectState.version_2021_01);
+                return
+                    LoadProjectState(projectState.version_2021_01)
+                    .map(returnValueFromTree);
             }
 
-            throw new Exception("Project state has an unexpected shape: " + parsedUrl.projectStateString);
+            return new Result<string, LoadFromUrlSuccess>(Err: "Project state has an unexpected shape: " + parsedUrl.projectStateString);
         }
 
-        static public Result<string, LoadFromUrlSuccess> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
+        static public Result<string, Composition.TreeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
         {
             Composition.TreeWithStringPath baseComposition = null;
 
             if (projectState.@base != null)
             {
-                var loadFromGitHost =
-                    LoadFromGitHubOrGitLab.LoadFromUrl(projectState.@base);
+                var loadFromGitHost = LoadFromGitHubOrGitLab.LoadFromUrl(projectState.@base);
 
                 if (loadFromGitHost?.Ok == null)
                 {
-                    return Result<string, LoadFromUrlSuccess>.err(
+                    return Result<string, Composition.TreeWithStringPath>.err(
                         "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
                 }
 
@@ -213,8 +219,7 @@ namespace Pine
 
             return
                 ApplyProjectStateDifference_2021_01(projectState.differenceFromBase, baseComposition)
-                .mapError(error => "Failed to apply difference: " + error)
-                .map(tree => new LoadFromUrlSuccess(tree: tree));
+                .mapError(error => "Failed to apply difference: " + error);
         }
 
         /// <summary>

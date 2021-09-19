@@ -7,26 +7,28 @@ namespace ElmFullstack.WebHost
 {
     static public class BuildConfigurationFromArguments
     {
-        static public (
-            Composition.TreeWithStringPath sourceTree,
+        static public
+            (Composition.TreeWithStringPath sourceTree,
             string filteredSourceCompositionId,
             byte[] configZipArchive)
             BuildConfigurationZipArchiveFromPath(string sourcePath)
         {
-            var loadFromPathResult = LoadFromPath.LoadTreeFromPath(sourcePath);
+            var loadCompositionResult =
+                LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
+                .LogToActions(Console.WriteLine);
 
-            if (loadFromPathResult?.Ok == null)
+            if (loadCompositionResult?.Ok == null)
             {
-                throw new Exception("Failed to load from path '" + sourcePath + "': " + loadFromPathResult?.Err);
+                throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
             }
 
-            var sourceTree = loadFromPathResult.Ok.tree;
+            var sourceTree = loadCompositionResult.Ok.tree;
 
             /*
             TODO: Provide a better way to avoid unnecessary files ending up in the config: Get the source files from git.
             */
             var filteredSourceTree =
-                loadFromPathResult.Ok.comesFromLocalFilesystem
+                loadCompositionResult.Ok.origin?.FromLocalFileSystem != null
                 ?
                 RemoveNoiseFromTreeComingFromLocalFileSystem(sourceTree)
                 :

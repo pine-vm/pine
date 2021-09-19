@@ -25,5 +25,13 @@ namespace Pine
 
             return Result<MappedErrT, OkT>.ok(Ok);
         }
+
+        public Result<ErrT, MappedOkT> andThen<MappedOkT>(Func<OkT, Result<ErrT, MappedOkT>> okMap)
+        {
+            if (Ok == null)
+                return Result<ErrT, MappedOkT>.err(Err);
+
+            return okMap(Ok);
+        }
     }
 }
