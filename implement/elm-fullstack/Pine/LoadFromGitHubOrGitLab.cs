@@ -297,8 +297,7 @@ namespace Pine
 
             var hashedValue = Encoding.ASCII.GetBytes(prefixAsText).Concat(blobContent).ToArray();
 
-            using var hasher = new SHA1Managed();
-            return hasher.ComputeHash(hashedValue);
+            return SHA1.HashData(hashedValue);
         }
 
         public record LoadFromUrlSuccess(

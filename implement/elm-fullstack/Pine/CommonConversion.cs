@@ -15,12 +15,7 @@ namespace Pine
         static public string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
             BitConverter.ToString(bytes as byte[] ?? bytes.ToArray()).Replace("-", "").ToLowerInvariant();
 
-        static public byte[] HashSHA256(byte[] input)
-        {
-            using var hasher = new SHA256Managed();
-
-            return hasher.ComputeHash(input);
-        }
+        static public byte[] HashSHA256(byte[] input) => SHA256.HashData(input);
 
         static public byte[] CompressGzip(byte[] original)
         {
