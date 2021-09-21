@@ -29,7 +29,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 <script>
 
     getCompletionItemsTimeoutMilliseconds = 1000;
+    getHoverTimeoutMilliseconds = 1000;
     provideCompletionItemsEventFromElm = function(){};
+    provideHoverEventFromElm = function(){};
 
     function getEditorModel() {
         if(typeof monaco != "object")
@@ -134,6 +136,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         if(message.ProvideCompletionItemsEvent)
             provideCompletionItemsEventFromElm(message.ProvideCompletionItemsEvent[0]);
+
+        if(message.ProvideHoverEvent)
+            provideHoverEventFromElm(message.ProvideHoverEvent[0]);
     }
 
     function tryCompleteSetup() {
@@ -171,8 +176,19 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         return new Promise(function (resolve, reject) {
 
+            var timeout =
+                setTimeout(() => {
+                    var message = "Did not get completion items from Elm within " + getCompletionItemsTimeoutMilliseconds + " milliseconds.";
+
+                console.error(message);
+                reject(message);
+                return;
+            }, getCompletionItemsTimeoutMilliseconds);
+
             provideCompletionItemsEventFromElm = function(completionItemsFromElm)
             {
+                clearTimeout(timeout);
+
                 var completionItemsForMonaco =
                     completionItemsFromElm.map(item => monacoCompletionItemFromElmMonacoCompletionItem(range, item));
 
@@ -184,14 +200,38 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             parent?.messageFromMonacoFrame?.({
                 "RequestCompletionItemsEvent":
                     [{"textUntilPosition":textUntilPosition,"cursorLineNumber":cursorLineNumber}]});
+        });
+    }
 
-            setTimeout(() => {
-                var message = "Did not get completion items from Elm within " + getCompletionItemsTimeoutMilliseconds + " milliseconds.";
+    function editorProvideHoverFromPosition(position, lineText, word) {
+
+        return new Promise(function (resolve, reject) {
+
+            var timeout =
+                setTimeout(() => {
+                    var message = "Did not get hover from Elm within " + getHoverTimeoutMilliseconds + " milliseconds.";
 
                 console.error(message);
                 reject(message);
-                return;
-            }, getCompletionItemsTimeoutMilliseconds);
+            }, getHoverTimeoutMilliseconds);
+
+            provideHoverEventFromElm = function(hoverFromElm)
+            {
+                clearTimeout(timeout);
+
+                var contents = hoverFromElm.map(content => ({ value: content }));
+
+                resolve({ contents: contents ?? [] });
+
+                provideHoverEventFromElm = function(){};
+            }
+
+            parent?.messageFromMonacoFrame?.({
+                "RequestHoverEvent":
+                    [{"positionLineNumber":position.lineNumber,
+                    "positionColumn":position.column,
+                    "lineText": lineText,
+                    "word": word.word}]});
         });
     }
 
@@ -247,6 +287,17 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             },
 
             triggerCharacters: ["."," "]
+        });
+
+        monaco.languages.registerHoverProvider('Elm', {
+            provideHover: function (model, position) {
+                var textUntilPosition = model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+
+                var lineText = model.getLineContent(position.lineNumber);
+                var word = model.getWordAtPosition(position);
+
+                return editorProvideHoverFromPosition(position, lineText, word);
+            }
         });
 
         monaco.editor.defineTheme('dark-plus', {

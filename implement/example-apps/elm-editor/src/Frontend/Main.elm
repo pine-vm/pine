@@ -758,6 +758,11 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                                 |> provideCompletionItems requestCompletionItems
                                 |> Tuple.mapSecond provideCompletionItemsInMonacoEditorCmd
 
+                        Frontend.MonacoEditor.RequestHoverEvent requestHoverEvent ->
+                            stateBefore
+                                |> provideHover requestHoverEvent
+                                |> Tuple.mapSecond provideHoverInMonacoEditorCmd
+
         UserInputFormat ->
             ( stateBefore, elmFormatCmd stateBefore |> Maybe.withDefault Cmd.none )
 
@@ -859,27 +864,54 @@ provideCompletionItems :
     -> WorkingProjectStateStructure
     -> ( WorkingProjectStateStructure, List Frontend.MonacoEditor.MonacoCompletionItem )
 provideCompletionItems request stateBefore =
+    case stateBefore.editing.filePathOpenedInEditor of
+        Nothing ->
+            ( stateBefore, [] )
+
+        Just filePathOpenedInEditor ->
+            updateAndGetFromLanguageService
+                (LanguageService.provideCompletionItems
+                    { filePathOpenedInEditor = filePathOpenedInEditor
+                    , textUntilPosition = request.textUntilPosition
+                    , cursorLineNumber = request.cursorLineNumber
+                    }
+                )
+                stateBefore
+
+
+provideHover :
+    Frontend.MonacoEditor.RequestHoverStruct
+    -> WorkingProjectStateStructure
+    -> ( WorkingProjectStateStructure, List String )
+provideHover request stateBefore =
+    case stateBefore.editing.filePathOpenedInEditor of
+        Nothing ->
+            ( stateBefore, [] )
+
+        Just filePathOpenedInEditor ->
+            updateAndGetFromLanguageService
+                (LanguageService.provideHover
+                    { filePathOpenedInEditor = filePathOpenedInEditor
+                    , positionLineNumber = request.positionLineNumber
+                    , positionColumn = request.positionColumn
+                    , lineText = request.lineText
+                    }
+                )
+                stateBefore
+
+
+updateAndGetFromLanguageService :
+    (LanguageService.LanguageServiceState -> a)
+    -> WorkingProjectStateStructure
+    -> ( WorkingProjectStateStructure, a )
+updateAndGetFromLanguageService getFromLangService stateBefore =
     let
         languageServiceState =
             LanguageService.updateLanguageServiceState stateBefore.fileTree stateBefore.languageServiceState
-
-        state =
-            { stateBefore | languageServiceState = languageServiceState }
-
-        completionItems =
-            case state.editing.filePathOpenedInEditor of
-                Nothing ->
-                    []
-
-                Just filePathOpenedInEditor ->
-                    LanguageService.provideCompletionItems
-                        { filePathOpenedInEditor = filePathOpenedInEditor
-                        , textUntilPosition = request.textUntilPosition
-                        , cursorLineNumber = request.cursorLineNumber
-                        }
-                        languageServiceState
     in
-    ( state, completionItems )
+    ( { stateBefore | languageServiceState = languageServiceState }
+    , getFromLangService languageServiceState
+    )
 
 
 processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
@@ -2963,6 +2995,13 @@ setModelMarkersInMonacoEditorCmd =
 provideCompletionItemsInMonacoEditorCmd : List Frontend.MonacoEditor.MonacoCompletionItem -> Cmd WorkspaceEventStructure
 provideCompletionItemsInMonacoEditorCmd =
     Frontend.MonacoEditor.ProvideCompletionItemsEvent
+        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> sendMessageToMonacoFrame
+
+
+provideHoverInMonacoEditorCmd : List String -> Cmd WorkspaceEventStructure
+provideHoverInMonacoEditorCmd =
+    Frontend.MonacoEditor.ProvideHoverEvent
         >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 

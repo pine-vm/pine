@@ -9,6 +9,233 @@ import LanguageService
 import Test
 
 
+provide_hover : Test.Test
+provide_hover =
+    let
+        otherFiles =
+            [ ( [ "src", "Alpha.elm" ]
+              , """
+module Alpha exposing (..)
+
+{-| Documentation comment on module Alpha
+-}
+
+from_alpha = 123
+
+
+"""
+              )
+            , ( [ "src", "Delta.elm" ]
+              , """
+module Delta exposing (..)
+
+{-| Module comment
+-}
+
+
+{-| Comment on function
+-}
+from_delta : ( Int, String )
+from_delta =
+    ( 1, "" )
+
+"""
+              )
+            ]
+
+        expectationFromScenarioInMain mainModuleText expectedItems =
+            hoverExpectationFromScenario
+                otherFiles
+                ( [ "src", "Main.elm" ], mainModuleText )
+                expectedItems
+    in
+    Test.describe "Provide hover"
+        [ Test.test "On local top-level function" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+name = i👈🚁nit
+
+
+init : State
+init =
+    0
+"""
+                    [ "    init : State"
+                    ]
+        , Test.test "On import syntax module name" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import A👈🚁lpha
+
+
+init : State
+init =
+    0
+"""
+                    [ "Documentation comment on module Alpha"
+                    ]
+        , Test.test "On type annotation referencing local declaration" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+name : S👈🚁tate
+name = 4
+
+{-| Comment on type alias declaration
+-}
+type alias State =
+    Int
+
+"""
+                    [ stringTrimUpToLineBreaks """
+    type alias State =
+        Int
+
+
+Comment on type alias declaration"""
+                    ]
+        , Test.test "On type alias declaration referencing local declaration" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+type alias OtherRecord =
+    { field_a : S👈🚁tate
+    }
+
+
+{-| Comment on type alias declaration
+-}
+type alias State =
+    Int
+
+"""
+                    [ stringTrimUpToLineBreaks """
+    type alias State =
+        Int
+
+
+Comment on type alias declaration"""
+                    ]
+        , Test.test "On imported module alias" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import Alpha exposing (from_alpha)
+import Delta as ModuleAlias
+
+
+name = ModuleAlia👈🚁s.from_delta
+
+
+init : State
+init =
+    0
+"""
+                    [ "Module comment"
+                    ]
+        , Test.test "On declaration from imported module alias" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import Alpha exposing (from_alpha)
+import Delta as ModuleAlias
+
+
+name = ModuleAlias.from_d👈🚁elta
+
+
+init : State
+init =
+    0
+"""
+                    [ """    from_delta : ( Int, String )
+
+Comment on function"""
+                    ]
+        ]
+
+
+hoverExpectationFromScenario :
+    List ( List String, String )
+    -> ( List String, String )
+    -> List String
+    -> Expect.Expectation
+hoverExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
+    case String.split "👈🚁" fileOpenedInEditorText of
+        [ textUntilCursor, textAfterCursor ] ->
+            hoverExpectationFromScenarioDescribingOpenFile
+                otherFiles
+                { filePath = fileOpenedInEditorPath
+                , textUntilCursor = textUntilCursor
+                , textAfterCursor = textAfterCursor
+                }
+                expectedItems
+
+        splitElements ->
+            Expect.fail ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: " ++ String.fromInt (List.length splitElements - 1))
+
+
+hoverExpectationFromScenarioDescribingOpenFile :
+    List ( List String, String )
+    -> { filePath : List String, textUntilCursor : String, textAfterCursor : String }
+    -> List String
+    -> Expect.Expectation
+hoverExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor expectedItems =
+    let
+        languageServiceState =
+            buildLanguageServiceStateFindingParsableModuleText
+                { maxLinesToRemoveBeforeCursor = 3 }
+                otherFiles
+                fileOpenedInEditor
+
+        wholeText =
+            fileOpenedInEditor.textUntilCursor ++ fileOpenedInEditor.textAfterCursor
+
+        positionLineNumber =
+            fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+
+        lineText =
+            wholeText
+                |> String.lines
+                |> List.drop (positionLineNumber - 1)
+                |> List.head
+
+        positionColumn =
+            fileOpenedInEditor.textUntilCursor
+                |> String.lines
+                |> List.reverse
+                |> List.head
+                |> Maybe.map (String.length >> (+) 1)
+                |> Maybe.withDefault 0
+    in
+    Expect.equal expectedItems
+        (LanguageService.provideHover
+            { filePathOpenedInEditor = fileOpenedInEditor.filePath
+            , positionLineNumber = fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+            , positionColumn = positionColumn
+            , lineText = Maybe.withDefault "" lineText
+            }
+            languageServiceState
+        )
+
+
 provide_completion_items : Test.Test
 provide_completion_items =
     let

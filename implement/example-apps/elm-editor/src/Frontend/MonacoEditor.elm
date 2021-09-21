@@ -6,6 +6,7 @@ type MessageToEditor
     | SetModelMarkers (List EditorMarker)
     | RevealPositionInCenter { lineNumber : Int, column : Int }
     | ProvideCompletionItemsEvent (List MonacoCompletionItem)
+    | ProvideHoverEvent (List String)
 
 
 type MessageFromEditor
@@ -15,11 +16,20 @@ type MessageFromEditor
     | EditorActionFormatDocumentEvent
     | EditorActionCompileEvent
     | RequestCompletionItemsEvent RequestCompletionItemsStruct
+    | RequestHoverEvent RequestHoverStruct
 
 
 type alias RequestCompletionItemsStruct =
     { textUntilPosition : String
     , cursorLineNumber : Int
+    }
+
+
+type alias RequestHoverStruct =
+    { positionLineNumber : Int
+    , positionColumn : Int
+    , lineText : String
+    , word : String
     }
 
 
