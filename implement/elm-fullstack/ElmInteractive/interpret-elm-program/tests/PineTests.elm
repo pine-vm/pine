@@ -18,16 +18,16 @@ pineExpressionEncodeDecodeRoundtrip =
       )
     , ( "if block"
       , Pine.IfBlockExpression
-            { condition = Pine.FunctionOrValueExpression "condition"
-            , ifTrue = Pine.FunctionOrValueExpression "trueExpression"
-            , ifFalse = Pine.FunctionOrValueExpression "falseExpression"
+            { condition = Pine.LookupNameExpression { scopeExpression = Nothing, name = "condition" }
+            , ifTrue = Pine.LookupNameExpression { scopeExpression = Nothing, name = "trueExpression" }
+            , ifFalse = Pine.LookupNameExpression { scopeExpression = Nothing, name = "falseExpression" }
             }
       )
     , ( "context expansion with name"
       , Pine.ContextExpansionWithNameExpression
             { name = "newName"
             , namedValue = Pine.valueFromString "named value"
-            , expression = Pine.FunctionOrValueExpression "expression_using_new_name"
+            , expression = Pine.LookupNameExpression { scopeExpression = Nothing, name = "expression_using_new_name" }
             }
       )
     , ( "simple function expression"

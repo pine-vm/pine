@@ -12,7 +12,8 @@ type Expression
     = LiteralExpression Value
     | ListExpression ListExpressionStructure
     | ApplicationExpression ApplicationExpressionStructure
-    | FunctionOrValueExpression String
+    | LookupNameExpression LookupNameExpressionStruct
+    | LookupNameInKernelExpression String
     | ContextExpansionWithNameExpression ContextExpansionWithNameExpressionStructure
     | IfBlockExpression IfBlockExpressionStructure
     | FunctionExpression FunctionExpressionStructure
@@ -20,6 +21,12 @@ type Expression
 
 type alias ListExpressionStructure =
     List Expression
+
+
+type alias LookupNameExpressionStruct =
+    { scopeExpression : Maybe Expression
+    , name : String
+    }
 
 
 type alias ApplicationExpressionStructure =
@@ -107,28 +114,41 @@ evaluateExpressionExceptClosure context expression =
             evaluateFunctionApplication context application
                 |> Result.mapError (DescribePathNode ("Failed application of '" ++ describeExpression application.function ++ "'"))
 
-        FunctionOrValueExpression name ->
-            case Dict.get name pineKernelFunctionsWithQualifiedName of
-                Just kernelFunction ->
-                    Ok kernelFunction
+        LookupNameExpression lookupNameExpression ->
+            lookupNameExpression.scopeExpression
+                |> Maybe.map
+                    (evaluateExpression context
+                        >> Result.map
+                            (\contextValue ->
+                                case contextValue of
+                                    ListValue list ->
+                                        { commonModel = list }
 
-                Nothing ->
-                    let
-                        beforeCheckForExpression =
-                            lookUpNameAsStringInContext name context
-                                |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
-                    in
-                    case beforeCheckForExpression of
-                        Ok ( valueFromLookup, contextFromLookup ) ->
-                            case decodeExpressionFromValue valueFromLookup of
-                                Ok expressionFromLookup ->
-                                    Ok (ClosureValue { commonModel = contextFromLookup } expressionFromLookup)
+                                    _ ->
+                                        { commonModel = [] }
+                            )
+                    )
+                |> Maybe.withDefault (Ok context)
+                |> Result.map
+                    (\contextValue ->
+                        let
+                            beforeCheckForExpression =
+                                lookUpNameAsStringInContext lookupNameExpression.name contextValue
+                                    |> Result.withDefault (ListValue [])
+                        in
+                        case decodeExpressionFromValue beforeCheckForExpression of
+                            Ok expressionFromLookup ->
+                                ClosureValue contextValue expressionFromLookup
 
-                                _ ->
-                                    Result.map Tuple.first beforeCheckForExpression
+                            _ ->
+                                beforeCheckForExpression
+                    )
+                |> Result.map (List.singleton >> ListValue)
 
-                        _ ->
-                            Result.map Tuple.first beforeCheckForExpression
+        LookupNameInKernelExpression name ->
+            Dict.get name pineKernelFunctions
+                |> Maybe.withDefault (ListValue [])
+                |> Ok
 
         IfBlockExpression ifBlock ->
             case evaluateExpression context ifBlock.condition of
@@ -175,7 +195,7 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameAsStringInContext : String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
+lookUpNameAsStringInContext : String -> ExpressionContext -> Result (PathDescription String) Value
 lookUpNameAsStringInContext name context =
     let
         nameAsValue =
@@ -216,10 +236,10 @@ lookUpNameAsStringInContext name context =
                 )
 
         Just firstNameValue ->
-            Ok ( firstNameValue, context.commonModel )
+            Ok firstNameValue
 
 
-pineKernelFunctions : List ( String, Value )
+pineKernelFunctions : Dict.Dict String Value
 pineKernelFunctions =
     [ ( "equals"
       , kernelFunctionExpectingExactlyTwoArguments
@@ -299,12 +319,6 @@ pineKernelFunctions =
             }
       )
     ]
-
-
-pineKernelFunctionsWithQualifiedName : Dict.Dict String Value
-pineKernelFunctionsWithQualifiedName =
-    pineKernelFunctions
-        |> List.map (Tuple.mapFirst ((++) (kernelModuleName ++ ".")))
         |> Dict.fromList
 
 
@@ -514,8 +528,11 @@ tagValueExpression tagName tagArgumentsExpressions =
 describeExpression : Expression -> String
 describeExpression expression =
     case expression of
-        FunctionOrValueExpression name ->
-            "name(" ++ name ++ ")"
+        LookupNameExpression lookupNameExpression ->
+            "lookup-name(" ++ (lookupNameExpression.scopeExpression |> Maybe.map describeExpression |> Maybe.withDefault "Nothing") ++ ", " ++ lookupNameExpression.name ++ ")"
+
+        LookupNameInKernelExpression name ->
+            "lookup-name-in-kernel(" ++ name ++ ")"
 
         ListExpression list ->
             "[" ++ String.join "," (list |> List.map describeExpression) ++ ")"
@@ -753,8 +770,22 @@ jsonEncodeExpression expression =
                   )
                 ]
 
-        FunctionOrValueExpression functionOrValueExpression ->
-            Json.Encode.object [ ( "FunctionOrValueExpression", Json.Encode.string functionOrValueExpression ) ]
+        LookupNameExpression lookupNameExpression ->
+            Json.Encode.object
+                [ ( "LookupNameExpression"
+                  , Json.Encode.object
+                        [ ( "name", Json.Encode.string lookupNameExpression.name )
+                        , ( "scopeExpression", jsonEncode__generic_Maybe jsonEncodeExpression lookupNameExpression.scopeExpression )
+                        ]
+                  )
+                ]
+
+        LookupNameInKernelExpression name ->
+            Json.Encode.object
+                [ ( "LookupNameInKernelExpression"
+                  , Json.Encode.object [ ( "name", Json.Encode.string name ) ]
+                  )
+                ]
 
         ContextExpansionWithNameExpression contextExpansionWithNameExpression ->
             Json.Encode.object
@@ -799,8 +830,17 @@ jsonDecodeExpression =
                     (Json.Decode.field "argument" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
                 )
             )
-        , Json.Decode.field "FunctionOrValueExpression"
-            (Json.Decode.map FunctionOrValueExpression Json.Decode.string)
+        , Json.Decode.field "LookupNameExpression"
+            (Json.Decode.map LookupNameExpression
+                (Json.Decode.map2 LookupNameExpressionStruct
+                    (Json.Decode.field "scopeExpression" (Json.Decode.lazy (\() -> jsonDecode__generic_Maybe jsonDecodeExpression)))
+                    (Json.Decode.field "name" Json.Decode.string)
+                )
+            )
+        , Json.Decode.field "LookupNameInKernelExpression"
+            (Json.Decode.map LookupNameInKernelExpression
+                (Json.Decode.field "name" Json.Decode.string)
+            )
         , Json.Decode.field "ContextExpansionWithNameExpression"
             (Json.Decode.map ContextExpansionWithNameExpression jsonDecodeContextExpansionWithNameExpression)
         , Json.Decode.field "IfBlockExpression"
@@ -869,6 +909,24 @@ jsonDecodeValue =
             (Json.Decode.map ListValue (Json.Decode.list (Json.Decode.lazy (\() -> jsonDecodeValue))))
         , Json.Decode.field "ClosureValue"
             (Json.Decode.fail "Decoding of ClosureValue not implemented")
+        ]
+
+
+jsonEncode__generic_Maybe : (a -> Json.Encode.Value) -> Maybe a -> Json.Encode.Value
+jsonEncode__generic_Maybe encodeJust valueToEncode =
+    case valueToEncode of
+        Nothing ->
+            [ ( "Nothing", [] |> Json.Encode.list identity ) ] |> Json.Encode.object
+
+        Just just ->
+            [ ( "Just", [ just ] |> Json.Encode.list encodeJust ) ] |> Json.Encode.object
+
+
+jsonDecode__generic_Maybe : Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
+jsonDecode__generic_Maybe decoder =
+    Json.Decode.oneOf
+        [ Json.Decode.field "Nothing" (Json.Decode.succeed Nothing)
+        , Json.Decode.field "Just" (Json.Decode.index 0 decoder |> Json.Decode.map Just)
         ]
 
 

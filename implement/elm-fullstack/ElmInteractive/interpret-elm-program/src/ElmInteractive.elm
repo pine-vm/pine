@@ -568,7 +568,7 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                                                 Just
                                                     [ Ok
                                                         ( "(" ++ Elm.Syntax.Node.value infixDeclaration.operator ++ ")"
-                                                        , Pine.FunctionOrValueExpression (Elm.Syntax.Node.value infixDeclaration.function)
+                                                        , expressionToLookupNameInEnvironment (Elm.Syntax.Node.value infixDeclaration.function)
                                                         )
                                                     ]
 
@@ -1388,7 +1388,7 @@ pineExpressionFromElm elmExpression =
                     ( Ok left, Ok right ) ->
                         Ok
                             (functionApplicationExpressionFromListOfArguments
-                                (Pine.FunctionOrValueExpression ("(" ++ operator ++ ")"))
+                                (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
                                 [ left, right ]
                             )
 
@@ -1396,7 +1396,7 @@ pineExpressionFromElm elmExpression =
                         Err "Failed to map OperatorApplication left or right expression. TODO: Expand error details."
 
         Elm.Syntax.Expression.PrefixOperator operator ->
-            Ok (Pine.FunctionOrValueExpression ("(" ++ operator ++ ")"))
+            Ok (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case pineExpressionFromElm (Elm.Syntax.Node.value elmCondition) of
@@ -1581,7 +1581,7 @@ pineExpressionFromElmFunctionWithoutName function =
                                                 String.join "_" [ "function", functionId, "argument", String.fromInt argIndex, inspectionSymbol ]
                                         in
                                         ( argumentNameBeforeDeconstruct
-                                        , deconstruction (Pine.FunctionOrValueExpression argumentNameBeforeDeconstruct)
+                                        , deconstruction (expressionToLookupNameInEnvironment argumentNameBeforeDeconstruct)
                                         )
                                     )
 
@@ -1674,7 +1674,7 @@ pineExpressionFromElmValueConstructor valueConstructor =
                 (\argumentName prevExpression ->
                     Pine.FunctionExpression { argumentName = argumentName, body = prevExpression }
                 )
-                (Pine.tagValueExpression constructorName (argumentsNames |> List.map Pine.FunctionOrValueExpression))
+                (Pine.tagValueExpression constructorName (argumentsNames |> List.map expressionToLookupNameInEnvironment))
         )
 
 
@@ -1704,7 +1704,7 @@ pineExpressionFromElmCaseBlock caseBlock =
                     Ok
                         (List.foldr
                             ifBlockFromCase
-                            (Pine.FunctionOrValueExpression "Error in mapping of case-of block: No matching branch.")
+                            (Pine.LiteralExpression (Pine.valueFromString "Error in mapping of case-of block: No matching branch."))
                             cases
                         )
 
@@ -1955,13 +1955,12 @@ pineExpressionFromElmRecordAccess fieldName recordElmExpression =
                             , listItemFromIndexExpression 0 recordExpression
                             ]
                     , ifTrue =
-                        expressionToPickRecordFieldValue
+                        expressionToLookupNameInValue
                             fieldName
-                            identity
                             (Pine.LiteralExpression
                                 (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
                             )
-                            recordFieldsExpression
+                            (Just recordFieldsExpression)
                     , ifFalse =
                         Pine.LiteralExpression
                             (Pine.valueFromString "Error: Used record access on value which is not a record")
@@ -1971,99 +1970,48 @@ pineExpressionFromElmRecordAccess fieldName recordElmExpression =
 
 expressionForPineKernelFunction : String -> Pine.Expression
 expressionForPineKernelFunction kernelFunctionName =
-    pineFunctionOrValueExpressionFromElmFunctionOrValue [ Pine.kernelModuleName ] kernelFunctionName
+    Pine.LookupNameInKernelExpression kernelFunctionName
 
 
 pineFunctionOrValueExpressionFromElmFunctionOrValue : List String -> String -> Pine.Expression
 pineFunctionOrValueExpressionFromElmFunctionOrValue moduleName nameInModule =
-    let
-        forNameInModule =
-            Pine.FunctionOrValueExpression nameInModule
-    in
     if moduleName == [ Pine.kernelModuleName ] then
-        Pine.FunctionOrValueExpression (String.join "." (moduleName ++ [ nameInModule ]))
-
-    else if moduleName == [] then
-        forNameInModule
+        Pine.LookupNameInKernelExpression nameInModule
 
     else
-        expressionToPickRecordFieldValue
-            nameInModule
-            identity
-            (Pine.LiteralExpression
-                (Pine.valueFromString ("Getting declaration in module " ++ String.join "." moduleName ++ " failed: Did not find declaration '" ++ nameInModule ++ "'"))
-            )
-            (Pine.FunctionOrValueExpression (String.join "." moduleName))
+        let
+            scopeExpression =
+                if moduleName == [] then
+                    Nothing
+
+                else
+                    Just (expressionToLookupNameInEnvironment (String.join "." moduleName))
+        in
+        listItemFromIndexExpression 0
+            (Pine.LookupNameExpression { scopeExpression = scopeExpression, name = nameInModule })
 
 
-expressionToPickRecordFieldValue : String -> (Pine.Expression -> Pine.Expression) -> Pine.Expression -> Pine.Expression -> Pine.Expression
-expressionToPickRecordFieldValue fieldName postProcessIfFound ifFieldNotFound recordFieldsExpression =
-    let
-        recordFieldNameValueExpression =
-            Pine.LiteralExpression (Pine.valueFromString fieldName)
-
-        matchingFieldPredicateExpression listElementExpression =
-            functionApplicationExpressionFromListOfArguments
-                (expressionForPineKernelFunction "equals")
-                [ recordFieldNameValueExpression
-                , Pine.ApplicationExpression
-                    { function = expressionForPineKernelFunction "listHead"
-                    , argument = listElementExpression
-                    }
-                ]
-    in
-    expressionToPickFirstMatchingElementFromList
-        matchingFieldPredicateExpression
-        (listItemFromIndexExpression 1 >> postProcessIfFound)
-        ifFieldNotFound
-        recordFieldsExpression
+expressionToLookupNameInEnvironment : String -> Pine.Expression
+expressionToLookupNameInEnvironment name =
+    listItemFromIndexExpression 0
+        (Pine.LookupNameExpression { scopeExpression = Nothing, name = name })
 
 
-expressionToPickFirstMatchingElementFromList : (Pine.Expression -> Pine.Expression) -> (Pine.Expression -> Pine.Expression) -> Pine.Expression -> Pine.Expression -> Pine.Expression
-expressionToPickFirstMatchingElementFromList elementPredicateFromElementExpression postProcessIfFound defaultExpression listExpression =
-    let
-        functionName =
-            "internal_recursive_pick_from_list"
-
-        recursionInstanceRemainingListName =
-            "internal_remaining_list"
-
-        firstElementExpression =
-            listItemFromIndexExpression 0 (Pine.FunctionOrValueExpression recursionInstanceRemainingListName)
-
-        functionExpression =
-            Pine.FunctionExpression
-                { argumentName = recursionInstanceRemainingListName
-                , body =
-                    Pine.IfBlockExpression
-                        { condition =
-                            functionApplicationExpressionFromListOfArguments
-                                (expressionForPineKernelFunction "equals")
-                                [ Pine.FunctionOrValueExpression recursionInstanceRemainingListName
-                                , Pine.LiteralExpression (Pine.ListValue [])
-                                ]
-                        , ifTrue = defaultExpression
-                        , ifFalse =
-                            Pine.IfBlockExpression
-                                { condition = elementPredicateFromElementExpression firstElementExpression
-                                , ifTrue = postProcessIfFound firstElementExpression
-                                , ifFalse =
-                                    Pine.ApplicationExpression
-                                        { function = Pine.FunctionOrValueExpression functionName
-                                        , argument =
-                                            listDropExpression
-                                                1
-                                                (Pine.FunctionOrValueExpression recursionInstanceRemainingListName)
-                                        }
-                                }
-                        }
-                }
-    in
+expressionToLookupNameInValue : String -> Pine.Expression -> Maybe Pine.Expression -> Pine.Expression
+expressionToLookupNameInValue name ifFieldNotFound scopeExpression =
     pineExpressionFromLetBlockDeclarationsAndExpression
-        [ ( functionName, functionExpression ) ]
-        (Pine.ApplicationExpression
-            { function = Pine.FunctionOrValueExpression functionName
-            , argument = listExpression
+        [ ( "lookupResult", Pine.LookupNameExpression { scopeExpression = scopeExpression, name = name } ) ]
+        (Pine.IfBlockExpression
+            { condition =
+                functionApplicationExpressionFromListOfArguments
+                    (expressionForPineKernelFunction "equals")
+                    [ Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" }
+                    , Pine.LiteralExpression (Pine.ListValue [])
+                    ]
+            , ifTrue = ifFieldNotFound
+            , ifFalse =
+                listItemFromIndexExpression 0
+                    (Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" })
             }
         )
 
