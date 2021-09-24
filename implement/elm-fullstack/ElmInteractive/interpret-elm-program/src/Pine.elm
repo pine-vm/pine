@@ -1,6 +1,7 @@
 module Pine exposing (..)
 
 import BigInt
+import Dict
 import Json.Decode
 import Json.Encode
 import Maybe.Extra
@@ -107,22 +108,27 @@ evaluateExpressionExceptClosure context expression =
                 |> Result.mapError (DescribePathNode ("Failed application of '" ++ describeExpression application.function ++ "'"))
 
         FunctionOrValueExpression name ->
-            let
-                beforeCheckForExpression =
-                    lookUpNameAsStringInContext (String.split "." name) context
-                        |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
-            in
-            case beforeCheckForExpression of
-                Ok ( valueFromLookup, contextFromLookup ) ->
-                    case decodeExpressionFromValue valueFromLookup of
-                        Ok expressionFromLookup ->
-                            Ok (ClosureValue { commonModel = contextFromLookup } expressionFromLookup)
+            case Dict.get name pineKernelFunctionsWithQualifiedName of
+                Just kernelFunction ->
+                    Ok kernelFunction
+
+                Nothing ->
+                    let
+                        beforeCheckForExpression =
+                            lookUpNameAsStringInContext name context
+                                |> Result.mapError (DescribePathNode ("Failed to look up name '" ++ name ++ "'"))
+                    in
+                    case beforeCheckForExpression of
+                        Ok ( valueFromLookup, contextFromLookup ) ->
+                            case decodeExpressionFromValue valueFromLookup of
+                                Ok expressionFromLookup ->
+                                    Ok (ClosureValue { commonModel = contextFromLookup } expressionFromLookup)
+
+                                _ ->
+                                    Result.map Tuple.first beforeCheckForExpression
 
                         _ ->
                             Result.map Tuple.first beforeCheckForExpression
-
-                _ ->
-                    Result.map Tuple.first beforeCheckForExpression
 
         IfBlockExpression ifBlock ->
             case evaluateExpression context ifBlock.condition of
@@ -169,194 +175,142 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameAsStringInContext : List String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
-lookUpNameAsStringInContext path =
-    case path of
-        [ "PineKernel", kernelFunctionName ] ->
-            case lookUpKernelFunction kernelFunctionName of
-                Nothing ->
-                    always (Err (DescribePathEnd ("Did not pine kernel function with this name: " ++ kernelFunctionName)))
+lookUpNameAsStringInContext : String -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
+lookUpNameAsStringInContext name context =
+    let
+        nameAsValue =
+            valueFromString name
 
-                Just kernelFunction ->
-                    always (Ok ( kernelFunction, [] ))
+        getMatchFromList contextList =
+            case contextList of
+                [] ->
+                    Nothing
 
-        _ ->
-            lookUpNameAsValueInContext (List.map valueFromString path)
+                nextElement :: remainingElements ->
+                    case nextElement of
+                        ListValue [ labelValue, namedValue ] ->
+                            if labelValue == nameAsValue then
+                                Just namedValue
 
+                            else
+                                getMatchFromList remainingElements
 
-lookUpKernelFunction : String -> Maybe Value
-lookUpKernelFunction kernelFunctionName =
-    case kernelFunctionName of
-        "equals" ->
-            Just
-                (kernelFunctionExpectingExactlyTwoArguments
-                    { mapArg0 = Ok
-                    , mapArg1 = Ok
-                    , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue == rightValue))
-                    }
+                        _ ->
+                            getMatchFromList remainingElements
+    in
+    case getMatchFromList context.commonModel of
+        Nothing ->
+            let
+                availableNames =
+                    context.commonModel |> List.filterMap namedValueFromValue
+            in
+            Err
+                (DescribePathEnd
+                    ("Did not find '"
+                        ++ name
+                        ++ "'. There are "
+                        ++ (availableNames |> List.length |> String.fromInt)
+                        ++ " names available in that scope: "
+                        ++ (availableNames |> List.map Tuple.first |> String.join ", ")
+                    )
                 )
 
-        "equalsNot" ->
-            Just
-                (kernelFunctionExpectingExactlyTwoArguments
-                    { mapArg0 = Ok
-                    , mapArg1 = Ok
-                    , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue /= rightValue))
-                    }
-                )
+        Just firstNameValue ->
+            Ok ( firstNameValue, context.commonModel )
 
-        "notBool" ->
-            Just
-                (kernelFunctionExpectingExactlyOneArgument
-                    { mapArg0 = Ok
-                    , apply = \argument -> Ok (valueFromBool (argument /= trueValue))
-                    }
-                )
 
-        "and" ->
-            Just (kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&))
-
-        "or" ->
-            Just (kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||))
-
-        "listHead" ->
-            Just (kernelFunctionExpectingExactlyOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []) >> Ok))
-
-        "listTail" ->
-            Just (kernelFunctionExpectingExactlyOneArgumentOfTypeList ((List.tail >> Maybe.withDefault [] >> ListValue) >> Ok))
-
-        "negate" ->
-            Just
-                (kernelFunctionExpectingExactlyOneArgument
-                    { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-                    , apply = BigInt.negate >> valueFromBigInt >> Ok
-                    }
-                )
-
-        "addInt" ->
-            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.add)
-
-        "subInt" ->
-            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.sub)
-
-        "mulInt" ->
-            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.mul)
-
-        "divInt" ->
-            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.div)
-
-        "lessThanInt" ->
-            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.lt)
-
-        "greaterThanInt" ->
-            Just (kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.gt)
-
-        "append" ->
-            Just
-                (kernelFunctionExpectingExactlyTwoArguments
-                    { mapArg0 = Ok
-                    , mapArg1 = Ok
-                    , apply =
-                        \leftValue rightValue ->
-                            case leftValue of
-                                ListValue leftList ->
-                                    case rightValue of
-                                        ListValue rightList ->
-                                            Ok (ListValue (leftList ++ rightList))
-
-                                        _ ->
-                                            Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a list.")
-
-                                BlobValue leftBlob ->
-                                    case rightValue of
-                                        BlobValue rightBlob ->
-                                            Ok (BlobValue (leftBlob ++ rightBlob))
-
-                                        _ ->
-                                            Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a blob.")
-
-                                _ ->
-                                    Err (DescribePathEnd "Left operand for append is not a list and not a blob.")
-                    }
-                )
-
-        "listCons" ->
-            Just
-                (kernelFunctionExpectingExactlyTwoArguments
-                    { mapArg0 = Ok
-                    , mapArg1 = Ok
-                    , apply =
-                        \leftValue rightValue ->
+pineKernelFunctions : List ( String, Value )
+pineKernelFunctions =
+    [ ( "equals"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = Ok
+            , mapArg1 = Ok
+            , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue == rightValue))
+            }
+      )
+    , ( "equalsNot"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = Ok
+            , mapArg1 = Ok
+            , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue /= rightValue))
+            }
+      )
+    , ( "notBool"
+      , kernelFunctionExpectingExactlyOneArgument
+            { mapArg0 = Ok
+            , apply = \argument -> Ok (valueFromBool (argument /= trueValue))
+            }
+      )
+    , ( "and", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&) )
+    , ( "or", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||) )
+    , ( "listHead", kernelFunctionExpectingExactlyOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []) >> Ok) )
+    , ( "listTail", kernelFunctionExpectingExactlyOneArgumentOfTypeList ((List.tail >> Maybe.withDefault [] >> ListValue) >> Ok) )
+    , ( "negate"
+      , kernelFunctionExpectingExactlyOneArgument
+            { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+            , apply = BigInt.negate >> valueFromBigInt >> Ok
+            }
+      )
+    , ( "addInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.add )
+    , ( "subInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.sub )
+    , ( "mulInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.mul )
+    , ( "divInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.div )
+    , ( "lessThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.lt )
+    , ( "greaterThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.gt )
+    , ( "append"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = Ok
+            , mapArg1 = Ok
+            , apply =
+                \leftValue rightValue ->
+                    case leftValue of
+                        ListValue leftList ->
                             case rightValue of
                                 ListValue rightList ->
-                                    Ok (ListValue (leftValue :: rightList))
+                                    Ok (ListValue (leftList ++ rightList))
 
                                 _ ->
-                                    Err (DescribePathEnd "Right operand for listCons is not a list.")
-                    }
-                )
+                                    Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a list.")
 
-        _ ->
-            Nothing
-
-
-lookUpNameAsValueInContext : List Value -> ExpressionContext -> Result (PathDescription String) ( Value, List Value )
-lookUpNameAsValueInContext path context =
-    case path of
-        [] ->
-            Err (DescribePathEnd "path is empty")
-
-        pathFirstElement :: pathRemainingElements ->
-            let
-                getPathFirstElementAsString _ =
-                    Result.withDefault "Failed to map value to string" (stringFromValue pathFirstElement)
-
-                getMatchFromList contextList =
-                    case contextList of
-                        [] ->
-                            Nothing
-
-                        nextElement :: remainingElements ->
-                            case nextElement of
-                                ListValue [ labelValue, namedValue ] ->
-                                    if labelValue == pathFirstElement then
-                                        Just namedValue
-
-                                    else
-                                        getMatchFromList remainingElements
+                        BlobValue leftBlob ->
+                            case rightValue of
+                                BlobValue rightBlob ->
+                                    Ok (BlobValue (leftBlob ++ rightBlob))
 
                                 _ ->
-                                    getMatchFromList remainingElements
-            in
-            case getMatchFromList context.commonModel of
-                Nothing ->
-                    let
-                        availableNames =
-                            context.commonModel |> List.filterMap namedValueFromValue
-                    in
-                    Err
-                        (DescribePathEnd
-                            ("Did not find '"
-                                ++ getPathFirstElementAsString ()
-                                ++ "'. There are "
-                                ++ (availableNames |> List.length |> String.fromInt)
-                                ++ " names available in that scope: "
-                                ++ (availableNames |> List.map Tuple.first |> String.join ", ")
-                            )
-                        )
+                                    Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a blob.")
 
-                Just firstNameValue ->
-                    if pathRemainingElements == [] then
-                        Ok ( firstNameValue, context.commonModel )
+                        _ ->
+                            Err (DescribePathEnd "Left operand for append is not a list and not a blob.")
+            }
+      )
+    , ( "listCons"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = Ok
+            , mapArg1 = Ok
+            , apply =
+                \leftValue rightValue ->
+                    case rightValue of
+                        ListValue rightList ->
+                            Ok (ListValue (leftValue :: rightList))
 
-                    else
-                        case firstNameValue of
-                            ListValue firstNameList ->
-                                lookUpNameAsValueInContext pathRemainingElements
-                                    { commonModel = firstNameList }
+                        _ ->
+                            Err (DescribePathEnd "Right operand for listCons is not a list.")
+            }
+      )
+    ]
 
-                            _ ->
-                                Err (DescribePathEnd ("'" ++ getPathFirstElementAsString () ++ "' has unexpected type: Not a list."))
+
+pineKernelFunctionsWithQualifiedName : Dict.Dict String Value
+pineKernelFunctionsWithQualifiedName =
+    pineKernelFunctions
+        |> List.map (Tuple.mapFirst ((++) (kernelModuleName ++ ".")))
+        |> Dict.fromList
+
+
+kernelModuleName : String
+kernelModuleName =
+    "PineKernel"
 
 
 evaluateFunctionApplication : ExpressionContext -> { function : Expression, argument : Expression } -> Result (PathDescription String) Value
