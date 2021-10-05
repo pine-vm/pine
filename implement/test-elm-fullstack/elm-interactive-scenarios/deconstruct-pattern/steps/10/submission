@@ -1,0 +1,5 @@
+let
+    returnField { field_a } =
+        field_a
+in
+returnField { field_a = "literal in field" }

@@ -1,0 +1,5 @@
+let
+    c (a, b) =
+        b
+in
+c ("alpha", "beta")

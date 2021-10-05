@@ -1,6 +1,7 @@
 module ElmInteractive exposing
     ( InteractiveContext(..)
     , SubmissionResponse(..)
+    , countListElementsExpression
     , elmValueAsExpression
     , elmValueAsJson
     , evaluateExpressionText
@@ -30,6 +31,7 @@ import Parser
 import Pine
 import Result.Extra
 import SHA256
+import Set
 
 
 type InteractiveSubmission
@@ -471,8 +473,24 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                 moduleName =
                     Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)
 
+                coreModulesToStub =
+                    [ [ "Bytes" ]
+                    , [ "Bytes", "Decode" ]
+                    , [ "Bytes", "Encode" ]
+                    , [ "Bitwise" ]
+                    ]
+                        |> Set.fromList
+
                 valueForImportedModule : Elm.Syntax.ModuleName.ModuleName -> Result String Pine.Value
                 valueForImportedModule importedModuleName =
+                    if Set.member importedModuleName coreModulesToStub then
+                        Ok (Pine.ListValue [])
+
+                    else
+                        valueForImportedModuleExceptFromCore importedModuleName
+
+                valueForImportedModuleExceptFromCore : Elm.Syntax.ModuleName.ModuleName -> Result String Pine.Value
+                valueForImportedModuleExceptFromCore importedModuleName =
                     otherModules
                         |> List.filter (.projectedModuleName >> (==) importedModuleName)
                         |> List.head
@@ -480,7 +498,12 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                             (\matchingModule ->
                                 case parseElmModuleTextIntoPineValue allModules matchingModule of
                                     Err parseOtherModuleError ->
-                                        Err ("Failed to parse imported module: " ++ parseOtherModuleError)
+                                        Err
+                                            ("Failed to parse imported module "
+                                                ++ String.join "." importedModuleName
+                                                ++ ": "
+                                                ++ parseOtherModuleError
+                                            )
 
                                     Ok ( _, importedModuleExports ) ->
                                         Ok importedModuleExports
@@ -1336,6 +1359,9 @@ pineExpressionFromElm elmExpression =
         Elm.Syntax.Expression.Integer integer ->
             Ok (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer)))
 
+        Elm.Syntax.Expression.Hex integer ->
+            Ok (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer)))
+
         Elm.Syntax.Expression.Negation negatedElmExpression ->
             case pineExpressionFromElm (Elm.Syntax.Node.value negatedElmExpression) of
                 Err error ->
@@ -1380,20 +1406,20 @@ pineExpressionFromElm elmExpression =
                 pineExpressionFromElm orderedElmExpression
 
             else
-                case
-                    ( pineExpressionFromElm (Elm.Syntax.Node.value leftExpr)
-                    , pineExpressionFromElm (Elm.Syntax.Node.value rightExpr)
-                    )
-                of
-                    ( Ok left, Ok right ) ->
-                        Ok
-                            (functionApplicationExpressionFromListOfArguments
-                                (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
-                                [ left, right ]
-                            )
-
-                    _ ->
-                        Err "Failed to map OperatorApplication left or right expression. TODO: Expand error details."
+                pineExpressionFromElm (Elm.Syntax.Node.value leftExpr)
+                    |> Result.mapError ((++) "Failed to map left expression: ")
+                    |> Result.andThen
+                        (\left ->
+                            pineExpressionFromElm (Elm.Syntax.Node.value rightExpr)
+                                |> Result.mapError ((++) "Failed to map right expression: ")
+                                |> Result.map
+                                    (\right ->
+                                        functionApplicationExpressionFromListOfArguments
+                                            (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
+                                            [ left, right ]
+                                    )
+                        )
+                    |> Result.mapError ((++) "Failed to map OperatorApplication: ")
 
         Elm.Syntax.Expression.PrefixOperator operator ->
             Ok (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
@@ -1644,6 +1670,19 @@ declarationsFromPattern pattern =
                                 |> List.concat
                         )
 
+        Elm.Syntax.Pattern.RecordPattern fieldsElements ->
+            (\recordExpression ->
+                fieldsElements
+                    |> List.map Elm.Syntax.Node.value
+                    |> List.map
+                        (\fieldName ->
+                            ( fieldName
+                            , listItemFromIndexExpression 0 (pineExpressionForRecordAccess fieldName recordExpression)
+                            )
+                        )
+            )
+                |> Ok
+
         _ ->
             Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
 
@@ -1712,157 +1751,229 @@ pineExpressionFromElmCaseBlock caseBlock =
 pineExpressionFromElmCaseBlockCase :
     Pine.Expression
     -> Elm.Syntax.Expression.Case
-    -> Result String { conditionExpression : Pine.Expression, declarations : List ( String, Pine.Expression ), thenExpression : Pine.Expression }
+    ->
+        Result
+            String
+            { conditionExpression : Pine.Expression
+            , declarations : List ( String, Pine.Expression )
+            , thenExpression : Pine.Expression
+            }
 pineExpressionFromElmCaseBlockCase caseBlockValueExpression ( elmPattern, elmExpression ) =
     case pineExpressionFromElm (Elm.Syntax.Node.value elmExpression) of
         Err error ->
             Err ("Failed to map case expression: " ++ error)
 
-        Ok expressionAfterDeconstruction ->
+        Ok caseValueExpression ->
+            pineExpressionFromElmPattern caseBlockValueExpression elmPattern
+                |> Result.map
+                    (\deconstruction ->
+                        { conditionExpression = deconstruction.conditionExpression
+                        , declarations = deconstruction.declarations
+                        , thenExpression = caseValueExpression
+                        }
+                    )
+
+
+pineExpressionFromElmPattern :
+    Pine.Expression
+    -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
+    -> Result String { conditionExpression : Pine.Expression, declarations : List ( String, Pine.Expression ) }
+pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
+    let
+        equalsCondition exprA exprB =
+            functionApplicationExpressionFromListOfArguments
+                (expressionForPineKernelFunction "equals")
+                [ exprA, exprB ]
+
+        continueWithOnlyEqualsCondition valueToCompare =
+            Ok
+                { conditionExpression = equalsCondition caseBlockValueExpression valueToCompare
+                , declarations = []
+                }
+    in
+    case Elm.Syntax.Node.value elmPattern of
+        Elm.Syntax.Pattern.AllPattern ->
+            Ok
+                { conditionExpression = Pine.LiteralExpression Pine.trueValue
+                , declarations = []
+                }
+
+        Elm.Syntax.Pattern.ListPattern listElements ->
             let
-                continueWithOnlyEqualsCondition valueToCompare =
-                    let
-                        conditionExpression =
-                            functionApplicationExpressionFromListOfArguments
-                                (expressionForPineKernelFunction "equals")
-                                [ caseBlockValueExpression
-                                , valueToCompare
-                                ]
-                    in
-                    Ok
-                        { conditionExpression = conditionExpression
-                        , declarations = []
-                        , thenExpression = expressionAfterDeconstruction
-                        }
+                conditionsAndDeclarationsFromPattern elementIndex =
+                    pineExpressionFromElmPattern
+                        (listItemFromIndexExpression elementIndex caseBlockValueExpression)
+                        >> Result.map
+                            (\listElementResult ->
+                                { conditions = [ listElementResult.conditionExpression ]
+                                , declarations = listElementResult.declarations
+                                }
+                            )
             in
-            case Elm.Syntax.Node.value elmPattern of
-                Elm.Syntax.Pattern.AllPattern ->
-                    Ok
-                        { conditionExpression = Pine.LiteralExpression Pine.trueValue
-                        , declarations = []
-                        , thenExpression = expressionAfterDeconstruction
+            listElements
+                |> List.indexedMap conditionsAndDeclarationsFromPattern
+                |> Result.Extra.combine
+                |> Result.map
+                    (\elementsResults ->
+                        let
+                            matchesLengthCondition =
+                                functionApplicationExpressionFromListOfArguments
+                                    (expressionForPineKernelFunction "equals")
+                                    [ Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt (List.length listElements)))
+                                    , countListElementsExpression caseBlockValueExpression
+                                    ]
+
+                            condition =
+                                (matchesLengthCondition
+                                    :: List.concatMap .conditions elementsResults
+                                )
+                                    |> booleanConjunctionExpressionFromList
+                                        (equalsCondition caseBlockValueExpression (Pine.ListExpression []))
+
+                            declarations =
+                                elementsResults |> List.concatMap .declarations
+                        in
+                        { conditionExpression = condition
+                        , declarations = declarations
                         }
+                    )
 
-                Elm.Syntax.Pattern.ListPattern [] ->
-                    continueWithOnlyEqualsCondition (Pine.ListExpression [])
+        Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight ->
+            case ( Elm.Syntax.Node.value unconsLeft, Elm.Syntax.Node.value unconsRight ) of
+                ( Elm.Syntax.Pattern.VarPattern unconsLeftName, Elm.Syntax.Pattern.VarPattern unconsRightName ) ->
+                    let
+                        declarations =
+                            [ ( unconsLeftName
+                              , Pine.ApplicationExpression
+                                    { function = expressionForPineKernelFunction "listHead"
+                                    , argument = caseBlockValueExpression
+                                    }
+                              )
+                            , ( unconsRightName
+                              , Pine.ApplicationExpression
+                                    { function = expressionForPineKernelFunction "listTail"
+                                    , argument = caseBlockValueExpression
+                                    }
+                              )
+                            ]
 
-                Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight ->
-                    case ( Elm.Syntax.Node.value unconsLeft, Elm.Syntax.Node.value unconsRight ) of
-                        ( Elm.Syntax.Pattern.VarPattern unconsLeftName, Elm.Syntax.Pattern.VarPattern unconsRightName ) ->
-                            let
-                                declarations =
-                                    [ ( unconsLeftName
-                                      , Pine.ApplicationExpression
-                                            { function = expressionForPineKernelFunction "listHead"
-                                            , argument = caseBlockValueExpression
-                                            }
-                                      )
-                                    , ( unconsRightName
-                                      , Pine.ApplicationExpression
+                        conditionExpression =
+                            Pine.ApplicationExpression
+                                { function = expressionForPineKernelFunction "notBool"
+                                , argument =
+                                    functionApplicationExpressionFromListOfArguments
+                                        (expressionForPineKernelFunction "equals")
+                                        [ caseBlockValueExpression
+                                        , Pine.ApplicationExpression
                                             { function = expressionForPineKernelFunction "listTail"
                                             , argument = caseBlockValueExpression
                                             }
-                                      )
-                                    ]
-
-                                conditionExpression =
-                                    Pine.ApplicationExpression
-                                        { function = expressionForPineKernelFunction "notBool"
-                                        , argument =
-                                            functionApplicationExpressionFromListOfArguments
-                                                (expressionForPineKernelFunction "equals")
-                                                [ caseBlockValueExpression
-                                                , Pine.ApplicationExpression
-                                                    { function = expressionForPineKernelFunction "listTail"
-                                                    , argument = caseBlockValueExpression
-                                                    }
-                                                ]
-                                        }
-                            in
-                            Ok
-                                { conditionExpression = conditionExpression
-                                , declarations = declarations
-                                , thenExpression = expressionAfterDeconstruction
+                                        ]
                                 }
-
-                        _ ->
-                            Err "Unsupported shape of uncons pattern."
-
-                Elm.Syntax.Pattern.NamedPattern qualifiedName customTypeArgumentPatterns ->
-                    let
-                        mapArgumentsToOnlyNameResults =
-                            customTypeArgumentPatterns
-                                |> List.map Elm.Syntax.Node.value
-                                |> List.map
-                                    (\argumentPattern ->
-                                        case argumentPattern of
-                                            Elm.Syntax.Pattern.VarPattern argumentName ->
-                                                Ok argumentName
-
-                                            Elm.Syntax.Pattern.AllPattern ->
-                                                Ok "unused_from_elm_all_pattern"
-
-                                            _ ->
-                                                Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
-                                    )
-
-                        conditionExpression =
-                            functionApplicationExpressionFromListOfArguments
-                                (expressionForPineKernelFunction "equals")
-                                [ Pine.LiteralExpression (Pine.valueFromString qualifiedName.name)
-                                , functionApplicationExpressionFromListOfArguments
-                                    (expressionForPineKernelFunction "listHead")
-                                    [ caseBlockValueExpression ]
-                                ]
                     in
-                    case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
-                        Err error ->
-                            Err ("Failed to map pattern in case block: " ++ error)
-
-                        Ok declarationsNames ->
-                            let
-                                argumentFromIndexExpression argumentIndex =
-                                    listDropExpression
-                                        argumentIndex
-                                        (listItemFromIndexExpression 1 caseBlockValueExpression)
-
-                                declarations =
-                                    declarationsNames
-                                        |> List.indexedMap
-                                            (\argumentIndex declarationName ->
-                                                ( declarationName
-                                                , Pine.ApplicationExpression
-                                                    { function = expressionForPineKernelFunction "listHead"
-                                                    , argument = argumentFromIndexExpression argumentIndex
-                                                    }
-                                                )
-                                            )
-                            in
-                            Ok
-                                { conditionExpression = conditionExpression
-                                , declarations = declarations
-                                , thenExpression = expressionAfterDeconstruction
-                                }
-
-                Elm.Syntax.Pattern.CharPattern char ->
-                    continueWithOnlyEqualsCondition (Pine.LiteralExpression (Pine.valueFromChar char))
-
-                Elm.Syntax.Pattern.VarPattern name ->
                     Ok
-                        { conditionExpression = Pine.LiteralExpression Pine.trueValue
-                        , declarations =
-                            [ ( name
-                              , caseBlockValueExpression
-                              )
-                            ]
-                        , thenExpression = expressionAfterDeconstruction
+                        { conditionExpression = conditionExpression
+                        , declarations = declarations
                         }
 
                 _ ->
-                    Err
-                        ("Unsupported type of pattern in case-of block case: "
-                            ++ Json.Encode.encode 0 (Elm.Syntax.Pattern.encode (Elm.Syntax.Node.value elmPattern))
-                        )
+                    Err "Unsupported shape of uncons pattern."
+
+        Elm.Syntax.Pattern.NamedPattern qualifiedName customTypeArgumentPatterns ->
+            let
+                mapArgumentsToOnlyNameResults =
+                    customTypeArgumentPatterns
+                        |> List.map Elm.Syntax.Node.value
+                        |> List.map
+                            (\argumentPattern ->
+                                case argumentPattern of
+                                    Elm.Syntax.Pattern.VarPattern argumentName ->
+                                        Ok argumentName
+
+                                    Elm.Syntax.Pattern.AllPattern ->
+                                        Ok "unused_from_elm_all_pattern"
+
+                                    _ ->
+                                        Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
+                            )
+
+                conditionExpression =
+                    functionApplicationExpressionFromListOfArguments
+                        (expressionForPineKernelFunction "equals")
+                        [ Pine.LiteralExpression (Pine.valueFromString qualifiedName.name)
+                        , functionApplicationExpressionFromListOfArguments
+                            (expressionForPineKernelFunction "listHead")
+                            [ caseBlockValueExpression ]
+                        ]
+            in
+            case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
+                Err error ->
+                    Err ("Failed to map pattern in case block: " ++ error)
+
+                Ok declarationsNames ->
+                    let
+                        argumentFromIndexExpression argumentIndex =
+                            listDropExpression
+                                argumentIndex
+                                (listItemFromIndexExpression 1 caseBlockValueExpression)
+
+                        declarations =
+                            declarationsNames
+                                |> List.indexedMap
+                                    (\argumentIndex declarationName ->
+                                        ( declarationName
+                                        , Pine.ApplicationExpression
+                                            { function = expressionForPineKernelFunction "listHead"
+                                            , argument = argumentFromIndexExpression argumentIndex
+                                            }
+                                        )
+                                    )
+                    in
+                    Ok
+                        { conditionExpression = conditionExpression
+                        , declarations = declarations
+                        }
+
+        Elm.Syntax.Pattern.CharPattern char ->
+            continueWithOnlyEqualsCondition (Pine.LiteralExpression (Pine.valueFromChar char))
+
+        Elm.Syntax.Pattern.IntPattern int ->
+            continueWithOnlyEqualsCondition (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt int)))
+
+        Elm.Syntax.Pattern.VarPattern name ->
+            Ok
+                { conditionExpression = Pine.LiteralExpression Pine.trueValue
+                , declarations =
+                    [ ( name
+                      , caseBlockValueExpression
+                      )
+                    ]
+                }
+
+        _ ->
+            Err
+                ("Unsupported type of pattern in case-of block case: "
+                    ++ Json.Encode.encode 0 (Elm.Syntax.Pattern.encode (Elm.Syntax.Node.value elmPattern))
+                )
+
+
+booleanConjunctionExpressionFromList : Pine.Expression -> List Pine.Expression -> Pine.Expression
+booleanConjunctionExpressionFromList defaultIfEmpty operands =
+    case operands of
+        [] ->
+            defaultIfEmpty
+
+        firstOperator :: otherOperators ->
+            otherOperators
+                |> List.foldl
+                    (\single aggregate ->
+                        functionApplicationExpressionFromListOfArguments
+                            (expressionForPineKernelFunction "and")
+                            [ aggregate
+                            , single
+                            ]
+                    )
+                    firstOperator
 
 
 listItemFromIndexExpression : Int -> Pine.Expression -> Pine.Expression
@@ -1871,6 +1982,42 @@ listItemFromIndexExpression itemIndex listExpression =
         { function = expressionForPineKernelFunction "listHead"
         , argument = listDropExpression itemIndex listExpression
         }
+
+
+countListElementsExpression : Pine.Expression -> Pine.Expression
+countListElementsExpression listExpr =
+    pineExpressionFromLetBlockDeclarationsAndExpression
+        [ ( "getLength"
+          , functionExpressionFromArgumentsNamesAndExpression
+                [ "remaining" ]
+                (Pine.IfBlockExpression
+                    { condition =
+                        functionApplicationExpressionFromListOfArguments
+                            (expressionForPineKernelFunction "equals")
+                            [ Pine.ListExpression []
+                            , expressionToLookupNameInEnvironment "remaining"
+                            ]
+                    , ifTrue =
+                        Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                    , ifFalse =
+                        functionApplicationExpressionFromListOfArguments
+                            (expressionForPineKernelFunction "addInt")
+                            [ Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                            , functionApplicationExpressionFromListOfArguments
+                                (expressionToLookupNameInEnvironment "getLength")
+                                [ functionApplicationExpressionFromListOfArguments
+                                    (expressionForPineKernelFunction "listTail")
+                                    [ expressionToLookupNameInEnvironment "remaining" ]
+                                ]
+                            ]
+                    }
+                )
+          )
+        ]
+        (functionApplicationExpressionFromListOfArguments
+            (expressionToLookupNameInEnvironment "getLength")
+            [ listExpr ]
+        )
 
 
 functionApplicationExpressionFromListOfArguments : Pine.Expression -> List Pine.Expression -> Pine.Expression
@@ -1937,35 +2084,35 @@ pineExpressionFromElmRecord recordSetters =
 
 pineExpressionFromElmRecordAccess : String -> Elm.Syntax.Expression.Expression -> Result String Pine.Expression
 pineExpressionFromElmRecordAccess fieldName recordElmExpression =
-    case pineExpressionFromElm recordElmExpression of
-        Err error ->
-            Err ("Failed to map record expression: " ++ error)
+    pineExpressionFromElm recordElmExpression
+        |> Result.mapError ((++) "Failed to map record expression: ")
+        |> Result.map (pineExpressionForRecordAccess fieldName)
 
-        Ok recordExpression ->
-            let
-                recordFieldsExpression =
-                    listItemFromIndexExpression 0 (listItemFromIndexExpression 1 recordExpression)
-            in
-            Ok
-                (Pine.IfBlockExpression
-                    { condition =
-                        functionApplicationExpressionFromListOfArguments
-                            (expressionForPineKernelFunction "equals")
-                            [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
-                            , listItemFromIndexExpression 0 recordExpression
-                            ]
-                    , ifTrue =
-                        expressionToLookupNameInValue
-                            fieldName
-                            (Pine.LiteralExpression
-                                (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
-                            )
-                            (Just recordFieldsExpression)
-                    , ifFalse =
-                        Pine.LiteralExpression
-                            (Pine.valueFromString "Error: Used record access on value which is not a record")
-                    }
+
+pineExpressionForRecordAccess : String -> Pine.Expression -> Pine.Expression
+pineExpressionForRecordAccess fieldName recordExpression =
+    let
+        recordFieldsExpression =
+            listItemFromIndexExpression 0 (listItemFromIndexExpression 1 recordExpression)
+    in
+    Pine.IfBlockExpression
+        { condition =
+            functionApplicationExpressionFromListOfArguments
+                (expressionForPineKernelFunction "equals")
+                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                , listItemFromIndexExpression 0 recordExpression
+                ]
+        , ifTrue =
+            expressionToLookupNameInValue
+                fieldName
+                (Pine.LiteralExpression
+                    (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
                 )
+                (Just recordFieldsExpression)
+        , ifFalse =
+            Pine.LiteralExpression
+                (Pine.valueFromString "Error: Used record access on value which is not a record")
+        }
 
 
 expressionForPineKernelFunction : String -> Pine.Expression

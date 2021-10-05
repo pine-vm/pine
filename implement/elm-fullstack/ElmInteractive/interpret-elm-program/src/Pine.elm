@@ -374,7 +374,7 @@ evaluateFunctionApplicationWithValues context application =
         _ ->
             decodeExpressionFromValue application.function
                 |> Result.mapError
-                    (DescribePathEnd >> DescribePathNode "Too many arguments: Failed to decode expression from value")
+                    (DescribePathEnd >> DescribePathNode ("Too many arguments: Failed to decode expression from value (" ++ describeValue application.function ++ ")"))
                 |> Result.andThen
                     (\expressionFromValue ->
                         evaluateFunctionApplicationWithValues

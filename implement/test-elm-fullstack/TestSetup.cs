@@ -42,12 +42,6 @@ namespace test_elm_fullstack
             return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
         }
 
-        static public IDisposableProcessWithStringInterface BuildInstanceOfCounterProcess() =>
-            ProcessFromElm019Code.ProcessFromElmCodeFiles(AsLoweredElmApp(CounterElmApp)).process;
-
-        static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> CounterElmApp =
-            GetElmAppFromExampleName("counter");
-
         static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> CounterElmWebApp =
             GetElmAppFromExampleName("counter-webapp");
 

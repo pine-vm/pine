@@ -35,7 +35,7 @@ namespace elm_fullstack.ElmInteractive
             var modulesTexts =
                 appCodeTree == null ? null
                 :
-                TreeToFlatDictionaryWithPathComparer(appCodeTree)
+                TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree))
                 .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
                 .WhereNotNull()
                 .ToImmutableList();
@@ -65,6 +65,27 @@ namespace elm_fullstack.ElmInteractive
 
             return Result<string, SubmissionResponseValueStructure>.ok(
                 responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue);
+        }
+
+        static TreeWithStringPath compileTree(TreeWithStringPath sourceTree)
+        {
+            if (sourceTree == null)
+                return null;
+
+            var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
+                sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
+                ElmAppInterfaceConfig.Default);
+
+            if (compilationResult.Ok == null)
+            {
+                var errorMessage = "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err) + "\n";
+
+                Console.WriteLine(errorMessage);
+
+                throw new Exception(errorMessage);
+            }
+
+            return SortedTreeFromSetOfBlobsWithStringPath(compilationResult.Ok.compiledAppFiles);
         }
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToEvaluateElm()
