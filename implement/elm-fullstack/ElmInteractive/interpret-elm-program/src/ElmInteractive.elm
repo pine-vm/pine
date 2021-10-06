@@ -1674,12 +1674,7 @@ declarationsFromPattern pattern =
             (\recordExpression ->
                 fieldsElements
                     |> List.map Elm.Syntax.Node.value
-                    |> List.map
-                        (\fieldName ->
-                            ( fieldName
-                            , listItemFromIndexExpression 0 (pineExpressionForRecordAccess fieldName recordExpression)
-                            )
-                        )
+                    |> List.map (\fieldName -> ( fieldName, pineExpressionForRecordAccess fieldName recordExpression ))
             )
                 |> Ok
 
@@ -2104,10 +2099,12 @@ pineExpressionForRecordAccess fieldName recordExpression =
                 ]
         , ifTrue =
             expressionToLookupNameInValue
+                { ifNotFound =
+                    Pine.LiteralExpression
+                        (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
+                , ifFoundPostprocess = listItemFromIndexExpression 0
+                }
                 fieldName
-                (Pine.LiteralExpression
-                    (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
-                )
                 (Just recordFieldsExpression)
         , ifFalse =
             Pine.LiteralExpression
@@ -2144,8 +2141,8 @@ expressionToLookupNameInEnvironment name =
         (Pine.LookupNameExpression { scopeExpression = Nothing, name = name })
 
 
-expressionToLookupNameInValue : String -> Pine.Expression -> Maybe Pine.Expression -> Pine.Expression
-expressionToLookupNameInValue name ifFieldNotFound scopeExpression =
+expressionToLookupNameInValue : { ifNotFound : Pine.Expression, ifFoundPostprocess : Pine.Expression -> Pine.Expression } -> String -> Maybe Pine.Expression -> Pine.Expression
+expressionToLookupNameInValue { ifNotFound, ifFoundPostprocess } name scopeExpression =
     pineExpressionFromLetBlockDeclarationsAndExpression
         [ ( "lookupResult", Pine.LookupNameExpression { scopeExpression = scopeExpression, name = name } ) ]
         (Pine.IfBlockExpression
@@ -2155,10 +2152,12 @@ expressionToLookupNameInValue name ifFieldNotFound scopeExpression =
                     [ Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" }
                     , Pine.LiteralExpression (Pine.ListValue [])
                     ]
-            , ifTrue = ifFieldNotFound
+            , ifTrue = ifNotFound
             , ifFalse =
-                listItemFromIndexExpression 0
-                    (Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" })
+                ifFoundPostprocess
+                    (listItemFromIndexExpression 0
+                        (Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" })
+                    )
             }
         )
 

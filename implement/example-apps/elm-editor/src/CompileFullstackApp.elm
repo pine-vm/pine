@@ -8,6 +8,7 @@ module CompileFullstackApp exposing
     , ElmMakeRequestStructure
     , ElmTypeAnnotation(..)
     , InterfaceBlobEncoding(..)
+    , InterfaceBlobSingleEncoding(..)
     , InterfaceSourceFilesFunctionVariant(..)
     , LeafElmTypeStruct(..)
     , LocatedCompilationError
@@ -25,6 +26,7 @@ module CompileFullstackApp exposing
     , parseElmMakeModuleFunctionName
     , parseElmModuleText
     , parseElmTypeAndDependenciesRecursivelyFromAnnotation
+    , parseSourceFileFunction
     , parseSourceFileFunctionName
     , parserDeadEndsToString
     )
@@ -158,7 +160,7 @@ type alias ElmMakeRequestStructure =
 type alias InterfaceElmMakeFunctionConfig =
     { outputType : ElmMakeOutputType
     , enableDebug : Bool
-    , encoding : Maybe InterfaceBlobEncoding
+    , encoding : InterfaceBlobEncoding
     }
 
 
@@ -168,17 +170,19 @@ type ElmMakeOutputType
 
 
 type InterfaceBlobEncoding
+    = SingleEncoding InterfaceBlobSingleEncoding
+    | RecordEncoding (List ( String, InterfaceBlobSingleEncoding ))
+
+
+type InterfaceBlobSingleEncoding
     = Base64Encoding
     | Utf8Encoding
-
-
-type InterfaceValueConversion
-    = FromBase64ToBytes
+    | BytesEncoding
 
 
 type alias InterfaceSourceFilesFunctionConfig =
     { variant : InterfaceSourceFilesFunctionVariant
-    , encoding : Maybe InterfaceBlobEncoding
+    , encoding : InterfaceBlobEncoding
     }
 
 
@@ -1662,19 +1666,6 @@ buildJsonCodingFunctionsForTypeAnnotation typeAnnotation =
     }
 
 
-{-| 2021-09-16 TODO: Test new API to simplify selecting encodings:
-Instead of modeling flags in the declaration name, use a record type to select encodings for a declaration.
-Here is how it could look in the app code:
-
-    file_tree____static_content : FileTreeNode { base64 : String, utf8 : String, bytes : Bytes.Bytes }
-    file_tree____static_content =
-        TreeNode []
-
-    file____readme_md : { utf8 : String }
-    file____readme_md =
-        { utf8 = "The compiler replaces this value." }
-
--}
 mapSourceFilesModuleText : ( AppFiles, List String, String ) -> Result (LocatedInSourceFiles String) ( AppFiles, String )
 mapSourceFilesModuleText ( sourceFiles, moduleFilePath, moduleText ) =
     let
@@ -1713,6 +1704,7 @@ mapSourceFilesModuleText ( sourceFiles, moduleFilePath, moduleText ) =
                         (\functionDeclaration ->
                             prepareReplaceFunctionInSourceFilesModuleText
                                 sourceFiles
+                                ( moduleFilePath, parsedModule )
                                 functionDeclaration
                                 |> Result.mapError (mapErrorStringForFunctionDeclaration functionDeclaration)
                                 |> Result.map (Tuple.pair functionDeclaration)
@@ -1734,12 +1726,15 @@ type FileTreeNode blobStructure
 """
                                     ]
 
-                                generatedModuleDeclarations =
+                                generatedModuleDeclarationsBeforeRemovingDuplicates =
                                     generatedModuleTypeDeclarations
                                         ++ List.map (Tuple.second >> .valueFunctionText) preparedFunctions
 
+                                generatedModuleDeclarations =
+                                    Set.fromList generatedModuleDeclarationsBeforeRemovingDuplicates
+
                                 generatedModuleTextWithoutModuleDeclaration =
-                                    String.join "\n\n" generatedModuleDeclarations
+                                    String.join "\n\n" (Set.toList generatedModuleDeclarations)
 
                                 generatedModuleHash =
                                     generatedModuleTextWithoutModuleDeclaration
@@ -1838,7 +1833,10 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
                     |> List.filterMap declarationWithRangeAsFunctionDeclaration
                     |> List.map
                         (\declaration ->
-                            prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles (Elm.Syntax.Node.value declaration)
+                            prepareReplaceFunctionInElmMakeModuleText dependencies
+                                sourceFiles
+                                ( moduleFilePath, parsedModule )
+                                (Elm.Syntax.Node.value declaration)
                                 |> Result.mapError (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration))
                                 |> Result.map (Tuple.pair (Elm.Syntax.Node.range declaration))
                         )
@@ -3236,17 +3234,18 @@ parseJsonCodingFunctionType signature =
 
 prepareReplaceFunctionInSourceFilesModuleText :
     AppFiles
+    -> ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
     -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result String String }
-prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclaration =
+prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule originalFunctionDeclaration =
     let
         functionName =
             Elm.Syntax.Node.value
                 (Elm.Syntax.Node.value (Elm.Syntax.Node.value originalFunctionDeclaration).declaration).name
     in
-    case parseSourceFileFunctionName functionName of
+    case parseSourceFileFunction currentModule (Elm.Syntax.Node.value originalFunctionDeclaration) of
         Err error ->
-            Err ("Failed to parse function name: " ++ error)
+            Err ("Failed to parse function: " ++ error)
 
         Ok ( filePathRepresentation, config ) ->
             case config.variant of
@@ -3256,9 +3255,9 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclar
                             Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
                         Ok ( _, fileContent ) ->
-                            baseStringExpressionAndConversion config.encoding fileContent
+                            baseRecordExpressionAndConversion config.encoding fileContent
                                 |> Result.map
-                                    (\( expression, conversion ) ->
+                                    (\expression ->
                                         let
                                             valueFunctionName =
                                                 [ "file_as"
@@ -3277,8 +3276,8 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclar
                                             \{ generatedModuleName } moduleText ->
                                                 let
                                                     fileExpression =
-                                                        buildElmExpressionFromStringExpression
-                                                            conversion
+                                                        buildElmExpressionForInterfaceBlobEncoding
+                                                            config.encoding
                                                             (generatedModuleName ++ "." ++ valueFunctionName)
 
                                                     buildNewFunctionLines previousFunctionLines =
@@ -3295,10 +3294,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclar
 
                 SourceFileTree ->
                     case config.encoding of
-                        Just _ ->
-                            Err "Encoding is not yet supported for file tree nodes. Remove the encoding flag and use the type `Bytes.Bytes`"
-
-                        Nothing ->
+                        SingleEncoding BytesEncoding ->
                             case findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
                                 Err error ->
                                     Err ("Failed to identify file tree node for '" ++ filePathRepresentation ++ "': " ++ error)
@@ -3370,6 +3366,9 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles originalFunctionDeclar
                                                     moduleText
                                         }
 
+                        _ ->
+                            Err "Encoding is not yet supported for file tree nodes. Remove the encoding flag and use the type `Bytes.Bytes`"
+
 
 sourceFilesInterfaceModuleAddedFunctions : List { functionName : String, mapFunctionLines : { generatedModuleName : String } -> Maybe (List String) -> List String }
 sourceFilesInterfaceModuleAddedFunctions =
@@ -3413,15 +3412,16 @@ mapBlobs mapBlob node =
 prepareReplaceFunctionInElmMakeModuleText :
     List ( DependencyKey, Bytes.Bytes )
     -> AppFiles
+    -> ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Expression.Function
     -> Result CompilationError { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result String String }
-prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunctionDeclaration =
+prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule originalFunctionDeclaration =
     let
         functionName =
             Elm.Syntax.Node.value
                 (Elm.Syntax.Node.value originalFunctionDeclaration.declaration).name
     in
-    case parseElmMakeModuleFunctionName functionName of
+    case parseElmMakeModuleFunction currentModule originalFunctionDeclaration of
         Err error ->
             Err (OtherCompilationError ("Failed to parse function name: " ++ error))
 
@@ -3455,9 +3455,9 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunct
                             Err (MissingDependencyError dependencyKey)
 
                         Just ( _, dependencyValue ) ->
-                            baseStringExpressionAndConversion encoding dependencyValue
+                            baseRecordExpressionAndConversion encoding dependencyValue
                                 |> Result.map
-                                    (\( expression, conversion ) ->
+                                    (\expression ->
                                         let
                                             valueFunctionName =
                                                 [ "file_as"
@@ -3476,8 +3476,8 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunct
                                             \{ generatedModuleName } moduleText ->
                                                 let
                                                     fileExpression =
-                                                        buildElmExpressionFromStringExpression
-                                                            conversion
+                                                        buildElmExpressionForInterfaceBlobEncoding
+                                                            encoding
                                                             (generatedModuleName ++ "." ++ valueFunctionName)
 
                                                     buildNewFunctionLines previousFunctionLines =
@@ -3492,30 +3492,53 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles originalFunct
                                 |> Result.mapError OtherCompilationError
 
 
-baseStringExpressionAndConversion :
-    Maybe InterfaceBlobEncoding
+baseRecordExpressionAndConversion :
+    InterfaceBlobEncoding
     -> Bytes.Bytes
-    -> Result String ( { expression : String, encodingName : String }, Maybe InterfaceValueConversion )
-baseStringExpressionAndConversion encoding blob =
+    -> Result String { expression : String, encodingName : String }
+baseRecordExpressionAndConversion encoding blob =
     let
-        continueWithBase64AndConversion conversion =
-            buildBase64ElmExpression blob
-                |> Result.map (\expr -> ( { expression = expr, encodingName = "base64" }, conversion ))
+        encodings =
+            case encoding of
+                SingleEncoding singleEncoding ->
+                    [ singleEncoding ]
+
+                RecordEncoding recordEncoding ->
+                    List.map Tuple.second recordEncoding
+
+        encodingsToInclude =
+            [ if List.member Base64Encoding encodings || List.member BytesEncoding encodings then
+                [ { name = "base64", buildExpression = buildBase64ElmExpression } ]
+
+              else
+                []
+            , if List.member Utf8Encoding encodings then
+                [ { name = "utf8", buildExpression = buildUtf8ElmExpression } ]
+
+              else
+                []
+            ]
+                |> List.concat
     in
-    case encoding of
-        Nothing ->
-            continueWithBase64AndConversion (Just FromBase64ToBytes)
-
-        Just Base64Encoding ->
-            continueWithBase64AndConversion Nothing
-
-        Just Utf8Encoding ->
-            case Bytes.Decode.decode (Bytes.Decode.string (Bytes.width blob)) blob of
-                Nothing ->
-                    Err "Failed to decode blob as UTF8"
-
-                Just asUtf8 ->
-                    Ok ( { expression = stringExpressionFromString asUtf8, encodingName = "utf8" }, Nothing )
+    encodingsToInclude
+        |> List.map
+            (\encodingToInclude ->
+                encodingToInclude.buildExpression blob
+                    |> Result.mapError ((++) ("Failed to build expression for encoding " ++ encodingToInclude.name ++ ":"))
+                    |> Result.map (Tuple.pair encodingToInclude.name)
+            )
+        |> Result.Extra.combine
+        |> Result.map
+            (\encodingsExpressions ->
+                let
+                    fieldsExpressions =
+                        encodingsExpressions
+                            |> List.map (\( encodingName, encodingExpression ) -> encodingName ++ " = " ++ encodingExpression)
+                in
+                { encodingName = String.join "_" (List.map Tuple.first encodingsExpressions)
+                , expression = "{ " ++ String.join "\n, " fieldsExpressions ++ "\n}"
+                }
+            )
 
 
 buildBase64ElmExpression : Bytes.Bytes -> Result String String
@@ -3526,6 +3549,16 @@ buildBase64ElmExpression bytes =
 
         Just asBase64 ->
             Ok (stringExpressionFromString asBase64)
+
+
+buildUtf8ElmExpression : Bytes.Bytes -> Result String String
+buildUtf8ElmExpression bytes =
+    case Bytes.Decode.decode (Bytes.Decode.string (Bytes.width bytes)) bytes of
+        Nothing ->
+            Err "Failed to decode bytes as UTF8"
+
+        Just asUtf8 ->
+            Ok (stringExpressionFromString asUtf8)
 
 
 stringExpressionFromString : String -> String
@@ -3540,18 +3573,41 @@ stringExpressionFromString string =
         ++ "\""
 
 
-buildElmExpressionFromStringExpression : Maybe InterfaceValueConversion -> String -> String
-buildElmExpressionFromStringExpression conversion stringExpression =
-    case conversion of
-        Nothing ->
-            stringExpression
+buildElmExpressionForInterfaceBlobEncoding : InterfaceBlobEncoding -> String -> String
+buildElmExpressionForInterfaceBlobEncoding encoding sourceExpression =
+    case encoding of
+        SingleEncoding singleEncoding ->
+            buildElmExpressionForInterfaceBlobSingleEncoding singleEncoding sourceExpression
 
-        Just FromBase64ToBytes ->
-            [ stringExpression
+        RecordEncoding recordFields ->
+            let
+                fieldsExpressions =
+                    recordFields
+                        |> List.map
+                            (\( fieldName, fieldEncoding ) ->
+                                fieldName
+                                    ++ " = "
+                                    ++ buildElmExpressionForInterfaceBlobSingleEncoding fieldEncoding sourceExpression
+                            )
+            in
+            "{ " ++ String.join "\n," fieldsExpressions ++ "\n}"
+
+
+buildElmExpressionForInterfaceBlobSingleEncoding : InterfaceBlobSingleEncoding -> String -> String
+buildElmExpressionForInterfaceBlobSingleEncoding encoding sourceExpression =
+    case encoding of
+        Base64Encoding ->
+            sourceExpression ++ ".base64"
+
+        BytesEncoding ->
+            [ sourceExpression ++ ".base64"
             , "|> Base64.toBytes"
             , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
             ]
                 |> String.join "\n"
+
+        Utf8Encoding ->
+            sourceExpression ++ ".utf8"
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
@@ -3842,6 +3898,32 @@ mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCod
                             )
 
 
+parseSourceFileFunction : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Expression.Function -> Result String ( String, InterfaceSourceFilesFunctionConfig )
+parseSourceFileFunction currentModule functionDeclaration =
+    case parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration of
+        Err error ->
+            Err ("Failed to parse encoding: " ++ error)
+
+        Ok maybeEncoding ->
+            let
+                functionName =
+                    Elm.Syntax.Node.value
+                        (Elm.Syntax.Node.value functionDeclaration.declaration).name
+            in
+            parseSourceFileFunctionName functionName
+                |> Result.map
+                    (Tuple.mapSecond
+                        (\beforeApplyEncoding ->
+                            case maybeEncoding of
+                                Nothing ->
+                                    beforeApplyEncoding
+
+                                Just encoding ->
+                                    { beforeApplyEncoding | encoding = encoding }
+                        )
+                    )
+
+
 parseSourceFileFunctionName : String -> Result String ( String, InterfaceSourceFilesFunctionConfig )
 parseSourceFileFunctionName functionName =
     parseFlagsAndPathPatternFromFunctionName
@@ -3854,22 +3936,55 @@ parseSourceFileFunctionName functionName =
         |> Result.andThen
             (\( variant, flags, filePathRepresentation ) ->
                 flags
-                    |> parseInterfaceFunctionFlags parseSourceFileFunctionFlag { variant = variant, encoding = Nothing }
+                    |> parseInterfaceFunctionFlags parseSourceFileFunctionFlag { variant = variant, encoding = SingleEncoding BytesEncoding }
                     |> Result.map (Tuple.pair filePathRepresentation)
             )
 
 
+encodingFromSourceFileFieldName : Dict.Dict String InterfaceBlobSingleEncoding
+encodingFromSourceFileFieldName =
+    [ ( "base64", Base64Encoding )
+    , ( "utf8", Utf8Encoding )
+    , ( "bytes", BytesEncoding )
+    ]
+        |> Dict.fromList
+
+
 parseSourceFileFunctionFlag : String -> InterfaceSourceFilesFunctionConfig -> Result String InterfaceSourceFilesFunctionConfig
 parseSourceFileFunctionFlag flag config =
-    case String.toLower flag of
-        "base64" ->
-            Ok { config | encoding = Just Base64Encoding }
-
-        "utf8" ->
-            Ok { config | encoding = Just Utf8Encoding }
-
-        _ ->
+    -- TODO: Retire flags in file names after migrating production systems to record-field based encoding selection.
+    case encodingFromSourceFileFieldName |> Dict.get (String.toLower flag) of
+        Nothing ->
             Err "Unknown flag"
+
+        Just encoding ->
+            Ok { config | encoding = SingleEncoding encoding }
+
+
+parseElmMakeModuleFunction : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Expression.Function -> Result String ( String, InterfaceElmMakeFunctionConfig )
+parseElmMakeModuleFunction currentModule functionDeclaration =
+    case parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration of
+        Err error ->
+            Err ("Failed to parse encoding: " ++ error)
+
+        Ok maybeEncoding ->
+            let
+                functionName =
+                    Elm.Syntax.Node.value
+                        (Elm.Syntax.Node.value functionDeclaration.declaration).name
+            in
+            parseElmMakeModuleFunctionName functionName
+                |> Result.map
+                    (Tuple.mapSecond
+                        (\beforeApplyEncoding ->
+                            case maybeEncoding of
+                                Nothing ->
+                                    beforeApplyEncoding
+
+                                Just encoding ->
+                                    { beforeApplyEncoding | encoding = encoding }
+                        )
+                    )
 
 
 parseElmMakeModuleFunctionName : String -> Result String ( String, InterfaceElmMakeFunctionConfig )
@@ -3881,19 +3996,20 @@ parseElmMakeModuleFunctionName functionName =
             (\( _, flags, filePathRepresentation ) ->
                 flags
                     |> parseInterfaceFunctionFlags parseElmMakeFunctionFlag
-                        { outputType = ElmMakeOutputTypeHtml, enableDebug = False, encoding = Nothing }
+                        { outputType = ElmMakeOutputTypeHtml, enableDebug = False, encoding = SingleEncoding BytesEncoding }
                     |> Result.map (Tuple.pair filePathRepresentation)
             )
 
 
 parseElmMakeFunctionFlag : String -> InterfaceElmMakeFunctionConfig -> Result String InterfaceElmMakeFunctionConfig
 parseElmMakeFunctionFlag flag config =
+    -- TODO: Retire flags for encoding in file names after migrating production systems to record-field based encoding selection.
     case String.toLower flag of
         "base64" ->
-            Ok { config | encoding = Just Base64Encoding }
+            Ok { config | encoding = SingleEncoding Base64Encoding }
 
         "utf8" ->
-            Ok { config | encoding = Just Utf8Encoding }
+            Ok { config | encoding = SingleEncoding Utf8Encoding }
 
         "javascript" ->
             Ok { config | outputType = ElmMakeOutputTypeJs }
@@ -3903,6 +4019,50 @@ parseElmMakeFunctionFlag flag config =
 
         _ ->
             Err "Unknown flag"
+
+
+parseSourceFileFunctionEncodingFromDeclaration : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Expression.Function -> Result String (Maybe InterfaceBlobEncoding)
+parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration =
+    case functionDeclaration.signature of
+        Nothing ->
+            Ok Nothing
+
+        Just signature ->
+            parseSourceFileFunctionEncodingFromTypeAnnotation currentModule (Elm.Syntax.Node.value signature).typeAnnotation
+
+
+parseSourceFileFunctionEncodingFromTypeAnnotation : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation -> Result String (Maybe InterfaceBlobEncoding)
+parseSourceFileFunctionEncodingFromTypeAnnotation currentModule typeAnnotationNode =
+    case
+        parseElmTypeAndDependenciesRecursivelyFromAnnotation
+            Dict.empty
+            ( currentModule, typeAnnotationNode )
+    of
+        Err (LocatedInSourceFiles _ error) ->
+            Err ("Failed to parse type annotation: " ++ error)
+
+        Ok ( typeAnnotation, typeAnnotationDependencies ) ->
+            case typeAnnotation of
+                RecordElmType recordType ->
+                    if Dict.empty /= typeAnnotationDependencies then
+                        Err
+                            ("type annotation dependencies are not empty: "
+                                ++ String.join ", " (Dict.keys typeAnnotationDependencies)
+                            )
+
+                    else
+                        recordType.fields
+                            |> List.map
+                                (\( fieldName, _ ) ->
+                                    Dict.get fieldName encodingFromSourceFileFieldName
+                                        |> Maybe.map (\encoding -> Ok ( fieldName, encoding ))
+                                        |> Maybe.withDefault (Err ("Unsupported field name: " ++ fieldName))
+                                )
+                            |> Result.Extra.combine
+                            |> Result.map (RecordEncoding >> Just)
+
+                _ ->
+                    Ok Nothing
 
 
 parseInterfaceFunctionFlags : (String -> aggregate -> Result String aggregate) -> aggregate -> List String -> Result String aggregate

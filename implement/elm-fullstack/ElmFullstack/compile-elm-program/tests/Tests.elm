@@ -20,7 +20,7 @@ parseCompilationInterfaceElmMakeFunctionName =
             ( "src_Frontend_Main_elm"
             , { outputType = CompileFullstackApp.ElmMakeOutputTypeJs
               , enableDebug = True
-              , encoding = Just CompileFullstackApp.Base64Encoding
+              , encoding = CompileFullstackApp.SingleEncoding CompileFullstackApp.Base64Encoding
               }
             )
       )
@@ -29,7 +29,7 @@ parseCompilationInterfaceElmMakeFunctionName =
             ( "src_Frontend_Main_elm"
             , { outputType = CompileFullstackApp.ElmMakeOutputTypeJs
               , enableDebug = False
-              , encoding = Just CompileFullstackApp.Base64Encoding
+              , encoding = CompileFullstackApp.SingleEncoding CompileFullstackApp.Base64Encoding
               }
             )
       )
@@ -38,7 +38,7 @@ parseCompilationInterfaceElmMakeFunctionName =
             ( "src_Frontend_Main_elm"
             , { outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
               , enableDebug = True
-              , encoding = Just CompileFullstackApp.Base64Encoding
+              , encoding = CompileFullstackApp.SingleEncoding CompileFullstackApp.Base64Encoding
               }
             )
       )
@@ -51,35 +51,6 @@ parseCompilationInterfaceElmMakeFunctionName =
                             |> Expect.equal expectedResult
             )
         |> Test.describe "parse Compilation Interface Elm Make function name"
-
-
-parseCompilationInterfaceSourceFilesFunctionName : Test.Test
-parseCompilationInterfaceSourceFilesFunctionName =
-    [ ( "file__utf8____readme_md"
-      , Ok
-            ( "readme_md"
-            , { variant = CompileFullstackApp.SourceFile
-              , encoding = Just CompileFullstackApp.Utf8Encoding
-              }
-            )
-      )
-    , ( "file_tree____static_content"
-      , Ok
-            ( "static_content"
-            , { variant = CompileFullstackApp.SourceFileTree
-              , encoding = Nothing
-              }
-            )
-      )
-    ]
-        |> List.map
-            (\( functionName, expectedResult ) ->
-                Test.test functionName <|
-                    \() ->
-                        CompileFullstackApp.parseSourceFileFunctionName functionName
-                            |> Expect.equal expectedResult
-            )
-        |> Test.describe "parse Compilation Interface Source Files function name"
 
 
 dependencies_encoding_roundtrip : Test.Test
