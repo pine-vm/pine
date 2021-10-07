@@ -1005,12 +1005,23 @@ updateLanguageServiceState fileTree state =
 
 coreModulesTexts : List String
 coreModulesTexts =
-    [ CompilationInterface.SourceFiles.file__utf8____elm_core_modules_List_elm
-    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_String_elm
-    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_Maybe_elm
-    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_Result_elm
-    , CompilationInterface.SourceFiles.file__utf8____elm_core_modules_Tuple_elm
-    ]
+    CompilationInterface.SourceFiles.file_tree____elm_core_modules
+        |> listAllFilesFromSourceFileTreeNode
+        |> List.map (Tuple.second >> .utf8)
+
+
+listAllFilesFromSourceFileTreeNode : CompilationInterface.SourceFiles.FileTreeNode a -> List ( List String, a )
+listAllFilesFromSourceFileTreeNode node =
+    case node of
+        CompilationInterface.SourceFiles.BlobNode blob ->
+            [ ( [], blob ) ]
+
+        CompilationInterface.SourceFiles.TreeNode tree ->
+            tree
+                |> List.concatMap
+                    (\( entryName, entryNode ) ->
+                        listAllFilesFromSourceFileTreeNode entryNode |> List.map (Tuple.mapFirst ((::) entryName))
+                    )
 
 
 coreModulesParseResults : List ParsedModuleCache

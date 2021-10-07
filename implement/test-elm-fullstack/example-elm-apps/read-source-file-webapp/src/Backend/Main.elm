@@ -73,9 +73,9 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                         |> List.filter (Tuple.first >> (==) (String.split "/" url.path |> List.filter (String.isEmpty >> not)))
                                         |> List.head
                                 of
-                                    Just matchingFile ->
+                                    Just ( _, matchingFile ) ->
                                         { statusCode = 200
-                                        , bodyAsBase64 = matchingFile |> Tuple.second |> Base64.fromBytes
+                                        , bodyAsBase64 = Just matchingFile.base64
                                         , headersToAdd =
                                             [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                                             ]

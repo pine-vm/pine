@@ -1,20 +1,14 @@
 module CompilationInterface.SourceFiles exposing (..)
 
-import Bytes
-import Bytes.Encode
-
 
 type FileTreeNode blobStructure
     = BlobNode blobStructure
     | TreeNode (List ( String, FileTreeNode blobStructure ))
 
 
-file_tree____static_content : FileTreeNode Bytes.Bytes
+file_tree____static_content : FileTreeNode { base64 : String }
 file_tree____static_content =
-    "The compiler replaces this declaration."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
-        |> BlobNode
+    TreeNode []
 
 
 file__utf8____readme_md : String

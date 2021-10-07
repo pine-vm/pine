@@ -3268,126 +3268,123 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule original
             Err ("Failed to parse function: " ++ error)
 
         Ok ( filePathRepresentation, config ) ->
-            case config.variant of
-                SourceFile ->
-                    case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
-                        Err error ->
-                            Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
+            case findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
+                Err error ->
+                    Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
-                        Ok ( _, fileContent ) ->
-                            baseFileRecordExpressionFromEncoding config.encoding fileContent
-                                |> Result.map
-                                    (\expression ->
-                                        let
-                                            valueFunctionName =
-                                                [ "file_as"
-                                                , expression.encodingName
-                                                , SHA256.toHex (SHA256.fromBytes fileContent)
+                Ok ( matchingPath, fileTreeContent ) ->
+                    let
+                        expressionFromFileContent =
+                            baseFileRecordExpressionFromEncoding config.encoding
+
+                        expressionFromFileTreeNode fileTreeNode =
+                            case fileTreeNode of
+                                FileTree.BlobNode blob ->
+                                    expressionFromFileContent blob
+                                        |> Result.map (\expression -> "BlobNode (" ++ expression.expression ++ ")")
+
+                                FileTree.TreeNode tree ->
+                                    let
+                                        buildTreeEntryExpression ( entryName, entryNode ) =
+                                            expressionFromFileTreeNode entryNode
+                                                |> Result.map
+                                                    (\entryNodeExpr ->
+                                                        [ "( \"" ++ entryName ++ "\""
+                                                        , ", " ++ entryNodeExpr
+                                                        , ")"
+                                                        ]
+                                                            |> String.join "\n"
+                                                    )
+                                    in
+                                    tree
+                                        |> List.map buildTreeEntryExpression
+                                        |> Result.Extra.combine
+                                        |> Result.map
+                                            (\entriesExpressions ->
+                                                "TreeNode\n"
+                                                    ++ indentElmCodeLines 1
+                                                        ([ "["
+                                                            ++ String.join "\n," entriesExpressions
+                                                            ++ "]"
+                                                         ]
+                                                            |> String.join "\n"
+                                                        )
+                                            )
+
+                        expressionResult =
+                            case config.variant of
+                                SourceFile ->
+                                    case fileTreeContent of
+                                        FileTree.TreeNode _ ->
+                                            Err ("This pattern matches path '" ++ String.join "/" matchingPath ++ "' but the node here is a tree, not a file")
+
+                                        FileTree.BlobNode fileContent ->
+                                            expressionFromFileContent fileContent
+                                                |> Result.map
+                                                    (\expression ->
+                                                        ( [ "file_as"
+                                                          , expression.encodingName
+                                                          , SHA256.toHex (SHA256.fromBytes fileContent)
+                                                          ]
+                                                        , expression.expression
+                                                        )
+                                                    )
+
+                                SourceFileTree ->
+                                    expressionFromFileTreeNode fileTreeContent
+                                        |> Result.map
+                                            (Tuple.pair
+                                                [ "file_tree_node"
+                                                , filePathRepresentation
                                                 ]
-                                                    |> String.join "_"
+                                            )
+                    in
+                    expressionResult
+                        |> Result.map
+                            (\( fileNameComponents, expression ) ->
+                                let
+                                    valueFunctionName =
+                                        String.join "_" fileNameComponents
 
-                                            valueFunctionText =
-                                                valueFunctionName
-                                                    ++ " =\n"
-                                                    ++ indentElmCodeLines 1 expression.expression
-                                        in
-                                        { valueFunctionText = valueFunctionText
-                                        , updateInterfaceModuleText =
-                                            \{ generatedModuleName } moduleText ->
-                                                let
-                                                    fileExpression =
+                                    valueFunctionText =
+                                        valueFunctionName
+                                            ++ " =\n"
+                                            ++ indentElmCodeLines 1 expression
+                                in
+                                { valueFunctionText = valueFunctionText
+                                , updateInterfaceModuleText =
+                                    \{ generatedModuleName } moduleText ->
+                                        let
+                                            fileExpression =
+                                                case config.variant of
+                                                    SourceFile ->
                                                         buildElmExpressionForInterfaceBlobEncoding
                                                             config.encoding
                                                             (generatedModuleName ++ "." ++ valueFunctionName)
 
-                                                    buildNewFunctionLines previousFunctionLines =
-                                                        List.take 2 previousFunctionLines
-                                                            ++ [ indentElmCodeLines 1 fileExpression ]
-                                                in
-                                                addOrUpdateFunctionInElmModuleText
-                                                    { functionName = functionName
-                                                    , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
-                                                    }
-                                                    moduleText
-                                        }
-                                    )
-
-                SourceFileTree ->
-                    case config.encoding of
-                        SingleEncoding BytesEncoding ->
-                            case findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
-                                Err error ->
-                                    Err ("Failed to identify file tree node for '" ++ filePathRepresentation ++ "': " ++ error)
-
-                                Ok ( _, rootFileTreeNode ) ->
-                                    let
-                                        expressionFromFileTreeNode fileTreeNode =
-                                            case fileTreeNode of
-                                                FileTree.BlobNode blob ->
-                                                    let
-                                                        asBase64Expression =
-                                                            Base64.fromBytes blob
-                                                                |> Maybe.withDefault ""
-                                                                |> stringExpressionFromString
-                                                    in
-                                                    "BlobNode " ++ asBase64Expression
-
-                                                FileTree.TreeNode tree ->
-                                                    let
-                                                        buildTreeEntryExpression ( entryName, entryNode ) =
-                                                            [ "( \"" ++ entryName ++ "\""
-                                                            , ", " ++ expressionFromFileTreeNode entryNode
-                                                            , ")"
-                                                            ]
-                                                                |> String.join "\n"
-
-                                                        listExpression =
-                                                            [ "["
-                                                                ++ String.join "\n," (List.map buildTreeEntryExpression tree)
-                                                                ++ "]"
-                                                            ]
-                                                                |> String.join "\n"
-                                                    in
-                                                    "TreeNode\n"
-                                                        ++ indentElmCodeLines 1 listExpression
-
-                                        valueFunctionName =
-                                            [ "file_tree_node_as_base64"
-                                            , filePathRepresentation
-                                            ]
-                                                |> String.join "_"
-
-                                        valueFunctionText =
-                                            valueFunctionName
-                                                ++ " =\n"
-                                                ++ indentElmCodeLines 1 (expressionFromFileTreeNode rootFileTreeNode)
-                                    in
-                                    Ok
-                                        { valueFunctionText = valueFunctionText
-                                        , updateInterfaceModuleText =
-                                            \{ generatedModuleName } moduleText ->
-                                                let
-                                                    fileTreeNodeExpression =
+                                                    SourceFileTree ->
                                                         [ generatedModuleName ++ "." ++ valueFunctionName
                                                         , sourceFilesInterfaceModuleAddedFunctionMapNode.functionName
                                                         , sourceFilesInterfaceModuleAddedFunctionMapBlobs.functionName
-                                                            ++ """ (Base64.toBytes >> Maybe.withDefault ("Failed to convert from base64" |> Bytes.Encode.string |> Bytes.Encode.encode)) """
+                                                            ++ """(\\blobValue -> """
+                                                            ++ buildElmExpressionForInterfaceBlobEncoding
+                                                                config.encoding
+                                                                "blobValue"
+                                                            ++ ")"
                                                         ]
                                                             |> String.join "\n|>"
 
-                                                    buildNewFunctionLines previousFunctionLines =
-                                                        List.take 2 previousFunctionLines
-                                                            ++ [ indentElmCodeLines 1 fileTreeNodeExpression ]
-                                                in
-                                                addOrUpdateFunctionInElmModuleText
-                                                    { functionName = functionName
-                                                    , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
-                                                    }
-                                                    moduleText
-                                        }
-
-                        _ ->
-                            Err "Encoding is not yet supported for file tree nodes. Remove the encoding flag and use the type `Bytes.Bytes`"
+                                            buildNewFunctionLines previousFunctionLines =
+                                                List.take 2 previousFunctionLines
+                                                    ++ [ indentElmCodeLines 1 fileExpression ]
+                                        in
+                                        addOrUpdateFunctionInElmModuleText
+                                            { functionName = functionName
+                                            , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
+                                            }
+                                            moduleText
+                                }
+                            )
 
 
 sourceFilesInterfaceModuleAddedFunctions : List { functionName : String, mapFunctionLines : { generatedModuleName : String } -> Maybe (List String) -> List String }
@@ -4021,7 +4018,7 @@ parseSourceFileFunction currentModule functionDeclaration =
         Err error ->
             Err ("Failed to parse encoding: " ++ error)
 
-        Ok maybeEncoding ->
+        Ok encodingFromDeclaration ->
             let
                 functionName =
                     Elm.Syntax.Node.value
@@ -4031,12 +4028,20 @@ parseSourceFileFunction currentModule functionDeclaration =
                 |> Result.map
                     (Tuple.mapSecond
                         (\beforeApplyEncoding ->
-                            case maybeEncoding of
+                            case encodingFromDeclaration.encoding of
                                 Nothing ->
                                     beforeApplyEncoding
 
                                 Just encoding ->
-                                    { beforeApplyEncoding | encoding = encoding }
+                                    { beforeApplyEncoding
+                                        | encoding = encoding
+                                        , variant =
+                                            if encodingFromDeclaration.isTree then
+                                                SourceFileTree
+
+                                            else
+                                                SourceFile
+                                    }
                         )
                     )
 
@@ -4053,7 +4058,8 @@ parseSourceFileFunctionName functionName =
         |> Result.andThen
             (\( variant, flags, filePathRepresentation ) ->
                 flags
-                    |> parseInterfaceFunctionFlags parseSourceFileFunctionFlag { variant = variant, encoding = SingleEncoding BytesEncoding }
+                    |> parseInterfaceFunctionFlags parseSourceFileFunctionFlag
+                        { variant = variant, encoding = SingleEncoding BytesEncoding }
                     |> Result.map (Tuple.pair filePathRepresentation)
             )
 
@@ -4146,14 +4152,17 @@ parseElmMakeFunctionFlag flag config =
             Err "Unknown flag"
 
 
-parseSourceFileFunctionEncodingFromDeclaration : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Expression.Function -> Result String (Maybe InterfaceBlobEncoding)
+parseSourceFileFunctionEncodingFromDeclaration :
+    ( List String, Elm.Syntax.File.File )
+    -> Elm.Syntax.Expression.Function
+    -> Result String { isTree : Bool, encoding : Maybe InterfaceBlobEncoding }
 parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration =
     case functionDeclaration.signature of
         Nothing ->
-            Ok Nothing
+            Err "Missing signature"
 
         Just signature ->
-            parseSourceFileFunctionEncodingFromTypeAnnotation currentModule (Elm.Syntax.Node.value signature).typeAnnotation
+            parseSourceFileFunctionEncodingFromElmTypeAnnotation currentModule (Elm.Syntax.Node.value signature).typeAnnotation
 
 
 parseElmMakeFunctionConfigFromTypeAnnotation : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation -> Result String InterfaceElmMakeFunctionConfig
@@ -4192,8 +4201,11 @@ integrateElmMakeFunctionRecordFieldName fieldName configBefore =
                     Err ("Unsupported field name: " ++ fieldName)
 
 
-parseSourceFileFunctionEncodingFromTypeAnnotation : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation -> Result String (Maybe InterfaceBlobEncoding)
-parseSourceFileFunctionEncodingFromTypeAnnotation currentModule typeAnnotationNode =
+parseSourceFileFunctionEncodingFromElmTypeAnnotation :
+    ( List String, Elm.Syntax.File.File )
+    -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
+    -> Result String { isTree : Bool, encoding : Maybe InterfaceBlobEncoding }
+parseSourceFileFunctionEncodingFromElmTypeAnnotation currentModule typeAnnotationNode =
     case
         parseElmTypeAndDependenciesRecursivelyFromAnnotation
             Dict.empty
@@ -4202,28 +4214,50 @@ parseSourceFileFunctionEncodingFromTypeAnnotation currentModule typeAnnotationNo
         Err (LocatedInSourceFiles _ error) ->
             Err ("Failed to parse type annotation: " ++ error)
 
-        Ok ( typeAnnotation, typeAnnotationDependencies ) ->
-            case typeAnnotation of
-                RecordElmType recordType ->
-                    if Dict.empty /= typeAnnotationDependencies then
-                        Err
-                            ("type annotation dependencies are not empty: "
-                                ++ String.join ", " (Dict.keys typeAnnotationDependencies)
-                            )
+        Ok ( typeAnnotation, _ ) ->
+            parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation
+
+
+parseSourceFileFunctionEncodingFromTypeAnnotation : ElmTypeAnnotation -> Result String { isTree : Bool, encoding : Maybe InterfaceBlobEncoding }
+parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation =
+    case typeAnnotation of
+        RecordElmType recordType ->
+            recordType.fields
+                |> List.map
+                    (\( fieldName, _ ) ->
+                        Dict.get fieldName encodingFromSourceFileFieldName
+                            |> Maybe.map (\encoding -> Ok ( fieldName, encoding ))
+                            |> Maybe.withDefault (Err ("Unsupported field name: " ++ fieldName))
+                    )
+                |> Result.Extra.combine
+                |> Result.map (\encoding -> { isTree = False, encoding = Just (RecordEncoding encoding) })
+
+        InstanceElmType instance ->
+            let
+                continueWithErrorUnexpectedInst detail =
+                    Err ("Unexpected shape of instantiation: " ++ detail)
+            in
+            case instance.instantiated of
+                CustomElmType instantiatedTypeName ->
+                    if not (String.endsWith ".FileTreeNode" instantiatedTypeName) then
+                        continueWithErrorUnexpectedInst ("instatiatedTypeName: " ++ instantiatedTypeName)
 
                     else
-                        recordType.fields
-                            |> List.map
-                                (\( fieldName, _ ) ->
-                                    Dict.get fieldName encodingFromSourceFileFieldName
-                                        |> Maybe.map (\encoding -> Ok ( fieldName, encoding ))
-                                        |> Maybe.withDefault (Err ("Unsupported field name: " ++ fieldName))
-                                )
-                            |> Result.Extra.combine
-                            |> Result.map (RecordEncoding >> Just)
+                        case instance.arguments of
+                            [ singleArgument ] ->
+                                singleArgument
+                                    |> parseSourceFileFunctionEncodingFromTypeAnnotation
+                                    |> Result.mapError ((++) "Failed to parse argument: ")
+                                    |> Result.map (\encoding -> { encoding | isTree = True })
+
+                            _ ->
+                                continueWithErrorUnexpectedInst ("Unexpected number of arguments: " ++ String.fromInt (List.length instance.arguments))
 
                 _ ->
-                    Ok Nothing
+                    continueWithErrorUnexpectedInst "Instantiated is not a custom type"
+
+        _ ->
+            Ok { isTree = False, encoding = Nothing }
 
 
 parseInterfaceFunctionFlags : (String -> aggregate -> Result String aggregate) -> aggregate -> List String -> Result String aggregate
