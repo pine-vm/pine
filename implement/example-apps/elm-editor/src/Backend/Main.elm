@@ -243,10 +243,10 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                     (httpResponseOkWithBodyAsBase64
                         (Just
                             (if debug then
-                                CompilationInterface.ElmMake.elm_make__debug__javascript____src_Frontend_Main_elm.base64
+                                CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.base64
 
                              else
-                                CompilationInterface.ElmMake.elm_make__javascript____src_Frontend_Main_elm.base64
+                                CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
                             )
                         )
                         (staticContentHttpHeaders "text/javascript")

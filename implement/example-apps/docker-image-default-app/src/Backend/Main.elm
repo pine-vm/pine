@@ -48,7 +48,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     |> Maybe.withDefault False
             then
                 { statusCode = 200
-                , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make__debug__base64____src_Frontend_Main_elm
+                , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
                 , headersToAdd = []
                 }
 

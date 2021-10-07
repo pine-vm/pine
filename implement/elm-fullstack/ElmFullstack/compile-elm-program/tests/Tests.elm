@@ -13,46 +13,6 @@ import Result.Extra
 import Test
 
 
-parseCompilationInterfaceElmMakeFunctionName : Test.Test
-parseCompilationInterfaceElmMakeFunctionName =
-    [ ( "elm_make__debug__javascript__base64____src_Frontend_Main_elm"
-      , Ok
-            ( "src_Frontend_Main_elm"
-            , { outputType = CompileFullstackApp.ElmMakeOutputTypeJs
-              , enableDebug = True
-              , encoding = CompileFullstackApp.SingleEncoding CompileFullstackApp.Base64Encoding
-              }
-            )
-      )
-    , ( "elm_make__javascript__base64____src_Frontend_Main_elm"
-      , Ok
-            ( "src_Frontend_Main_elm"
-            , { outputType = CompileFullstackApp.ElmMakeOutputTypeJs
-              , enableDebug = False
-              , encoding = CompileFullstackApp.SingleEncoding CompileFullstackApp.Base64Encoding
-              }
-            )
-      )
-    , ( "elm_make__debug__base64____src_Frontend_Main_elm"
-      , Ok
-            ( "src_Frontend_Main_elm"
-            , { outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
-              , enableDebug = True
-              , encoding = CompileFullstackApp.SingleEncoding CompileFullstackApp.Base64Encoding
-              }
-            )
-      )
-    ]
-        |> List.map
-            (\( functionName, expectedResult ) ->
-                Test.test functionName <|
-                    \() ->
-                        CompileFullstackApp.parseElmMakeModuleFunctionName functionName
-                            |> Expect.equal expectedResult
-            )
-        |> Test.describe "parse Compilation Interface Elm Make function name"
-
-
 dependencies_encoding_roundtrip : Test.Test
 dependencies_encoding_roundtrip =
     [ ( "ElmMakeDependency Empty "
