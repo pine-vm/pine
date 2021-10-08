@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-16/elm-fullstack-bin-1e73eca94e8fd3244d889a4a2a3383d88eb7c8ee-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-09-16/elm-fullstack-bin-1e73eca94e8fd3244d889a4a2a3383d88eb7c8ee-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-10-07/elm-fullstack-bin-8d31a7ada98378d79ccf38482e969bb5995422cb-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-10-07/elm-fullstack-bin-8d31a7ada98378d79ccf38482e969bb5995422cb-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -32,12 +32,12 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 As part of a deployment, Elm Fullstack compiles the app program code.
 The compiler requires the program code to contain the entry point for a back-end app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/1e73eca94e8fd3244d889a4a2a3383d88eb7c8ee/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/1e73eca94e8fd3244d889a4a2a3383d88eb7c8ee/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -45,7 +45,9 @@ When running this command, we get an output like this:
 ```txt
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
-Loaded source composition 1dcd6020e22e22cc7346492b8356dcf07e014a909a00decf6a8bcf4f12052005 from 'https://github.com/elm-fullstack/elm-fullstack/tree/1e73eca94e8fd3244d889a4a2a3383d88eb7c8ee/implement/example-apps/docker-image-default-app'.
+This path looks like a URL into a remote git repository. Trying to load from there...
+This path points to commit 8d31a7ada98378d79ccf38482e969bb5995422cb
+Loaded source composition 5fafa8dd16fc872981a809a25553439f11f49d4b7dae1d129a9d94cd30fbb9d4 from 'https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process live representation.
@@ -92,39 +94,61 @@ backendMain =
 
 ### `CompilationInterface.ElmMake` Elm Module
 
-The `ElmMake` module provides an interface to run the `elm make` command and use the resulting file value in our Elm app.
-For each name in this module, the full-stack compiler replaces the value with the output from `elm  make`.
+The `ElmMake` module provides an interface to run the `elm make` command and use the output file value in our Elm app.
+For each function declaration in this module, the compiler replaces the declaration with the output(s) from `elm  make`.
 
-Using the name in the Elm module, we specify the source file name and optional flags for `elm  make`. By default, the value we get is of type `Bytes.Bytes`.
-Here is an example that depends on the source file located at path `src/Frontend/Main.elm`:
+Using the name of the declaration, we specify the source file name.
+Using a type signature on the function declaration, we select the flags for elm make and the encoding of the output file. This signature must always be a record type or an alias of a record type declared in the same module. Using the record field names, we select:
+
++ Flags for elm make: `debug` or none.
++ Output type: `javascript`, `html` or none for HTML.
++ Encoding: Either `bytes` or `base64` or `utf8`.
+
+Here is an example that compiles a source file located at path `src/Frontend/Main.elm`:
 
 ```Elm
 module CompilationInterface.ElmMake exposing (..)
 
+import Bytes
+import Bytes.Encode
 
-elm_make____src_Frontend_Main_elm : Bytes.Bytes
+
+elm_make____src_Frontend_Main_elm : { bytes : Bytes.Bytes }
 elm_make____src_Frontend_Main_elm =
-    "The compiler replaces this value."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
+    { bytes =
+        "The compiler replaces this value."
+            |> Bytes.Encode.string
+            |> Bytes.Encode.encode
+    }
 
-
-elm_make__debug____src_Frontend_Main_elm : Bytes.Bytes
-elm_make__debug____src_Frontend_Main_elm =
-    "The compiler replaces this value."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
 ```
 
 We can also get the value encoded as a base64 string instead of `Bytes.Bytes`, by adding the `base64` flag:
 
 ```Elm
-elm_make__base64____src_Frontend_Main_elm : String
-elm_make__base64____src_Frontend_Main_elm =
-    "The compiler replaces this value."
+elm_make____src_Frontend_Main_elm : { base64 : String }
+elm_make____src_Frontend_Main_elm =
+    { base64 = "The compiler replaces this value." }
 ```
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/e692d9dec494523d0e1e4e8dbf39a007bf932750/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+We use nested record types to combine multiple of those names.
+
+For example, this declaration gets us two compilation variants of the same file, one without flags and one compiled the `--debug` flag:
+
+```Elm
+elm_make____src_Frontend_Main_elm : { debug : { javascript : { base64 : String } }, javascript : { base64 : String } }
+elm_make____src_Frontend_Main_elm =
+    { javascript = { base64 = "The compiler replaces this value." }
+    , debug = { javascript = { base64 = "The compiler replaces this value." } }
+    }
+```
+
+The tree described by this record type has two leaves:
+
++ `debug.javascript.base64 : String`
++ `javascript.base64 : String`
+
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -135,7 +159,7 @@ Backend apps often use the output from `elm make` send the frontend to web brows
                 |> Maybe.withDefault False
         then
             { statusCode = 200
-            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make__debug__base64____src_Frontend_Main_elm
+            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
             , headersToAdd = []
             }
 
@@ -166,11 +190,11 @@ jsonDecodeMessageToClient =
 
 ### `CompilationInterface.SourceFiles` Elm Module
 
-This module provides access to the app source code files.
+The `SourceFiles` module provides access to the app source code files.
 
-By adding a name to this module, we can pick a source file and read its contents. The lowering step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
+By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/example-apps/rich-chat-room/src/CompilationInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/rich-chat-room/src/CompilationInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
 
 ```Elm
 file____readme_md : Bytes.Bytes
@@ -210,7 +234,7 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
 
 ### `elm-fullstack.json`
 
@@ -258,7 +282,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-09-16.
+Welcome to the Elm Fullstack admin interface version 2021-10-07.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -271,7 +295,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/1e73eca94e8fd3244d889a4a2a3383d88eb7c8ee/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.

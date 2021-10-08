@@ -16,7 +16,7 @@ Elm Fullstack currently offers:
 Use this command to run a server and deploy an example app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/c2c44f466fab0e57ca8a4fa85c2d299a379e0d45/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app
 ```
 
 For a guide on installation and configuration options, see [How to Configure and Deploy an Elm Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
