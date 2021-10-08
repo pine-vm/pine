@@ -166,10 +166,10 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                         , bodyAsBase64 =
                             Just
                                 (if enableInspector then
-                                    CompilationInterface.ElmMake.elm_make__debug__base64____src_Frontend_Main_elm
+                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
 
                                  else
-                                    CompilationInterface.ElmMake.elm_make__base64____src_Frontend_Main_elm
+                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.base64
                                 )
                         , headersToAdd = []
                         }
@@ -279,7 +279,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
 
 availableStaticContent : Dict.Dict String Bytes.Bytes
 availableStaticContent =
-    [ CompilationInterface.SourceFiles.file____static_chat_message_added_0_mp3 ]
+    [ CompilationInterface.SourceFiles.file____static_chat_message_added_0_mp3.bytes ]
         |> List.map (\content -> ( content |> FrontendBackendInterface.staticContentFileName, content ))
         |> Dict.fromList
 

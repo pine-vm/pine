@@ -267,7 +267,7 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
             ( stateBefore
             , [ ElmFullstack.RespondToHttpRequest
                     (httpResponseOkWithBodyAsBase64
-                        (Just CompilationInterface.SourceFiles.file__base64____src_monarch_js)
+                        (Just CompilationInterface.SourceFiles.file____src_monarch_js.base64)
                         (staticContentHttpHeaders "text/javascript")
                     )
               ]
@@ -277,7 +277,7 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
             ( stateBefore
             , [ ElmFullstack.RespondToHttpRequest
                     (httpResponseOkWithBodyAsBase64
-                        (Just CompilationInterface.SourceFiles.file__base64____static_favicon_svg)
+                        (Just CompilationInterface.SourceFiles.file____static_favicon_svg.base64)
                         (staticContentHttpHeaders "image/svg+xml")
                     )
               ]

@@ -272,7 +272,7 @@ updateForSoundEffects { stateBeforeEvent } stateBefore =
                     |> PlayAudio.startPlayback
                         { sourceUrl =
                             Url.Builder.relative
-                                (CompilationInterface.SourceFiles.file____static_chat_message_added_0_mp3
+                                (CompilationInterface.SourceFiles.file____static_chat_message_added_0_mp3.bytes
                                     |> FrontendBackendInterface.staticContentFileName
                                     |> FrontendBackendInterface.StaticContentRoute
                                     |> FrontendBackendInterface.urlPathFromRoute
@@ -615,7 +615,7 @@ view state =
 
 appDescriptionHtml : Html.Html a
 appDescriptionHtml =
-    CompilationInterface.SourceFiles.file__utf8____readme_md
+    CompilationInterface.SourceFiles.file____readme_md.utf8
         |> Markdown.Parser.parse
         |> Result.map
             (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer

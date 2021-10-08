@@ -55,7 +55,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             else
                 { statusCode = 200
                 , bodyAsBase64 =
-                    [ CompilationInterface.SourceFiles.file__utf8____readme_md
+                    [ CompilationInterface.SourceFiles.file____readme_md.utf8
                     , ""
                     , "This backend process received " ++ (state.httpRequestsCount |> String.fromInt) ++ " HTTP requests."
                     ]

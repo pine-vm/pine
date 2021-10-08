@@ -36,4 +36,4 @@ requestToVolatileProcess =
 
 volatileProcessProgramCode : String
 volatileProcessProgramCode =
-    CompilationInterface.SourceFiles.file__utf8____src_Backend_VolatileProcess_csx
+    CompilationInterface.SourceFiles.file____src_Backend_VolatileProcess_csx.utf8

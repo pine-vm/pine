@@ -1,9 +1,6 @@
 module CompilationInterface.SourceFiles exposing (..)
 
-import Bytes
-import Bytes.Encode
 
-
-file__utf8____src_Backend_HttpViaVolatileProcess_csx : String
-file__utf8____src_Backend_HttpViaVolatileProcess_csx =
-    "The compiler replaces this value."
+file____src_Backend_HttpViaVolatileProcess_csx : { utf8 : String }
+file____src_Backend_HttpViaVolatileProcess_csx =
+    { utf8 = "The compiler replaces this value." }

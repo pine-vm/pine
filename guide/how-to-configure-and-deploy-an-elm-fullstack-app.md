@@ -123,7 +123,7 @@ elm_make____src_Frontend_Main_elm =
 
 ```
 
-We can also get the value encoded as a base64 string instead of `Bytes.Bytes`, by adding the `base64` flag:
+We can also get the output encoded as a base64 string instead of `Bytes.Bytes`, by using the field name `base64`:
 
 ```Elm
 elm_make____src_Frontend_Main_elm : { base64 : String }
@@ -131,9 +131,7 @@ elm_make____src_Frontend_Main_elm =
     { base64 = "The compiler replaces this value." }
 ```
 
-We use nested record types to combine multiple of those names.
-
-For example, this declaration gets us two compilation variants of the same file, one without flags and one compiled the `--debug` flag:
+We use nested record types to combine multiple of those names. For example, this declaration gets us two compilation variants of the same file, one without flags and one compiled the `--debug` flag:
 
 ```Elm
 elm_make____src_Frontend_Main_elm : { debug : { javascript : { base64 : String } }, javascript : { base64 : String } }
@@ -143,7 +141,7 @@ elm_make____src_Frontend_Main_elm =
     }
 ```
 
-The tree described by this record type has two leaves:
+The tree we modeled with this record type has two leaves:
 
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`

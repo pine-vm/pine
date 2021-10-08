@@ -56,7 +56,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                             Just "utf8" ->
                                 { statusCode = 200
                                 , bodyAsBase64 =
-                                    CompilationInterface.SourceFiles.file__utf8____readme_md
+                                    CompilationInterface.SourceFiles.file____readme_md.utf8
                                         |> Bytes.Encode.string
                                         |> Bytes.Encode.encode
                                         |> Base64.fromBytes
