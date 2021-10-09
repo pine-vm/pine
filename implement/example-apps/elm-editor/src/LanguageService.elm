@@ -10,6 +10,7 @@ import Elm.Syntax.File
 import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
+import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
 import FileTree
@@ -349,8 +350,8 @@ listFunctionOrValueExpressionsFromExpression expressionNode =
                    )
 
         Elm.Syntax.Expression.CaseExpression caseExpression ->
-            (caseExpression.expression :: List.map Tuple.second caseExpression.cases)
-                |> List.concatMap listFunctionOrValueExpressionsFromExpression
+            listFunctionOrValueExpressionsFromExpression caseExpression.expression
+                ++ List.concatMap listFunctionOrValueExpressionsFromCase caseExpression.cases
 
         Elm.Syntax.Expression.LambdaExpression lambdaExpression ->
             listFunctionOrValueExpressionsFromExpression lambdaExpression.expression
@@ -365,6 +366,39 @@ listFunctionOrValueExpressionsFromExpression expressionNode =
 
         Elm.Syntax.Expression.ListExpr list ->
             List.concatMap listFunctionOrValueExpressionsFromExpression list
+
+        _ ->
+            []
+
+
+listFunctionOrValueExpressionsFromCase : ( Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern, Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression ) -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+listFunctionOrValueExpressionsFromCase ( patternNode, expressionNode ) =
+    listFunctionOrValueExpressionsFromPattern patternNode
+        ++ listFunctionOrValueExpressionsFromExpression expressionNode
+
+
+listFunctionOrValueExpressionsFromPattern : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+listFunctionOrValueExpressionsFromPattern patternNode =
+    case Elm.Syntax.Node.value patternNode of
+        Elm.Syntax.Pattern.TuplePattern tuplePattern ->
+            List.concatMap listFunctionOrValueExpressionsFromPattern tuplePattern
+
+        Elm.Syntax.Pattern.UnConsPattern head tail ->
+            List.concatMap listFunctionOrValueExpressionsFromPattern [ head, tail ]
+
+        Elm.Syntax.Pattern.ListPattern listPattern ->
+            List.concatMap listFunctionOrValueExpressionsFromPattern listPattern
+
+        Elm.Syntax.Pattern.NamedPattern named arguments ->
+            Elm.Syntax.Node.Node (Elm.Syntax.Node.range patternNode)
+                ( named.moduleName, named.name )
+                :: List.concatMap listFunctionOrValueExpressionsFromPattern arguments
+
+        Elm.Syntax.Pattern.AsPattern asPattern _ ->
+            listFunctionOrValueExpressionsFromPattern asPattern
+
+        Elm.Syntax.Pattern.ParenthesizedPattern parentisized ->
+            listFunctionOrValueExpressionsFromPattern parentisized
 
         _ ->
             []
