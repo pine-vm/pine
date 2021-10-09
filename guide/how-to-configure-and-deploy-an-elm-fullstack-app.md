@@ -192,14 +192,35 @@ The `SourceFiles` module provides access to the app source code files.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [`rich-chat-room` example app uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/rich-chat-room/src/CompilationInterface/SourceFiles.elm) to get the contents of the `readme.md` file in the app code directory and display it in the frontend:
+The [app 'Elm Editor' uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/94c2551500ab48cc5c0743adf8dac0c386604203/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
-file____readme_md : Bytes.Bytes
-file____readme_md =
-    "The compiler replaces this value."
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
+module CompilationInterface.SourceFiles exposing (..)
+
+
+type FileTreeNode blobStructure
+    = BlobNode blobStructure
+    | TreeNode (List ( String, FileTreeNode blobStructure ))
+
+
+file____src_monarch_js : { base64 : String }
+file____src_monarch_js =
+    { base64 = "The compiler replaces this value." }
+
+
+file____static_favicon_svg : { base64 : String }
+file____static_favicon_svg =
+    { base64 = "The compiler replaces this value." }
+
+
+file____src_Backend_VolatileProcess_csx : { utf8 : String }
+file____src_Backend_VolatileProcess_csx =
+    { utf8 = "The compiler replaces this value." }
+
+
+file_tree____elm_core_modules : FileTreeNode { utf8 : String }
+file_tree____elm_core_modules =
+    TreeNode []
 ```
 
 To map the source file path to a name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
@@ -211,6 +232,8 @@ To map the source file path to a name in this module, replace any non-alphanumer
 | `static/chat.message-added.0.mp3` | `file____static_chat_message_added_0_mp3` |
 
 The compilation will fail if this module contains a name that matches more than one or none of the source files.
+
+Using the record type on a function declaration, we can choose from the encodings `bytes`, `base64` and `utf8`.
 
 ### `Backend.MigrateState` Elm Module
 
