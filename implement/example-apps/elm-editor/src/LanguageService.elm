@@ -20,7 +20,7 @@ import Maybe.Extra
 
 type alias LanguageServiceState =
     { fileTreeParseCache : FileTree.FileTreeNode LanguageServiceStateFileTreeNodeBlob
-    , coreModulesCache : List ParsedModuleCache
+    , coreModulesCache : List ElmCoreModule
     }
 
 
@@ -40,10 +40,16 @@ type alias ParsedModuleCache =
     }
 
 
+type alias ElmCoreModule =
+    { parseResult : ParsedModuleCache
+    , implicitImport : Bool
+    }
+
+
 initLanguageServiceState : LanguageServiceState
 initLanguageServiceState =
     { fileTreeParseCache = FileTree.TreeNode []
-    , coreModulesCache = coreModulesParseResults
+    , coreModulesCache = elmCoreModulesParseResults
     }
 
 
@@ -418,13 +424,15 @@ provideCompletionItems request languageServiceState =
                                         |> Maybe.map Char.isUpper
                                         |> Maybe.withDefault True
 
+                        modulesAvailableForImport =
+                            modulesAvailableForImportFromState languageServiceState
+
                         moduleNamesToNotSuggestForImport =
                             [ fileOpenedInEditorModuleName ]
 
                         modulesToSuggestForImport =
-                            languageServiceState.fileTreeParseCache
-                                |> FileTree.flatListOfBlobsFromFileTreeNode
-                                |> List.filterMap (Tuple.second >> .parsedFileLastSuccess >> Maybe.map .syntax)
+                            modulesAvailableForImport
+                                |> List.map .syntax
                                 |> List.filter
                                     (\availableModule ->
                                         not
@@ -542,18 +550,30 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
     let
         implicitlyImportedModules =
             languageServiceState.coreModulesCache
+                |> List.filter .implicitImport
                 |> List.map
                     (\coreModule ->
                         let
                             canonicalName =
-                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value coreModule.syntax.moduleDefinition)
+                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value coreModule.parseResult.syntax.moduleDefinition)
                         in
                         { canonicalName = canonicalName
                         , importedName = canonicalName
-                        , parsedModule = Just coreModule
+                        , parsedModule = Just coreModule.parseResult
                         , referencesRanges = []
                         }
                     )
+
+        parsedModuleFromModuleName canonicalModuleName =
+            modulesAvailableForImportFromState languageServiceState
+                |> List.filter
+                    (.syntax
+                        >> .moduleDefinition
+                        >> Elm.Syntax.Node.value
+                        >> Elm.Syntax.Module.moduleName
+                        >> (==) canonicalModuleName
+                    )
+                |> List.head
 
         explicitlyImportedModules =
             fileOpenedInEditor.syntax.imports
@@ -568,33 +588,24 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                                 importSyntax.moduleAlias
                                     |> Maybe.map Elm.Syntax.Node.value
                                     |> Maybe.withDefault canonicalName
-
-                            parsedModule =
-                                languageServiceState.fileTreeParseCache
-                                    |> FileTree.flatListOfBlobsFromFileTreeNode
-                                    |> List.filterMap
-                                        (\( _, fileCache ) ->
-                                            case fileCache.parsedFileLastSuccess of
-                                                Nothing ->
-                                                    Nothing
-
-                                                Just moduleCandidate ->
-                                                    if Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleCandidate.syntax.moduleDefinition) == canonicalName then
-                                                        Just moduleCandidate
-
-                                                    else
-                                                        Nothing
-                                        )
-                                    |> List.head
                         in
                         { canonicalName = canonicalName
                         , importedName = importedName
-                        , parsedModule = parsedModule
+                        , parsedModule = parsedModuleFromModuleName canonicalName
                         , referencesRanges = [ Elm.Syntax.Node.range importSyntax.moduleName ]
                         }
                     )
     in
     implicitlyImportedModules ++ explicitlyImportedModules
+
+
+modulesAvailableForImportFromState : LanguageServiceState -> List ParsedModuleCache
+modulesAvailableForImportFromState languageServiceState =
+    (languageServiceState.fileTreeParseCache
+        |> FileTree.flatListOfBlobsFromFileTreeNode
+        |> List.filterMap (Tuple.second >> .parsedFileLastSuccess)
+    )
+        ++ List.map .parseResult languageServiceState.coreModulesCache
 
 
 importExposingsFromFile :
@@ -1003,11 +1014,16 @@ updateLanguageServiceState fileTree state =
     }
 
 
-coreModulesTexts : List String
-coreModulesTexts =
-    CompilationInterface.SourceFiles.file_tree____elm_core_modules
+elmCoreModules : List { moduleText : String, implicitImport : Bool }
+elmCoreModules =
+    [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_implicit_import
         |> listAllFilesFromSourceFileTreeNode
-        |> List.map (Tuple.second >> .utf8)
+        |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = True })
+    , CompilationInterface.SourceFiles.file_tree____elm_core_modules_explicit_import
+        |> listAllFilesFromSourceFileTreeNode
+        |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = False })
+    ]
+        |> List.concat
 
 
 listAllFilesFromSourceFileTreeNode : CompilationInterface.SourceFiles.FileTreeNode a -> List ( List String, a )
@@ -1024,15 +1040,20 @@ listAllFilesFromSourceFileTreeNode node =
                     )
 
 
-coreModulesParseResults : List ParsedModuleCache
-coreModulesParseResults =
-    coreModulesTexts
+elmCoreModulesParseResults : List ElmCoreModule
+elmCoreModulesParseResults =
+    elmCoreModules
         |> List.filterMap
-            (\asString ->
-                asString
+            (\coreModule ->
+                coreModule.moduleText
                     |> CompileFullstackApp.parseElmModuleText
                     |> Result.toMaybe
-                    |> Maybe.map (\syntax -> { text = asString, syntax = syntax })
+                    |> Maybe.map
+                        (\syntax ->
+                            { parseResult = { text = coreModule.moduleText, syntax = syntax }
+                            , implicitImport = coreModule.implicitImport
+                            }
+                        )
             )
 
 

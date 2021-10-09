@@ -52,11 +52,12 @@ To make the links into projects even smaller, the interface to save a project co
 
 ## Code Editor
 
-The code editor is a central part of an IDE. Elm Editor integrates the [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide a range of standard IDE features, including the following:
+The code editor is a central part of an IDE. Elm Editor integrates the [Monaco Editor](https://microsoft.github.io/monaco-editor/) to provide a range of IDE features, including the following:
 
 + Text search with options for case sensitivity, regular expressions, and replacing matches.
 + Visual markers in the code to quickly find locations of problems.
 + Showing error descriptions on mouse hover.
 + Completion suggestions to discover available declarations and explore useful codes.
++ Showing documentation and details when hovering the mouse cursor over a part of the code.
 + Command palette to discover new functionality and keyboard shortcuts.
 + Minimap for improved navigation of large documents.

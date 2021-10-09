@@ -21,6 +21,11 @@ file____src_Backend_VolatileProcess_csx =
     { utf8 = "The compiler replaces this value." }
 
 
-file_tree____elm_core_modules : FileTreeNode { utf8 : String }
-file_tree____elm_core_modules =
-    TreeNode []
+file_tree____elm_core_modules_implicit_import : FileTreeNode { utf8 : String }
+file_tree____elm_core_modules_implicit_import =
+    BlobNode { utf8 = "The compiler replaces this value." }
+
+
+file_tree____elm_core_modules_explicit_import : FileTreeNode { utf8 : String }
+file_tree____elm_core_modules_explicit_import =
+    BlobNode { utf8 = "The compiler replaces this value." }
