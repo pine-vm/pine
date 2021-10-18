@@ -169,6 +169,20 @@ init =
 
 Comment on function"""
                     ]
+        , Test.test "On function argument" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+function : Int -> Int
+function argumentName =
+    argu👈🚁mentName + 1
+
+"""
+                    [ """    argumentName : Int"""
+                    ]
         ]
 
 
@@ -403,7 +417,7 @@ Comment on declaration
                       , kind = Frontend.MonacoEditor.StructCompletionItemKind
                       }
                     , { label = "from_alpha"
-                      , documentation = ""
+                      , documentation = "    from_alpha"
                       , insertText = "from_alpha"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
@@ -450,6 +464,7 @@ init =
                       }
                     , { label = "from_beta"
                       , documentation = stringTrimUpToLineBreaks """
+    from_beta
 """
                       , insertText = "from_beta"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
@@ -547,7 +562,7 @@ A variant of the union type `Event`
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "name"
-                      , documentation = ""
+                      , documentation = "    name"
                       , insertText = "name"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
@@ -650,17 +665,17 @@ beta =
 
 """
                     [ { label = "alpha"
-                      , documentation = ""
+                      , documentation = "    alpha"
                       , insertText = "alpha"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "beta"
-                      , documentation = ""
+                      , documentation = "    beta"
                       , insertText = "beta"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     , { label = "delta"
-                      , documentation = ""
+                      , documentation = "    delta"
                       , insertText = "delta"
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }

@@ -12,6 +12,8 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
+import Elm.Syntax.Type
+import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
 import FileTree
 import FileTreeInWorkspace
@@ -45,6 +47,44 @@ type alias ElmCoreModule =
     { parseResult : ParsedModuleCache
     , implicitImport : Bool
     }
+
+
+type DeclarationScope
+    = TopLevelScope
+    | LocalScope Elm.Syntax.Range.Range
+
+
+type Declaration documentation
+    = FunctionOrValueDeclaration (FunctionOrValueDeclarationStruct documentation)
+    | TypeAliasDeclaration (FunctionOrValueDeclarationStruct documentation)
+    | CustomTypeDeclaration (CustomTypeDeclarationStruct documentation)
+
+
+type alias FunctionOrValueDeclarationStruct documentation =
+    { name : String
+    , documentation : documentation
+    }
+
+
+type alias CustomTypeDeclarationStruct documentation =
+    { name : String
+    , documentation : documentation
+    , tagsDeclarations : List (FunctionOrValueDeclarationStruct documentation)
+    }
+
+
+type alias ParsedDeclarationsAndReferences =
+    { declarations : List ( ParsedDeclaration, DeclarationScope )
+    , references : List (Elm.Syntax.Node.Node ( List String, String ))
+    }
+
+
+type alias ParsedDeclaration =
+    Declaration ParsedDocumentation
+
+
+type alias ParsedDocumentation =
+    { buildMarkdown : (Elm.Syntax.Range.Range -> List String) -> String }
 
 
 initLanguageServiceState : LanguageServiceState
@@ -93,6 +133,9 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
         importedModules =
             importedModulesFromFile parsedModule languageServiceState
 
+        parsedDeclarationsAndReferences =
+            listDeclarationsAndReferencesInFile parsedModule.syntax
+
         currentModuleDeclarations =
             completionItemsFromModule parsedModule
 
@@ -100,8 +143,12 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
             importExposingsFromFile parsedModule languageServiceState
 
         localDeclarationsAndImportExposings =
-            List.map .completionItem currentModuleDeclarations.topLevel
+            ((List.map .completionItem currentModuleDeclarations.fromTopLevel
                 ++ importExposings
+             )
+                |> List.map (Tuple.pair TopLevelScope)
+            )
+                ++ List.map (\item -> ( LocalScope item.scope, item.completionItem )) currentModuleDeclarations.fromLocals
 
         getModuleByImportedName importedName =
             importedModules
@@ -130,12 +177,28 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                     )
                 |> List.map (Tuple.mapSecond .documentation)
 
-        getHoverForFunctionOrName : ( Elm.Syntax.ModuleName.ModuleName, String ) -> Maybe String
-        getHoverForFunctionOrName ( moduleName, nameInModule ) =
+        getHoverForFunctionOrName : Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ) -> Maybe String
+        getHoverForFunctionOrName functionOrNameNode =
             let
+                ( moduleName, nameInModule ) =
+                    Elm.Syntax.Node.value functionOrNameNode
+
+                functionOrNameNodeRange =
+                    Elm.Syntax.Node.range functionOrNameNode
+
                 itemsBeforeFilteringByNameInModule =
                     if moduleName == [] then
                         localDeclarationsAndImportExposings
+                            |> List.filter
+                                (\( scope, _ ) ->
+                                    case scope of
+                                        TopLevelScope ->
+                                            True
+
+                                        LocalScope scopeRange ->
+                                            rangeIntersectsLocation functionOrNameNodeRange.start scopeRange
+                                )
+                            |> List.map Tuple.second
 
                     else
                         case getModuleByImportedName moduleName of
@@ -143,7 +206,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                 []
 
                             Just referencedModule ->
-                                (completionItemsFromModule referencedModule).topLevel
+                                (completionItemsFromModule referencedModule).fromTopLevel
                                     |> List.filter .isExposed
                                     |> List.map .completionItem
             in
@@ -155,8 +218,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
         getForHoversForReferenceNode functionOrNameNode =
             let
                 ( moduleName, nameInModule ) =
-                    functionOrNameNode
-                        |> Elm.Syntax.Node.value
+                    Elm.Syntax.Node.value functionOrNameNode
 
                 wholeRange =
                     Elm.Syntax.Node.range functionOrNameNode
@@ -205,7 +267,6 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
 
                 forNameInModule =
                     functionOrNameNode
-                        |> Elm.Syntax.Node.value
                         |> getHoverForFunctionOrName
                         |> Maybe.map (Tuple.pair forNameInModuleRange)
                         |> Maybe.map List.singleton
@@ -213,48 +274,11 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
             in
             forModule ++ forNameInModule
 
-        fromFunctionOrName =
-            parsedModule.syntax
-                |> listFunctionOrValueExpressionsFromFile
-                |> List.concatMap getForHoversForReferenceNode
-
-        fromFunctionTypeAnnotations =
-            parsedModule.syntax
-                |> listTypeReferencesFromFile
+        fromDeclarations =
+            parsedDeclarationsAndReferences.references
                 |> List.concatMap getForHoversForReferenceNode
     in
-    fromImportSyntax ++ fromFunctionOrName ++ fromFunctionTypeAnnotations
-
-
-listTypeReferencesFromFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listTypeReferencesFromFile =
-    .declarations
-        >> List.concatMap (Elm.Syntax.Node.value >> listTypeReferencesFromDeclaration)
-
-
-listTypeReferencesFromDeclaration : Elm.Syntax.Declaration.Declaration -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listTypeReferencesFromDeclaration declaration =
-    case declaration of
-        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-            functionDeclaration.signature
-                |> Maybe.map
-                    (Elm.Syntax.Node.value
-                        >> .typeAnnotation
-                        >> listTypeReferencesFromTypeAnnotation
-                    )
-                |> Maybe.withDefault []
-
-        Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-            aliasDeclaration.typeAnnotation
-                |> listTypeReferencesFromTypeAnnotation
-
-        Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-            customTypeDeclaration.constructors
-                |> List.concatMap
-                    (Elm.Syntax.Node.value >> .arguments >> List.concatMap listTypeReferencesFromTypeAnnotation)
-
-        _ ->
-            []
+    fromImportSyntax ++ fromDeclarations
 
 
 listTypeReferencesFromTypeAnnotation : Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
@@ -282,132 +306,6 @@ listTypeReferencesFromTypeAnnotation node =
 
         Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation input return ->
             List.concatMap listTypeReferencesFromTypeAnnotation [ input, return ]
-
-
-listFunctionOrValueExpressionsFromFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromFile file =
-    file.declarations
-        |> List.concatMap (Elm.Syntax.Node.value >> listFunctionOrValueExpressionsFromDeclaration)
-
-
-listFunctionOrValueExpressionsFromDeclaration : Elm.Syntax.Declaration.Declaration -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromDeclaration declaration =
-    case declaration of
-        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-            functionDeclaration.declaration
-                |> Elm.Syntax.Node.value
-                |> .expression
-                |> listFunctionOrValueExpressionsFromExpression
-
-        _ ->
-            []
-
-
-listFunctionOrValueExpressionsFromLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromLetDeclaration declaration =
-    case declaration of
-        Elm.Syntax.Expression.LetFunction function ->
-            listFunctionOrValueExpressionsFromFunction function
-
-        Elm.Syntax.Expression.LetDestructuring _ destructuredExpr ->
-            listFunctionOrValueExpressionsFromExpression destructuredExpr
-
-
-listFunctionOrValueExpressionsFromExpression : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromExpression expressionNode =
-    case Elm.Syntax.Node.value expressionNode of
-        Elm.Syntax.Expression.FunctionOrValue moduleName nameInModule ->
-            [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range expressionNode) ( moduleName, nameInModule ) ]
-
-        Elm.Syntax.Expression.Application application ->
-            application
-                |> List.concatMap listFunctionOrValueExpressionsFromExpression
-
-        Elm.Syntax.Expression.OperatorApplication _ _ left right ->
-            [ left, right ]
-                |> List.concatMap listFunctionOrValueExpressionsFromExpression
-
-        Elm.Syntax.Expression.IfBlock condition thenNode elseNode ->
-            [ condition, thenNode, elseNode ]
-                |> List.concatMap listFunctionOrValueExpressionsFromExpression
-
-        Elm.Syntax.Expression.Negation negation ->
-            listFunctionOrValueExpressionsFromExpression negation
-
-        Elm.Syntax.Expression.TupledExpression tupled ->
-            tupled |> List.concatMap listFunctionOrValueExpressionsFromExpression
-
-        Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
-            listFunctionOrValueExpressionsFromExpression parenthesizedExpression
-
-        Elm.Syntax.Expression.LetExpression letExpression ->
-            listFunctionOrValueExpressionsFromExpression letExpression.expression
-                ++ (letExpression.declarations
-                        |> List.concatMap
-                            (Elm.Syntax.Node.value
-                                >> listFunctionOrValueExpressionsFromLetDeclaration
-                            )
-                   )
-
-        Elm.Syntax.Expression.CaseExpression caseExpression ->
-            listFunctionOrValueExpressionsFromExpression caseExpression.expression
-                ++ List.concatMap listFunctionOrValueExpressionsFromCase caseExpression.cases
-
-        Elm.Syntax.Expression.LambdaExpression lambdaExpression ->
-            listFunctionOrValueExpressionsFromExpression lambdaExpression.expression
-
-        Elm.Syntax.Expression.RecordExpr recordExpr ->
-            List.concatMap
-                (Elm.Syntax.Node.value
-                    >> Tuple.second
-                    >> listFunctionOrValueExpressionsFromExpression
-                )
-                recordExpr
-
-        Elm.Syntax.Expression.ListExpr list ->
-            List.concatMap listFunctionOrValueExpressionsFromExpression list
-
-        _ ->
-            []
-
-
-listFunctionOrValueExpressionsFromCase : ( Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern, Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression ) -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromCase ( patternNode, expressionNode ) =
-    listFunctionOrValueExpressionsFromPattern patternNode
-        ++ listFunctionOrValueExpressionsFromExpression expressionNode
-
-
-listFunctionOrValueExpressionsFromPattern : Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromPattern patternNode =
-    case Elm.Syntax.Node.value patternNode of
-        Elm.Syntax.Pattern.TuplePattern tuplePattern ->
-            List.concatMap listFunctionOrValueExpressionsFromPattern tuplePattern
-
-        Elm.Syntax.Pattern.UnConsPattern head tail ->
-            List.concatMap listFunctionOrValueExpressionsFromPattern [ head, tail ]
-
-        Elm.Syntax.Pattern.ListPattern listPattern ->
-            List.concatMap listFunctionOrValueExpressionsFromPattern listPattern
-
-        Elm.Syntax.Pattern.NamedPattern named arguments ->
-            Elm.Syntax.Node.Node (Elm.Syntax.Node.range patternNode)
-                ( named.moduleName, named.name )
-                :: List.concatMap listFunctionOrValueExpressionsFromPattern arguments
-
-        Elm.Syntax.Pattern.AsPattern asPattern _ ->
-            listFunctionOrValueExpressionsFromPattern asPattern
-
-        Elm.Syntax.Pattern.ParenthesizedPattern parentisized ->
-            listFunctionOrValueExpressionsFromPattern parentisized
-
-        _ ->
-            []
-
-
-listFunctionOrValueExpressionsFromFunction : Elm.Syntax.Expression.Function -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listFunctionOrValueExpressionsFromFunction function =
-    listFunctionOrValueExpressionsFromExpression
-        (Elm.Syntax.Node.value function.declaration).expression
 
 
 provideCompletionItems :
@@ -490,12 +388,12 @@ provideCompletionItems request languageServiceState =
                         currentModuleDeclarations =
                             completionItemsFromModule fileOpenedInEditor
 
-                        fromLetBlocks =
-                            currentModuleDeclarations.fromLetBlocks
+                        fromLocals =
+                            currentModuleDeclarations.fromLocals
                                 |> List.filter
-                                    (\fromLetBlock ->
-                                        (fromLetBlock.scope.start.row <= request.cursorLineNumber)
-                                            && (request.cursorLineNumber <= fromLetBlock.scope.end.row)
+                                    (.scope
+                                        >> rangeIntersectsLocation
+                                            { row = request.cursorLineNumber, column = String.length lineUntilPosition }
                                     )
                                 |> List.map .completionItem
 
@@ -503,9 +401,9 @@ provideCompletionItems request languageServiceState =
                             importExposingsFromFile fileOpenedInEditor languageServiceState
 
                         localDeclarationsAndImportExposings =
-                            List.map .completionItem currentModuleDeclarations.topLevel
+                            List.map .completionItem currentModuleDeclarations.fromTopLevel
                                 ++ importExposings
-                                ++ fromLetBlocks
+                                ++ fromLocals
 
                         localDeclarationsAfterPrefix =
                             if completionPrefix == [] then
@@ -522,7 +420,7 @@ provideCompletionItems request languageServiceState =
                                         []
 
                                     Just referencedModule ->
-                                        (completionItemsFromModule referencedModule).topLevel
+                                        (completionItemsFromModule referencedModule).fromTopLevel
                                             |> List.filter .isExposed
                                             |> List.map .completionItem
 
@@ -684,7 +582,7 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
                             Just importedParsedModule ->
                                 let
                                     importedModuleItems =
-                                        (completionItemsFromModule importedParsedModule).topLevel
+                                        (completionItemsFromModule importedParsedModule).fromTopLevel
                                             |> List.filter .isExposed
                                             |> List.map .completionItem
                                 in
@@ -771,8 +669,8 @@ documentationStringFromModuleSyntax parsedModule =
 completionItemsFromModule :
     ParsedModuleCache
     ->
-        { topLevel : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
-        , fromLetBlocks : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, scope : Elm.Syntax.Range.Range }
+        { fromTopLevel : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
+        , fromLocals : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, scope : Elm.Syntax.Range.Range }
         }
 completionItemsFromModule moduleCache =
     let
@@ -828,168 +726,99 @@ completionItemsFromModule moduleCache =
                                         name == functionName
                             )
 
-        fromLetBlocks =
-            listLetBlocksInFile moduleCache.syntax
-                |> List.concatMap
-                    (\letBlock ->
-                        (Elm.Syntax.Node.value letBlock).declarations
-                            |> List.concatMap
-                                (\letDeclaration ->
-                                    case Elm.Syntax.Node.value letDeclaration of
-                                        Elm.Syntax.Expression.LetFunction letFunction ->
-                                            [ (completionItemFromFunctionSyntax letFunction).buildCompletionItem getTextLinesFromRange
-                                            ]
+        parsedDeclarationsAndReferences =
+            listDeclarationsAndReferencesInFile moduleCache.syntax
 
-                                        Elm.Syntax.Expression.LetDestructuring _ _ ->
-                                            []
-                                )
-                            |> List.map
-                                (\completionItem ->
-                                    { completionItem = completionItem
-                                    , scope = Elm.Syntax.Node.range letBlock
-                                    }
-                                )
+        buildCompletionItems =
+            completionItemsFromParsedDeclarationOrReference getTextLinesFromRange
+
+        fromTopLevel =
+            parsedDeclarationsAndReferences.declarations
+                |> List.concatMap
+                    (\( declOrRef, scope ) ->
+                        case scope of
+                            TopLevelScope ->
+                                buildCompletionItems declOrRef
+                                    |> List.map
+                                        (\completionItem ->
+                                            { completionItem = completionItem
+                                            , isExposed =
+                                                case declOrRef of
+                                                    FunctionOrValueDeclaration functionOrValue ->
+                                                        exposesFunction functionOrValue.name
+
+                                                    TypeAliasDeclaration typeAlias ->
+                                                        exposesTypeOrAlias typeAlias.name
+
+                                                    CustomTypeDeclaration customType ->
+                                                        exposesTypeOrAlias customType.name
+                                            }
+                                        )
+
+                            LocalScope _ ->
+                                []
+                    )
+
+        fromLocals =
+            parsedDeclarationsAndReferences.declarations
+                |> List.concatMap
+                    (\( declOrRef, scope ) ->
+                        case scope of
+                            TopLevelScope ->
+                                []
+
+                            LocalScope range ->
+                                buildCompletionItems declOrRef
+                                    |> List.map (\completionItem -> { completionItem = completionItem, scope = range })
                     )
     in
-    { topLevel =
-        moduleCache.syntax.declarations
-            |> List.concatMap
-                (\declaration ->
-                    case Elm.Syntax.Node.value declaration of
-                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                            let
-                                { functionName, buildCompletionItem } =
-                                    completionItemFromFunctionSyntax functionDeclaration
-                            in
-                            [ { completionItem = buildCompletionItem getTextLinesFromRange
-                              , isExposed = exposesFunction functionName
-                              }
-                            ]
-
-                        Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-                            let
-                                aliasName =
-                                    Elm.Syntax.Node.value aliasDeclaration.name
-
-                                documentationStringFromSyntax =
-                                    aliasDeclaration.documentation
-                                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
-
-                                codeRange =
-                                    [ Elm.Syntax.Node.range aliasDeclaration.name
-                                    , Elm.Syntax.Node.range aliasDeclaration.typeAnnotation
-                                    ]
-                                        |> Elm.Syntax.Range.combine
-                                        |> expandRangeToLineStart
-
-                                codeLines =
-                                    getTextLinesFromRange codeRange
-                            in
-                            [ { completionItem =
-                                    { label = aliasName
-                                    , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                                    , insertText = aliasName
-                                    , kind = Frontend.MonacoEditor.StructCompletionItemKind
-                                    }
-                              , isExposed = exposesTypeOrAlias aliasName
-                              }
-                            ]
-
-                        Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                            let
-                                documentationStringFromSyntax =
-                                    customTypeDeclaration.documentation
-                                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
-
-                                codeRange =
-                                    Elm.Syntax.Node.range customTypeDeclaration.name
-                                        :: List.map Elm.Syntax.Node.range customTypeDeclaration.constructors
-                                        |> Elm.Syntax.Range.combine
-                                        |> expandRangeToLineStart
-
-                                codeLines =
-                                    getTextLinesFromRange codeRange
-
-                                customTypeName =
-                                    Elm.Syntax.Node.value customTypeDeclaration.name
-
-                                fromTags =
-                                    customTypeDeclaration.constructors
-                                        |> List.map
-                                            (\constructorNode ->
-                                                let
-                                                    tagName =
-                                                        Elm.Syntax.Node.value
-                                                            (Elm.Syntax.Node.value constructorNode).name
-
-                                                    documentation =
-                                                        [ markdownElmCodeBlockFromCodeLines [ tagName ]
-                                                        , "A variant of the union type `" ++ customTypeName ++ "`"
-                                                        , markdownElmCodeBlockFromCodeLines codeLines
-                                                        ]
-                                                            |> String.join "\n\n"
-                                                in
-                                                { completionItem =
-                                                    { label = tagName
-                                                    , documentation = documentation
-                                                    , insertText = tagName
-                                                    , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
-                                                    }
-                                                , isExposed = exposesTypeOrAlias customTypeName
-                                                }
-                                            )
-                            in
-                            { completionItem =
-                                { label = customTypeName
-                                , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-                                , insertText = customTypeName
-                                , kind = Frontend.MonacoEditor.EnumCompletionItemKind
-                                }
-                            , isExposed = exposesTypeOrAlias customTypeName
-                            }
-                                :: fromTags
-
-                        Elm.Syntax.Declaration.Destructuring _ _ ->
-                            []
-
-                        Elm.Syntax.Declaration.PortDeclaration _ ->
-                            []
-
-                        Elm.Syntax.Declaration.InfixDeclaration _ ->
-                            []
-                )
-    , fromLetBlocks = fromLetBlocks |> List.sortBy (.completionItem >> .label)
+    { fromTopLevel = fromTopLevel
+    , fromLocals = fromLocals
     }
 
 
-completionItemFromFunctionSyntax : Elm.Syntax.Expression.Function -> { functionName : String, buildCompletionItem : (Elm.Syntax.Range.Range -> List String) -> Frontend.MonacoEditor.MonacoCompletionItem }
-completionItemFromFunctionSyntax functionSyntax =
+completionItemsFromParsedDeclarationOrReference : (Elm.Syntax.Range.Range -> List String) -> ParsedDeclaration -> List Frontend.MonacoEditor.MonacoCompletionItem
+completionItemsFromParsedDeclarationOrReference getTextLinesFromRange declarationOrReference =
     let
-        functionName =
-            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSyntax.declaration).name
-    in
-    { functionName = functionName
-    , buildCompletionItem =
-        \getTextLinesFromRange ->
-            let
-                documentationStringFromSyntax =
-                    functionSyntax.documentation
-                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
-
-                codeSignatureLines =
-                    functionSyntax.signature
-                        |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange)
-                        |> Maybe.withDefault []
-
-                codeLines =
-                    codeSignatureLines
-            in
-            { label = functionName
-            , documentation = documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
-            , insertText = functionName
-            , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
+        buildCompletionItem { name, buildMarkdown, kind } =
+            { label = name
+            , documentation = buildMarkdown getTextLinesFromRange
+            , insertText = name
+            , kind = kind
             }
-    }
+    in
+    case declarationOrReference of
+        FunctionOrValueDeclaration functionOrValueDeclaration ->
+            [ buildCompletionItem
+                { name = functionOrValueDeclaration.name
+                , buildMarkdown = functionOrValueDeclaration.documentation.buildMarkdown
+                , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
+                }
+            ]
+
+        TypeAliasDeclaration typeAliasDeclaration ->
+            [ buildCompletionItem
+                { name = typeAliasDeclaration.name
+                , buildMarkdown = typeAliasDeclaration.documentation.buildMarkdown
+                , kind = Frontend.MonacoEditor.StructCompletionItemKind
+                }
+            ]
+
+        CustomTypeDeclaration customTypeDeclaration ->
+            buildCompletionItem
+                { name = customTypeDeclaration.name
+                , buildMarkdown = customTypeDeclaration.documentation.buildMarkdown
+                , kind = Frontend.MonacoEditor.EnumCompletionItemKind
+                }
+                :: List.map
+                    (\tagDeclaration ->
+                        buildCompletionItem
+                            { name = tagDeclaration.name
+                            , buildMarkdown = tagDeclaration.documentation.buildMarkdown
+                            , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
+                            }
+                    )
+                    customTypeDeclaration.tagsDeclarations
 
 
 documentationMarkdownFromCodeLinesAndDocumentation : List String -> Maybe String -> String
@@ -1091,121 +920,431 @@ elmCoreModulesParseResults =
             )
 
 
-listLetBlocksInFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
-listLetBlocksInFile file =
-    file.declarations
-        |> List.concatMap (Elm.Syntax.Node.value >> listLetBlocksInDeclaration)
+listDeclarationsAndReferencesInFile : Elm.Syntax.File.File -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesInFile =
+    .declarations
+        >> listConcatMapParsedDeclarationsAndReferences (Elm.Syntax.Node.value >> listDeclarationsAndReferencesInDeclaration)
 
 
-listLetBlocksInDeclaration : Elm.Syntax.Declaration.Declaration -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
-listLetBlocksInDeclaration declaration =
+listDeclarationsAndReferencesInDeclaration : Elm.Syntax.Declaration.Declaration -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesInDeclaration declaration =
+    let
+        empty =
+            { declarations = [], references = [] }
+    in
     case declaration of
         Elm.Syntax.Declaration.FunctionDeclaration function ->
-            listLetBlocksInExpression (Elm.Syntax.Node.value function.declaration).expression
+            listDeclarationsAndReferencesForFunction function
 
-        Elm.Syntax.Declaration.AliasDeclaration _ ->
-            []
+        Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
+            declarationsAndReferencesForAliasDeclaration aliasDeclaration
 
-        Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
-            []
+        Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+            listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration
 
         Elm.Syntax.Declaration.PortDeclaration _ ->
-            []
+            empty
 
         Elm.Syntax.Declaration.InfixDeclaration _ ->
-            []
+            empty
 
         Elm.Syntax.Declaration.Destructuring _ _ ->
-            []
+            empty
 
 
-listLetBlocksInLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
-listLetBlocksInLetDeclaration declaration =
-    case declaration of
-        Elm.Syntax.Expression.LetFunction function ->
-            listLetBlocksInExpression (Elm.Syntax.Node.value function.declaration).expression
-
-        Elm.Syntax.Expression.LetDestructuring _ letDestructuring ->
-            listLetBlocksInExpression letDestructuring
+declarationsAndReferencesForAliasDeclaration : Elm.Syntax.TypeAlias.TypeAlias -> ParsedDeclarationsAndReferences
+declarationsAndReferencesForAliasDeclaration aliasDeclaration =
+    { declarations = [ ( declarationOrReferenceForAliasDeclaration aliasDeclaration, TopLevelScope ) ]
+    , references = listTypeReferencesFromTypeAnnotation aliasDeclaration.typeAnnotation
+    }
 
 
-listLetBlocksInExpression : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> List (Elm.Syntax.Node.Node Elm.Syntax.Expression.LetBlock)
-listLetBlocksInExpression expressionNode =
+declarationOrReferenceForAliasDeclaration : Elm.Syntax.TypeAlias.TypeAlias -> ParsedDeclaration
+declarationOrReferenceForAliasDeclaration aliasDeclaration =
+    let
+        aliasName =
+            Elm.Syntax.Node.value aliasDeclaration.name
+    in
+    TypeAliasDeclaration
+        { name = aliasName
+        , documentation =
+            { buildMarkdown =
+                \getTextLinesFromRange ->
+                    let
+                        documentationStringFromSyntax =
+                            aliasDeclaration.documentation
+                                |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+
+                        codeRange =
+                            [ Elm.Syntax.Node.range aliasDeclaration.name
+                            , Elm.Syntax.Node.range aliasDeclaration.typeAnnotation
+                            ]
+                                |> Elm.Syntax.Range.combine
+                                |> expandRangeToLineStart
+
+                        codeLines =
+                            getTextLinesFromRange codeRange
+                    in
+                    documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+            }
+        }
+
+
+listDeclarationsAndReferencesFromTypeDeclaration : Elm.Syntax.Type.Type -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration =
+    let
+        documentationStringFromSyntax =
+            customTypeDeclaration.documentation
+                |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+
+        codeRange =
+            Elm.Syntax.Node.range customTypeDeclaration.name
+                :: List.map Elm.Syntax.Node.range customTypeDeclaration.constructors
+                |> Elm.Syntax.Range.combine
+                |> expandRangeToLineStart
+
+        customTypeName =
+            Elm.Syntax.Node.value customTypeDeclaration.name
+
+        tagsDeclarations : List (FunctionOrValueDeclarationStruct ParsedDocumentation)
+        tagsDeclarations =
+            customTypeDeclaration.constructors
+                |> List.map
+                    (\constructorNode ->
+                        let
+                            tagName =
+                                Elm.Syntax.Node.value
+                                    (Elm.Syntax.Node.value constructorNode).name
+                        in
+                        { name = tagName
+                        , documentation =
+                            { buildMarkdown =
+                                \getTextLinesFromRange ->
+                                    let
+                                        codeLines =
+                                            getTextLinesFromRange codeRange
+                                    in
+                                    [ markdownElmCodeBlockFromCodeLines [ tagName ]
+                                    , "A variant of the union type `" ++ customTypeName ++ "`"
+                                    , markdownElmCodeBlockFromCodeLines codeLines
+                                    ]
+                                        |> String.join "\n\n"
+                            }
+                        }
+                    )
+    in
+    { declarations =
+        [ ( CustomTypeDeclaration
+                { name = customTypeName
+                , documentation =
+                    { buildMarkdown =
+                        \getTextLinesFromRange ->
+                            let
+                                codeLines =
+                                    getTextLinesFromRange codeRange
+                            in
+                            documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                    }
+                , tagsDeclarations = tagsDeclarations
+                }
+          , TopLevelScope
+          )
+        ]
+    , references =
+        customTypeDeclaration.constructors
+            |> List.concatMap (Elm.Syntax.Node.value >> .arguments >> List.concatMap listTypeReferencesFromTypeAnnotation)
+    }
+
+
+listDeclarationsAndReferencesInExpression : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesInExpression expressionNode =
+    let
+        empty =
+            { declarations = [], references = [] }
+    in
     case Elm.Syntax.Node.value expressionNode of
         Elm.Syntax.Expression.UnitExpr ->
-            []
+            empty
 
         Elm.Syntax.Expression.Application application ->
-            application |> List.concatMap listLetBlocksInExpression
+            application
+                |> List.map listDeclarationsAndReferencesInExpression
+                |> concatParsedDeclarationsAndReferences
 
         Elm.Syntax.Expression.OperatorApplication _ _ leftExpr rightExpr ->
-            [ leftExpr, rightExpr ] |> List.concatMap listLetBlocksInExpression
+            [ leftExpr, rightExpr ]
+                |> List.map listDeclarationsAndReferencesInExpression
+                |> concatParsedDeclarationsAndReferences
 
-        Elm.Syntax.Expression.FunctionOrValue _ _ ->
-            []
+        Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
+            { declarations = []
+            , references = [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range expressionNode) ( moduleName, localName ) ]
+            }
 
         Elm.Syntax.Expression.IfBlock ifExpr thenExpr elseExpr ->
-            [ ifExpr, thenExpr, elseExpr ] |> List.concatMap listLetBlocksInExpression
+            [ ifExpr, thenExpr, elseExpr ]
+                |> listConcatMapParsedDeclarationsAndReferences listDeclarationsAndReferencesInExpression
 
         Elm.Syntax.Expression.PrefixOperator _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.Operator _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.Integer _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.Hex _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.Floatable _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.Negation negation ->
-            listLetBlocksInExpression negation
+            listDeclarationsAndReferencesInExpression negation
 
         Elm.Syntax.Expression.Literal _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.CharLiteral _ ->
-            []
+            empty
 
         Elm.Syntax.Expression.TupledExpression tupled ->
-            tupled |> List.concatMap listLetBlocksInExpression
+            tupled |> listConcatMapParsedDeclarationsAndReferences listDeclarationsAndReferencesInExpression
 
         Elm.Syntax.Expression.ParenthesizedExpression parenthesized ->
-            listLetBlocksInExpression parenthesized
+            listDeclarationsAndReferencesInExpression parenthesized
 
         Elm.Syntax.Expression.LetExpression letBlock ->
-            List.concatMap (Elm.Syntax.Node.value >> listLetBlocksInLetDeclaration) letBlock.declarations
-                ++ listLetBlocksInExpression letBlock.expression
-                ++ [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range expressionNode) letBlock ]
+            listDeclarationsAndReferencesInLetBlock letBlock
 
         Elm.Syntax.Expression.CaseExpression caseBlock ->
-            listLetBlocksInExpression caseBlock.expression
-                ++ (caseBlock.cases |> List.concatMap (Tuple.second >> listLetBlocksInExpression))
+            [ listDeclarationsAndReferencesInExpression caseBlock.expression
+            , caseBlock.cases
+                |> listConcatMapParsedDeclarationsAndReferences (Tuple.second >> listDeclarationsAndReferencesInExpression)
+            ]
+                |> concatParsedDeclarationsAndReferences
 
         Elm.Syntax.Expression.LambdaExpression lambda ->
-            listLetBlocksInExpression lambda.expression
+            listDeclarationsAndReferencesInExpression lambda.expression
 
         Elm.Syntax.Expression.RecordExpr recordExpr ->
-            recordExpr |> List.concatMap (Elm.Syntax.Node.value >> Tuple.second >> listLetBlocksInExpression)
+            recordExpr
+                |> listConcatMapParsedDeclarationsAndReferences (Elm.Syntax.Node.value >> Tuple.second >> listDeclarationsAndReferencesInExpression)
 
         Elm.Syntax.Expression.ListExpr listExpr ->
-            listExpr |> List.concatMap listLetBlocksInExpression
+            listExpr |> listConcatMapParsedDeclarationsAndReferences listDeclarationsAndReferencesInExpression
 
         Elm.Syntax.Expression.RecordAccess recordAccess _ ->
-            listLetBlocksInExpression recordAccess
+            listDeclarationsAndReferencesInExpression recordAccess
 
         Elm.Syntax.Expression.RecordAccessFunction _ ->
-            []
+            empty
 
-        Elm.Syntax.Expression.RecordUpdateExpression _ recordUpdateExpression ->
-            recordUpdateExpression |> List.concatMap (Elm.Syntax.Node.value >> Tuple.second >> listLetBlocksInExpression)
+        Elm.Syntax.Expression.RecordUpdateExpression recordName recordUpdateExpression ->
+            [ { references = [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range recordName) ( [], Elm.Syntax.Node.value recordName ) ]
+              , declarations = []
+              }
+            , recordUpdateExpression
+                |> listConcatMapParsedDeclarationsAndReferences (Elm.Syntax.Node.value >> Tuple.second >> listDeclarationsAndReferencesInExpression)
+            ]
+                |> concatParsedDeclarationsAndReferences
 
         Elm.Syntax.Expression.GLSLExpression _ ->
-            []
+            empty
+
+
+listDeclarationsAndReferencesForFunction : Elm.Syntax.Expression.Function -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesForFunction function =
+    let
+        functionName =
+            Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).name
+
+        functionItem =
+            FunctionOrValueDeclaration
+                { name = functionName
+                , documentation =
+                    { buildMarkdown =
+                        \getTextLinesFromRange ->
+                            let
+                                documentationStringFromSyntax =
+                                    function.documentation
+                                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+
+                                typeAnnotationText =
+                                    function.signature
+                                        |> Maybe.map (Elm.Syntax.Node.value >> .typeAnnotation)
+                                        |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange >> String.join " ")
+
+                                codeLines =
+                                    [ functionName ++ Maybe.withDefault "" (Maybe.map ((++) " : ") typeAnnotationText) ]
+                            in
+                            documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
+                    }
+                }
+
+        signatureReferences =
+            function.signature
+                |> Maybe.map (Elm.Syntax.Node.value >> .typeAnnotation >> listTypeReferencesFromTypeAnnotation)
+                |> Maybe.withDefault []
+
+        expressionNode =
+            (Elm.Syntax.Node.value function.declaration).expression
+
+        getTypeAnnotationFromArgumentIndex argumentIndex =
+            function.signature
+                |> Maybe.andThen (Elm.Syntax.Node.value >> .typeAnnotation >> getTypeAnnotationFromFunctionArgumentIndex argumentIndex)
+
+        arguments =
+            (Elm.Syntax.Node.value function.declaration).arguments
+                |> List.indexedMap
+                    (\argumentIndex argument ->
+                        listDeclarationsAndReferencesFromPattern
+                            { typeAnnotation = getTypeAnnotationFromArgumentIndex argumentIndex }
+                            argument
+                    )
+                |> concatParsedDeclarationsAndReferences
+    in
+    [ { declarations = [ ( functionItem, TopLevelScope ) ]
+      , references = signatureReferences
+      }
+    , [ arguments
+      , listDeclarationsAndReferencesInExpression expressionNode
+      ]
+        |> concatParsedDeclarationsAndReferences
+        |> constrainDeclarationsScopesToRange (Elm.Syntax.Node.range function.declaration)
+    ]
+        |> concatParsedDeclarationsAndReferences
+
+
+getTypeAnnotationFromFunctionArgumentIndex : Int -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
+getTypeAnnotationFromFunctionArgumentIndex argumentIndex typeAnnotation =
+    case Elm.Syntax.Node.value typeAnnotation of
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation argumentType returnType ->
+            if argumentIndex < 1 then
+                Just argumentType
+
+            else
+                getTypeAnnotationFromFunctionArgumentIndex (argumentIndex - 1) returnType
+
+        _ ->
+            if argumentIndex < 1 then
+                Just typeAnnotation
+
+            else
+                Nothing
+
+
+listDeclarationsAndReferencesFromPattern :
+    { typeAnnotation : Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) }
+    -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
+    -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesFromPattern config patternNode =
+    case Elm.Syntax.Node.value patternNode of
+        Elm.Syntax.Pattern.TuplePattern tuplePattern ->
+            listConcatMapParsedDeclarationsAndReferences
+                (listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing })
+                tuplePattern
+
+        Elm.Syntax.Pattern.UnConsPattern head tail ->
+            listConcatMapParsedDeclarationsAndReferences
+                (listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing })
+                [ head, tail ]
+
+        Elm.Syntax.Pattern.ListPattern listPattern ->
+            listConcatMapParsedDeclarationsAndReferences
+                (listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing })
+                listPattern
+
+        Elm.Syntax.Pattern.VarPattern name ->
+            { declarations =
+                [ ( FunctionOrValueDeclaration
+                        { name = name
+                        , documentation =
+                            { buildMarkdown =
+                                \getTextLinesFromRange ->
+                                    let
+                                        typeAnnotationText =
+                                            config.typeAnnotation
+                                                |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange >> String.join " ")
+
+                                        codeLines =
+                                            [ name ++ Maybe.withDefault "" (Maybe.map ((++) " : ") typeAnnotationText) ]
+                                    in
+                                    documentationMarkdownFromCodeLinesAndDocumentation codeLines Nothing
+                            }
+                        }
+                  , TopLevelScope
+                  )
+                ]
+            , references = []
+            }
+
+        Elm.Syntax.Pattern.NamedPattern named arguments ->
+            [ { declarations = []
+              , references = [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range patternNode) ( named.moduleName, named.name ) ]
+              }
+            , listConcatMapParsedDeclarationsAndReferences
+                (listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing })
+                arguments
+            ]
+                |> concatParsedDeclarationsAndReferences
+
+        Elm.Syntax.Pattern.ParenthesizedPattern parenthesized ->
+            listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing }
+                parenthesized
+
+        _ ->
+            { declarations = [], references = [] }
+
+
+listDeclarationsAndReferencesInLetBlock : Elm.Syntax.Expression.LetBlock -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesInLetBlock letBlock =
+    [ listConcatMapParsedDeclarationsAndReferences
+        (Elm.Syntax.Node.value >> listDeclarationsAndReferencesInLetDeclaration)
+        letBlock.declarations
+    , listDeclarationsAndReferencesInExpression letBlock.expression
+    ]
+        |> concatParsedDeclarationsAndReferences
+
+
+listDeclarationsAndReferencesInLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> ParsedDeclarationsAndReferences
+listDeclarationsAndReferencesInLetDeclaration declaration =
+    case declaration of
+        Elm.Syntax.Expression.LetFunction function ->
+            listDeclarationsAndReferencesForFunction function
+
+        Elm.Syntax.Expression.LetDestructuring _ letDestructuring ->
+            listDeclarationsAndReferencesInExpression letDestructuring
+
+
+constrainDeclarationsScopesToRange : Elm.Syntax.Range.Range -> ParsedDeclarationsAndReferences -> ParsedDeclarationsAndReferences
+constrainDeclarationsScopesToRange range declarationsAndReferences =
+    { declarationsAndReferences
+        | declarations = declarationsAndReferences.declarations |> List.map (Tuple.mapSecond (constrainScopeToRange range))
+    }
+
+
+constrainScopeToRange : Elm.Syntax.Range.Range -> DeclarationScope -> DeclarationScope
+constrainScopeToRange range scope =
+    case scope of
+        LocalScope _ ->
+            scope
+
+        TopLevelScope ->
+            LocalScope range
+
+
+concatParsedDeclarationsAndReferences : List ParsedDeclarationsAndReferences -> ParsedDeclarationsAndReferences
+concatParsedDeclarationsAndReferences list =
+    { declarations = List.concatMap .declarations list
+    , references = List.concatMap .references list
+    }
+
+
+listConcatMapParsedDeclarationsAndReferences : (a -> ParsedDeclarationsAndReferences) -> List a -> ParsedDeclarationsAndReferences
+listConcatMapParsedDeclarationsAndReferences map =
+    List.map map >> concatParsedDeclarationsAndReferences
 
 
 expandRangeToLineStart : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range
