@@ -1,12 +1,11 @@
 # Elm Full-Stack
 
-Elm Fullstack is a tool for developing web services and full-stack web applications. It leverages the [Elm programming language](https://elm-lang.org) and its ecosystem of tools and libraries.
-As it evolves, Elm Fullstack automates more and more activities in software development that humans had performed in the past.
+Elm Fullstack is a tool for developing web services and full-stack web applications. It leverages the [Elm programming language](https://elm-lang.org) and its ecosystem of libraries. As it evolves, Elm Fullstack automates more and more activities in software development that humans had performed in the past.
 
 Elm Fullstack currently offers:
 
 + Persisting and restoring the state of backend Elm apps.
-+ Migrating backend state when deploying a new program version.
++ Migrating the backend state when deploying a new program version: [Design Report - Migrations in Elm Fullstack Deployments](https://michaelrätzel.com/blog/design-report-migrations-in-elm-fullstack-deployments)
 + Generating functions to serialize and deserialize Elm values based on type declarations from Elm programs.
 + Ports to integrate and interoperate with custom components written in any programming language.
 + A single executable file (per operating system) integrating all tools with a command-line interface.
