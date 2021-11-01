@@ -28,6 +28,11 @@ namespace test_elm_fullstack
                 {
                     input = "https://elm-editor.com/?project-state-deflate-base64=dZDJasMwFEX%2FRWsnnmJ5gC6SDhBKQ9NFQ2pM0PDsmNqWkeTQYPzvtUwDbUl2ege9ew%2BvRyeQqhTNwXM89%2BC4KOkRJQpQgo5atyqx7aLUx47OmahtqOpZ3lWV0oR9%2Fpu0BLDDhYcDh2KCcxd8zkLP5yHOKY2YG8WMuJg4FADbZd1WUEOjbfgi5j0jbaumSOClFtLmkJOu0oYjC%2FEyz0FCw%2BBJino1GfZIQi1OsBEcFErSzELsSJoCVpWgBqQpUpKN2y%2BkbOZjNsqstEdv0ClYnfW0FPhhNlgGmqgLxRNbcn4B46BMK16Ml1nfL4v1w%2FYZDdO3v3mBnw3Z2HPpfq3IuZCia%2FgNgzCOfmJ%2BGywmdssAzm60ftyI%2FS5oPnbbYu%2FFmu7eO74Ud9es%2FDgOAuOVDcPwDQ%3D%3D&file-path-to-open=src%2FMain.elm",
                     expectedCompositionId = "037e66cbbb5c06cecb6760efcbb0ad4c7b8e4ed036f331e1a28c897839dd55b1"
+                },
+                new
+                {
+                    input = "https://elm-editor.com/?project-state-deflate-base64=jY%2FNasMwEITfZc9OJMuO3RhyiAs9lUIbSH%2BMCJa9tgWWFSQ5UIzevUqh0F7a3nZnZ7%2BdXeCCxko9nRhl8YnGUCwgaotQwODc2RaE9NINs1g3WpGjlIYI7SxxBpFkaZZ3adZkLBFxnG5YxyiNRUO7JKdZl28pbWOW3xCpziMqnBxxGMraoSUmCEqgWQXeyqJzcuotRNDKrkODU4N3RqvyM8sCwa0v%2BKBbtFBUPIJmqKcey1GLq1BVUGq3xlEBj6oFnnC2WL6HO2G4yRPuowX2bfslhcZe0VkaHr3tdzvwv1ruD7R%2FPJTz20vTv7KtE8%2FHud3rv9b%2BQf5m%2BRGaJTTlnnPuvf8A&file-path-to-open=Bot.elm",
+                    expectedCompositionId = "3fe337ab4616321a2b761bd59f9e6e7111d43f5877abee1664e82fda47d3458b",
                 }
             };
 

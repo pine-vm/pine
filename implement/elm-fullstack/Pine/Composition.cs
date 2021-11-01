@@ -275,7 +275,7 @@ namespace Pine
                 var treeEntries =
                     (TreeContent?.Where(treeNode => treeNode.name != pathFirstElement) ?? ImmutableList<(string name, TreeWithStringPath component)>.Empty)
                     .Concat(new[] { (pathFirstElement, childNode) })
-                    .OrderBy(treeEntry => treeEntry.Item1)
+                    .OrderBy(treeEntry => treeEntry.Item1, TreeEntryNameComparer)
                     .ToImmutableList();
 
                 return Tree(treeEntries);
