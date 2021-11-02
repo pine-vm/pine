@@ -586,9 +586,9 @@ namespace ElmFullstack
             IReadOnlyList<string> OtherCompilationError = null,
             IReadOnlyList<DependencyKey> MissingDependencyError = null);
 
-        record LocatedInSourceFilesRecord(LocationInSourceFiles location);
+        public record LocatedInSourceFilesRecord(LocationInSourceFiles location);
 
-        record LocatedCompilationError(LocationInSourceFiles location, CompilationError error);
+        public record LocatedCompilationError(LocationInSourceFiles location, CompilationError error);
 
         public record LocationInSourceFiles(IReadOnlyList<string> filePath);
 
