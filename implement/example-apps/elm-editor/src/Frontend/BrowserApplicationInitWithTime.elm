@@ -1,6 +1,6 @@
 module Frontend.BrowserApplicationInitWithTime exposing (..)
 
-{-| This module provides an extension of `Browser.application` to add the current time as parameter for the `init` function.
+{-| This module extends `Browser.application` to add the current time as a parameter for the `init` function.
 -}
 
 import Browser
