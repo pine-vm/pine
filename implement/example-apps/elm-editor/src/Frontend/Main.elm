@@ -128,7 +128,7 @@ type alias ElmMakeResultStructure =
 type Event
     = TimeHasArrived Time.Posix
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
-    | UserInputLoadOrImportTakeProjectStateEvent FileTreeInWorkspace.FileTreeNode
+    | UserInputLoadOrImportTakeProjectStateEvent LoadOrImportProjectStateOrigin
     | UserInputClosePopup
     | BackendLoadFromGitResultEvent String (Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure))
     | UrlRequest Browser.UrlRequest
@@ -199,14 +199,18 @@ type alias LoadFromGitDialogState =
 
 
 type alias ImportFromZipArchiveDialogState =
-    { loadCompositionResult :
-        Maybe
-            (Result
-                String
-                { fileTree : FileTreeInWorkspace.FileTreeNode
-                , compositionIdCache : String
-                }
-            )
+    { loadCompositionResult : Maybe (Result String ImportFromZipArchiveOk)
+    }
+
+
+type LoadOrImportProjectStateOrigin
+    = FromZipArchiveProjectState ImportFromZipArchiveOk
+    | FromGitProjectState BackendLoadFromGitOkWithCache
+
+
+type alias ImportFromZipArchiveOk =
+    { fileTree : FileTreeInWorkspace.FileTreeNode
+    , compositionIdCache : String
     }
 
 
@@ -449,7 +453,27 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputLoadOrImportTakeProjectStateEvent fileTree ->
+        UserInputLoadOrImportTakeProjectStateEvent origin ->
+            let
+                ( fileTree, urlToPush ) =
+                    case origin of
+                        FromZipArchiveProjectState fromZip ->
+                            ( fromZip.fileTree
+                            , Url.Builder.absolute
+                                (List.filter (String.isEmpty >> not) (String.split "/" stateBefore.url.path))
+                                []
+                            )
+
+                        FromGitProjectState fromGit ->
+                            ( fromGit.fileTree
+                            , stateBefore.url
+                                |> Frontend.ProjectStateInUrl.setProjectStateInUrl
+                                    fromGit.fileTree
+                                    (Just fromGit)
+                                    { filePathToOpen = Nothing }
+                                |> Url.toString
+                            )
+            in
             ( { stateBefore
                 | popup = Nothing
                 , workspace =
@@ -459,7 +483,7 @@ update event stateBefore =
                         |> initWorkspaceFromFileTreeAndFileSelection
                         |> WorkspaceOk
               }
-            , Cmd.none
+            , urlToPush |> Navigation.pushUrl stateBefore.navigationKey
             )
 
         UserInputExportProjectToZipArchive { sendDownloadCmd } ->
@@ -1995,6 +2019,7 @@ viewLoadFromGitDialog dialogState =
                 |> Maybe.map
                     (Result.Extra.unpack (describeHttpError >> Err) identity
                         >> Result.mapError (String.left 500)
+                        >> Result.map FromGitProjectState
                         >> viewLoadOrImportDialogResultElement
                             dialogErrorElementFromDescription
                             UserInputLoadOrImportTakeProjectStateEvent
@@ -2058,9 +2083,10 @@ viewImportFromZipArchiveDialog dialogState =
         resultElement =
             dialogState.loadCompositionResult
                 |> Maybe.map
-                    (viewLoadOrImportDialogResultElement
-                        dialogErrorElementFromDescription
-                        UserInputLoadOrImportTakeProjectStateEvent
+                    (Result.map FromZipArchiveProjectState
+                        >> viewLoadOrImportDialogResultElement
+                            dialogErrorElementFromDescription
+                            UserInputLoadOrImportTakeProjectStateEvent
                     )
                 |> Maybe.withDefault Element.none
     in
@@ -2110,8 +2136,8 @@ projectSummaryElementForDialog projectState =
 
 viewLoadOrImportDialogResultElement :
     (err -> Element.Element e)
-    -> (FileTreeInWorkspace.FileTreeNode -> e)
-    -> Result err { r | fileTree : FileTreeInWorkspace.FileTreeNode, compositionIdCache : String }
+    -> (LoadOrImportProjectStateOrigin -> e)
+    -> Result err LoadOrImportProjectStateOrigin
     -> Element.Element e
 viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCompositionResult =
     case loadCompositionResult of
@@ -2119,10 +2145,19 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
             elementToDisplayFromError loadError
 
         Ok loadOk ->
+            let
+                ( fileTree, compositionIdCache ) =
+                    case loadOk of
+                        FromZipArchiveProjectState fromZip ->
+                            ( fromZip.fileTree, fromZip.compositionIdCache )
+
+                        FromGitProjectState fromGit ->
+                            ( fromGit.fileTree, fromGit.compositionIdCache )
+            in
             [ [ ("Loaded composition "
-                    ++ loadOk.compositionIdCache
+                    ++ compositionIdCache
                     ++ " containing "
-                    ++ (loadOk.fileTree |> FileTree.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
+                    ++ (fileTree |> FileTree.flatListOfBlobsFromFileTreeNode |> List.length |> String.fromInt)
                     ++ " files:"
                 )
                     |> Element.text
@@ -2132,7 +2167,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
                 { selectEventFromNode = always (always Nothing)
                 , iconFromFileName = Visuals.iconFromFileName
                 }
-                (sortFileTreeForExplorerView loadOk.fileTree)
+                (sortFileTreeForExplorerView fileTree)
                 |> Element.el
                     [ Element.scrollbars
                     , Element.width Element.fill
@@ -2143,7 +2178,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
                     ]
             , buttonElement
                 { label = "Set these files as project state"
-                , onPress = Just (commitEvent loadOk.fileTree)
+                , onPress = Just (commitEvent loadOk)
                 }
                 |> Element.el [ Element.centerX ]
             ]
