@@ -1,6 +1,7 @@
 module FrontendBackendInterface exposing (..)
 
 import Bytes
+import CompileFullstackApp
 import FileTree
 
 
@@ -22,6 +23,7 @@ type alias ElmMakeRequestStructure =
     , workingDirectoryPath : List String
     , entryPointFilePathFromWorkingDirectory : List String
     , makeOptionDebug : Bool
+    , outputType : CompileFullstackApp.ElmMakeOutputType
     }
 
 

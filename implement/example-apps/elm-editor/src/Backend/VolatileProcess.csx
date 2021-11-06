@@ -58,6 +58,14 @@ public class ElmMakeRequestStructure
     public IReadOnlyList<string> workingDirectoryPath;
 
     public bool makeOptionDebug;
+
+    public ElmMakeOutputType outputType;
+}
+
+public class ElmMakeOutputType
+{
+    public object ElmMakeOutputTypeHtml;
+    public object ElmMakeOutputTypeJs;
 }
 
 public class FormatElmModuleTextResponseStructure
@@ -252,7 +260,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var entryPointFilePathFromWorkingDirectory =
         MakePlatformSpecificPath(elmMakeRequest.entryPointFilePathFromWorkingDirectory);
 
-    var elmMakeOutputFileName = "elm-make-output.html";
+    var elmMakeOutputFileName = "elm-make-output." + (elmMakeRequest.outputType.ElmMakeOutputTypeJs != null ? "js" : "html");
 
     var commandLineCommonArguments = "make " + entryPointFilePathFromWorkingDirectory + " " + (elmMakeRequest.makeOptionDebug ? "--debug" : "");
 

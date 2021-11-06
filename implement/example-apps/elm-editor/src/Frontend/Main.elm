@@ -104,8 +104,32 @@ type alias WorkingProjectStateStructure =
 
 
 type CompilationState
-    = ElmMakeRequestPending ElmMakeRequestStructure
+    = CompilationInProgress CompilationInProgressStructure
     | CompilationCompleted ElmMakeRequestStructure CompilationCompletedState
+
+
+type alias CompilationInProgressStructure =
+    { origin : CompilationOrigin
+    , iterationRequest : CompilationIterationRequestStructure
+    , dependenciesFromCompletedIterations : List ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
+    }
+
+
+type alias CompilationOrigin =
+    { requestFromUser : ElmMakeRequestStructure
+    , loweredElmAppFromDependencies : List ( CompileFullstackApp.DependencyKey, Bytes.Bytes ) -> Result (List CompileFullstackApp.LocatedCompilationError) CompileFullstackApp.AppFiles
+    }
+
+
+type alias CompilationIterationRequestStructure =
+    { requestToBackend : ElmMakeRequestStructure
+    , origin : CompilationPendingRequestOrigin
+    }
+
+
+type CompilationPendingRequestOrigin
+    = ForUserElmMakeRequest
+    | ForDependencyElmMakeRequest CompileFullstackApp.ElmMakeRequestStructure
 
 
 type CompilationCompletedState
@@ -825,48 +849,85 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
             )
 
         BackendElmMakeResponseEvent requestIdentity httpResponse ->
-            let
-                elmMakeResult =
-                    httpResponse
-                        |> Result.map
-                            (\elmMakeResponse ->
-                                let
-                                    compiledHtmlDocument =
-                                        case elmMakeResponse.outputFileContentBase64 of
-                                            Nothing ->
-                                                Nothing
+            case stateBefore.compilation of
+                Just (CompilationInProgress compilationInProgressBefore) ->
+                    if compilationInProgressBefore.origin.requestFromUser /= requestIdentity then
+                        ( stateBefore, Cmd.none )
 
-                                            Just outputFileContentBase64 ->
-                                                outputFileContentBase64
-                                                    |> Common.decodeBase64ToString
-                                                    |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
-                                                    |> Just
+                    else
+                        let
+                            elmMakeResult =
+                                httpResponse
+                                    |> Result.map
+                                        (\elmMakeResponse ->
+                                            let
+                                                compiledHtmlDocument =
+                                                    case elmMakeResponse.outputFileContentBase64 of
+                                                        Nothing ->
+                                                            Nothing
 
-                                    reportFromJson =
-                                        case
-                                            elmMakeResponse.reportJsonProcessOutput.standardError
-                                                |> Json.Decode.decodeString Json.Decode.value
-                                        of
+                                                        Just outputFileContentBase64 ->
+                                                            outputFileContentBase64
+                                                                |> Common.decodeBase64ToString
+                                                                |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
+                                                                |> Just
+
+                                                reportFromJson =
+                                                    case
+                                                        elmMakeResponse.reportJsonProcessOutput.standardError
+                                                            |> Json.Decode.decodeString Json.Decode.value
+                                                    of
+                                                        Err _ ->
+                                                            Nothing
+
+                                                        Ok elmMakeReportJson ->
+                                                            elmMakeReportJson
+                                                                |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
+                                                                |> Result.mapError Json.Decode.errorToString
+                                                                |> Just
+                                            in
+                                            { response = elmMakeResponse
+                                            , compiledHtmlDocument = compiledHtmlDocument
+                                            , reportFromJson = reportFromJson
+                                            }
+                                        )
+
+                            continueWithCompilationCompleted =
+                                ( CompilationCompleted requestIdentity (ElmMakeRequestCompleted elmMakeResult)
+                                , Nothing
+                                )
+
+                            ( compilation, cmd ) =
+                                case compilationInProgressBefore.iterationRequest.origin of
+                                    ForUserElmMakeRequest ->
+                                        continueWithCompilationCompleted
+
+                                    ForDependencyElmMakeRequest elmMakeDependency ->
+                                        case elmMakeResult of
                                             Err _ ->
-                                                Nothing
+                                                continueWithCompilationCompleted
 
-                                            Ok elmMakeReportJson ->
-                                                elmMakeReportJson
-                                                    |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
-                                                    |> Result.mapError Json.Decode.errorToString
-                                                    |> Just
-                                in
-                                { response = elmMakeResponse
-                                , compiledHtmlDocument = compiledHtmlDocument
-                                , reportFromJson = reportFromJson
-                                }
-                            )
-            in
-            ( { stateBefore
-                | compilation = Just (CompilationCompleted requestIdentity (ElmMakeRequestCompleted elmMakeResult))
-              }
-            , Cmd.none
-            )
+                                            Ok elmMakeResponse ->
+                                                case
+                                                    compilationInProgressBefore
+                                                        |> continueCompileWithResolvedDependency ( elmMakeDependency, elmMakeResponse.response )
+                                                of
+                                                    Err loweringError ->
+                                                        ( CompilationCompleted requestIdentity (CompilationFailedLowering loweringError)
+                                                        , Nothing
+                                                        )
+
+                                                    Ok compilationInProgress ->
+                                                        ( CompilationInProgress compilationInProgress
+                                                        , Just (requestToBackendCmdFromCompilationInProgress compilationInProgress)
+                                                        )
+                        in
+                        ( { stateBefore | compilation = Just compilation }
+                        , Maybe.withDefault Cmd.none cmd
+                        )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
 
         UserInputSetEnlargedPane enlargedPane ->
             ( { stateBefore | viewEnlargedPane = enlargedPane }, Cmd.none )
@@ -1196,44 +1257,42 @@ userInputCompileFileOpenedInEditor stateBefore =
 
         Just preparedCompilation ->
             let
-                jsonDecoder backendResponse =
-                    case backendResponse of
-                        FrontendBackendInterface.ElmMakeResponse elmMakeResponse ->
-                            Json.Decode.succeed elmMakeResponse
-
-                        _ ->
-                            Json.Decode.fail "Unexpected response"
-
                 compilation =
                     preparedCompilation.compile ()
 
                 requestToBackendCmd =
-                    case compilation.requestToBackend of
-                        Nothing ->
-                            Nothing
+                    case compilation of
+                        CompilationInProgress elmMakeRequestPending ->
+                            Just (requestToBackendCmdFromCompilationInProgress elmMakeRequestPending)
 
-                        Just requestToBackend ->
-                            Just
-                                (requestToApiCmd
-                                    (FrontendBackendInterface.ElmMakeRequest requestToBackend)
-                                    jsonDecoder
-                                    (BackendElmMakeResponseEvent preparedCompilation.requestIdentity)
-                                )
+                        CompilationCompleted _ _ ->
+                            Nothing
             in
-            ( { stateBefore
-                | compilation = Just compilation.compilation
-              }
+            ( { stateBefore | compilation = Just compilation }
             , Maybe.withDefault Cmd.none requestToBackendCmd
             )
 
 
+requestToBackendCmdFromCompilationInProgress : CompilationInProgressStructure -> Cmd WorkspaceEventStructure
+requestToBackendCmdFromCompilationInProgress compilationInProgress =
+    let
+        jsonDecoder backendResponse =
+            case backendResponse of
+                FrontendBackendInterface.ElmMakeResponse elmMakeResponse ->
+                    Json.Decode.succeed elmMakeResponse
+
+                _ ->
+                    Json.Decode.fail "Unexpected response"
+    in
+    requestToApiCmd
+        (FrontendBackendInterface.ElmMakeRequest compilationInProgress.iterationRequest.requestToBackend)
+        jsonDecoder
+        (BackendElmMakeResponseEvent compilationInProgress.origin.requestFromUser)
+
+
 prepareCompileForFileOpenedInEditor :
     WorkingProjectStateStructure
-    ->
-        Maybe
-            { requestIdentity : ElmMakeRequestStructure
-            , compile : () -> { compilation : CompilationState, requestToBackend : Maybe ElmMakeRequestStructure }
-            }
+    -> Maybe { requestFromUserIdentity : ElmMakeRequestStructure, compile : () -> CompilationState }
 prepareCompileForFileOpenedInEditor workspace =
     case workspace.editing.filePathOpenedInEditor of
         Nothing ->
@@ -1241,10 +1300,6 @@ prepareCompileForFileOpenedInEditor workspace =
 
         Just entryPointFilePath ->
             let
-                base64FromBytes : Bytes.Bytes -> String
-                base64FromBytes =
-                    Base64.fromBytes >> Maybe.withDefault "Error encoding in base64"
-
                 filesBeforeLowering =
                     workspace.fileTree
                         |> FileTree.flatListOfBlobsFromFileTreeNode
@@ -1263,51 +1318,145 @@ prepareCompileForFileOpenedInEditor workspace =
                         |> List.head
                         |> Maybe.withDefault []
 
-                mapFilesToRequestStructure mapContent =
-                    List.map (\( path, content ) -> { path = path, contentBase64 = mapContent content })
-
-                requestIdentity =
-                    { files = mapFilesToRequestStructure .asBase64 filesBeforeLowering
+                requestFromUserIdentity =
+                    { files = mapFilesToRequestToBackendStructure .asBase64 filesBeforeLowering
                     , workingDirectoryPath = workingDirectoryPath
                     , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
                     , makeOptionDebug = workspace.enableInspectionOnCompile
+                    , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
                     }
 
                 compile () =
                     let
                         filesBeforeLoweringOnlyAsBytes =
                             filesBeforeLowering |> List.map (Tuple.mapSecond .asBytes)
-                    in
-                    case
-                        CompileFullstackApp.asCompletelyLoweredElmApp
-                            { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
-                            , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
-                            , dependencies = []
-                            , rootModuleName = []
-                            , interfaceToHostRootModuleName = []
-                            }
-                    of
-                        Err failedLowering ->
-                            { compilation = CompilationCompleted requestIdentity (CompilationFailedLowering failedLowering)
-                            , requestToBackend = Nothing
-                            }
 
-                        Ok completedLowering ->
-                            let
-                                files =
-                                    completedLowering
-                                        |> Dict.toList
-                                        |> List.filter (Tuple.first >> CompileFullstackApp.includeFilePathInElmMakeRequest)
-                            in
-                            { compilation = ElmMakeRequestPending requestIdentity
-                            , requestToBackend =
-                                Just { requestIdentity | files = mapFilesToRequestStructure base64FromBytes files }
+                        loweredElmAppFromDependencies dependencies =
+                            CompileFullstackApp.asCompletelyLoweredElmApp
+                                { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
+                                , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
+                                , dependencies = dependencies
+                                , rootModuleName = []
+                                , interfaceToHostRootModuleName = []
+                                }
+
+                        compilationOrigin =
+                            { requestFromUser = requestFromUserIdentity
+                            , loweredElmAppFromDependencies = loweredElmAppFromDependencies
                             }
+                    in
+                    case continueCompile [] compilationOrigin of
+                        Err loweringErrors ->
+                            CompilationCompleted requestFromUserIdentity (CompilationFailedLowering loweringErrors)
+
+                        Ok iterationRequest ->
+                            CompilationInProgress
+                                { origin = compilationOrigin
+                                , iterationRequest = iterationRequest
+                                , dependenciesFromCompletedIterations = []
+                                }
             in
             Just
-                { requestIdentity = requestIdentity
+                { requestFromUserIdentity = requestFromUserIdentity
                 , compile = compile
                 }
+
+
+continueCompileWithResolvedDependency :
+    ( CompileFullstackApp.ElmMakeRequestStructure, ElmMakeResponseStructure )
+    -> CompilationInProgressStructure
+    -> Result (List CompileFullstackApp.LocatedCompilationError) CompilationInProgressStructure
+continueCompileWithResolvedDependency ( elmMakeDependency, lastIterationResponse ) compilationInProgress =
+    let
+        newDependencies =
+            case lastIterationResponse.outputFileContentBase64 |> Maybe.andThen Base64.toBytes of
+                Nothing ->
+                    []
+
+                Just outputFileContent ->
+                    [ ( CompileFullstackApp.ElmMakeDependency elmMakeDependency, outputFileContent ) ]
+
+        dependenciesFromCompletedIterations =
+            compilationInProgress.dependenciesFromCompletedIterations ++ newDependencies
+    in
+    compilationInProgress.origin
+        |> continueCompile dependenciesFromCompletedIterations
+        |> Result.map
+            (\iterationRequest ->
+                { compilationInProgress
+                    | iterationRequest = iterationRequest
+                    , dependenciesFromCompletedIterations = dependenciesFromCompletedIterations
+                }
+            )
+
+
+continueCompile :
+    List ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
+    -> CompilationOrigin
+    -> Result (List CompileFullstackApp.LocatedCompilationError) CompilationIterationRequestStructure
+continueCompile dependenciesFromCompletedIterations compilationOrigin =
+    let
+        base64FromBytes : Bytes.Bytes -> String
+        base64FromBytes =
+            Base64.fromBytes >> Maybe.withDefault "Error encoding in base64"
+    in
+    case
+        compilationOrigin.loweredElmAppFromDependencies dependenciesFromCompletedIterations
+    of
+        Err loweringErrors ->
+            let
+                errorsMissingDependencyElmMake =
+                    loweringErrors
+                        |> List.filterMap
+                            (\locatedError ->
+                                case locatedError of
+                                    CompileFullstackApp.LocatedInSourceFiles _ error ->
+                                        case error of
+                                            CompileFullstackApp.MissingDependencyError (CompileFullstackApp.ElmMakeDependency missingDependencyElmMake) ->
+                                                Just missingDependencyElmMake
+
+                                            _ ->
+                                                Nothing
+                            )
+            in
+            case List.head errorsMissingDependencyElmMake of
+                Just missingDependencyElmMake ->
+                    Ok
+                        { requestToBackend =
+                            { files =
+                                missingDependencyElmMake.files
+                                    |> Dict.toList
+                                    |> mapFilesToRequestToBackendStructure base64FromBytes
+                            , workingDirectoryPath = []
+                            , entryPointFilePathFromWorkingDirectory = missingDependencyElmMake.entryPointFilePath
+                            , makeOptionDebug = missingDependencyElmMake.enableDebug
+                            , outputType = missingDependencyElmMake.outputType
+                            }
+                        , origin = ForDependencyElmMakeRequest missingDependencyElmMake
+                        }
+
+                Nothing ->
+                    Err loweringErrors
+
+        Ok completedLowering ->
+            let
+                requestFromUser =
+                    compilationOrigin.requestFromUser
+
+                files =
+                    completedLowering
+                        |> Dict.toList
+                        |> List.filter (Tuple.first >> CompileFullstackApp.includeFilePathInElmMakeRequest)
+            in
+            Ok
+                { requestToBackend = { requestFromUser | files = mapFilesToRequestToBackendStructure base64FromBytes files }
+                , origin = ForUserElmMakeRequest
+                }
+
+
+mapFilesToRequestToBackendStructure : (b -> a) -> List ( c, b ) -> List { path : c, contentBase64 : a }
+mapFilesToRequestToBackendStructure mapContent =
+    List.map (\( path, content ) -> { path = path, contentBase64 = mapContent content })
 
 
 requestToApiCmd :
@@ -1326,7 +1475,7 @@ requestToApiCmd request jsonDecoderSpecialization eventConstructor =
         , body =
             Http.jsonBody
                 (request |> CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
-        , expect = Http.expectJson (\response -> eventConstructor response) jsonDecoder
+        , expect = Http.expectJson eventConstructor jsonDecoder
         }
 
 
@@ -2313,18 +2462,18 @@ viewOutputPaneContent state =
         Just (CompilationCompleted requestIdentity compilationCompleted) ->
             viewOutputPaneContentFromCompilationComplete state requestIdentity compilationCompleted
 
-        Just (ElmMakeRequestPending pendingElmMakeRequest) ->
+        Just (CompilationInProgress compilationInProgress) ->
             let
                 elmMakeRequestEntryPointFilePathAbs =
-                    pendingElmMakeRequest.workingDirectoryPath
-                        ++ pendingElmMakeRequest.entryPointFilePathFromWorkingDirectory
+                    compilationInProgress.origin.requestFromUser.workingDirectoryPath
+                        ++ compilationInProgress.origin.requestFromUser.entryPointFilePathFromWorkingDirectory
             in
             { mainContent =
                 [ Element.text
                     ("Compiling module '"
                         ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
                         ++ "' with inspection "
-                        ++ (if pendingElmMakeRequest.makeOptionDebug then
+                        ++ (if compilationInProgress.origin.requestFromUser.makeOptionDebug then
                                 "enabled"
 
                             else
@@ -2350,7 +2499,7 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
 
         currentFileContentIsStillSame =
             Just elmMakeRequest.files
-                == (elmMakeRequestFromCurrentState |> Maybe.map (.requestIdentity >> .files))
+                == (elmMakeRequestFromCurrentState |> Maybe.map (.requestFromUserIdentity >> .files))
 
         elmMakeRequestEntryPointFilePathAbs =
             elmMakeRequest.workingDirectoryPath
