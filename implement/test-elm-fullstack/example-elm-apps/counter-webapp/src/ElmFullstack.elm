@@ -1,6 +1,14 @@
 module ElmFullstack exposing (..)
 
+{-| The `ElmFullstack` module provides the types to build backend app declarations.
+The type declarations in this module mirror the interface of the Elm Fullstack executable file and enable type-checking for compatibility.
+-}
 
+
+{-| Describe a complete backend app. A backend app can handle HTTP requests or spawn volatile processes to integrate other software
+components.
+The `BackendConfig` type does not include migrations because their types, by definition, can vary independently of the other types.
+-}
 type alias BackendConfig state =
     { init : ( state, BackendCmds state )
     , subscriptions : state -> BackendSubs state

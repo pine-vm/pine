@@ -3,6 +3,9 @@ module CompilationInterface.GenerateJsonCoders exposing
     , encodeBackendState
     )
 
+{-| For documentation of the compilation interface, see <https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md#compilationinterfacegeneratejsoncoders-elm-module>
+-}
+
 import Backend.StateType
 import Json.Decode
 import Json.Encode

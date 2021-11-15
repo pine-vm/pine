@@ -1,5 +1,8 @@
 module CompilationInterface.SourceFiles exposing (..)
 
+{-| For documentation of the compilation interface, see <https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md#compilationinterfacesourcefiles-elm-module>
+-}
+
 
 type alias Base64AndUtf8 =
     { utf8 : String, base64 : String }

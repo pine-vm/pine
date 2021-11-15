@@ -4,6 +4,9 @@ module CompilationInterface.GenerateJsonCoders exposing
     , testsValueToInterface
     )
 
+{-| For documentation of the compilation interface, see <https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md#compilationinterfacegeneratejsoncoders-elm-module>
+-}
+
 import Json.Decode
 import Json.Encode
 import Structures

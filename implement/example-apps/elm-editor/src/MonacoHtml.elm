@@ -1,6 +1,7 @@
 module MonacoHtml exposing (..)
 
-{-| -}
+{-| Functions for building the HTML document containing the Monaco Editor instance.
+-}
 
 
 {-| Combine from samples:

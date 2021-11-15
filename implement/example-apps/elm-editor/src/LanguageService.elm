@@ -1,5 +1,9 @@
 module LanguageService exposing (..)
 
+{-| This module contains language services for Elm programs.
+These functions enable editor features like completion suggestions and hover tips.
+-}
+
 import Common
 import CompilationInterface.SourceFiles
 import CompileFullstackApp

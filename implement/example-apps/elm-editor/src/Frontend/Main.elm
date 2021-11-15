@@ -1,4 +1,13 @@
-port module Frontend.Main exposing (Event(..), State, init, main, receiveMessageFromMonacoFrame, sendMessageToMonacoFrame, update, view)
+port module Frontend.Main exposing
+    ( Event(..)
+    , State
+    , init
+    , main
+    , receiveMessageFromMonacoFrame
+    , sendMessageToMonacoFrame
+    , update
+    , view
+    )
 
 import Base64
 import Browser

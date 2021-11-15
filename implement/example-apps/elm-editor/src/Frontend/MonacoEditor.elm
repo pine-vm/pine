@@ -1,5 +1,8 @@
 module Frontend.MonacoEditor exposing (..)
 
+{-| Types for exchanging messages with the Javascript wrapping the Monaco Editor.
+-}
+
 
 type MessageToEditor
     = SetValue String
