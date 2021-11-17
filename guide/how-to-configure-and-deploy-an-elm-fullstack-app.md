@@ -32,12 +32,12 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 As part of a deployment, Elm Fullstack compiles the app program code.
 The compiler requires the program code to contain the entry point for a back-end app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -46,8 +46,8 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 8d31a7ada98378d79ccf38482e969bb5995422cb
-Loaded source composition 5fafa8dd16fc872981a809a25553439f11f49d4b7dae1d129a9d94cd30fbb9d4 from 'https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app'.
+This path points to commit cd427019349f3d9d2f5b4c594b34d4e6c3e193cf
+Loaded source composition 5fafa8dd16fc872981a809a25553439f11f49d4b7dae1d129a9d94cd30fbb9d4 from 'https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process live representation.
@@ -146,7 +146,7 @@ The tree we modeled with this record type has two leaves:
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -255,7 +255,7 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
 
 ### `elm-fullstack.json`
 
@@ -316,7 +316,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/8d31a7ada98378d79ccf38482e969bb5995422cb/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
