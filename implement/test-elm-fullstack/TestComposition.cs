@@ -4,16 +4,16 @@ using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 
-namespace test_elm_fullstack
+namespace test_elm_fullstack;
+
+[TestClass]
+public class TestComposition
 {
-    [TestClass]
-    public class TestComposition
+    [TestMethod]
+    public void Composition_from_tree_with_string_path()
     {
-        [TestMethod]
-        public void Composition_from_tree_with_string_path()
+        var testCases = new[]
         {
-            var testCases = new[]
-            {
                 new
                 {
                     input = Composition.TreeWithStringPath.Blob(new byte[]{0,1,2}),
@@ -52,19 +52,19 @@ namespace test_elm_fullstack
                     },
                 };
 
-            foreach (var testCase in testCases)
-            {
-                var asComposition = Composition.FromTreeWithStringPath(testCase.input);
-
-                Assert.AreEqual(testCase.expectedOutput, asComposition);
-            }
-        }
-
-        [TestMethod]
-        public void Parse_as_tree_with_string_path()
+        foreach (var testCase in testCases)
         {
-            var testCases = new[]
-            {
+            var asComposition = Composition.FromTreeWithStringPath(testCase.input);
+
+            Assert.AreEqual(testCase.expectedOutput, asComposition);
+        }
+    }
+
+    [TestMethod]
+    public void Parse_as_tree_with_string_path()
+    {
+        var testCases = new[]
+        {
                 new
                 {
                     input = Composition.Component.Blob(new byte[]{0,1,2}),
@@ -109,19 +109,19 @@ namespace test_elm_fullstack
                 },
             };
 
-            foreach (var testCase in testCases)
-            {
-                var parseResult = Composition.ParseAsTreeWithStringPath(testCase.input);
-
-                Assert.AreEqual(testCase.expectedOutput, parseResult);
-            }
-        }
-
-        [TestMethod]
-        public void Composition_from_file_tree()
+        foreach (var testCase in testCases)
         {
-            var testCases = new[]
-            {
+            var parseResult = Composition.ParseAsTreeWithStringPath(testCase.input);
+
+            Assert.AreEqual(testCase.expectedOutput, parseResult);
+        }
+    }
+
+    [TestMethod]
+    public void Composition_from_file_tree()
+    {
+        var testCases = new[]
+        {
                 new
                 {
                     input = new []
@@ -197,20 +197,20 @@ namespace test_elm_fullstack
                 },
             };
 
-            foreach (var testCase in testCases)
-            {
-                var asComposition = Composition.FromTreeWithStringPath(
-                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
-
-                Assert.AreEqual(testCase.expectedOutput, asComposition);
-            }
-        }
-
-        [TestMethod]
-        public void Hash_composition()
+        foreach (var testCase in testCases)
         {
-            var testCases = new[]
-            {
+            var asComposition = Composition.FromTreeWithStringPath(
+                Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
+
+            Assert.AreEqual(testCase.expectedOutput, asComposition);
+        }
+    }
+
+    [TestMethod]
+    public void Hash_composition()
+    {
+        var testCases = new[]
+        {
                 new
                 {
                     input = Composition.Component.Blob(new byte[]{0,1,2}),
@@ -219,91 +219,91 @@ namespace test_elm_fullstack
                 },
             };
 
-            foreach (var testCase in testCases)
-            {
-                var hash = Composition.GetHash(testCase.input);
-
-                Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16FromByteArray(hash), ignoreCase: true);
-            }
-        }
-
-        [TestMethod]
-        public void String_value_roundtrips()
+        foreach (var testCase in testCases)
         {
-            var testCases = new[]
-            {
+            var hash = Composition.GetHash(testCase.input);
+
+            Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16FromByteArray(hash), ignoreCase: true);
+        }
+    }
+
+    [TestMethod]
+    public void String_value_roundtrips()
+    {
+        var testCases = new[]
+        {
                 "",
                 "Hello World!",
                 "Using some non-ASCII chars: 🌀 𝅘𝅥𝅰𝆁  𝅘𝅥𝅰 𝆁◌ 𝅘 𝅥 𝅰 𝆁◌ 😃 ⚠️☢️✔️",
             };
 
-            foreach (var testCase in testCases)
-            {
-                var asPineValue =
-                    Composition.ComponentFromString(testCase);
-
-                var toStringResult =
-                    Composition.StringFromComponent(asPineValue);
-
-                Assert.IsNull(toStringResult.Err);
-
-                Assert.AreEqual(testCase, toStringResult.Ok);
-            }
-        }
-
-        [TestMethod]
-        public void Signed_Integer_value_roundtrips()
+        foreach (var testCase in testCases)
         {
-            var testCases = new[]
-            {
+            var asPineValue =
+                Composition.ComponentFromString(testCase);
+
+            var toStringResult =
+                Composition.StringFromComponent(asPineValue);
+
+            Assert.IsNull(toStringResult.Err);
+
+            Assert.AreEqual(testCase, toStringResult.Ok);
+        }
+    }
+
+    [TestMethod]
+    public void Signed_Integer_value_roundtrips()
+    {
+        var testCases = new[]
+        {
                 0,-1,1,-1234,2345,123456789
             };
 
-            foreach (var testCase in testCases)
-            {
-                var asPineValue =
-                    Composition.ComponentFromSignedInteger(testCase);
-
-                var toIntegerResult =
-                    Composition.SignedIntegerFromComponent(asPineValue);
-
-                Assert.IsNull(toIntegerResult.Err);
-
-                Assert.AreEqual(testCase, toIntegerResult.Ok);
-            }
-        }
-
-        [TestMethod]
-        public void Unsigned_Integer_value_roundtrips()
+        foreach (var testCase in testCases)
         {
-            var testCases = new[]
-            {
+            var asPineValue =
+                Composition.ComponentFromSignedInteger(testCase);
+
+            var toIntegerResult =
+                Composition.SignedIntegerFromComponent(asPineValue);
+
+            Assert.IsNull(toIntegerResult.Err);
+
+            Assert.AreEqual(testCase, toIntegerResult.Ok);
+        }
+    }
+
+    [TestMethod]
+    public void Unsigned_Integer_value_roundtrips()
+    {
+        var testCases = new[]
+        {
                 0,1,1234,2345,123456789
             };
 
-            foreach (var testCase in testCases)
-            {
-                var asPineValue =
-                    Composition.ComponentFromUnsignedInteger(testCase);
+        foreach (var testCase in testCases)
+        {
+            var asPineValue =
+                Composition.ComponentFromUnsignedInteger(testCase);
 
-                Assert.IsNull(asPineValue.Err);
+            Assert.IsNull(asPineValue.Err);
 
-                var toIntegerResult =
-                    Composition.UnsignedIntegerFromComponent(asPineValue.Ok);
+            var toIntegerResult =
+                Composition.UnsignedIntegerFromComponent(asPineValue.Ok);
 
-                Assert.IsNull(toIntegerResult.Err);
+            Assert.IsNull(toIntegerResult.Err);
 
-                Assert.AreEqual(testCase, toIntegerResult.Ok);
-            }
-
-            Assert.IsNotNull(Composition.ComponentFromUnsignedInteger(-1).Err);
+            Assert.AreEqual(testCase, toIntegerResult.Ok);
         }
 
-        [TestMethod]
-        public void Tree_with_string_path_sorting()
+        Assert.IsNotNull(Composition.ComponentFromUnsignedInteger(-1).Err);
+    }
+
+    [TestMethod]
+    public void Tree_with_string_path_sorting()
+    {
+        var testCases = new[]
         {
-            var testCases = new[]
-            {
                 new
                 {
                     input = Composition.TreeWithStringPath.Tree(
@@ -355,12 +355,11 @@ namespace test_elm_fullstack
                 }
             };
 
-            foreach (var testCase in testCases)
-            {
-                var sortedTree = Composition.SortedTreeFromTree(testCase.input);
+        foreach (var testCase in testCases)
+        {
+            var sortedTree = Composition.SortedTreeFromTree(testCase.input);
 
-                Assert.AreEqual(expected: testCase.expected, sortedTree);
-            }
+            Assert.AreEqual(expected: testCase.expected, sortedTree);
         }
     }
 }

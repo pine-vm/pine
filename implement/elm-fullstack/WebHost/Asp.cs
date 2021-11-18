@@ -7,95 +7,94 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ElmFullstack.WebHost
+namespace ElmFullstack.WebHost;
+
+static public class Asp
 {
-    static public class Asp
+    class ClientsRateLimitStateContainer
     {
-        class ClientsRateLimitStateContainer
+        readonly public ConcurrentDictionary<string, RateLimitMutableContainer> RateLimitFromClientId =
+            new ConcurrentDictionary<string, RateLimitMutableContainer>();
+    }
+
+    static public void ConfigureServices(IServiceCollection services)
+    {
+        services.AddSingleton(new ClientsRateLimitStateContainer());
+    }
+
+    static public async Task MiddlewareFromWebAppConfig(
+        WebAppConfigurationJsonStructure webAppConfig, HttpContext context, Func<Task> next) =>
+        await RateLimitMiddlewareFromWebAppConfig(webAppConfig, context, next);
+
+    static async Task RateLimitMiddlewareFromWebAppConfig(
+        WebAppConfigurationJsonStructure webAppConfig, HttpContext context, Func<Task> next)
+    {
+        string ClientId()
         {
-            readonly public ConcurrentDictionary<string, RateLimitMutableContainer> RateLimitFromClientId =
-                new ConcurrentDictionary<string, RateLimitMutableContainer>();
+            const string defaultClientId = "MapToIPv4-failed";
+            try
+            {
+                return context.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? defaultClientId;
+            }
+            catch
+            {
+                return defaultClientId;
+            }
         }
 
-        static public void ConfigureServices(IServiceCollection services)
+        var rateLimitFromClientId =
+            context.RequestServices.GetService<ClientsRateLimitStateContainer>().RateLimitFromClientId;
+
+        var clientRateLimitState =
+            rateLimitFromClientId.GetOrAdd(
+                ClientId(), _ => BuildRateLimitContainerForClient(webAppConfig));
+
+        if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
         {
-            services.AddSingleton(new ClientsRateLimitStateContainer());
-        }
-
-        static public async Task MiddlewareFromWebAppConfig(
-            WebAppConfigurationJsonStructure webAppConfig, HttpContext context, Func<Task> next) =>
-            await RateLimitMiddlewareFromWebAppConfig(webAppConfig, context, next);
-
-        static async Task RateLimitMiddlewareFromWebAppConfig(
-            WebAppConfigurationJsonStructure webAppConfig, HttpContext context, Func<Task> next)
-        {
-            string ClientId()
-            {
-                const string defaultClientId = "MapToIPv4-failed";
-                try
-                {
-                    return context.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? defaultClientId;
-                }
-                catch
-                {
-                    return defaultClientId;
-                }
-            }
-
-            var rateLimitFromClientId =
-                context.RequestServices.GetService<ClientsRateLimitStateContainer>().RateLimitFromClientId;
-
-            var clientRateLimitState =
-                rateLimitFromClientId.GetOrAdd(
-                    ClientId(), _ => BuildRateLimitContainerForClient(webAppConfig));
-
-            if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
-            {
-                await next?.Invoke();
-                return;
-            }
-
-            context.Response.StatusCode = 429;
-            await context.Response.WriteAsync("");
+            await next?.Invoke();
             return;
         }
 
-        static RateLimitMutableContainer BuildRateLimitContainerForClient(WebAppConfigurationJsonStructure jsonStructure)
-        {
-            if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
-                return null;
+        context.Response.StatusCode = 429;
+        await context.Response.WriteAsync("");
+        return;
+    }
 
-            return new RateLimitMutableContainer(new RateLimitStateSingleWindow
-            {
-                limit = jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
-                windowSize = jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
-            });
+    static RateLimitMutableContainer BuildRateLimitContainerForClient(WebAppConfigurationJsonStructure jsonStructure)
+    {
+        if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
+            return null;
+
+        return new RateLimitMutableContainer(new RateLimitStateSingleWindow
+        {
+            limit = jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
+            windowSize = jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
+        });
+    }
+
+    static public async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(
+        HttpRequest httpRequest)
+    {
+        var httpHeaders =
+            httpRequest.Headers
+            .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray()))
+            .ToArray();
+
+        byte[] httpRequestBody = null;
+
+        using (var stream = new MemoryStream())
+        {
+            await httpRequest.Body.CopyToAsync(stream);
+
+            httpRequestBody = stream.ToArray();
         }
 
-        static public async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(
-            HttpRequest httpRequest)
-        {
-            var httpHeaders =
-                httpRequest.Headers
-                .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray()))
-                .ToArray();
-
-            byte[] httpRequestBody = null;
-
-            using (var stream = new MemoryStream())
-            {
-                await httpRequest.Body.CopyToAsync(stream);
-
-                httpRequestBody = stream.ToArray();
-            }
-
-            return new InterfaceToHost.HttpRequest
-            (
-                method: httpRequest.Method,
-                uri: httpRequest.GetDisplayUrl(),
-                bodyAsBase64: httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
-                headers: httpHeaders
-            );
-        }
+        return new InterfaceToHost.HttpRequest
+        (
+            method: httpRequest.Method,
+            uri: httpRequest.GetDisplayUrl(),
+            bodyAsBase64: httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
+            headers: httpHeaders
+        );
     }
 }

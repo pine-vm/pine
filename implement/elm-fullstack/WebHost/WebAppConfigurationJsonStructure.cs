@@ -1,25 +1,24 @@
-namespace ElmFullstack
+namespace ElmFullstack;
+
+public class WebAppConfigurationJsonStructure
 {
-    public class WebAppConfigurationJsonStructure
+    public RateLimitWindow singleRateLimitWindowPerClientIPv4Address;
+
+    public int? httpRequestEventSizeLimit;
+
+    public FluffySpoon.AspNet.LetsEncrypt.LetsEncryptOptions letsEncryptOptions;
+
+    public class ConditionalMapFromStringToString
     {
-        public RateLimitWindow singleRateLimitWindowPerClientIPv4Address;
+        public string matchingRegexPattern;
 
-        public int? httpRequestEventSizeLimit;
+        public string resultString;
+    }
 
-        public FluffySpoon.AspNet.LetsEncrypt.LetsEncryptOptions letsEncryptOptions;
+    public class RateLimitWindow
+    {
+        public int windowSizeInMs;
 
-        public class ConditionalMapFromStringToString
-        {
-            public string matchingRegexPattern;
-
-            public string resultString;
-        }
-
-        public class RateLimitWindow
-        {
-            public int windowSizeInMs;
-
-            public int limit;
-        }
+        public int limit;
     }
 }

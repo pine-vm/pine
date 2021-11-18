@@ -4,16 +4,16 @@ using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 
-namespace test_elm_fullstack
+namespace test_elm_fullstack;
+
+[TestClass]
+public class TestLoadComposition
 {
-    [TestClass]
-    public class TestLoadComposition
+    [TestMethod]
+    public void Composition_from_link_in_elm_editor()
     {
-        [TestMethod]
-        public void Composition_from_link_in_elm_editor()
+        var testCases = new[]
         {
-            var testCases = new[]
-            {
                 new
                 {
                     input = "https://elm-editor.com/?project-state=https%3A%2F%2Fgithub.com%2Felm-fullstack%2Felm-fullstack%2Ftree%2F742650b6a6f1e3dc723d76fbb8c189ca16a0bee6%2Fimplement%2Fexample-apps%2Felm-editor%2Fdefault-app&file-path-to-open=src%2FMain.elm",
@@ -36,47 +36,46 @@ namespace test_elm_fullstack
                 }
             };
 
-            foreach (var testCase in testCases)
+        foreach (var testCase in testCases)
+        {
+            try
             {
-                try
-                {
-                    var loadCompositionResult =
-                        LoadComposition.LoadFromPathResolvingNetworkDependencies(testCase.input).LogToList();
+                var loadCompositionResult =
+                    LoadComposition.LoadFromPathResolvingNetworkDependencies(testCase.input).LogToList();
 
-                    if (loadCompositionResult.result.Ok.tree == null)
-                        throw new Exception("Failed to load from path: " + loadCompositionResult.result.Err);
+                if (loadCompositionResult.result.Ok.tree == null)
+                    throw new Exception("Failed to load from path: " + loadCompositionResult.result.Err);
 
-                    var inspectComposition =
-                        loadCompositionResult.result.Ok.tree.EnumerateBlobsTransitive()
-                        .Select(blobAtPath =>
+                var inspectComposition =
+                    loadCompositionResult.result.Ok.tree.EnumerateBlobsTransitive()
+                    .Select(blobAtPath =>
+                    {
+                        string utf8 = null;
+
+                        try
                         {
-                            string utf8 = null;
+                            utf8 = System.Text.Encoding.UTF8.GetString(blobAtPath.blobContent.ToArray());
+                        }
+                        catch { }
 
-                            try
+                        return
+                            new
                             {
-                                utf8 = System.Text.Encoding.UTF8.GetString(blobAtPath.blobContent.ToArray());
-                            }
-                            catch { }
+                                blobAtPath.path,
+                                blobAtPath.blobContent,
+                                utf8
+                            };
+                    })
+                    .ToImmutableList();
 
-                            return
-                                new
-                                {
-                                    blobAtPath.path,
-                                    blobAtPath.blobContent,
-                                    utf8
-                                };
-                        })
-                        .ToImmutableList();
+                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.tree);
+                var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
 
-                    var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.tree);
-                    var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
-
-                    Assert.AreEqual(testCase.expectedCompositionId, compositionId);
-                }
-                catch (Exception e)
-                {
-                    throw new Exception("Failed in test case " + testCase.input, e);
-                }
+                Assert.AreEqual(testCase.expectedCompositionId, compositionId);
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Failed in test case " + testCase.input, e);
             }
         }
     }

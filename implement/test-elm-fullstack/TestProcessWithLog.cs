@@ -3,16 +3,16 @@ using Pine;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace test_elm_fullstack
+namespace test_elm_fullstack;
+
+[TestClass]
+public class TestProcessWithLog
 {
-    [TestClass]
-    public class TestProcessWithLog
+    [TestMethod]
+    public void Process_with_log_build_and_unpack()
     {
-        [TestMethod]
-        public void Process_with_log_build_and_unpack()
+        var testCases = new[]
         {
-            var testCases = new[]
-            {
                 new
                 {
                     process = AsProcessWithStringLog(5678),
@@ -40,15 +40,14 @@ namespace test_elm_fullstack
                 }
             };
 
-            foreach (var testCase in testCases)
-            {
-                var result = testCase.process.LogToList();
+        foreach (var testCase in testCases)
+        {
+            var result = testCase.process.LogToList();
 
-                Assert.AreEqual(testCase.expectedResult, result.result);
-                CollectionAssert.AreEqual(testCase.expectedLog, result.log.ToList());
-            }
+            Assert.AreEqual(testCase.expectedResult, result.result);
+            CollectionAssert.AreEqual(testCase.expectedLog, result.log.ToList());
         }
-
-        static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T Result) => new(Result: Result);
     }
+
+    static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T Result) => new(Result: Result);
 }

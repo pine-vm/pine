@@ -7,139 +7,138 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Mono.Unix;
 
-namespace Pine
+namespace Pine;
+
+public class ExecutableFile
 {
-    public class ExecutableFile
+    public struct ProcessOutput
     {
-        public struct ProcessOutput
+        public string StandardError;
+
+        public string StandardOutput;
+
+        public int ExitCode;
+    }
+
+    static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) ExecuteFileWithArguments(
+        IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> content)> environmentFiles,
+        byte[] executableFile,
+        string arguments,
+        IDictionary<string, string> environmentStrings,
+        IImmutableList<string> workingDirectory = null)
+    {
+        var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+
+        var executableFileName = "name-used-to-execute-file.exe";
+
+        var executableFilePathRelative = ImmutableList.Create(executableFileName);
+
+        foreach (var environmentFile in environmentFiles)
         {
-            public string StandardError;
+            var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.path));
+            var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath);
 
-            public string StandardOutput;
+            Directory.CreateDirectory(environmentFileDirectory);
 
-            public int ExitCode;
+            File.WriteAllBytes(environmentFilePath, (environmentFile.content as byte[]) ?? environmentFile.content.ToArray());
         }
 
-        static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) ExecuteFileWithArguments(
-            IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> content)> environmentFiles,
-            byte[] executableFile,
-            string arguments,
-            IDictionary<string, string> environmentStrings,
-            IImmutableList<string> workingDirectory = null)
+        var executableFilePathAbsolute = Path.Combine(containerDirectory, executableFileName);
+
+        File.WriteAllBytes(executableFilePathAbsolute, executableFile);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+            var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePathAbsolute);
 
-            var executableFileName = "name-used-to-execute-file.exe";
+            unixFileInfo.FileAccessPermissions |=
+                FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
+                FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
+        }
 
-            var executableFilePathRelative = ImmutableList.Create(executableFileName);
+        var workingDirectoryAbsolute =
+            Path.Combine(
+                containerDirectory,
+                Filesystem.MakePlatformSpecificPath(workingDirectory ?? ImmutableList<string>.Empty));
 
-            foreach (var environmentFile in environmentFiles)
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
             {
-                var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.path));
-                var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath);
+                WorkingDirectory = workingDirectoryAbsolute,
+                FileName = executableFilePathAbsolute,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            },
+        };
 
-                Directory.CreateDirectory(environmentFileDirectory);
+        foreach (var envString in environmentStrings.EmptyIfNull())
+            process.StartInfo.Environment[envString.Key] = envString.Value;
 
-                File.WriteAllBytes(environmentFilePath, (environmentFile.content as byte[]) ?? environmentFile.content.ToArray());
+        process.Start();
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+
+        process.WaitForExit();
+        var exitCode = process.ExitCode;
+        process.Close();
+
+        var createdFiles =
+            Filesystem.GetFilesFromDirectory(
+                directoryPath: containerDirectory,
+                filterByRelativeName: path => !path.SequenceEqual(executableFilePathRelative));
+
+        try
+        {
+            Directory.Delete(path: containerDirectory, recursive: true);
+        }
+        // Avoid crash in scenario like https://forum.botengine.org/t/farm-manager-tribal-wars-2-farmbot/3038/170
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        return (new ProcessOutput
+        {
+            ExitCode = exitCode,
+            StandardError = standardError,
+            StandardOutput = standardOutput,
+        }, createdFiles);
+    }
+
+    //  Helper for Linux platform. Thank you Kyle Spearrin!
+    //  https://stackoverflow.com/questions/45132081/file-permissions-on-linux-unix-with-net-core/47918132#47918132
+    static public void LinuxExecWithBash(string cmd)
+    {
+        var escapedArgs = cmd.Replace("\"", "\\\"");
+
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                FileName = "/bin/bash",
+                Arguments = $"-c \"{escapedArgs}\""
             }
+        };
 
-            var executableFilePathAbsolute = Path.Combine(containerDirectory, executableFileName);
+        process.Start();
+        process.WaitForExit();
 
-            File.WriteAllBytes(executableFilePathAbsolute, executableFile);
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePathAbsolute);
-
-                unixFileInfo.FileAccessPermissions |=
-                    FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
-                    FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
-            }
-
-            var workingDirectoryAbsolute =
-                Path.Combine(
-                    containerDirectory,
-                    Filesystem.MakePlatformSpecificPath(workingDirectory ?? ImmutableList<string>.Empty));
-
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
+        Console.WriteLine(
+            "Executed command with bash: " +
+            Newtonsoft.Json.JsonConvert.SerializeObject(
+                new
                 {
-                    WorkingDirectory = workingDirectoryAbsolute,
-                    FileName = executableFilePathAbsolute,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                },
-            };
-
-            foreach (var envString in environmentStrings.EmptyIfNull())
-                process.StartInfo.Environment[envString.Key] = envString.Value;
-
-            process.Start();
-            var standardOutput = process.StandardOutput.ReadToEnd();
-            var standardError = process.StandardError.ReadToEnd();
-
-            process.WaitForExit();
-            var exitCode = process.ExitCode;
-            process.Close();
-
-            var createdFiles =
-                Filesystem.GetFilesFromDirectory(
-                    directoryPath: containerDirectory,
-                    filterByRelativeName: path => !path.SequenceEqual(executableFilePathRelative));
-
-            try
-            {
-                Directory.Delete(path: containerDirectory, recursive: true);
-            }
-            // Avoid crash in scenario like https://forum.botengine.org/t/farm-manager-tribal-wars-2-farmbot/3038/170
-            catch (UnauthorizedAccessException)
-            {
-            }
-
-            return (new ProcessOutput
-            {
-                ExitCode = exitCode,
-                StandardError = standardError,
-                StandardOutput = standardOutput,
-            }, createdFiles);
-        }
-
-        //  Helper for Linux platform. Thank you Kyle Spearrin!
-        //  https://stackoverflow.com/questions/45132081/file-permissions-on-linux-unix-with-net-core/47918132#47918132
-        static public void LinuxExecWithBash(string cmd)
-        {
-            var escapedArgs = cmd.Replace("\"", "\\\"");
-
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    FileName = "/bin/bash",
-                    Arguments = $"-c \"{escapedArgs}\""
-                }
-            };
-
-            process.Start();
-            process.WaitForExit();
-
-            Console.WriteLine(
-                "Executed command with bash: " +
-                Newtonsoft.Json.JsonConvert.SerializeObject(
-                    new
-                    {
-                        cmd = cmd,
-                        exitCode = process.ExitCode,
-                        standardOut = process.StandardOutput.ReadToEnd(),
-                        standardError = process.StandardError.ReadToEnd(),
-                    }));
-        }
+                    cmd = cmd,
+                    exitCode = process.ExitCode,
+                    standardOut = process.StandardOutput.ReadToEnd(),
+                    standardError = process.StandardError.ReadToEnd(),
+                }));
     }
 }

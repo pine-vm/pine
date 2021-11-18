@@ -3,32 +3,31 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace ElmFullstack
+namespace ElmFullstack;
+
+static public class Cache
 {
-    static public class Cache
+    static public void RemoveItemsToLimitRetainedSize<TKey, TValue, TOrderKey>(
+        IDictionary<TKey, TValue> cache,
+        Func<KeyValuePair<TKey, TValue>, long> computeItemSize,
+        Func<KeyValuePair<TKey, TValue>, TOrderKey> computeItemRetentionPriority,
+        long retainedSizeLimit)
     {
-        static public void RemoveItemsToLimitRetainedSize<TKey, TValue, TOrderKey>(
-            IDictionary<TKey, TValue> cache,
-            Func<KeyValuePair<TKey, TValue>, long> computeItemSize,
-            Func<KeyValuePair<TKey, TValue>, TOrderKey> computeItemRetentionPriority,
-            long retainedSizeLimit)
+        var itemsOrderedByRetentionPrio =
+            cache
+            .OrderByDescending(computeItemRetentionPriority)
+            .ToImmutableList();
+
+        long aggregateSize = 0;
+
+        foreach (var item in itemsOrderedByRetentionPrio)
         {
-            var itemsOrderedByRetentionPrio =
-                cache
-                .OrderByDescending(computeItemRetentionPriority)
-                .ToImmutableList();
+            var itemSize = computeItemSize(item);
 
-            long aggregateSize = 0;
+            aggregateSize += itemSize;
 
-            foreach (var item in itemsOrderedByRetentionPrio)
-            {
-                var itemSize = computeItemSize(item);
-
-                aggregateSize += itemSize;
-
-                if (retainedSizeLimit < aggregateSize)
-                    cache.Remove(item.Key, out _);
-            }
+            if (retainedSizeLimit < aggregateSize)
+                cache.Remove(item.Key, out _);
         }
     }
 }

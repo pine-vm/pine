@@ -3,41 +3,39 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using static Pine.Composition;
 
-namespace elm_fullstack.ElmInteractive
+namespace elm_fullstack.ElmInteractive;
+
+public class InteractiveSession : IDisposable
 {
+    readonly TreeWithStringPath appCodeTree;
 
-    public class InteractiveSession : IDisposable
+    readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
+        new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(ElmInteractive.PrepareJsEngineToEvaluateElm);
+
+    readonly IList<string> previousSubmissions = new List<string>();
+
+    public InteractiveSession(TreeWithStringPath appCodeTree)
     {
-        readonly TreeWithStringPath appCodeTree;
+        this.appCodeTree = appCodeTree;
+    }
 
-        readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
-            new Lazy<JavaScriptEngineSwitcher.Core.IJsEngine>(ElmInteractive.PrepareJsEngineToEvaluateElm);
+    public Pine.Result<string, ElmInteractive.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
+    {
+        var result =
+            ElmInteractive.EvaluateSubmissionAndGetResultingValue(
+                evalElmPreparedJsEngine.Value,
+                appCodeTree: appCodeTree,
+                submission: submission,
+                previousLocalSubmissions: previousSubmissions.ToImmutableList());
 
-        readonly IList<string> previousSubmissions = new List<string>();
+        previousSubmissions.Add(submission);
 
-        public InteractiveSession(TreeWithStringPath appCodeTree)
-        {
-            this.appCodeTree = appCodeTree;
-        }
+        return result;
+    }
 
-        public Pine.Result<string, ElmInteractive.SubmissionResponseValueStructure> SubmitAndGetResultingValue(string submission)
-        {
-            var result =
-                ElmInteractive.EvaluateSubmissionAndGetResultingValue(
-                    evalElmPreparedJsEngine.Value,
-                    appCodeTree: appCodeTree,
-                    submission: submission,
-                    previousLocalSubmissions: previousSubmissions.ToImmutableList());
-
-            previousSubmissions.Add(submission);
-
-            return result;
-        }
-
-        void IDisposable.Dispose()
-        {
-            if (evalElmPreparedJsEngine.IsValueCreated)
-                evalElmPreparedJsEngine.Value?.Dispose();
-        }
+    void IDisposable.Dispose()
+    {
+        if (evalElmPreparedJsEngine.IsValueCreated)
+            evalElmPreparedJsEngine.Value?.Dispose();
     }
 }

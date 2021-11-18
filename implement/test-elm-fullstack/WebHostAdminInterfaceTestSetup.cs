@@ -9,210 +9,209 @@ using Microsoft.AspNetCore.Hosting;
 using Newtonsoft.Json;
 using Pine;
 
-namespace test_elm_fullstack
+namespace test_elm_fullstack;
+
+public class WebHostAdminInterfaceTestSetup : IDisposable
 {
-    public class WebHostAdminInterfaceTestSetup : IDisposable
+    static string PublicWebHostUrlDefault => "http://localhost:35491";
+
+    static string AdminWebHostUrlDefault => "http://localhost:19372";
+
+    readonly string publicWebHostUrlOverride;
+
+    readonly string adminWebHostUrlOverride;
+
+    public string PublicWebHostUrl => publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
+
+    public string AdminWebHostUrl => adminWebHostUrlOverride ?? AdminWebHostUrlDefault;
+
+    readonly string testDirectory;
+
+    readonly string adminPassword;
+
+    readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
+
+    public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
+
+    IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+
+    readonly IFileStore fileStore;
+
+    public IWebHost StartWebHost(
+         Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
     {
-        static string PublicWebHostUrlDefault => "http://localhost:35491";
+        var webHost =
+            (webHostBuilderMap ?? (builder => builder))
+            (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
+            .UseUrls(AdminWebHostUrl)
+            .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
+            .WithSettingAdminPassword(adminPassword)
+            .UseStartup<StartupAdminInterface>()
+            .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(fileStore) ?? fileStore))
+            .Build();
 
-        static string AdminWebHostUrlDefault => "http://localhost:19372";
+        webHost?.StartAsync().Wait();
 
-        readonly string publicWebHostUrlOverride;
+        return webHost;
+    }
 
-        readonly string adminWebHostUrlOverride;
+    static public WebHostAdminInterfaceTestSetup Setup(
+        Func<DateTimeOffset> persistentProcessHostDateTime = null,
+        string adminPassword = null,
+        IFileStore fileStore = null,
+        Composition.Component deployAppConfigAndInitElmState = null) =>
+        Setup(
+            adminPassword: adminPassword,
+            fileStore: fileStore,
+            deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
+            webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
+            persistentProcessHostDateTime: persistentProcessHostDateTime);
 
-        public string PublicWebHostUrl => publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
+    static public WebHostAdminInterfaceTestSetup Setup(
+        Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
+        string adminPassword = null,
+        IFileStore fileStore = null,
+        Composition.Component deployAppConfigAndInitElmState = null,
+        string adminWebHostUrlOverride = null,
+        string publicWebHostUrlOverride = null,
+        Func<DateTimeOffset> persistentProcessHostDateTime = null)
+    {
+        var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        public string AdminWebHostUrl => adminWebHostUrlOverride ?? AdminWebHostUrlDefault;
+        var setup = new WebHostAdminInterfaceTestSetup(
+            testDirectory,
+            adminPassword: adminPassword,
+            fileStore: fileStore,
+            deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
+            webHostBuilderMap: webHostBuilderMap,
+            adminWebHostUrlOverride: adminWebHostUrlOverride,
+            publicWebHostUrlOverride: publicWebHostUrlOverride,
+            persistentProcessHostDateTime: persistentProcessHostDateTime);
 
-        readonly string testDirectory;
+        return setup;
+    }
 
-        readonly string adminPassword;
-
-        readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
-
-        public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
-
-        IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
-
-        readonly IFileStore fileStore;
-
-        public IWebHost StartWebHost(
-             Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
+    public System.Net.Http.HttpClient BuildPublicAppHttpClient()
+    {
+        var handler = new System.Net.Http.HttpClientHandler()
         {
-            var webHost =
-                (webHostBuilderMap ?? (builder => builder))
-                (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-                .UseUrls(AdminWebHostUrl)
-                .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
-                .WithSettingAdminPassword(adminPassword)
-                .UseStartup<StartupAdminInterface>()
-                .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(fileStore) ?? fileStore))
-                .Build();
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+        };
 
-            webHost?.StartAsync().Wait();
-
-            return webHost;
-        }
-
-        static public WebHostAdminInterfaceTestSetup Setup(
-            Func<DateTimeOffset> persistentProcessHostDateTime = null,
-            string adminPassword = null,
-            IFileStore fileStore = null,
-            Composition.Component deployAppConfigAndInitElmState = null) =>
-            Setup(
-                adminPassword: adminPassword,
-                fileStore: fileStore,
-                deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
-                webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
-                persistentProcessHostDateTime: persistentProcessHostDateTime);
-
-        static public WebHostAdminInterfaceTestSetup Setup(
-            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
-            string adminPassword = null,
-            IFileStore fileStore = null,
-            Composition.Component deployAppConfigAndInitElmState = null,
-            string adminWebHostUrlOverride = null,
-            string publicWebHostUrlOverride = null,
-            Func<DateTimeOffset> persistentProcessHostDateTime = null)
+        return new System.Net.Http.HttpClient(handler)
         {
-            var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+            BaseAddress = new Uri(PublicWebHostUrl),
+        };
+    }
 
-            var setup = new WebHostAdminInterfaceTestSetup(
-                testDirectory,
-                adminPassword: adminPassword,
-                fileStore: fileStore,
-                deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
-                webHostBuilderMap: webHostBuilderMap,
-                adminWebHostUrlOverride: adminWebHostUrlOverride,
-                publicWebHostUrlOverride: publicWebHostUrlOverride,
-                persistentProcessHostDateTime: persistentProcessHostDateTime);
-
-            return setup;
-        }
-
-        public System.Net.Http.HttpClient BuildPublicAppHttpClient()
+    public System.Net.Http.HttpClient BuildAdminInterfaceHttpClient()
+    {
+        return new System.Net.Http.HttpClient
         {
-            var handler = new System.Net.Http.HttpClientHandler()
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
-            };
+            BaseAddress = new Uri(AdminWebHostUrl),
+        };
+    }
 
-            return new System.Net.Http.HttpClient(handler)
-            {
-                BaseAddress = new Uri(PublicWebHostUrl),
-            };
-        }
-
-        public System.Net.Http.HttpClient BuildAdminInterfaceHttpClient()
-        {
-            return new System.Net.Http.HttpClient
-            {
-                BaseAddress = new Uri(AdminWebHostUrl),
-            };
-        }
-
-        public System.Net.Http.HttpClient SetDefaultRequestHeaderAuthorizeForAdmin(System.Net.Http.HttpClient client)
-        {
-            if (adminPassword == null)
-                return client;
-
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                "Basic",
-                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                    ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
-
+    public System.Net.Http.HttpClient SetDefaultRequestHeaderAuthorizeForAdmin(System.Net.Http.HttpClient client)
+    {
+        if (adminPassword == null)
             return client;
-        }
 
-        public void Dispose()
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Basic",
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+
+        return client;
+    }
+
+    public void Dispose()
+    {
+        Directory.Delete(testDirectory, true);
+    }
+
+    WebHostAdminInterfaceTestSetup(
+        string testDirectory,
+        string adminPassword,
+        IFileStore fileStore,
+        Composition.Component deployAppConfigAndInitElmState,
+        Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
+        string adminWebHostUrlOverride,
+        string publicWebHostUrlOverride,
+        Func<DateTimeOffset> persistentProcessHostDateTime = null)
+    {
+        this.testDirectory = testDirectory;
+
+        fileStore ??= defaultFileStore;
+
+        this.adminPassword = adminPassword ?? "notempty";
+        this.fileStore = fileStore;
+        this.webHostBuilderMap = webHostBuilderMap;
+        this.adminWebHostUrlOverride = adminWebHostUrlOverride;
+        this.publicWebHostUrlOverride = publicWebHostUrlOverride;
+
+        if (deployAppConfigAndInitElmState != null)
         {
-            Directory.Delete(testDirectory, true);
-        }
+            var compositionLogEvent =
+                new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                {
+                    DeployAppConfigAndInitElmAppState =
+                        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                        {
+                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(deployAppConfigAndInitElmState))
+                        }
+                };
 
-        WebHostAdminInterfaceTestSetup(
-            string testDirectory,
-            string adminPassword,
-            IFileStore fileStore,
-            Composition.Component deployAppConfigAndInitElmState,
-            Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
-            string adminWebHostUrlOverride,
-            string publicWebHostUrlOverride,
-            Func<DateTimeOffset> persistentProcessHostDateTime = null)
+            var processStoreWriter =
+                new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                fileStore,
+                getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
+                fileStore);
+
+            processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
+
+            processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
+        }
+    }
+
+    public Pine.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
+            new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+
+    public ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
+        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+            BuildProcessStoreFileStoreReaderInFileDirectory());
+
+    public IEnumerable<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
+    {
+        var processStoreReader = BuildProcessStoreReaderInFileDirectory();
+
+        ElmFullstack.WebHost.InterfaceToHost.AppEventStructure eventLogEntry(ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
         {
-            this.testDirectory = testDirectory;
+            var component =
+                logEntry.LiteralStringUtf8 != null
+                ?
+                Composition.Component.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
+                :
+                processStoreReader.LoadComponent(logEntry.HashBase16);
 
-            fileStore ??= defaultFileStore;
+            if (component == null)
+                throw new Exception("component == null");
 
-            this.adminPassword = adminPassword ?? "notempty";
-            this.fileStore = fileStore;
-            this.webHostBuilderMap = webHostBuilderMap;
-            this.adminWebHostUrlOverride = adminWebHostUrlOverride;
-            this.publicWebHostUrlOverride = publicWebHostUrlOverride;
+            if (component.BlobContent == null)
+                throw new Exception("component.BlobContent == null");
 
-            if (deployAppConfigAndInitElmState != null)
-            {
-                var compositionLogEvent =
-                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
-                    {
-                        DeployAppConfigAndInitElmAppState =
-                            new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
-                            {
-                                HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(deployAppConfigAndInitElmState))
-                            }
-                    };
+            var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
-                var processStoreWriter =
-                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-                    fileStore,
-                    getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
-                    fileStore);
-
-                processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
-
-                processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
-            }
+            return JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString);
         }
 
-        public Pine.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
-                new FileStoreFromSystemIOFile(ProcessStoreDirectory);
-
-        public ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
-            new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
-                BuildProcessStoreFileStoreReaderInFileDirectory());
-
-        public IEnumerable<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
-        {
-            var processStoreReader = BuildProcessStoreReaderInFileDirectory();
-
-            ElmFullstack.WebHost.InterfaceToHost.AppEventStructure eventLogEntry(ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
-            {
-                var component =
-                    logEntry.LiteralStringUtf8 != null
-                    ?
-                    Composition.Component.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
-                    :
-                    processStoreReader.LoadComponent(logEntry.HashBase16);
-
-                if (component == null)
-                    throw new Exception("component == null");
-
-                if (component.BlobContent == null)
-                    throw new Exception("component.BlobContent == null");
-
-                var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
-
-                return JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString);
-            }
-
-            return
-                BuildProcessStoreReaderInFileDirectory()
-                .EnumerateSerializedCompositionLogRecordsReverse()
-                .Select(Encoding.UTF8.GetString)
-                .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
-                .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
-                .WhereNotNull()
-                .Select(updateElmAppStateForEvent => eventLogEntry(updateElmAppStateForEvent));
-        }
+        return
+            BuildProcessStoreReaderInFileDirectory()
+            .EnumerateSerializedCompositionLogRecordsReverse()
+            .Select(Encoding.UTF8.GetString)
+            .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
+            .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
+            .WhereNotNull()
+            .Select(updateElmAppStateForEvent => eventLogEntry(updateElmAppStateForEvent));
     }
 }
