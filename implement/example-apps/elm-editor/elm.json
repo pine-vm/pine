@@ -33,7 +33,7 @@
             "jinjor/elm-diff": "1.0.6",
             "lattyware/elm-fontawesome": "5.0.0",
             "mdgriffith/elm-ui": "1.1.8",
-            "stil4m/elm-syntax": "7.2.7",
+            "stil4m/elm-syntax": "7.2.8",
             "z5h/jaro-winkler": "1.0.2"
         },
         "indirect": {

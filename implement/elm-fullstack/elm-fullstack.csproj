@@ -19,17 +19,17 @@
 
   <ItemGroup>
     <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.116.0" />
-    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.12.5" />
-    <PackageReference Include="LibGit2Sharp" Version="0.27.0-preview-0119" />
+    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.13.3" />
+    <PackageReference Include="LibGit2Sharp" Version="0.27.0-preview-0158" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.1.5" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.1.5" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="3.11.0" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.1.7" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.1.7" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.0.1" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.30.0" />
-    <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
+    <PackageReference Include="System.Collections.Immutable" Version="6.0.0" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 
