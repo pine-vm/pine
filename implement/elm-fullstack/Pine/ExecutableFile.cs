@@ -21,39 +21,49 @@ public class ExecutableFile
     }
 
     static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) ExecuteFileWithArguments(
-        IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> content)> environmentFiles,
+        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesNotExecutable,
         byte[] executableFile,
         string arguments,
         IDictionary<string, string> environmentStrings,
-        IImmutableList<string> workingDirectory = null)
+        IImmutableList<string> workingDirectory = null,
+        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesExecutable = null)
     {
         var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        var executableFileName = "name-used-to-execute-file.exe";
-
-        var executableFilePathRelative = ImmutableList.Create(executableFileName);
-
-        foreach (var environmentFile in environmentFiles)
+        string writeEnvironmentFile(KeyValuePair<IImmutableList<string>, IReadOnlyList<byte>> environmentFile)
         {
-            var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.path));
+            var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.Key));
             var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath);
 
             Directory.CreateDirectory(environmentFileDirectory);
 
-            File.WriteAllBytes(environmentFilePath, (environmentFile.content as byte[]) ?? environmentFile.content.ToArray());
+            File.WriteAllBytes(environmentFilePath, (environmentFile.Value as byte[]) ?? environmentFile.Value.ToArray());
+
+            return environmentFilePath;
         }
 
-        var executableFilePathAbsolute = Path.Combine(containerDirectory, executableFileName);
+        foreach (var environmentFile in environmentFilesNotExecutable)
+            writeEnvironmentFile(environmentFile);
 
-        File.WriteAllBytes(executableFilePathAbsolute, executableFile);
+        var mainExecutableFileName = "name-used-to-execute-file.exe";
+        var mainExecutableFilePathRelative = ImmutableList.Create(mainExecutableFileName);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        var allExecutableFiles =
+            (environmentFilesExecutable ?? ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty)
+            .ToImmutableDictionary().SetItem(mainExecutableFilePathRelative, executableFile);
+
+        foreach (var environmentFile in allExecutableFiles)
         {
-            var unixFileInfo = new Mono.Unix.UnixFileInfo(executableFilePathAbsolute);
+            var fileAbsolutePath = writeEnvironmentFile(environmentFile);
 
-            unixFileInfo.FileAccessPermissions |=
-                FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
-                FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                var unixFileInfo = new UnixFileInfo(fileAbsolutePath);
+
+                unixFileInfo.FileAccessPermissions |=
+                    FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
+                    FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
+            }
         }
 
         var workingDirectoryAbsolute =
@@ -61,12 +71,14 @@ public class ExecutableFile
                 containerDirectory,
                 Filesystem.MakePlatformSpecificPath(workingDirectory ?? ImmutableList<string>.Empty));
 
+        var mainExecutableFilePathAbsolute = Path.Combine(containerDirectory, mainExecutableFileName);
+
         var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 WorkingDirectory = workingDirectoryAbsolute,
-                FileName = executableFilePathAbsolute,
+                FileName = mainExecutableFilePathAbsolute,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -88,7 +100,7 @@ public class ExecutableFile
         var createdFiles =
             Filesystem.GetFilesFromDirectory(
                 directoryPath: containerDirectory,
-                filterByRelativeName: path => !path.SequenceEqual(executableFilePathRelative));
+                filterByRelativeName: path => !path.SequenceEqual(mainExecutableFilePathRelative));
 
         try
         {
@@ -106,6 +118,23 @@ public class ExecutableFile
             StandardOutput = standardOutput,
         }, createdFiles);
     }
+
+    /// <summary>
+    /// Offer method with old interface for backwards-compatibility with assembly consumers.
+    /// </summary>
+    static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) ExecuteFileWithArguments(
+        IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> content)> environmentFiles,
+        byte[] executableFile,
+        string arguments,
+        IDictionary<string, string> environmentStrings,
+        IImmutableList<string> workingDirectory = null) =>
+        ExecuteFileWithArguments(
+            environmentFilesNotExecutable: Composition.ToFlatDictionaryWithPathComparer(environmentFiles),
+            executableFile: executableFile,
+            arguments: arguments,
+            environmentStrings: environmentStrings,
+            workingDirectory: workingDirectory);
+
 
     //  Helper for Linux platform. Thank you Kyle Spearrin!
     //  https://stackoverflow.com/questions/45132081/file-permissions-on-linux-unix-with-net-core/47918132#47918132

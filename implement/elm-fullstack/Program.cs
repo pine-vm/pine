@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-11-18";
+    static public string AppVersionId => "2021-11-19";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -56,6 +56,7 @@ public class Program
         var compileAppCmd = AddCompileCmd(app);
         var enterInteractiveCmd = AddInteractiveCmd(app);
         var describeCmd = AddDescribeCmd(app);
+        var elmTestRsCmd = AddElmTestRsCmd(app);
 
         app.Command("user-secrets", userSecretsCmd =>
         {
@@ -131,6 +132,7 @@ public class Program
                             compileAppCmd,
                             enterInteractiveCmd,
                             describeCmd,
+                            elmTestRsCmd,
                         }
                     },
             }
@@ -541,7 +543,7 @@ public class Program
 
             compileCmd.OnExecute(() =>
             {
-                var compileReport = CompileApp(sourceArgument.Value);
+                var compileReport = CompileAppAndSaveCompositionToZipArchive(sourceArgument.Value).report;
 
                 WriteReportToFileInReportDirectory(
                     reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
@@ -549,8 +551,68 @@ public class Program
             });
         });
 
-    static CompileAppReport CompileApp(string sourcePath)
+    static CommandLineApplication AddElmTestRsCmd(CommandLineApplication app) =>
+        app.Command("elm-test-rs", elmTestCmd =>
+        {
+            elmTestCmd.Description = "Run tests using the interface of elm-test-rs.";
+            elmTestCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var sourceArgument = elmTestCmd.Argument("source", "path to the Elm project containing the tests to run");
+
+            elmTestCmd.OnExecute(() =>
+            {
+                var result = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
+
+                ElmTestRsReportJsonEntry eventByName(string eventName)
+                {
+                    var matchingEvent = result.stdoutLines.FirstOrDefault(l => l.parsedLine.@event == eventName).parsedLine;
+
+                    if (matchingEvent == null)
+                        throw new Exception("Protocol error: Did not find '" + eventName + "' in output:\n" + result.stdout + "\nstderr:\n" + result.stderr);
+
+                    return matchingEvent;
+                }
+
+                var runStartEvent = eventByName("runStart");
+                var runCompleteEvent = eventByName("runComplete");
+
+                Console.WriteLine("Ran " + runStartEvent.testCount + " tests.");
+                Console.WriteLine("Duration: " + string.Format("{0:#,##0}", runCompleteEvent.duration) + " ms");
+                Console.WriteLine("Passed:   " + runCompleteEvent.passed);
+                Console.WriteLine("Failed:   " + runCompleteEvent.failed);
+
+                // TODO: Report more details on timing.
+
+                return runCompleteEvent.failed == 0 ? 0 : 1;
+            });
+        });
+
+    static (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles)
+        CompileAppAndSaveCompositionToZipArchive(string sourcePath)
     {
+        var compileResult = CompileApp(sourcePath);
+
+        var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
+        var compiledFiles = Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
+
+        var compiledCompositionArchive = ZipArchive.ZipArchiveFromEntries(compiledFiles);
+
+        var outputCompositionFileName = compileResult.report.compiledCompositionId + ".zip";
+
+        var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath));
+        File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
+        Console.WriteLine("\nSaved compiled composition " + compileResult.report.compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
+
+        return compileResult;
+    }
+
+    static public (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles)
+        CompileApp(string sourcePath)
+    {
+        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles = null;
+
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var report = new CompileAppReport
@@ -602,10 +664,12 @@ public class Program
             {
                 Console.WriteLine("\n" + ElmFullstack.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err) + "\n");
 
-                return report with { compilationErrors = compilationResult.Err, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds };
+                return (report with { compilationErrors = compilationResult.Err, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds }, compiledAppFiles);
             }
 
-            var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compilationResult.Ok.compiledAppFiles);
+            compiledAppFiles = compilationResult.Ok.compiledAppFiles;
+
+            var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
             var compiledComposition = Composition.FromTreeWithStringPath(compiledTree);
             var compiledCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(compiledComposition));
 
@@ -615,33 +679,22 @@ public class Program
                 "\nCompilation completed in " + (int)compilationStopwatch.Elapsed.TotalSeconds +
                 " seconds, resulting in composition " + compiledCompositionId + ".");
 
-            var compiledFiles =
-                Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
-
-            var compiledCompositionArchive =
-                ZipArchive.ZipArchiveFromEntries(compiledFiles);
-
-            var outputCompositionFileName = compiledCompositionId + ".zip";
-
-            var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath));
-            File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
-            Console.WriteLine("\nSaved compiled composition " + compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
-
-            return report with
+            return (report with
             {
                 compilationIterationsReports = compilationResult.Ok.iterationsReports,
                 compiledCompositionId = compiledCompositionId,
                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
-            };
+            }, compiledAppFiles);
         }
         catch (Exception e)
         {
             report = report with { compilationTimeSpentMilli = (int)compilationStopwatch.Elapsed.TotalMilliseconds };
 
             Console.WriteLine("Compilation failed with runtime exception: " + e.ToString());
-            return report with { compilationException = e.ToString(), totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds };
+
+            return
+                (report with { compilationException = e.ToString(), totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds },
+                compiledAppFiles);
         }
     }
 
@@ -1530,13 +1583,13 @@ public class Program
 
                     Environment.SetEnvironmentVariable(environmentVariableName, newValueForPathEnv, environmentVariableScope);
 
-                        //  https://stackoverflow.com/questions/32650063/get-environment-variable-out-of-new-process-in-c-sharp/32650213#32650213
-                        //  https://devblogs.microsoft.com/oldnewthing/?p=91591
-                        //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
+                    //  https://stackoverflow.com/questions/32650063/get-environment-variable-out-of-new-process-in-c-sharp/32650213#32650213
+                    //  https://devblogs.microsoft.com/oldnewthing/?p=91591
+                    //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
-                        Console.WriteLine(
-                        "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-                        "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+                    Console.WriteLine(
+                    "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+                    "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
                 });
 
                 return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
@@ -1654,4 +1707,16 @@ public class Program
     }
 
     static readonly DateTimeOffset programStartTime = DateTimeOffset.UtcNow;
+
+
+    static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
+        CompileAndElmTestRs(string source)
+    {
+        var compileResult = CompileApp(source);
+
+        if (compileResult.compiledAppFiles == null)
+            throw new Exception("Compilation failed");
+
+        return ElmTestRs.Run(compileResult.compiledAppFiles);
+    }
 }

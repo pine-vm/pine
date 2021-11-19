@@ -195,13 +195,10 @@ public class ProcessFromElm019Code
 
         var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles)>();
 
-        var environmentFiles =
-            elmCodeFiles.Select(file => (path: file.Key, content: file.Value)).ToImmutableList();
-
         do
         {
             var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                environmentFiles,
+                environmentFilesNotExecutable: elmCodeFiles,
                 GetElmExecutableFile,
                 command,
                 new Dictionary<string, string>()
@@ -237,7 +234,7 @@ public class ProcessFromElm019Code
 
             var newFiles =
                 commandResults.resultingFiles
-                .Where(file => !environmentFiles.Any(inputFile => inputFile.Item1.SequenceEqual(file.path)))
+                .Where(file => !elmCodeFiles.ContainsKey(file.path))
                 .ToImmutableList();
 
             var outputFileContent =
