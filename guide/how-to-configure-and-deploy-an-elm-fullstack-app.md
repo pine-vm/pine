@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-10-07/elm-fullstack-bin-8d31a7ada98378d79ccf38482e969bb5995422cb-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-10-07/elm-fullstack-bin-8d31a7ada98378d79ccf38482e969bb5995422cb-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-11-19/elm-fullstack-bin-1a8e96bfce5afb38186e0145f44f253d0515807d-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-11-19/elm-fullstack-bin-1a8e96bfce5afb38186e0145f44f253d0515807d-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -280,13 +280,15 @@ When running this command, you will get an output like this:
 ```text
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Begin to build the process volatile representation.
+      Begin to build the process live representation.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to restore the process state.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Found no composition record, default to initial state.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Completed building the process volatile representation.
+      Completed building the process live representation.
+info: ElmFullstack.WebHost.StartupAdminInterface[0]
+      Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
 
@@ -303,7 +305,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-10-07.
+Welcome to the Elm Fullstack admin interface version 2021-11-19.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
