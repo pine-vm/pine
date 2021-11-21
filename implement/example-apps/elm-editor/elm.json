@@ -31,6 +31,7 @@
             "folkertdev/elm-flate": "2.0.5",
             "folkertdev/elm-sha2": "1.0.0",
             "jinjor/elm-diff": "1.0.6",
+            "jzxhuang/http-extras": "2.1.0",
             "lattyware/elm-fontawesome": "5.0.0",
             "mdgriffith/elm-ui": "1.1.8",
             "stil4m/elm-syntax": "7.2.8",

@@ -47,6 +47,7 @@ import Html
 import Html.Attributes as HA
 import Html.Events
 import Http
+import Http.Detailed
 import Json.Decode
 import Json.Encode
 import Keyboard.Event
@@ -85,7 +86,7 @@ type alias State =
     , time : Time.Posix
     , workspace : WorkspaceStateStructure
     , popup : Maybe PopupState
-    , lastBackendLoadFromGitResult : Maybe ( String, Result Http.Error (Result String BackendLoadFromGitOkWithCache) )
+    , lastBackendLoadFromGitResult : Maybe ( String, Result (Http.Detailed.Error String) (Result String BackendLoadFromGitOkWithCache) )
     }
 
 
@@ -105,7 +106,7 @@ type alias WorkingProjectStateStructure =
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
     , compilation : Maybe CompilationState
-    , elmFormatResult : Maybe (Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure)
+    , elmFormatResult : Maybe (Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
     , languageServiceState : LanguageService.LanguageServiceState
@@ -143,7 +144,7 @@ type CompilationPendingRequestOrigin
 
 type CompilationCompletedState
     = CompilationFailedLowering (List CompileFullstackApp.LocatedCompilationError)
-    | ElmMakeRequestCompleted (Result Http.Error ElmMakeResultStructure)
+    | ElmMakeRequestCompleted (Result (Http.Detailed.Error String) ElmMakeResultStructure)
 
 
 type WorkspacePane
@@ -163,7 +164,7 @@ type Event
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputLoadOrImportTakeProjectStateEvent LoadOrImportProjectStateOrigin
     | UserInputClosePopup
-    | BackendLoadFromGitResultEvent String (Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure))
+    | BackendLoadFromGitResultEvent String (Result (Http.Detailed.Error String) (Result String FrontendBackendInterface.LoadCompositionResponseStructure))
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
@@ -187,8 +188,8 @@ type WorkspaceEventStructure
     | UserInputCompile
     | UserInputCloseEditor
     | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
-    | BackendElmFormatResponseEvent { filePath : List String, result : Result Http.Error FrontendBackendInterface.FormatElmModuleTextResponseStructure }
-    | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result Http.Error ElmMakeResponseStructure)
+    | BackendElmFormatResponseEvent { filePath : List String, result : Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure }
+    | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result (Http.Detailed.Error String) ElmMakeResponseStructure)
     | UserInputSetEnlargedPane (Maybe WorkspacePane)
     | UserInputSetInspectionOnCompile Bool
 
@@ -227,7 +228,7 @@ type alias GetLinkToProjectDialogState =
 type alias LoadFromGitDialogState =
     { urlIntoGitRepository : String
     , request : Maybe { url : String, time : Time.Posix }
-    , loadCompositionResult : Maybe (Result Http.Error (Result String BackendLoadFromGitOkWithCache))
+    , loadCompositionResult : Maybe (Result (Http.Detailed.Error String) (Result String BackendLoadFromGitOkWithCache))
     }
 
 
@@ -1088,7 +1089,7 @@ updateToBeginLoadProjectState { projectStateExpectedCompositionHash, filePathToO
     )
 
 
-processEventBackendLoadFromGitResult : String -> Result Http.Error (Result String FrontendBackendInterface.LoadCompositionResponseStructure) -> State -> ( State, Cmd Event )
+processEventBackendLoadFromGitResult : String -> Result (Http.Detailed.Error String) (Result String FrontendBackendInterface.LoadCompositionResponseStructure) -> State -> ( State, Cmd Event )
 processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeRememberingResult =
     let
         resultWithFileTreeAndCache =
@@ -1234,7 +1235,7 @@ elmFormatCmd state =
                     in
                     requestToApiCmd request
                         jsonDecoder
-                        (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result })
+                        (Result.map Tuple.second >> (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result }))
                         |> Just
 
 
@@ -1255,7 +1256,7 @@ loadFromGitCmd urlIntoGitRepository =
     requestToApiCmd
         (FrontendBackendInterface.LoadCompositionRequest (String.trim urlIntoGitRepository))
         backendResponseJsonDecoder
-        (BackendLoadFromGitResultEvent urlIntoGitRepository)
+        (Result.map Tuple.second >> BackendLoadFromGitResultEvent urlIntoGitRepository)
 
 
 userInputCompileFileOpenedInEditor : WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
@@ -1296,7 +1297,7 @@ requestToBackendCmdFromCompilationInProgress compilationInProgress =
     requestToApiCmd
         (FrontendBackendInterface.ElmMakeRequest compilationInProgress.iterationRequest.requestToBackend)
         jsonDecoder
-        (BackendElmMakeResponseEvent compilationInProgress.origin.requestFromUser)
+        (Result.map Tuple.second >> BackendElmMakeResponseEvent compilationInProgress.origin.requestFromUser)
 
 
 prepareCompileForFileOpenedInEditor :
@@ -1471,7 +1472,7 @@ mapFilesToRequestToBackendStructure mapContent =
 requestToApiCmd :
     FrontendBackendInterface.RequestStructure
     -> (FrontendBackendInterface.ResponseStructure -> Json.Decode.Decoder event)
-    -> (Result Http.Error event -> mappedEvent)
+    -> (Result (Http.Detailed.Error String) ( Http.Metadata, event ) -> mappedEvent)
     -> Cmd mappedEvent
 requestToApiCmd request jsonDecoderSpecialization eventConstructor =
     let
@@ -1484,7 +1485,7 @@ requestToApiCmd request jsonDecoderSpecialization eventConstructor =
         , body =
             Http.jsonBody
                 (request |> CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
-        , expect = Http.expectJson eventConstructor jsonDecoder
+        , expect = Http.Detailed.expectJson eventConstructor jsonDecoder
         }
 
 
@@ -2263,7 +2264,7 @@ viewImportFromZipArchiveDialog dialogState =
     }
 
 
-elementToDisplayLoadFromGitError : Http.Error -> Element.Element msg
+elementToDisplayLoadFromGitError : Http.Detailed.Error String -> Element.Element msg
 elementToDisplayLoadFromGitError =
     describeErrorLoadingContentsFromGit
         >> String.left 500
@@ -2343,7 +2344,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
                 |> Element.column [ Element.spacing (defaultFontSize // 2) ]
 
 
-describeErrorLoadingContentsFromGit : Http.Error -> String
+describeErrorLoadingContentsFromGit : Http.Detailed.Error String -> String
 describeErrorLoadingContentsFromGit loadError =
     "Failed to load contents from git: " ++ describeHttpError loadError
 
@@ -3243,23 +3244,29 @@ fileContentFromString =
     Bytes.Encode.string >> Bytes.Encode.encode
 
 
-describeHttpError : Http.Error -> String
+describeHttpError : Http.Detailed.Error String -> String
 describeHttpError httpError =
     case httpError of
-        Http.BadUrl errorMessage ->
+        Http.Detailed.BadUrl errorMessage ->
             "Bad Url: " ++ errorMessage
 
-        Http.Timeout ->
+        Http.Detailed.Timeout ->
             "Timeout"
 
-        Http.NetworkError ->
+        Http.Detailed.NetworkError ->
             "Network Error"
 
-        Http.BadStatus statusCode ->
-            "BadStatus: " ++ (statusCode |> String.fromInt)
+        Http.Detailed.BadStatus metadata body ->
+            [ "BadStatus: " ++ (metadata.statusCode |> String.fromInt)
+            , "Response body: " ++ body
+            ]
+                |> String.join "\n"
 
-        Http.BadBody errorMessage ->
-            "BadPayload: " ++ errorMessage
+        Http.Detailed.BadBody _ body errorMessage ->
+            [ "BadPayload: " ++ errorMessage
+            , "Response body: " ++ body
+            ]
+                |> String.join "\n"
 
 
 headingAttributes : Int -> List (Element.Attribute event)
