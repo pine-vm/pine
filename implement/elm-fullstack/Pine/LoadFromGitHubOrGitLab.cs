@@ -36,11 +36,14 @@ static public class LoadFromGitHubOrGitLab
         string pathGroupName) =>
         "(?<" + repositoryGroupName + ">" +
         "https://(github\\.com|gitlab\\.com)/" +
-        "[^/]+/[^/]+)/(-/|)(?<" + typeGroupName + ">blob|tree)/" +
-        "(?<" + refGroupName + ">[^/]+)($|/(?<" + pathGroupName + ">.*))";
+        "[^/]+/[^/]+)(/(?<" + typeGroupName + ">blob|tree)/" +
+        "(?<" + refGroupName + ">[^/]+)($|/(?<" + pathGroupName + ">.*))|)";
 
-    public record ParseObjectUrlResult(
+    public record ParsedUrl(
         string repository,
+        ParsedUrlInRepository? inRepository);
+
+    public record ParsedUrlInRepository(
         GitObjectType objectType,
         string @ref,
         string path);
@@ -51,7 +54,7 @@ static public class LoadFromGitHubOrGitLab
         tree = 2,
     }
 
-    static public ParseObjectUrlResult ParsePathFromUrl(string objectUrl)
+    static public ParsedUrl ParseUrl(string objectUrl)
     {
         const string repositoryGroupName = "repo";
         const string typeGroupName = "type";
@@ -71,38 +74,49 @@ static public class LoadFromGitHubOrGitLab
         if (!regexMatch.Success)
             return null;
 
-        return new ParseObjectUrlResult
+        var inRepository =
+            regexMatch.Groups[typeGroupName].Success ?
+            new ParsedUrlInRepository(
+                objectType: Enum.Parse<GitObjectType>(regexMatch.Groups[typeGroupName].Value),
+                @ref: regexMatch.Groups[refGroupName].Value,
+                path: regexMatch.Groups[pathGroupName].Value)
+            :
+            null;
+
+        return new ParsedUrl
         (
             repository: regexMatch.Groups[repositoryGroupName].Value,
-            objectType: Enum.Parse<GitObjectType>(regexMatch.Groups[typeGroupName].Value),
-            @ref: regexMatch.Groups[refGroupName].Value,
-            path: regexMatch.Groups[pathGroupName].Value
+            inRepository: inRepository
         );
     }
 
-    static public string BackToUrl(ParseObjectUrlResult parseObjectUrlResult) =>
-        parseObjectUrlResult.repository + "/" +
-        parseObjectUrlResult.objectType + "/" +
-        parseObjectUrlResult.@ref + "/" +
-        parseObjectUrlResult.path;
+    static public string BackToUrl(ParsedUrl parsedUrl) =>
+        parsedUrl.repository +
+        (parsedUrl.inRepository == null
+        ? "" :
+        "/" + parsedUrl.inRepository.objectType + "/" + parsedUrl.inRepository.@ref + "/" + parsedUrl.inRepository.path);
 
     static public Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl)
     {
-        var parsedUrl = ParsePathFromUrl(sourceUrl);
+        var parsedUrl = ParseUrl(sourceUrl);
 
         if (parsedUrl == null)
             return Result<string, LoadFromUrlSuccess>.err(
-                "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab object URL.");
+                "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab URL.");
 
-        var refLooksLikeCommit = Regex.IsMatch(parsedUrl.@ref, "[A-Fa-f0-9]{40}");
+        string branchName = null;
 
-        var tempWorkingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+        if (parsedUrl.inRepository != null)
+        {
+            var refLooksLikeCommit = Regex.IsMatch(parsedUrl.inRepository.@ref, "[A-Fa-f0-9]{40}");
 
-        var gitRepositoryLocalDirectory = Path.Combine(tempWorkingDirectory, "git-repository");
-
-        var branchName = refLooksLikeCommit ? null : parsedUrl.@ref;
+            branchName = refLooksLikeCommit ? null : parsedUrl.inRepository.@ref;
+        }
 
         var cloneUrl = parsedUrl.repository.TrimEnd('/') + ".git";
+
+        var tempWorkingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+        var gitRepositoryLocalDirectory = Path.Combine(tempWorkingDirectory, "git-repository");
 
         try
         {
@@ -124,32 +138,53 @@ static public class LoadFromGitHubOrGitLab
 
         using (var gitRepository = new Repository(gitRepositoryLocalDirectory))
         {
-            var commit = gitRepository.Lookup(parsedUrl.@ref) as Commit;
+            Commit startCommit = null;
 
-            if (commit == null)
-                return Result<string, LoadFromUrlSuccess>.err(
-                    "I did not find the commit for ref '" + parsedUrl.@ref + "'.");
+            if (parsedUrl.inRepository == null)
+            {
+                startCommit = gitRepository.Head.Commits.FirstOrDefault();
 
-            urlInCommit = BackToUrl(parsedUrl with { @ref = commit.Sha });
+                if (startCommit == null)
+                    return Result<string, LoadFromUrlSuccess>.err(
+                        "Failed to get the first commit from HEAD");
+            }
+            else
+            {
+                startCommit = gitRepository.Lookup(parsedUrl.inRepository.@ref) as Commit;
 
-            rootCommit = GetCommitHashAndContent(commit);
+                if (startCommit == null)
+                    return Result<string, LoadFromUrlSuccess>.err(
+                        "I did not find the commit for ref '" + parsedUrl.inRepository.@ref + "'.");
+            }
 
-            var pathNodesNames = parsedUrl.path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            ParsedUrlInRepository partInRepositoryWithCommit(Commit replacementCommit) =>
+                parsedUrl.inRepository == null ?
+                    new ParsedUrlInRepository(GitObjectType.tree, @ref: replacementCommit.Sha, path: "") :
+                    parsedUrl.inRepository with { @ref = replacementCommit.Sha };
+
+            urlInCommit = BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(startCommit) });
+
+            rootCommit = GetCommitHashAndContent(startCommit);
+
+            var parsedUrlPath =
+                parsedUrl.inRepository == null ? "" : parsedUrl.inRepository.path;
+
+            var pathNodesNames = parsedUrlPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
             var findGitObjectResult =
-                FindGitObjectAtPath(commit.Tree, pathNodesNames);
+                FindGitObjectAtPath(startCommit.Tree, pathNodesNames);
 
             var linkedObject = findGitObjectResult?.Ok;
 
             if (linkedObject == null)
                 return Result<string, LoadFromUrlSuccess>.err(
-                    "I did not find an object at path '" + parsedUrl.path + "' in " + commit.Sha);
+                    "I did not find an object at path '" + parsedUrlPath + "' in " + startCommit.Sha);
 
             IEnumerable<Commit> traceBackTreeParents()
             {
                 var queue = new Queue<Commit>();
 
-                queue.Enqueue(commit);
+                queue.Enqueue(startCommit);
 
                 while (queue.TryDequeue(out var currentCommit))
                 {
@@ -165,11 +200,14 @@ static public class LoadFromGitHubOrGitLab
                 }
             }
 
+            var firstParentCommitWithSameTreeRef =
+                traceBackTreeParents().OrderBy(commit => commit.Author.When).First();
+
             firstParentCommitWithSameTree =
-                GetCommitHashAndContent(traceBackTreeParents().OrderBy(commit => commit.Author.When).First());
+                GetCommitHashAndContent(firstParentCommitWithSameTreeRef);
 
             urlInFirstParentCommitWithSameValueAtThisPath =
-                BackToUrl(parsedUrl with { @ref = firstParentCommitWithSameTree.Value.hash });
+                BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTreeRef) });
 
             static Composition.TreeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
             {

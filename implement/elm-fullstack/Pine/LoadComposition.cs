@@ -15,7 +15,7 @@ static public class LoadComposition
     {
         var asProcess = AsProcessWithStringLog(sourcePath);
 
-        if (LoadFromGitHubOrGitLab.ParsePathFromUrl(sourcePath) != null)
+        if (LoadFromGitHubOrGitLab.ParseUrl(sourcePath) != null)
         {
             return
                 asProcess

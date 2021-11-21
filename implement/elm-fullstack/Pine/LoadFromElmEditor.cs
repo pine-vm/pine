@@ -162,7 +162,7 @@ namespace Pine
             LoadFromUrlSuccess returnValueFromTree(Composition.TreeWithStringPath tree) =>
                 new LoadFromUrlSuccess(parsedUrl: parsedUrl, tree: tree);
 
-            if (LoadFromGitHubOrGitLab.ParsePathFromUrl(parsedUrl.projectStateString) != null)
+            if (LoadFromGitHubOrGitLab.ParseUrl(parsedUrl.projectStateString) != null)
             {
                 var loadFromGitHost =
                     LoadFromGitHubOrGitLab.LoadFromUrl(parsedUrl.projectStateString);

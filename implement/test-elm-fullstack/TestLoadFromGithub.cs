@@ -12,15 +12,15 @@ public class TestLoadFromGithub
     {
         var expectedFilesNamesAndHashes = new[]
         {
-                ("elm-fullstack.json", "64c2c48a13c28a92366e6db67a6204084919d906ff109644f4237b22b87e952e"),
+            ("elm-fullstack.json", "64c2c48a13c28a92366e6db67a6204084919d906ff109644f4237b22b87e952e"),
 
-                ("elm-app/elm.json", "f6d1d18ccceb520cf43f27e5bc30060553c580e44151dbb0a32e3ded0763b209"),
+            ("elm-app/elm.json", "f6d1d18ccceb520cf43f27e5bc30060553c580e44151dbb0a32e3ded0763b209"),
 
-                ("elm-app/src/Backend/Main.elm", "61ff36d96ea01dd1572c2f35c1c085dd23f1225fbebfbd4b3c71a69f3daa204a"),
-                ("elm-app/src/Backend/InterfaceToHost.elm", "7c263cc27f29148a0ca2db1cdef5f7a17a5c0357839dec02f04c45cf8a491116"),
+            ("elm-app/src/Backend/Main.elm", "61ff36d96ea01dd1572c2f35c1c085dd23f1225fbebfbd4b3c71a69f3daa204a"),
+            ("elm-app/src/Backend/InterfaceToHost.elm", "7c263cc27f29148a0ca2db1cdef5f7a17a5c0357839dec02f04c45cf8a491116"),
 
-                ("elm-app/src/FrontendWeb/Main.elm", "6e82dcde8a9dc45ef65b27724903770d1bed74da458571811840687b4c790705"),
-            };
+            ("elm-app/src/FrontendWeb/Main.elm", "6e82dcde8a9dc45ef65b27724903770d1bed74da458571811840687b4c790705"),
+        };
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
@@ -54,8 +54,8 @@ public class TestLoadFromGithub
     {
         var expectedFilesNamesAndHashes = new[]
         {
-                (fileName: "README.md", fileHash: "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238"),
-            };
+            (fileName: "README.md", fileHash: "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238"),
+        };
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
@@ -135,5 +135,29 @@ public class TestLoadFromGithub
         Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.Ok.firstParentCommitWithSameTree.content.message);
         Assert.AreEqual("John", loadFromGithubResult.Ok.firstParentCommitWithSameTree.content.author.name);
         Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.Ok.firstParentCommitWithSameTree.content.author.email);
+    }
+
+
+    [TestMethod]
+    public void LoadFromGithub_URL_points_only_to_repository()
+    {
+        var loadFromGithubResult =
+            Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
+                "https://github.com/elm-fullstack/elm-fullstack");
+
+        Assert.IsNull(loadFromGithubResult.Err, "No error: " + loadFromGithubResult.Err);
+
+        var loadedFilesPathsAndContents =
+            loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
+            .Select(blobPathAndContent => (
+                filePath: string.Join("/", blobPathAndContent.path),
+                fileContent: blobPathAndContent.blobContent))
+            .ToImmutableList();
+
+        var readmeFile =
+            loadedFilesPathsAndContents
+            .FirstOrDefault(c => c.filePath.Equals("readme.md", System.StringComparison.InvariantCultureIgnoreCase));
+
+        Assert.IsNotNull(readmeFile.fileContent, "Loaded files contain readme.md");
     }
 }
