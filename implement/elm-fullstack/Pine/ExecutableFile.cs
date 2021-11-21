@@ -26,8 +26,14 @@ public class ExecutableFile
         string arguments,
         IDictionary<string, string> environmentStrings,
         IImmutableList<string> workingDirectory = null,
-        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesExecutable = null)
+        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesExecutable = null,
+        IReadOnlyDictionary<string, IReadOnlyList<byte>> environmentPathExecutableFiles = null)
     {
+        var environmentStringsDict =
+            environmentStrings?.ToImmutableDictionary() ?? ImmutableDictionary<string, string>.Empty;
+
+        var environmentPathContainerDirectoryName = "environment-path-cont";
+
         var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
         string writeEnvironmentFile(KeyValuePair<IImmutableList<string>, IReadOnlyList<byte>> environmentFile)
@@ -48,9 +54,17 @@ public class ExecutableFile
         var mainExecutableFileName = "name-used-to-execute-file.exe";
         var mainExecutableFilePathRelative = ImmutableList.Create(mainExecutableFileName);
 
+        var executableFileNameAppendix =
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "";
+
         var allExecutableFiles =
             (environmentFilesExecutable ?? ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty)
-            .ToImmutableDictionary().SetItem(mainExecutableFilePathRelative, executableFile);
+            .ToImmutableDictionary()
+            .SetItems(
+                (environmentPathExecutableFiles ?? ImmutableDictionary<string, IReadOnlyList<byte>>.Empty)
+                .Select(execFile => new KeyValuePair<IImmutableList<string>, IReadOnlyList<byte>>(
+                    ImmutableList.Create(environmentPathContainerDirectoryName, execFile.Key + executableFileNameAppendix), execFile.Value)))
+            .SetItem(mainExecutableFilePathRelative, executableFile);
 
         foreach (var environmentFile in allExecutableFiles)
         {
@@ -73,6 +87,20 @@ public class ExecutableFile
 
         var mainExecutableFilePathAbsolute = Path.Combine(containerDirectory, mainExecutableFileName);
 
+        var environmentPathExecutableFilesPathAbsolute = Path.Combine(containerDirectory, environmentPathContainerDirectoryName);
+
+        var pathEnvironmentVarSeparator =
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ";" : ":";
+
+        var environmentPathEntryBefore =
+            environmentStringsDict?.FirstOrDefault(c => c.Key.Equals("PATH", StringComparison.InvariantCultureIgnoreCase));
+
+        var environmentPath = environmentPathExecutableFilesPathAbsolute + pathEnvironmentVarSeparator + environmentPathEntryBefore?.Value;
+
+        var environmentStringsWithExecutableFiles =
+            environmentStringsDict
+            .SetItem(environmentPathEntryBefore?.Key ?? "PATH", environmentPath);
+
         var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -86,7 +114,7 @@ public class ExecutableFile
             },
         };
 
-        foreach (var envString in environmentStrings.EmptyIfNull())
+        foreach (var envString in environmentStringsWithExecutableFiles.EmptyIfNull())
             process.StartInfo.Environment[envString.Key] = envString.Value;
 
         process.Start();

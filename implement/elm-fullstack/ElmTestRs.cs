@@ -68,44 +68,14 @@ public class ElmTestRs
 
         var elmExecutableFileName = "elm.exe";
 
-        string elmTestEnvironmentPath = null;
+        /*
+         * We found no way yet to point elm-test-rs to the deno executable file.
+         * As a temporary solution, use the path environment variable to help elm-test-rs find it.
+         * */
 
-        {
-            /*
-             * We found no way yet to point elm-test-rs to the deno executable file.
-             * As a temporary solution, adapt the file path and environment variables to help elm-test-rs find it.
-             * */
-
-            var (denoExecutableFileName, pathEnvironmentVarSeparator) =
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ("deno.exe", ";") : ("deno", ":");
-
-            var denoExecutableFileContent = DenoExecutableFileForCurrentOs();
-
-            var denoExecutableFileDirectory =
-                Path.Combine(Filesystem.CacheDirectory,
-                "bin-by-sha256",
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(denoExecutableFileContent)));
-
-            var denoExecutableFilePath = Path.Combine(denoExecutableFileDirectory, denoExecutableFileName);
-
-            Directory.CreateDirectory(denoExecutableFileDirectory);
-
-            File.WriteAllBytes(denoExecutableFilePath, denoExecutableFileContent);
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                var unixFileInfo = new UnixFileInfo(denoExecutableFilePath);
-
-                unixFileInfo.FileAccessPermissions |=
-                    FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
-                    FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
-            }
-
-            var environmentPath =
-                System.Environment.GetEnvironmentVariable("PATH") ?? System.Environment.GetEnvironmentVariable("path");
-
-            elmTestEnvironmentPath = environmentPath + pathEnvironmentVarSeparator + denoExecutableFileDirectory;
-        }
+        var environmentPathExecutableFiles =
+            ImmutableDictionary<string, IReadOnlyList<byte>>.Empty
+            .SetItem("deno", DenoExecutableFileForCurrentOs());
 
         var environmentFilesExecutable =
             ImmutableDictionary.Create<IImmutableList<string>, IReadOnlyList<byte>>()
@@ -116,9 +86,10 @@ public class ElmTestRs
             environmentFilesNotExecutable: elmProjectFiles,
             executableFile: elmTestExecutableFile,
             arguments: "--compiler=./" + elmExecutableFileName + "  --deno  --report=json",
-            environmentStrings: ImmutableDictionary<string, string>.Empty.SetItem("PATH", elmTestEnvironmentPath),
+            environmentStrings: null,
             workingDirectory: null,
-            environmentFilesExecutable: environmentFilesExecutable); ;
+            environmentFilesExecutable: environmentFilesExecutable,
+            environmentPathExecutableFiles: environmentPathExecutableFiles);
 
         var stdoutLines =
             executeElmTestResult.processOutput.StandardOutput
