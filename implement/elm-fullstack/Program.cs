@@ -569,16 +569,6 @@ public class Program
             {
                 var result = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
 
-                ElmTestRsReportJsonEntry eventByName(string eventName)
-                {
-                    var matchingEvent = result.stdoutLines.FirstOrDefault(l => l.parsedLine.@event == eventName).parsedLine;
-
-                    if (matchingEvent == null)
-                        throw new Exception("Protocol error: Did not find '" + eventName + "' in output:\n" + result.stdout + "\nstderr:\n" + result.stderr);
-
-                    return matchingEvent;
-                }
-
                 void saveTextToFileAndReportToConsole(string filePath, string text)
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(filePath));
@@ -595,17 +585,41 @@ public class Program
                     saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", result.stderr ?? "");
                 }
 
-                var runStartEvent = eventByName("runStart");
-                var runCompleteEvent = eventByName("runComplete");
+                var eventsOutputs =
+                    result.stdoutLines
+                    .Select(l => ElmTestRs.OutputFromEvent(l.parsedLine))
+                    .ToImmutableList();
 
-                Console.WriteLine("Ran " + runStartEvent.testCount + " tests.");
-                Console.WriteLine("Duration: " + string.Format("{0:#,##0}", runCompleteEvent.duration) + " ms");
-                Console.WriteLine("Passed:   " + runCompleteEvent.passed);
-                Console.WriteLine("Failed:   " + runCompleteEvent.failed);
+                foreach (var eventOutout in eventsOutputs)
+                {
+                    if (eventOutout.text.Any())
+                        Console.WriteLine("");
+
+                    foreach (var coloredText in eventOutout.text)
+                    {
+                        if (coloredText.color.Red != null)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                        }
+                        else if (coloredText.color.Green != null)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Green;
+                        }
+                        else
+                        {
+                            Console.ResetColor();
+                        }
+
+                        Console.Write(coloredText.text);
+                    }
+                }
+
+                Console.WriteLine("");
 
                 // TODO: Report more details on timing.
 
-                return runCompleteEvent.failed == 0 ? 0 : 1;
+                return
+                    eventsOutputs.All(e => e.overallSuccess != false) && eventsOutputs.Any(e => e.overallSuccess == true) ? 0 : 1;
             });
         });
 

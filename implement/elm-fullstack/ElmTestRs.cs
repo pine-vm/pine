@@ -1,8 +1,6 @@
-﻿using Mono.Unix;
-using Pine;
+﻿using Pine;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -15,8 +13,23 @@ public record ElmTestRsReportJsonEntry(
     int? failed,
     string status,
     string[] labels,
+    ElmTestRsReportJsonEntryFailure[] failures,
     double? duration,
-    string initialSeed);
+    string initialSeed,
+    int? fuzzRuns);
+
+public record ElmTestRsReportJsonEntryFailure(
+    string message,
+    ElmTestRsReportJsonEntryFailureReason reason);
+
+public record ElmTestRsReportJsonEntryFailureReason(
+    string type,
+    ElmTestRsReportJsonEntryFailureReasonData data);
+
+public record ElmTestRsReportJsonEntryFailureReasonData(
+    string expected,
+    string actual,
+    string comparison);
 
 public class ElmTestRs
 {
@@ -91,8 +104,10 @@ public class ElmTestRs
             environmentFilesExecutable: environmentFilesExecutable,
             environmentPathExecutableFiles: environmentPathExecutableFiles);
 
+        var stdout = executeElmTestResult.processOutput.StandardOutput;
+
         var stdoutLines =
-            executeElmTestResult.processOutput.StandardOutput
+            stdout
             .Split(new char[] { (char)10, (char)13 })
             .Where(l => 0 < l?.Length)
             .ToImmutableList();
@@ -101,6 +116,83 @@ public class ElmTestRs
             stdoutLines.Select(line => (line, Newtonsoft.Json.JsonConvert.DeserializeObject<ElmTestRsReportJsonEntry>(line)))
             .ToImmutableList();
 
-        return (executeElmTestResult.processOutput.StandardOutput, executeElmTestResult.processOutput.StandardError, parsedLines);
+        return (stdout, executeElmTestResult.processOutput.StandardError, parsedLines);
     }
+
+    static public (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
+        ElmTestRsReportJsonEntry @event)
+    {
+        if (@event.@event == "runStart")
+        {
+            return
+                (ImmutableList.Create(
+                    (string.Join("\n",
+                    "Running " + @event.testCount + " tests. To reproduce these results later,"
+                    , "run elm-test-rs with --seed " + @event.initialSeed + " and --fuzz " + @event.fuzzRuns),
+                    ElmTestRsConsoleOutputColor.DefaultColor)
+                    ),
+                overallSuccess: null);
+        }
+
+        if (@event.@event == "runComplete")
+        {
+            var overallSuccess = @event.failed == 0;
+
+            var overallSuccessText =
+                overallSuccess ?
+                ("\nTEST RUN PASSED\n\n", ElmTestRsConsoleOutputColor.GreenColor)
+                :
+                ("\nTEST RUN FAILED\n\n", ElmTestRsConsoleOutputColor.RedColor);
+
+            return
+                (ImmutableList.Create(
+                    overallSuccessText,
+                    (string.Join("\n",
+                    "Duration: " + string.Format("{0:#,##0}", @event.duration) + " ms",
+                    "Passed:   " + @event.passed,
+                    "Failed:   " + @event.failed),
+                    ElmTestRsConsoleOutputColor.DefaultColor)),
+                overallSuccess: overallSuccess);
+        }
+
+        if (@event.@event == "testsCompleted" && @event.status != "pass")
+        {
+            var textsFromLabels =
+                @event.labels.EmptyIfNull().SkipLast(1).Select(label => ("\n↓ " + label, ElmTestRsConsoleOutputColor.DefaultColor))
+                .Concat(@event.labels.EmptyIfNull().TakeLast(1).Select(label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
+                .ToImmutableList();
+
+            var textsFromFailures =
+                @event.failures.EmptyIfNull()
+                .Select(failure => failure.reason?.data)
+                .WhereNotNull()
+                .SelectMany(failureReasonData =>
+                new[]
+                {
+                    "",
+                    failureReasonData.actual,
+                    "╷",
+                    "│ " + failureReasonData.comparison,
+                    "╵",
+                    failureReasonData.expected,
+                    ""
+                })
+                .ToImmutableList();
+
+            return
+                (textsFromLabels.Concat(
+                    textsFromFailures
+                    .Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))).ToImmutableList(),
+                    null);
+        }
+
+        return (ImmutableList<(string text, ElmTestRsConsoleOutputColor color)>.Empty, null);
+    }
+}
+
+public record ElmTestRsConsoleOutputColor(object Default = null, object Red = null, object Green = null)
+{
+    static public ElmTestRsConsoleOutputColor DefaultColor => new ElmTestRsConsoleOutputColor(Default: new object());
+    static public ElmTestRsConsoleOutputColor RedColor => new ElmTestRsConsoleOutputColor(Red: new object());
+    static public ElmTestRsConsoleOutputColor GreenColor => new ElmTestRsConsoleOutputColor(Green: new object());
 }
