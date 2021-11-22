@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-11-21";
+    static public string AppVersionId => "2021-11-22";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -559,6 +559,12 @@ public class Program
 
             var sourceArgument = elmTestCmd.Argument("source", "path to the Elm project containing the tests to run");
 
+            var elmTestRsOutputOption =
+                elmTestCmd.Option(
+                    "--elm-test-rs-output",
+                    "Where to save the output (via stdout and stderr) from the elm-test-rs tool.",
+                    CommandOptionType.SingleValue);
+
             elmTestCmd.OnExecute(() =>
             {
                 var result = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
@@ -571,6 +577,22 @@ public class Program
                         throw new Exception("Protocol error: Did not find '" + eventName + "' in output:\n" + result.stdout + "\nstderr:\n" + result.stderr);
 
                     return matchingEvent;
+                }
+
+                void saveTextToFileAndReportToConsole(string filePath, string text)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
+                    File.WriteAllText(filePath, text ?? "", System.Text.Encoding.UTF8);
+                    Console.WriteLine("Saved " + text?.Length + " characters to " + filePath);
+                }
+
+                var elmTestRsOutput = elmTestRsOutputOption.Value();
+
+                if (elmTestRsOutput != null)
+                {
+                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", result.stdout ?? "");
+                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", result.stderr ?? "");
                 }
 
                 var runStartEvent = eventByName("runStart");
