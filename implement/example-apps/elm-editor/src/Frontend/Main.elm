@@ -2608,7 +2608,12 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
                 ElmMakeRequestCompleted elmMakeResult ->
                     case elmMakeResult of
                         Err elmMakeError ->
-                            ("Error: " ++ describeHttpError elmMakeError) |> Element.text
+                            elmMakeError
+                                |> describeHttpError
+                                |> String.lines
+                                |> (++) [ "Error:" ]
+                                |> List.map (Element.text >> List.singleton >> Element.paragraph [])
+                                |> Element.textColumn [ Element.spacing 4, Element.padding defaultFontSize ]
 
                         Ok elmMakeOk ->
                             case elmMakeOk.compiledHtmlDocument of
