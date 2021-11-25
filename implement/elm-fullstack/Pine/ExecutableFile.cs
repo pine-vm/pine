@@ -111,6 +111,7 @@ public class ExecutableFile
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                CreateNoWindow = true,
             },
         };
 
