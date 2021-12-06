@@ -15,6 +15,10 @@ COPY --from=build-env /app/elm-fullstack/out /elm-fullstack/dotnet/
 # Build the process with a deployment for the default app.
 FROM binaries AS build-default-config
 
+# Support partial clone of git repositories: Install git as fallback implementation for cloning.
+RUN apt update
+RUN apt install -y git
+
 COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
 RUN dotnet "/elm-fullstack/dotnet/elm-fs.dll"  deploy  /docker-image-default-app/  /elm-fullstack/process-store  --init-app-state

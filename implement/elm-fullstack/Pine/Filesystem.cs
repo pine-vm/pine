@@ -50,4 +50,33 @@ public class Filesystem
 
     static public string MakePlatformSpecificPath(IImmutableList<string> path) =>
         string.Join(Path.DirectorySeparatorChar.ToString(), path);
+
+    /// <summary>
+    /// https://github.com/libgit2/libgit2sharp/issues/769#issuecomment-198833179
+    /// </summary>
+    static public void DeleteLocalDirectoryRecursive(string directoryPath)
+    {
+        if (!Directory.Exists(directoryPath))
+        {
+            return;
+        }
+
+        var files = Directory.GetFiles(directoryPath);
+        var directories = Directory.GetDirectories(directoryPath);
+
+        foreach (var file in files)
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+            File.Delete(file);
+        }
+
+        foreach (var dir in directories)
+        {
+            DeleteLocalDirectoryRecursive(dir);
+        }
+
+        File.SetAttributes(directoryPath, FileAttributes.Normal);
+
+        Directory.Delete(directoryPath, false);
+    }
 }

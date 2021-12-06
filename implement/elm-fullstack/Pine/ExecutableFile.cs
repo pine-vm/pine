@@ -135,7 +135,7 @@ public class ExecutableFile
         {
             Directory.Delete(path: containerDirectory, recursive: true);
         }
-        // Avoid crash in scenario like https://forum.botengine.org/t/farm-manager-tribal-wars-2-farmbot/3038/170
+        // Avoid crash in scenario like https://forum.botlab.org/t/farm-manager-tribal-wars-2-farmbot/3038/170
         catch (UnauthorizedAccessException)
         {
         }

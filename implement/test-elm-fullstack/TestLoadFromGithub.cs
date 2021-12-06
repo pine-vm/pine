@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Net.Http;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace test_elm_fullstack;
@@ -159,5 +161,92 @@ public class TestLoadFromGithub
             .FirstOrDefault(c => c.filePath.Equals("readme.md", System.StringComparison.InvariantCultureIgnoreCase));
 
         Assert.IsNotNull(readmeFile.fileContent, "Loaded files contain readme.md");
+    }
+
+    [TestMethod]
+    public void LoadFromGitHub_Partial_Cache()
+    {
+        var tempWorkingDirectory = Pine.Filesystem.CreateRandomDirectoryInTempDirectory();
+
+        try
+        {
+            var serverUrl = "http://localhost:16789";
+
+            var server = Pine.GitPartialForCommitServer.Run(
+                urls: ImmutableList.Create(serverUrl),
+                gitCloneUrlPrefixes: ImmutableList.Create("https://github.com/elm-fullstack/"),
+                fileCacheDirectory: System.IO.Path.Combine(tempWorkingDirectory, "server-cache"));
+
+            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> consultServer(
+                Pine.LoadFromGitHubOrGitLab.GetRepositoryFilesPartialForCommitRequest request)
+            {
+                using var httpClient = new HttpClient();
+
+                var httpRequest = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    requestUri: serverUrl.TrimEnd('/') + Pine.GitPartialForCommitServer.ZipArchivePathFromCommit(request.commit))
+                {
+                    Content = new StringContent(string.Join("\n", request.cloneUrlCandidates))
+                };
+
+                var response = httpClient.SendAsync(httpRequest).Result;
+
+                var responseContentBytes = response.Content.ReadAsByteArrayAsync().Result;
+
+                return
+                    Pine.Composition.ToFlatDictionaryWithPathComparer(
+                        Pine.Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                            Pine.ZipArchive.EntriesFromZipArchive(responseContentBytes))
+                        .EnumerateBlobsTransitive());
+            }
+
+            {
+                var loadFromGitHubResult =
+                    Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
+                        sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
+                        getRepositoryFilesPartialForCommit:
+                        consultServer);
+
+                Assert.IsNull(loadFromGitHubResult.Err, "No error: " + loadFromGitHubResult.Err);
+
+                var blobContent = loadFromGitHubResult.Ok.tree.BlobContent;
+
+                Assert.IsNotNull(blobContent, "Found blobContent.");
+
+                Assert.AreEqual("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
+                    Pine.CommonConversion.StringBase16FromByteArray(
+                        Pine.CommonConversion.HashSHA256(blobContent.ToArray()))
+                    .ToLowerInvariant(),
+                    "Loaded blob content hash equals expected hash.");
+            }
+
+            {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var loadFromGitHubResult =
+                    Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
+                        sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
+                        getRepositoryFilesPartialForCommit:
+                        consultServer);
+
+                Assert.IsNull(loadFromGitHubResult.Err, "No error: " + loadFromGitHubResult.Err);
+
+                var blobContent = loadFromGitHubResult.Ok.tree.BlobContent;
+
+                Assert.IsNotNull(blobContent, "Found blobContent.");
+
+                Assert.AreEqual("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
+                    Pine.CommonConversion.StringBase16FromByteArray(
+                        Pine.CommonConversion.HashSHA256(blobContent.ToArray()))
+                    .ToLowerInvariant(),
+                    "Loaded blob content hash equals expected hash.");
+
+                Assert.IsTrue(stopwatch.Elapsed.TotalSeconds < 3, "Reading another blob from an already cached commit should complete fast.");
+            }
+        }
+        finally
+        {
+            Pine.Filesystem.DeleteLocalDirectoryRecursive(tempWorkingDirectory);
+        }
     }
 }

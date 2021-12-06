@@ -14,13 +14,16 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-11-25";
+    static public string AppVersionId => "2021-12-06";
 
     static int AdminInterfaceDefaultPort => 4000;
 
     static int Main(string[] args)
     {
         ElmFullstack.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
+
+        LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
+            new CacheByFileName { CacheDirectory = Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip") };
 
         var app = new CommandLineApplication
         {
@@ -57,6 +60,8 @@ public class Program
         var enterInteractiveCmd = AddInteractiveCmd(app);
         var describeCmd = AddDescribeCmd(app);
         var elmTestRsCmd = AddElmTestRsCmd(app);
+
+        var runCacheServerCmd = AddRunCacheServerCmd(app);
 
         app.Command("user-secrets", userSecretsCmd =>
         {
@@ -861,6 +866,44 @@ public class Program
                     "Composition " + compositionId + " is " + compositionDescription);
 
                 return 0;
+            });
+        });
+
+    static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
+        app.Command("run-cache-server", runCacheServerCmd =>
+        {
+            runCacheServerCmd.Description = "Run an HTTP server to cache popular parts of git repositories.";
+            runCacheServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            runCacheServerCmd.ShowInHelpText = false;
+
+            var gitCloneUrlPrefixOption =
+                runCacheServerCmd
+                .Option("--git-clone-prefix", "Prefix of URL from which git cloning is enabled.", CommandOptionType.MultipleValue);
+
+            var urlOption =
+                runCacheServerCmd
+                .Option("--url", "URL for the HTTP server", CommandOptionType.MultipleValue);
+
+            var fileCacheDirectoryOption =
+                runCacheServerCmd
+                .Option("--file-cache-directory", "Directory in the file system to store cache entries.", CommandOptionType.SingleValue);
+
+            runCacheServerCmd.OnExecute(() =>
+            {
+                var urls = urlOption.Values;
+                var gitCloneUrlPrefixes = gitCloneUrlPrefixOption.Values;
+                var fileCacheDirectory = fileCacheDirectoryOption.Value();
+
+                Console.WriteLine("Starting HTTP server with git cache...");
+
+                var serverTask = GitPartialForCommitServer.Run(
+                    urls: urls,
+                    gitCloneUrlPrefixes: gitCloneUrlPrefixes,
+                    fileCacheDirectory: fileCacheDirectory);
+
+                Console.WriteLine("Completed starting HTTP server with git cache at '" + string.Join(", ", urls) + "'.");
+
+                serverTask.Wait();
             });
         });
 
