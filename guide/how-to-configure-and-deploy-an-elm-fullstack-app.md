@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-11-19/elm-fullstack-bin-1a8e96bfce5afb38186e0145f44f253d0515807d-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-11-19/elm-fullstack-bin-1a8e96bfce5afb38186e0145f44f253d0515807d-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-11-25/elm-fullstack-bin-55b18b330af932bc9a13d02a188d1c20f50afbd1-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2021-11-25/elm-fullstack-bin-55b18b330af932bc9a13d02a188d1c20f50afbd1-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -47,7 +47,8 @@ I got no path to a persistent store for the process. This process will not be pe
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
 This path points to commit cd427019349f3d9d2f5b4c594b34d4e6c3e193cf
-Loaded source composition 5fafa8dd16fc872981a809a25553439f11f49d4b7dae1d129a9d94cd30fbb9d4 from 'https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app'.
+Participants from commit cd427019349f3d9d2f5b4c594b34d4e6c3e193cf:
+Loaded source composition fe9b6872328a845ef50c7953bf969e9df773b8fd4b6abe24ba032f72501d021f from 'https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process live representation.
@@ -305,7 +306,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-11-19.
+Welcome to the Elm Fullstack admin interface version 2021-12-07.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
