@@ -166,12 +166,12 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                         , bodyAsBase64 =
                             Just
                                 (if enableInspector then
-                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.gzip.base64
 
                                  else
-                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.base64
+                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.gzip.base64
                                 )
-                        , headersToAdd = []
+                        , headersToAdd = [ { name = "Content-Encoding", values = [ "gzip" ] } ]
                         }
                     }
               ]

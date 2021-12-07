@@ -7,7 +7,6 @@ module CompileFullstackApp exposing
     , ElmMakeOutputType(..)
     , ElmMakeRequestStructure
     , ElmTypeAnnotation(..)
-    , InterfaceBlobEncoding(..)
     , InterfaceBlobSingleEncoding(..)
     , InterfaceSourceFilesFunctionVariant(..)
     , LeafElmTypeStruct(..)
@@ -52,6 +51,7 @@ import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
 import FileTree
+import Flate
 import JaroWinkler
 import Json.Encode
 import List
@@ -158,9 +158,9 @@ type alias ElmMakeRequestStructure =
     }
 
 
-type CompilationInterfaceRecordTreeNode a
-    = RecordTreeLeaf a
-    | RecordTreeBranch (List ( String, CompilationInterfaceRecordTreeNode a ))
+type CompilationInterfaceRecordTreeNode leaf
+    = RecordTreeLeaf leaf
+    | RecordTreeBranch (List ( String, CompilationInterfaceRecordTreeNode leaf ))
 
 
 type alias InterfaceElmMakeFunctionConfig =
@@ -168,15 +168,20 @@ type alias InterfaceElmMakeFunctionConfig =
 
 
 type alias InterfaceElmMakeFunctionLeafConfig =
+    { elmMakeConfig : InterfaceElmMakeConfig
+    , emitBlob : RecordTreeEmit
+    }
+
+
+type alias InterfaceElmMakeConfig =
     { outputType : ElmMakeOutputType
     , enableDebug : Bool
-    , encoding : InterfaceBlobSingleEncoding
     }
 
 
 type alias ElmMakeRecordTreeLeafEmit =
     { blob : Bytes.Bytes
-    , encoding : InterfaceBlobSingleEncoding
+    , emitBlob : RecordTreeEmit
     , valueFunctionName : String
     }
 
@@ -186,26 +191,51 @@ type ElmMakeOutputType
     | ElmMakeOutputTypeJs
 
 
-type InterfaceBlobEncoding
-    = SingleEncoding InterfaceBlobSingleEncoding
-    | RecordEncoding (List ( String, InterfaceBlobSingleEncoding ))
-
-
 type InterfaceBlobSingleEncoding
     = Base64Encoding
     | Utf8Encoding
     | BytesEncoding
+    | GZipEncoding
 
 
 type alias InterfaceSourceFilesFunctionConfig =
     { variant : InterfaceSourceFilesFunctionVariant
-    , encoding : InterfaceBlobEncoding
+    , encoding : CompilationInterfaceRecordTreeNode InterfaceBlobSingleEncoding
     }
 
 
 type InterfaceSourceFilesFunctionVariant
     = SourceFile
     | SourceFileTree
+
+
+{-| Generic enough to be used in source files trees: We can use the `valueModule` function for each blob contained in the tree.
+The signature of the `valueModule` function allows for encoding (e.g. `utf8`) to fail
+-}
+type alias RecordTreeEmit =
+    { interfaceModule : RecordTreeEmitInterfaceModule
+    , valueModule : RecordTreeEmitValueModule
+    }
+
+
+type alias RecordTreeEmitElmMake =
+    { interfaceModule : RecordTreeEmitInterfaceModule
+    , valueModule : { expression : String }
+    }
+
+
+type alias RecordTreeEmitInterfaceModule =
+    CompilationInterfaceRecordTreeNode ({ sourceExpression : String } -> String)
+
+
+type alias RecordTreeEmitValueModule =
+    Bytes.Bytes -> Result String (Dict.Dict String { expression : String })
+
+
+type alias RecordTreeEmitBlobIntermediateResult =
+    { interfaceModule : { sourceExpression : String } -> String
+    , valueModule : { fieldName : String, buildExpression : Bytes.Bytes -> Result String String }
+    }
 
 
 {-| This function returns an Err if the needed dependencies for ElmMake are not yet in the arguments.
@@ -3273,117 +3303,124 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule original
                     Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
                 Ok ( matchingPath, fileTreeContent ) ->
-                    let
-                        expressionFromFileContent =
-                            baseFileRecordExpressionFromEncoding config.encoding
-
-                        expressionFromFileTreeNode fileTreeNode =
-                            case fileTreeNode of
-                                FileTree.BlobNode blob ->
-                                    expressionFromFileContent blob
-                                        |> Result.map (\expression -> "BlobNode (" ++ expression.expression ++ ")")
-
-                                FileTree.TreeNode tree ->
-                                    let
-                                        buildTreeEntryExpression ( entryName, entryNode ) =
-                                            expressionFromFileTreeNode entryNode
-                                                |> Result.map
-                                                    (\entryNodeExpr ->
-                                                        [ "( \"" ++ entryName ++ "\""
-                                                        , ", " ++ entryNodeExpr
-                                                        , ")"
-                                                        ]
-                                                            |> String.join "\n"
-                                                    )
-                                    in
-                                    tree
-                                        |> List.map buildTreeEntryExpression
-                                        |> Result.Extra.combine
-                                        |> Result.map
-                                            (\entriesExpressions ->
-                                                "TreeNode\n"
-                                                    ++ indentElmCodeLines 1
-                                                        ([ "["
-                                                            ++ String.join "\n," entriesExpressions
-                                                            ++ "]"
-                                                         ]
-                                                            |> String.join "\n"
-                                                        )
-                                            )
-
-                        expressionResult =
-                            case config.variant of
-                                SourceFile ->
-                                    case fileTreeContent of
-                                        FileTree.TreeNode _ ->
-                                            Err ("This pattern matches path '" ++ String.join "/" matchingPath ++ "' but the node here is a tree, not a file")
-
-                                        FileTree.BlobNode fileContent ->
-                                            expressionFromFileContent fileContent
-                                                |> Result.map
-                                                    (\expression ->
-                                                        ( [ "file_as"
-                                                          , expression.encodingName
-                                                          , SHA256.toHex (SHA256.fromBytes fileContent)
-                                                          ]
-                                                        , expression.expression
-                                                        )
-                                                    )
-
-                                SourceFileTree ->
-                                    expressionFromFileTreeNode fileTreeContent
-                                        |> Result.map
-                                            (Tuple.pair
-                                                [ "file_tree_node"
-                                                , filePathRepresentation
-                                                ]
-                                            )
-                    in
-                    expressionResult
-                        |> Result.map
-                            (\( fileNameComponents, expression ) ->
+                    prepareRecordTreeEmitForTreeOrBlobUnderPath [] config.encoding
+                        |> Result.andThen
+                            (\prepareOk ->
                                 let
-                                    valueFunctionName =
-                                        String.join "_" fileNameComponents
+                                    expressionFromFileContent : Bytes.Bytes -> Result String String
+                                    expressionFromFileContent =
+                                        valueModuleRecordExpressionFromEncodings prepareOk.valueModule
 
-                                    valueFunctionText =
-                                        valueFunctionName
-                                            ++ " =\n"
-                                            ++ indentElmCodeLines 1 expression
+                                    expressionFromFileTreeNode fileTreeNode =
+                                        case fileTreeNode of
+                                            FileTree.BlobNode blob ->
+                                                expressionFromFileContent blob
+                                                    |> Result.map (\expression -> "BlobNode (" ++ expression ++ ")")
+
+                                            FileTree.TreeNode tree ->
+                                                let
+                                                    buildTreeEntryExpression ( entryName, entryNode ) =
+                                                        expressionFromFileTreeNode entryNode
+                                                            |> Result.map
+                                                                (\entryNodeExpr ->
+                                                                    [ "( \"" ++ entryName ++ "\""
+                                                                    , ", " ++ entryNodeExpr
+                                                                    , ")"
+                                                                    ]
+                                                                        |> String.join "\n"
+                                                                )
+                                                in
+                                                tree
+                                                    |> List.map buildTreeEntryExpression
+                                                    |> Result.Extra.combine
+                                                    |> Result.map
+                                                        (\entriesExpressions ->
+                                                            "TreeNode\n"
+                                                                ++ indentElmCodeLines 1
+                                                                    ([ "["
+                                                                        ++ String.join "\n," entriesExpressions
+                                                                        ++ "]"
+                                                                     ]
+                                                                        |> String.join "\n"
+                                                                    )
+                                                        )
+
+                                    expressionResult =
+                                        case config.variant of
+                                            SourceFile ->
+                                                case fileTreeContent of
+                                                    FileTree.TreeNode _ ->
+                                                        Err ("This pattern matches path '" ++ String.join "/" matchingPath ++ "' but the node here is a tree, not a file")
+
+                                                    FileTree.BlobNode fileContent ->
+                                                        expressionFromFileContent fileContent
+                                                            |> Result.map
+                                                                (\expression ->
+                                                                    ( [ "file_"
+                                                                      , filePathRepresentation
+                                                                      ]
+                                                                    , expression
+                                                                    )
+                                                                )
+
+                                            SourceFileTree ->
+                                                expressionFromFileTreeNode fileTreeContent
+                                                    |> Result.map
+                                                        (Tuple.pair
+                                                            [ "file_tree_node"
+                                                            , filePathRepresentation
+                                                            ]
+                                                        )
+
+                                    fileEncodingTreeExpression : String -> String
+                                    fileEncodingTreeExpression sourceExpression =
+                                        interfaceModuleRecordExpression
+                                            prepareOk.interfaceModule
+                                            { sourceExpression = sourceExpression }
                                 in
-                                { valueFunctionText = valueFunctionText
-                                , updateInterfaceModuleText =
-                                    \{ generatedModuleName } moduleText ->
-                                        let
-                                            fileExpression =
-                                                case config.variant of
-                                                    SourceFile ->
-                                                        buildElmExpressionForInterfaceBlobEncoding
-                                                            config.encoding
-                                                            (generatedModuleName ++ "." ++ valueFunctionName)
+                                expressionResult
+                                    |> Result.map
+                                        (\( fileNameComponents, expression ) ->
+                                            let
+                                                valueFunctionName =
+                                                    String.join "_" fileNameComponents
 
-                                                    SourceFileTree ->
-                                                        [ generatedModuleName ++ "." ++ valueFunctionName
-                                                        , sourceFilesInterfaceModuleAddedFunctionMapNode.functionName
-                                                        , sourceFilesInterfaceModuleAddedFunctionMapBlobs.functionName
-                                                            ++ """(\\blobValue -> """
-                                                            ++ buildElmExpressionForInterfaceBlobEncoding
-                                                                config.encoding
-                                                                "blobValue"
-                                                            ++ ")"
-                                                        ]
-                                                            |> String.join "\n|>"
+                                                valueFunctionText =
+                                                    valueFunctionName
+                                                        ++ " =\n"
+                                                        ++ indentElmCodeLines 1 expression
+                                            in
+                                            { valueFunctionText = valueFunctionText
+                                            , updateInterfaceModuleText =
+                                                \{ generatedModuleName } moduleText ->
+                                                    let
+                                                        fileExpression =
+                                                            case config.variant of
+                                                                SourceFile ->
+                                                                    fileEncodingTreeExpression
+                                                                        (generatedModuleName ++ "." ++ valueFunctionName)
 
-                                            buildNewFunctionLines previousFunctionLines =
-                                                List.take 2 previousFunctionLines
-                                                    ++ [ indentElmCodeLines 1 fileExpression ]
-                                        in
-                                        addOrUpdateFunctionInElmModuleText
-                                            { functionName = functionName
-                                            , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
+                                                                SourceFileTree ->
+                                                                    [ generatedModuleName ++ "." ++ valueFunctionName
+                                                                    , sourceFilesInterfaceModuleAddedFunctionMapNode.functionName
+                                                                    , sourceFilesInterfaceModuleAddedFunctionMapBlobs.functionName
+                                                                        ++ """(\\blobValue -> """
+                                                                        ++ fileEncodingTreeExpression "blobValue"
+                                                                        ++ ")"
+                                                                    ]
+                                                                        |> String.join "\n|>"
+
+                                                        buildNewFunctionLines previousFunctionLines =
+                                                            List.take 2 previousFunctionLines
+                                                                ++ [ indentElmCodeLines 1 fileExpression ]
+                                                    in
+                                                    addOrUpdateFunctionInElmModuleText
+                                                        { functionName = functionName
+                                                        , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
+                                                        }
+                                                        moduleText
                                             }
-                                            moduleText
-                                }
+                                        )
                             )
 
 
@@ -3448,85 +3485,77 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule
             Err [ OtherCompilationError ("Failed to parse Elm make function: " ++ error) ]
 
         Ok ( filePathRepresentation, elmMakeTree ) ->
-            attemptMapRecordTreeLeaves
-                (prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation = filePathRepresentation })
-                elmMakeTree
-                |> Result.mapError (List.map Tuple.second)
+            let
+                continueMapResult : ElmMakeRecordTreeLeafEmit -> Result String { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
+                continueMapResult leafBeforeApplyBytes =
+                    recordTreeEmitElmMake leafBeforeApplyBytes.emitBlob leafBeforeApplyBytes.blob
+                        |> Result.map
+                            (\emitBlob ->
+                                { emitBlob = emitBlob
+                                , valueFunctionName = leafBeforeApplyBytes.valueFunctionName
+                                }
+                            )
+
+                mapTreeLeaf =
+                    prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation = filePathRepresentation }
+                        >> Result.andThen (continueMapResult >> Result.mapError OtherCompilationError)
+
+                mappedTreeResult : Result (List CompilationError) (CompilationInterfaceRecordTreeNode { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String })
+                mappedTreeResult =
+                    attemptMapRecordTreeLeaves
+                        []
+                        (always mapTreeLeaf)
+                        elmMakeTree
+                        |> Result.mapError (List.map Tuple.second)
+            in
+            mappedTreeResult
                 |> Result.andThen
                     (\mappedTree ->
                         let
+                            leaves : List { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
                             leaves =
-                                enumerateLeavesFromRecordTree mappedTree
+                                mappedTree
+                                    |> enumerateLeavesFromRecordTree
+                                    |> List.map Tuple.second
 
-                            variants =
+                            valueFunctions : List { functionName : String, functionText : String }
+                            valueFunctions =
                                 leaves
-                                    |> List.map (Tuple.second >> .valueFunctionName)
                                     |> List.map
-                                        (\valueFunctionName ->
-                                            ( valueFunctionName
-                                            , leaves
-                                                |> List.map Tuple.second
-                                                |> List.filter (.valueFunctionName >> (==) valueFunctionName)
-                                            )
+                                        (\leaf ->
+                                            { functionName = leaf.valueFunctionName
+                                            , functionText =
+                                                leaf.valueFunctionName
+                                                    ++ " =\n"
+                                                    ++ indentElmCodeLines 1 leaf.emitBlob.valueModule.expression
+                                            }
                                         )
+
+                            updateInterfaceModuleText =
+                                \{ generatedModuleName } moduleText ->
+                                    let
+                                        fileExpression : String
+                                        fileExpression =
+                                            emitRecordExpressionFromRecordTree
+                                                (\leaf ->
+                                                    interfaceModuleRecordExpression
+                                                        leaf.emitBlob.interfaceModule
+                                                        { sourceExpression = generatedModuleName ++ "." ++ leaf.valueFunctionName }
+                                                )
+                                                mappedTree
+
+                                        buildNewFunctionLines previousFunctionLines =
+                                            List.take 2 previousFunctionLines
+                                                ++ [ indentElmCodeLines 1 fileExpression ]
+                                    in
+                                    addOrUpdateFunctionInElmModuleText
+                                        { functionName = functionName, mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines }
+                                        moduleText
                         in
-                        case
-                            variants
-                                |> List.filterMap
-                                    (\( valueFunctionName, variantConfigs ) ->
-                                        List.head variantConfigs
-                                            |> Maybe.map
-                                                (\variantConfig ->
-                                                    baseFileRecordExpressionFromEncodings
-                                                        (List.map .encoding variantConfigs)
-                                                        variantConfig.blob
-                                                        |> Result.map (Tuple.pair valueFunctionName)
-                                                )
-                                    )
-                                |> Result.Extra.combine
-                        of
-                            Err error ->
-                                Err [ OtherCompilationError ("Failed to emit base file record expression: " ++ error) ]
-
-                            Ok variantsExpressions ->
-                                let
-                                    valueFunctions : List { functionName : String, functionText : String }
-                                    valueFunctions =
-                                        variantsExpressions
-                                            |> List.map
-                                                (\( valueFunctionName, variantExpression ) ->
-                                                    { functionName = valueFunctionName
-                                                    , functionText =
-                                                        valueFunctionName
-                                                            ++ " =\n"
-                                                            ++ indentElmCodeLines 1 variantExpression.expression
-                                                    }
-                                                )
-
-                                    updateInterfaceModuleText =
-                                        \{ generatedModuleName } moduleText ->
-                                            let
-                                                fileExpression =
-                                                    emitRecordExpressionFromRecordTree
-                                                        (\leaf ->
-                                                            buildElmExpressionForInterfaceBlobEncoding
-                                                                (SingleEncoding leaf.encoding)
-                                                                (generatedModuleName ++ "." ++ leaf.valueFunctionName)
-                                                        )
-                                                        mappedTree
-
-                                                buildNewFunctionLines previousFunctionLines =
-                                                    List.take 2 previousFunctionLines
-                                                        ++ [ indentElmCodeLines 1 fileExpression ]
-                                            in
-                                            addOrUpdateFunctionInElmModuleText
-                                                { functionName = functionName, mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines }
-                                                moduleText
-                                in
-                                Ok
-                                    { valueFunctionsTexts = List.map .functionText valueFunctions
-                                    , updateInterfaceModuleText = updateInterfaceModuleText
-                                    }
+                        Ok
+                            { valueFunctionsTexts = List.map .functionText valueFunctions
+                            , updateInterfaceModuleText = updateInterfaceModuleText
+                            }
                     )
 
 
@@ -3550,8 +3579,8 @@ prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation 
                 elmMakeRequest =
                     { files = sourceFilesForElmMake
                     , entryPointFilePath = entryPointFilePath
-                    , outputType = config.outputType
-                    , enableDebug = config.enableDebug
+                    , outputType = config.elmMakeConfig.outputType
+                    , enableDebug = config.elmMakeConfig.enableDebug
                     }
 
                 dependencyKey =
@@ -3579,7 +3608,7 @@ prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation 
                 Just ( _, dependencyValue ) ->
                     let
                         variantName =
-                            getNameComponentsFromLeafConfig config
+                            getNameComponentsFromLeafConfig config.elmMakeConfig
                                 |> List.sort
                                 |> String.join "_"
 
@@ -3592,65 +3621,42 @@ prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation 
                     in
                     Ok
                         { valueFunctionName = valueFunctionName
-                        , encoding = config.encoding
+                        , emitBlob = config.emitBlob
                         , blob = dependencyValue
                         }
 
 
-baseFileRecordExpressionFromEncoding :
-    InterfaceBlobEncoding
-    -> Bytes.Bytes
-    -> Result String { expression : String, encodingName : String }
-baseFileRecordExpressionFromEncoding encoding =
-    let
-        encodings =
-            case encoding of
-                SingleEncoding singleEncoding ->
-                    [ singleEncoding ]
-
-                RecordEncoding recordEncoding ->
-                    List.map Tuple.second recordEncoding
-    in
-    baseFileRecordExpressionFromEncodings encodings
+interfaceModuleRecordExpression : RecordTreeEmitInterfaceModule -> { sourceExpression : String } -> String
+interfaceModuleRecordExpression interfaceModuleTree context =
+    interfaceModuleTree
+        |> emitRecordExpressionFromRecordTree (\leafMap -> leafMap context)
 
 
-baseFileRecordExpressionFromEncodings :
-    List InterfaceBlobSingleEncoding
-    -> Bytes.Bytes
-    -> Result String { expression : String, encodingName : String }
-baseFileRecordExpressionFromEncodings encodings blob =
-    let
-        encodingsToInclude =
-            [ if List.member Base64Encoding encodings || List.member BytesEncoding encodings then
-                [ { name = "base64", buildExpression = buildBase64ElmExpression } ]
-
-              else
-                []
-            , if List.member Utf8Encoding encodings then
-                [ { name = "utf8", buildExpression = buildUtf8ElmExpression } ]
-
-              else
-                []
-            ]
-                |> List.concat
-    in
-    encodingsToInclude
-        |> List.map
-            (\encodingToInclude ->
-                encodingToInclude.buildExpression blob
-                    |> Result.mapError ((++) ("Failed to build expression for encoding " ++ encodingToInclude.name ++ ":"))
-                    |> Result.map (Tuple.pair encodingToInclude.name)
-            )
-        |> Result.Extra.combine
+valueModuleRecordExpressionFromEncodings : RecordTreeEmitValueModule -> Bytes.Bytes -> Result String String
+valueModuleRecordExpressionFromEncodings encodings blob =
+    encodings blob
         |> Result.map
-            (\encodingsExpressions ->
-                let
-                    fieldsExpressions =
-                        encodingsExpressions
-                            |> List.map (\( encodingName, encodingExpression ) -> encodingName ++ " = " ++ encodingExpression)
-                in
-                { encodingName = String.join "_" (List.map Tuple.first encodingsExpressions)
-                , expression = "{ " ++ String.join "\n, " fieldsExpressions ++ "\n}"
+            (\fieldsDict ->
+                "{ "
+                    ++ (fieldsDict
+                            |> Dict.toList
+                            |> List.map
+                                (\( fieldName, field ) ->
+                                    fieldName ++ " = " ++ field.expression
+                                )
+                            |> String.join "\n, "
+                       )
+                    ++ " }"
+            )
+
+
+recordTreeEmitElmMake : RecordTreeEmit -> Bytes.Bytes -> Result String RecordTreeEmitElmMake
+recordTreeEmitElmMake recordTree bytes =
+    valueModuleRecordExpressionFromEncodings recordTree.valueModule bytes
+        |> Result.map
+            (\expression ->
+                { interfaceModule = recordTree.interfaceModule
+                , valueModule = { expression = expression }
                 }
             )
 
@@ -3675,6 +3681,11 @@ buildUtf8ElmExpression bytes =
             Ok (stringExpressionFromString asUtf8)
 
 
+buildGZipBase64ElmExpression : Bytes.Bytes -> Result String String
+buildGZipBase64ElmExpression bytes =
+    buildBase64ElmExpression (Flate.deflateGZip bytes)
+
+
 stringExpressionFromString : String -> String
 stringExpressionFromString string =
     "\""
@@ -3685,43 +3696,6 @@ stringExpressionFromString string =
                 |> String.replace "\"" "\\\""
            )
         ++ "\""
-
-
-buildElmExpressionForInterfaceBlobEncoding : InterfaceBlobEncoding -> String -> String
-buildElmExpressionForInterfaceBlobEncoding encoding sourceExpression =
-    case encoding of
-        SingleEncoding singleEncoding ->
-            buildElmExpressionForInterfaceBlobSingleEncoding singleEncoding sourceExpression
-
-        RecordEncoding recordFields ->
-            let
-                fieldsExpressions =
-                    recordFields
-                        |> List.map
-                            (\( fieldName, fieldEncoding ) ->
-                                fieldName
-                                    ++ " = "
-                                    ++ buildElmExpressionForInterfaceBlobSingleEncoding fieldEncoding sourceExpression
-                            )
-            in
-            "{ " ++ String.join "\n," fieldsExpressions ++ "\n}"
-
-
-buildElmExpressionForInterfaceBlobSingleEncoding : InterfaceBlobSingleEncoding -> String -> String
-buildElmExpressionForInterfaceBlobSingleEncoding encoding sourceExpression =
-    case encoding of
-        Base64Encoding ->
-            sourceExpression ++ ".base64"
-
-        BytesEncoding ->
-            [ sourceExpression ++ ".base64"
-            , "|> Base64.toBytes"
-            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
-            ]
-                |> String.join "\n"
-
-        Utf8Encoding ->
-            sourceExpression ++ ".utf8"
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
@@ -4012,7 +3986,10 @@ mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCod
                             )
 
 
-parseSourceFileFunction : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Expression.Function -> Result String ( String, InterfaceSourceFilesFunctionConfig )
+parseSourceFileFunction :
+    ( List String, Elm.Syntax.File.File )
+    -> Elm.Syntax.Expression.Function
+    -> Result String ( String, InterfaceSourceFilesFunctionConfig )
 parseSourceFileFunction currentModule functionDeclaration =
     case parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration of
         Err error ->
@@ -4027,26 +4004,15 @@ parseSourceFileFunction currentModule functionDeclaration =
             parseSourceFileFunctionName functionName
                 |> Result.map
                     (Tuple.mapSecond
-                        (\beforeApplyEncoding ->
-                            case encodingFromDeclaration.encoding of
-                                Nothing ->
-                                    beforeApplyEncoding
-
-                                Just encoding ->
-                                    { beforeApplyEncoding
-                                        | encoding = encoding
-                                        , variant =
-                                            if encodingFromDeclaration.isTree then
-                                                SourceFileTree
-
-                                            else
-                                                SourceFile
-                                    }
+                        (\variant ->
+                            { encoding = encodingFromDeclaration.encoding
+                            , variant = variant
+                            }
                         )
                     )
 
 
-parseSourceFileFunctionName : String -> Result String ( String, InterfaceSourceFilesFunctionConfig )
+parseSourceFileFunctionName : String -> Result String ( String, InterfaceSourceFilesFunctionVariant )
 parseSourceFileFunctionName functionName =
     parseFlagsAndPathPatternFromFunctionName
         ([ ( sourceFileFunctionNameStart, SourceFile )
@@ -4057,10 +4023,11 @@ parseSourceFileFunctionName functionName =
         functionName
         |> Result.andThen
             (\( variant, flags, filePathRepresentation ) ->
-                flags
-                    |> parseInterfaceFunctionFlags parseSourceFileFunctionFlag
-                        { variant = variant, encoding = SingleEncoding BytesEncoding }
-                    |> Result.map (Tuple.pair filePathRepresentation)
+                if flags /= [] then
+                    Err "Flags are not supported in SourceFiles declarations"
+
+                else
+                    Ok ( filePathRepresentation, variant )
             )
 
 
@@ -4069,22 +4036,15 @@ encodingFromSourceFileFieldName =
     [ ( "base64", Base64Encoding )
     , ( "utf8", Utf8Encoding )
     , ( "bytes", BytesEncoding )
+    , ( "gzip", GZipEncoding )
     ]
         |> Dict.fromList
 
 
-parseSourceFileFunctionFlag : String -> InterfaceSourceFilesFunctionConfig -> Result String InterfaceSourceFilesFunctionConfig
-parseSourceFileFunctionFlag flag config =
-    -- TODO: Retire flags in file names after migrating production systems to record-field based encoding selection.
-    case encodingFromSourceFileFieldName |> Dict.get (String.toLower flag) of
-        Nothing ->
-            Err "Unknown flag"
-
-        Just encoding ->
-            Ok { config | encoding = SingleEncoding encoding }
-
-
-parseElmMakeModuleFunction : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Expression.Function -> Result String ( String, InterfaceElmMakeFunctionConfig )
+parseElmMakeModuleFunction :
+    ( List String, Elm.Syntax.File.File )
+    -> Elm.Syntax.Expression.Function
+    -> Result String ( String, InterfaceElmMakeFunctionConfig )
 parseElmMakeModuleFunction currentModule functionDeclaration =
     let
         functionName =
@@ -4093,69 +4053,40 @@ parseElmMakeModuleFunction currentModule functionDeclaration =
     in
     parseElmMakeModuleFunctionName functionName
         |> Result.andThen
-            (\( referencedName, maybeConfigFromName ) ->
-                maybeConfigFromName
-                    |> Maybe.map (RecordTreeLeaf >> Ok)
-                    |> Maybe.withDefault
-                        (case functionDeclaration.signature of
-                            Nothing ->
-                                Err "Missing function signature"
+            (\referencedName ->
+                (case functionDeclaration.signature of
+                    Nothing ->
+                        Err "Missing function signature"
 
-                            Just signature ->
-                                parseElmMakeFunctionConfigFromTypeAnnotation
-                                    currentModule
-                                    (Elm.Syntax.Node.value signature).typeAnnotation
-                                    |> Result.mapError ((++) "Failed to parse config: ")
-                        )
+                    Just signature ->
+                        parseElmMakeFunctionConfigFromTypeAnnotation
+                            currentModule
+                            (Elm.Syntax.Node.value signature).typeAnnotation
+                            |> Result.mapError ((++) "Failed to parse config: ")
+                )
                     |> Result.map (Tuple.pair referencedName)
             )
 
 
-parseElmMakeModuleFunctionName : String -> Result String ( String, Maybe InterfaceElmMakeFunctionLeafConfig )
+parseElmMakeModuleFunctionName : String -> Result String String
 parseElmMakeModuleFunctionName functionName =
-    -- TODO: Remove the config from return type of parseElmMakeModuleFunctionName, because we can now model flags via record fields.
     parseFlagsAndPathPatternFromFunctionName
         (Dict.fromList [ ( elmMakeFunctionNameStart, () ) ])
         functionName
         |> Result.andThen
             (\( _, flags, filePathRepresentation ) ->
-                (if flags == [] then
-                    Ok Nothing
+                if flags /= [] then
+                    Err "Flags are not supported in ElmMake declarations"
 
-                 else
-                    flags
-                        |> parseInterfaceFunctionFlags parseElmMakeFunctionFlag
-                            { outputType = ElmMakeOutputTypeHtml, enableDebug = False, encoding = BytesEncoding }
-                        |> Result.map Just
-                )
-                    |> Result.map (Tuple.pair filePathRepresentation)
+                else
+                    Ok filePathRepresentation
             )
-
-
-parseElmMakeFunctionFlag : String -> InterfaceElmMakeFunctionLeafConfig -> Result String InterfaceElmMakeFunctionLeafConfig
-parseElmMakeFunctionFlag flag config =
-    -- TODO: Retire flags for encoding in file names after migrating production systems to record-field based encoding selection.
-    case String.toLower flag of
-        "base64" ->
-            Ok { config | encoding = Base64Encoding }
-
-        "utf8" ->
-            Ok { config | encoding = Utf8Encoding }
-
-        "javascript" ->
-            Ok { config | outputType = ElmMakeOutputTypeJs }
-
-        "debug" ->
-            Ok { config | enableDebug = True }
-
-        _ ->
-            Err "Unknown flag"
 
 
 parseSourceFileFunctionEncodingFromDeclaration :
     ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Expression.Function
-    -> Result String { isTree : Bool, encoding : Maybe InterfaceBlobEncoding }
+    -> Result String { isTree : Bool, encoding : CompilationInterfaceRecordTreeNode InterfaceBlobSingleEncoding }
 parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration =
     case functionDeclaration.signature of
         Nothing ->
@@ -4165,7 +4096,10 @@ parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration
             parseSourceFileFunctionEncodingFromElmTypeAnnotation currentModule (Elm.Syntax.Node.value signature).typeAnnotation
 
 
-parseElmMakeFunctionConfigFromTypeAnnotation : ( List String, Elm.Syntax.File.File ) -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation -> Result String InterfaceElmMakeFunctionConfig
+parseElmMakeFunctionConfigFromTypeAnnotation :
+    ( List String, Elm.Syntax.File.File )
+    -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
+    -> Result String InterfaceElmMakeFunctionConfig
 parseElmMakeFunctionConfigFromTypeAnnotation currentModule typeAnnotationNode =
     case parseElmTypeAndDependenciesRecursivelyFromAnnotation Dict.empty ( currentModule, typeAnnotationNode ) of
         Err (LocatedInSourceFiles _ error) ->
@@ -4174,37 +4108,157 @@ parseElmMakeFunctionConfigFromTypeAnnotation currentModule typeAnnotationNode =
         Ok ( typeAnnotation, _ ) ->
             parseInterfaceRecordTree
                 identity
-                integrateElmMakeFunctionRecordFieldName
+                (always Ok)
                 typeAnnotation
-                { encoding = BytesEncoding, enableDebug = False, outputType = ElmMakeOutputTypeHtml }
+                ()
                 |> Result.mapError (\( path, error ) -> "Failed at path " ++ String.join "." path ++ ": " ++ error)
+                |> Result.andThen parseElmMakeFunctionConfigFromRecordTree
 
 
-integrateElmMakeFunctionRecordFieldName : String -> InterfaceElmMakeFunctionLeafConfig -> Result String InterfaceElmMakeFunctionLeafConfig
+parseElmMakeFunctionConfigFromRecordTree : CompilationInterfaceRecordTreeNode a -> Result String InterfaceElmMakeFunctionConfig
+parseElmMakeFunctionConfigFromRecordTree =
+    parseElmMakeFunctionConfigFromRecordTreeInternal { enableDebug = False, outputType = ElmMakeOutputTypeHtml }
+
+
+parseElmMakeFunctionConfigFromRecordTreeInternal :
+    InterfaceElmMakeConfig
+    -> CompilationInterfaceRecordTreeNode a
+    -> Result String InterfaceElmMakeFunctionConfig
+parseElmMakeFunctionConfigFromRecordTreeInternal elmMakeConfig recordTree =
+    let
+        leafFromTree pathPrefix =
+            prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix
+                >> Result.map (\emitBlob -> RecordTreeLeaf { elmMakeConfig = elmMakeConfig, emitBlob = emitBlob })
+    in
+    case recordTree of
+        RecordTreeLeaf leaf ->
+            leafFromTree [] (RecordTreeLeaf ())
+
+        RecordTreeBranch branch ->
+            branch
+                |> List.map
+                    (\( branchName, branchValue ) ->
+                        (case integrateElmMakeFunctionRecordFieldName branchName elmMakeConfig of
+                            Err _ ->
+                                leafFromTree [ branchName ] branchValue
+
+                            Ok newElmMakeConfig ->
+                                parseElmMakeFunctionConfigFromRecordTreeInternal newElmMakeConfig branchValue
+                        )
+                            |> Result.map (Tuple.pair branchName)
+                    )
+                |> Result.Extra.combine
+                |> Result.map RecordTreeBranch
+
+
+prepareRecordTreeEmitForTreeOrBlobUnderPath : List String -> CompilationInterfaceRecordTreeNode a -> Result String RecordTreeEmit
+prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
+    let
+        mappingBase64 =
+            { fieldName = "base64"
+            , valueModuleBuildExpression = buildBase64ElmExpression
+            }
+
+        mappingUtf8 =
+            { fieldName = "utf8"
+            , valueModuleBuildExpression = buildUtf8ElmExpression
+            }
+
+        mappingGZipBase64 =
+            { fieldName = "gzipBase64"
+            , valueModuleBuildExpression = buildGZipBase64ElmExpression
+            }
+
+        fromBase64ToBytes =
+            [ "|> Base64.toBytes"
+            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
+            ]
+                |> String.join " "
+
+        mapToValueDict : Dict.Dict (List String) ( { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }, Maybe String )
+        mapToValueDict =
+            [ ( [ "base64" ], ( mappingBase64, Nothing ) )
+            , ( [ "bytes" ], ( mappingBase64, Just fromBase64ToBytes ) )
+            , ( [], ( mappingBase64, Just fromBase64ToBytes ) )
+            , ( [ "utf8" ], ( mappingUtf8, Nothing ) )
+            , ( [ "gzip", "base64" ], ( mappingGZipBase64, Nothing ) )
+            ]
+                |> Dict.fromList
+
+        attemptMapLeaf : List String -> a -> Result String RecordTreeEmitBlobIntermediateResult
+        attemptMapLeaf leafPath _ =
+            let
+                path =
+                    pathPrefix ++ leafPath
+            in
+            case Dict.get path mapToValueDict of
+                Nothing ->
+                    Err ("Found no mapping for path " ++ String.join "." path)
+
+                Just ( valueModule, maybeMappingInInterfaceModule ) ->
+                    Ok
+                        { interfaceModule =
+                            \{ sourceExpression } ->
+                                let
+                                    beforeMapping =
+                                        sourceExpression ++ "." ++ valueModule.fieldName
+                                in
+                                case maybeMappingInInterfaceModule of
+                                    Nothing ->
+                                        beforeMapping
+
+                                    Just mappingInInterfaceModule ->
+                                        "(" ++ beforeMapping ++ ") " ++ mappingInInterfaceModule
+                        , valueModule =
+                            { fieldName = valueModule.fieldName
+                            , buildExpression = valueModule.valueModuleBuildExpression
+                            }
+                        }
+    in
+    tree
+        |> attemptMapRecordTreeLeaves [] attemptMapLeaf
+        |> Result.mapError
+            (List.map (\( errorPath, error ) -> "Error at path " ++ String.join "." errorPath ++ ": " ++ error) >> String.join ", ")
+        |> Result.map
+            (\mappedTree ->
+                { interfaceModule = mappedTree |> mapRecordTreeLeaves .interfaceModule
+                , valueModule =
+                    \valueBytes ->
+                        mappedTree
+                            |> enumerateLeavesFromRecordTree
+                            |> List.map
+                                (\( _, leaf ) ->
+                                    leaf.valueModule.buildExpression valueBytes
+                                        |> Result.mapError ((++) ("Failed to build expression for field '" ++ leaf.valueModule.fieldName ++ "': "))
+                                        |> Result.map
+                                            (\expression -> ( leaf.valueModule.fieldName, { expression = expression } ))
+                                )
+                            |> Result.Extra.combine
+                            |> Result.map Dict.fromList
+                }
+            )
+
+
+integrateElmMakeFunctionRecordFieldName : String -> InterfaceElmMakeConfig -> Result String InterfaceElmMakeConfig
 integrateElmMakeFunctionRecordFieldName fieldName configBefore =
-    case Dict.get fieldName encodingFromSourceFileFieldName of
-        Just encoding ->
-            Ok { configBefore | encoding = encoding }
+    case fieldName of
+        "debug" ->
+            Ok { configBefore | enableDebug = True }
 
-        Nothing ->
-            case fieldName of
-                "debug" ->
-                    Ok { configBefore | enableDebug = True }
+        "html" ->
+            Ok { configBefore | outputType = ElmMakeOutputTypeHtml }
 
-                "html" ->
-                    Ok { configBefore | outputType = ElmMakeOutputTypeHtml }
+        "javascript" ->
+            Ok { configBefore | outputType = ElmMakeOutputTypeJs }
 
-                "javascript" ->
-                    Ok { configBefore | outputType = ElmMakeOutputTypeJs }
-
-                _ ->
-                    Err ("Unsupported field name: " ++ fieldName)
+        _ ->
+            Err ("Unsupported field name: " ++ fieldName)
 
 
 parseSourceFileFunctionEncodingFromElmTypeAnnotation :
     ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
-    -> Result String { isTree : Bool, encoding : Maybe InterfaceBlobEncoding }
+    -> Result String { isTree : Bool, encoding : CompilationInterfaceRecordTreeNode InterfaceBlobSingleEncoding }
 parseSourceFileFunctionEncodingFromElmTypeAnnotation currentModule typeAnnotationNode =
     case
         parseElmTypeAndDependenciesRecursivelyFromAnnotation
@@ -4215,22 +4269,18 @@ parseSourceFileFunctionEncodingFromElmTypeAnnotation currentModule typeAnnotatio
             Err ("Failed to parse type annotation: " ++ error)
 
         Ok ( typeAnnotation, _ ) ->
-            parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation
+            parseSourceFileFunctionFromTypeAnnotation typeAnnotation
 
 
-parseSourceFileFunctionEncodingFromTypeAnnotation : ElmTypeAnnotation -> Result String { isTree : Bool, encoding : Maybe InterfaceBlobEncoding }
-parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation =
+parseSourceFileFunctionFromTypeAnnotation :
+    ElmTypeAnnotation
+    -> Result String { isTree : Bool, encoding : CompilationInterfaceRecordTreeNode InterfaceBlobSingleEncoding }
+parseSourceFileFunctionFromTypeAnnotation typeAnnotation =
     case typeAnnotation of
-        RecordElmType recordType ->
-            recordType.fields
-                |> List.map
-                    (\( fieldName, _ ) ->
-                        Dict.get fieldName encodingFromSourceFileFieldName
-                            |> Maybe.map (\encoding -> Ok ( fieldName, encoding ))
-                            |> Maybe.withDefault (Err ("Unsupported field name: " ++ fieldName))
-                    )
-                |> Result.Extra.combine
-                |> Result.map (\encoding -> { isTree = False, encoding = Just (RecordEncoding encoding) })
+        RecordElmType _ ->
+            typeAnnotation
+                |> parseSourceFileFunctionEncodingFromTypeAnnotation
+                |> Result.map (\encoding -> { isTree = False, encoding = encoding })
 
         InstanceElmType instance ->
             let
@@ -4248,7 +4298,7 @@ parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation =
                                 singleArgument
                                     |> parseSourceFileFunctionEncodingFromTypeAnnotation
                                     |> Result.mapError ((++) "Failed to parse argument: ")
-                                    |> Result.map (\encoding -> { encoding | isTree = True })
+                                    |> Result.map (\encoding -> { isTree = True, encoding = encoding })
 
                             _ ->
                                 continueWithErrorUnexpectedInst ("Unexpected number of arguments: " ++ String.fromInt (List.length instance.arguments))
@@ -4257,7 +4307,33 @@ parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation =
                     continueWithErrorUnexpectedInst "Instantiated is not a custom type"
 
         _ ->
-            Ok { isTree = False, encoding = Nothing }
+            Ok { isTree = False, encoding = RecordTreeLeaf BytesEncoding }
+
+
+parseSourceFileFunctionEncodingFromTypeAnnotation :
+    ElmTypeAnnotation
+    -> Result String (CompilationInterfaceRecordTreeNode InterfaceBlobSingleEncoding)
+parseSourceFileFunctionEncodingFromTypeAnnotation typeAnnotation =
+    parseInterfaceRecordTree
+        identity
+        integrateSourceFilesFunctionRecordFieldName
+        typeAnnotation
+        BytesEncoding
+        |> Result.mapError (\( path, error ) -> "Failed at path " ++ String.join "." path ++ ": " ++ error)
+
+
+integrateSourceFilesFunctionRecordFieldName :
+    String
+    -> InterfaceBlobSingleEncoding
+    -> Result String InterfaceBlobSingleEncoding
+integrateSourceFilesFunctionRecordFieldName fieldName configBefore =
+    -- TODO: Aggregate different encodings
+    case Dict.get fieldName encodingFromSourceFileFieldName of
+        Just encoding ->
+            Ok encoding
+
+        Nothing ->
+            Err ("Unsupported field name: " ++ fieldName)
 
 
 parseInterfaceFunctionFlags : (String -> aggregate -> Result String aggregate) -> aggregate -> List String -> Result String aggregate
@@ -4317,16 +4393,23 @@ emitRecordExpressionFromRecordTree expressionFromLeafValue tree =
             let
                 fieldsExpressions =
                     fields
-                        |> List.map (\( fieldName, encodingExpression ) -> fieldName ++ " = " ++ emitRecordExpressionFromRecordTree expressionFromLeafValue encodingExpression)
+                        |> List.map
+                            (\( fieldName, encodingExpression ) ->
+                                fieldName
+                                    ++ " = "
+                                    ++ emitRecordExpressionFromRecordTree
+                                        expressionFromLeafValue
+                                        encodingExpression
+                            )
             in
             "{ " ++ String.join "\n, " fieldsExpressions ++ "\n}"
 
 
-attemptMapRecordTreeLeaves : (a -> Result e b) -> CompilationInterfaceRecordTreeNode a -> Result (List ( List String, e )) (CompilationInterfaceRecordTreeNode b)
-attemptMapRecordTreeLeaves attemptMapLeaf tree =
+attemptMapRecordTreeLeaves : List String -> (List String -> a -> Result e b) -> CompilationInterfaceRecordTreeNode a -> Result (List ( List String, e )) (CompilationInterfaceRecordTreeNode b)
+attemptMapRecordTreeLeaves pathPrefix attemptMapLeaf tree =
     case tree of
         RecordTreeLeaf leaf ->
-            attemptMapLeaf leaf
+            attemptMapLeaf pathPrefix leaf
                 |> Result.mapError (Tuple.pair [] >> List.singleton)
                 |> Result.map RecordTreeLeaf
 
@@ -4336,7 +4419,7 @@ attemptMapRecordTreeLeaves attemptMapLeaf tree =
                     fields
                         |> List.map
                             (\( fieldName, fieldNode ) ->
-                                attemptMapRecordTreeLeaves attemptMapLeaf fieldNode
+                                attemptMapRecordTreeLeaves (pathPrefix ++ [ fieldName ]) attemptMapLeaf fieldNode
                                     |> Result.map (Tuple.pair fieldName)
                                     |> Result.mapError (List.map (Tuple.mapFirst ((::) fieldName)))
                             )
@@ -4347,8 +4430,23 @@ attemptMapRecordTreeLeaves attemptMapLeaf tree =
                 Ok (RecordTreeBranch successes)
 
             else
-                errors
-                    |> Err
+                Err errors
+
+
+mapRecordTreeLeaves : (a -> b) -> CompilationInterfaceRecordTreeNode a -> CompilationInterfaceRecordTreeNode b
+mapRecordTreeLeaves mapLeaf tree =
+    case tree of
+        RecordTreeLeaf leaf ->
+            RecordTreeLeaf (mapLeaf leaf)
+
+        RecordTreeBranch fields ->
+            fields
+                |> List.map
+                    (\( fieldName, fieldNode ) ->
+                        mapRecordTreeLeaves mapLeaf fieldNode
+                            |> Tuple.pair fieldName
+                    )
+                |> RecordTreeBranch
 
 
 parseInterfaceRecordTree : (String -> e) -> (String -> leaf -> Result e leaf) -> ElmTypeAnnotation -> leaf -> Result ( List String, e ) (CompilationInterfaceRecordTreeNode leaf)
