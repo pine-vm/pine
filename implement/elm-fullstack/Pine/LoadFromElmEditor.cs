@@ -133,6 +133,7 @@ namespace Pine
                 try
                 {
                     projectStateString ??=
+                        projectStateDeflateBase64String == null ? null :
                         Encoding.UTF8.GetString(CommonConversion.Inflate(Convert.FromBase64String(projectStateDeflateBase64String)));
                 }
                 catch { }
