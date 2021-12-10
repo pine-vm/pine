@@ -27,9 +27,46 @@ public record ElmTestRsReportJsonEntryFailureReason(
     ElmTestRsReportJsonEntryFailureReasonData data);
 
 public record ElmTestRsReportJsonEntryFailureReasonData(
+    string @String = null,
+    ElmTestRsReportJsonEntryFailureReasonDataEquality Equality = null);
+
+public record ElmTestRsReportJsonEntryFailureReasonDataEquality(
     string expected,
     string actual,
     string comparison);
+
+public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter : System.Text.Json.Serialization.JsonConverter<ElmTestRsReportJsonEntryFailureReasonData>
+{
+    public override ElmTestRsReportJsonEntryFailureReasonData Read(
+        ref System.Text.Json.Utf8JsonReader reader,
+        System.Type typeToConvert,
+        System.Text.Json.JsonSerializerOptions options)
+    {
+        try
+        {
+            var equalityReader = reader;
+
+            var asEquality = new ElmTestRsReportJsonEntryFailureReasonData(
+                Equality: System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntryFailureReasonDataEquality>(ref equalityReader));
+
+            reader = equalityReader;
+
+            return asEquality;
+        }
+        catch { }
+
+        return new ElmTestRsReportJsonEntryFailureReasonData(
+            String: System.Text.Json.JsonSerializer.Deserialize<string>(ref reader));
+    }
+
+    public override void Write(
+        System.Text.Json.Utf8JsonWriter writer,
+        ElmTestRsReportJsonEntryFailureReasonData value,
+        System.Text.Json.JsonSerializerOptions options)
+    {
+        throw new System.NotImplementedException();
+    }
+}
 
 public class ElmTestRs
 {
@@ -113,10 +150,22 @@ public class ElmTestRs
             .ToImmutableList();
 
         var parsedLines =
-            stdoutLines.Select(line => (line, Newtonsoft.Json.JsonConvert.DeserializeObject<ElmTestRsReportJsonEntry>(line)))
+            stdoutLines.Select(line => (line, DeserializeElmTestRsReportJsonEntry(line)))
             .ToImmutableList();
 
         return (stdout, executeElmTestResult.processOutput.StandardError, parsedLines);
+    }
+
+    static public ElmTestRsReportJsonEntry DeserializeElmTestRsReportJsonEntry(string json)
+    {
+        var serializeOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
+        };
+
+        serializeOptions.Converters.Add(new ElmTestRsReportJsonEntryFailureReasonDataJsonConverter());
+
+        return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, serializeOptions);
     }
 
     static public (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
@@ -162,21 +211,29 @@ public class ElmTestRs
                 .Concat(@event.labels.EmptyIfNull().TakeLast(1).Select(label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
                 .ToImmutableList();
 
+            static IReadOnlyList<string> renderFailureReasonData(ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
+            {
+                if (failureReasonData.Equality != null)
+                {
+                    return ImmutableList.Create(
+                        "",
+                        failureReasonData.Equality.actual,
+                        "╷",
+                        "│ " + failureReasonData.Equality.comparison,
+                        "╵",
+                        failureReasonData.Equality.expected,
+                        ""
+                    );
+                }
+
+                return ImmutableList.Create("", failureReasonData.String, "");
+            }
+
             var textsFromFailures =
                 @event.failures.EmptyIfNull()
                 .Select(failure => failure.reason?.data)
                 .WhereNotNull()
-                .SelectMany(failureReasonData =>
-                new[]
-                {
-                    "",
-                    failureReasonData.actual,
-                    "╷",
-                    "│ " + failureReasonData.comparison,
-                    "╵",
-                    failureReasonData.expected,
-                    ""
-                })
+                .SelectMany(renderFailureReasonData)
                 .ToImmutableList();
 
             return

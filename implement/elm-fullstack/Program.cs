@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-12-07";
+    static public string AppVersionId => "2021-12-10";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -559,7 +559,7 @@ public class Program
     static CommandLineApplication AddElmTestRsCmd(CommandLineApplication app) =>
         app.Command("elm-test-rs", elmTestCmd =>
         {
-            elmTestCmd.Description = "Run tests using the interface of elm-test-rs.";
+            elmTestCmd.Description = "Compile and run tests using the interface of elm-test-rs. The compilation integrates interfaces such as SourceFiles.";
             elmTestCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var sourceArgument = elmTestCmd.Argument("source", "path to the Elm project containing the tests to run");
