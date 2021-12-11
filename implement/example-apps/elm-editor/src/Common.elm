@@ -17,4 +17,4 @@ decodeBase64ToString =
 
 faviconPath : String
 faviconPath =
-    "favicon.ico"
+    "favicon.svg"

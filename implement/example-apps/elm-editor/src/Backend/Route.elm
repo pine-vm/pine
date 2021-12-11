@@ -21,8 +21,6 @@ type StaticFile
     = FrontendHtmlDocumentRoute { debug : Bool }
     | FrontendElmJavascriptRoute { debug : Bool }
     | MonacoFrameDocumentRoute
-    | MonarchJavascriptRoute
-    | FaviconRoute
 
 
 elmMadeScriptFileNameDefault : String
@@ -47,8 +45,6 @@ routeFromUrl =
             [ Url.Parser.map (StaticFileRoute (FrontendElmJavascriptRoute { debug = False })) (Url.Parser.s elmMadeScriptFileNameDefault)
             , Url.Parser.map (StaticFileRoute (FrontendElmJavascriptRoute { debug = True })) (Url.Parser.s elmMadeScriptFileNameDebug)
             , Url.Parser.map (StaticFileRoute MonacoFrameDocumentRoute) (Url.Parser.s "monaco")
-            , Url.Parser.map (StaticFileRoute MonarchJavascriptRoute) (Url.Parser.s "monarch.js")
-            , Url.Parser.map (StaticFileRoute FaviconRoute) (Url.Parser.s Common.faviconPath)
             , Url.Parser.map ApiRoute (Url.Parser.s "api")
             , Url.Parser.map (StaticFileRoute (FrontendHtmlDocumentRoute { debug = True })) (Url.Parser.s "enable-elm-debug")
             ]

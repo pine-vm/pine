@@ -12,6 +12,7 @@ import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
 import Dict
 import ElmFullstack
+import FileTree
 import Flate
 import MonacoHtml
 import Set
@@ -211,84 +212,89 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                               }
                             ]
             in
-            { httpRequestId = httpRequestEvent.httpRequestId
-            , response =
-                { statusCode = 200
-                , bodyAsBase64 = bodyAsBase64
-                , headersToAdd = cacheHeaders
-                }
+            { statusCode = 200
+            , bodyAsBase64 = bodyAsBase64
+            , headersToAdd = cacheHeaders
             }
 
         frontendHtmlDocumentResponse frontendConfig =
-            [ ElmFullstack.RespondToHttpRequest
-                (httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
-                    (staticContentHttpHeaders "text/html")
-                )
-            ]
+            httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
+                (staticContentHttpHeaders "text/html")
+
+        continueWithStaticHttpResponse httpResponse =
+            ( stateBefore
+            , [ ElmFullstack.RespondToHttpRequest
+                    { httpRequestId = httpRequestEvent.httpRequestId
+                    , response = httpResponse
+                    }
+              ]
+            )
     in
-    case httpRequestEvent.request.uri |> Url.fromString |> Maybe.andThen Backend.Route.routeFromUrl of
+    case httpRequestEvent.request.uri |> Url.fromString of
         Nothing ->
-            ( stateBefore
-            , frontendHtmlDocumentResponse { debug = False }
-            )
+            continueWithStaticHttpResponse
+                { statusCode = 500
+                , bodyAsBase64 = bodyFromString "Failed to parse URL"
+                , headersToAdd = []
+                }
 
-        Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendHtmlDocumentRoute frontendConfig)) ->
-            ( stateBefore
-            , frontendHtmlDocumentResponse frontendConfig
-            )
+        Just url ->
+            case
+                CompilationInterface.SourceFiles.file_tree____static
+                    |> mapFileTreeNodeFromSource
+                    |> FileTree.flatListOfBlobsFromFileTreeNode
+                    |> List.filter (Tuple.first >> (==) (String.split "/" url.path |> List.filter (String.isEmpty >> not)))
+                    |> List.head
+            of
+                Just ( filePath, matchingFile ) ->
+                    let
+                        contentType =
+                            filePath
+                                |> List.concatMap (String.split ".")
+                                |> List.reverse
+                                |> List.head
+                                |> Maybe.andThen (Dict.get >> (|>) contentTypeFromStaticFileExtensionDict)
+                                |> Maybe.withDefault ""
+                    in
+                    httpResponseOkWithBodyAsBase64
+                        (Just matchingFile.base64)
+                        { cacheMaxAgeMinutes = Just 1440, contentType = contentType }
+                        |> continueWithStaticHttpResponse
 
-        Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
-            ( stateBefore
-            , [ ElmFullstack.RespondToHttpRequest
-                    (httpResponseOkWithBodyAsBase64
-                        (Just
-                            (if debug then
-                                CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.base64
+                Nothing ->
+                    case url |> Backend.Route.routeFromUrl of
+                        Nothing ->
+                            frontendHtmlDocumentResponse { debug = False }
+                                |> continueWithStaticHttpResponse
 
-                             else
-                                CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
+                        Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendHtmlDocumentRoute frontendConfig)) ->
+                            frontendHtmlDocumentResponse frontendConfig
+                                |> continueWithStaticHttpResponse
+
+                        Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
+                            httpResponseOkWithBodyAsBase64
+                                (Just
+                                    (if debug then
+                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.base64
+
+                                     else
+                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
+                                    )
+                                )
+                                (staticContentHttpHeaders "text/javascript")
+                                |> continueWithStaticHttpResponse
+
+                        Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
+                            httpResponseOkWithStringContent monacoHtmlDocument
+                                (staticContentHttpHeaders "text/html")
+                                |> continueWithStaticHttpResponse
+
+                        Just Backend.Route.ApiRoute ->
+                            ( { stateBefore
+                                | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10
+                              }
+                            , []
                             )
-                        )
-                        (staticContentHttpHeaders "text/javascript")
-                    )
-              ]
-            )
-
-        Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
-            ( stateBefore
-            , [ ElmFullstack.RespondToHttpRequest
-                    (httpResponseOkWithStringContent monacoHtmlDocument
-                        (staticContentHttpHeaders "text/html")
-                    )
-              ]
-            )
-
-        Just (Backend.Route.StaticFileRoute Backend.Route.MonarchJavascriptRoute) ->
-            ( stateBefore
-            , [ ElmFullstack.RespondToHttpRequest
-                    (httpResponseOkWithBodyAsBase64
-                        (Just CompilationInterface.SourceFiles.file____src_monarch_js.base64)
-                        (staticContentHttpHeaders "text/javascript")
-                    )
-              ]
-            )
-
-        Just (Backend.Route.StaticFileRoute Backend.Route.FaviconRoute) ->
-            ( stateBefore
-            , [ ElmFullstack.RespondToHttpRequest
-                    (httpResponseOkWithBodyAsBase64
-                        (Just CompilationInterface.SourceFiles.file____static_favicon_svg.base64)
-                        (staticContentHttpHeaders "image/svg+xml")
-                    )
-              ]
-            )
-
-        Just Backend.Route.ApiRoute ->
-            ( { stateBefore
-                | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10
-              }
-            , []
-            )
 
 
 updateForRequestToVolatileProcessResult : String -> ElmFullstack.RequestToVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
@@ -451,7 +457,7 @@ frontendHtmlDocument { debug } =
   <title>Elm Editor</title>
   <link rel="icon" href="/"""
         ++ Common.faviconPath
-        ++ """" type="image/x-icon">
+        ++ """" type="image/svg+xml">
   <script type="text/javascript" src="""
         ++ elmMadeScriptFileName
         ++ """></script>
@@ -493,3 +499,21 @@ monacoCdnURLs =
     [ "https://unpkg.com/monaco-editor@0.27.0/min"
     , "https://cdn.jsdelivr.net/npm/monaco-editor@0.27/min"
     ]
+
+
+contentTypeFromStaticFileExtensionDict : Dict.Dict String String
+contentTypeFromStaticFileExtensionDict =
+    [ ( "svg", "image/svg+xml" )
+    , ( "js", "text/javascript" )
+    ]
+        |> Dict.fromList
+
+
+mapFileTreeNodeFromSource : CompilationInterface.SourceFiles.FileTreeNode a -> FileTree.FileTreeNode a
+mapFileTreeNodeFromSource node =
+    case node of
+        CompilationInterface.SourceFiles.BlobNode blob ->
+            FileTree.BlobNode blob
+
+        CompilationInterface.SourceFiles.TreeNode tree ->
+            tree |> List.map (Tuple.mapSecond mapFileTreeNodeFromSource) |> FileTree.TreeNode
