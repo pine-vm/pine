@@ -188,38 +188,37 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
         bodyFromString =
             Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
 
-        staticContentHttpHeaders contentType =
-            { cacheMaxAgeMinutes = Just (60 * 4)
+        staticContentHttpHeaders { contentType, contentEncoding } =
+            { cacheMaxAgeMinutes = Just (60 * 24)
             , contentType = contentType
+            , contentEncoding = contentEncoding
             }
 
         httpResponseOkWithStringContent stringContent httpResponseHeaders =
             httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
 
-        httpResponseOkWithBodyAsBase64 bodyAsBase64 { cacheMaxAgeMinutes, contentType } =
-            let
-                cacheHeaders =
-                    case cacheMaxAgeMinutes of
-                        Nothing ->
-                            []
-
-                        Just maxAgeMinutes ->
-                            [ { name = "Cache-Control"
-                              , values = [ "public, max-age=" ++ String.fromInt (maxAgeMinutes * 60) ]
-                              }
-                            , { name = "Content-Type"
-                              , values = [ contentType ]
-                              }
-                            ]
-            in
+        httpResponseOkWithBodyAsBase64 bodyAsBase64 contentConfig =
             { statusCode = 200
             , bodyAsBase64 = bodyAsBase64
-            , headersToAdd = cacheHeaders
+            , headersToAdd =
+                [ ( "Cache-Control"
+                  , contentConfig.cacheMaxAgeMinutes
+                        |> Maybe.map (\maxAgeMinutes -> "public, max-age=" ++ String.fromInt (maxAgeMinutes * 60))
+                  )
+                , ( "Content-Type", Just contentConfig.contentType )
+                , ( "Content-Encoding", contentConfig.contentEncoding )
+                ]
+                    |> List.concatMap
+                        (\( name, maybeValue ) ->
+                            maybeValue
+                                |> Maybe.map (\value -> [ { name = name, values = [ value ] } ])
+                                |> Maybe.withDefault []
+                        )
             }
 
         frontendHtmlDocumentResponse frontendConfig =
             httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
-                (staticContentHttpHeaders "text/html")
+                (staticContentHttpHeaders { contentType = "text/html", contentEncoding = Nothing })
 
         continueWithStaticHttpResponse httpResponse =
             ( stateBefore
@@ -258,7 +257,7 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                     in
                     httpResponseOkWithBodyAsBase64
                         (Just matchingFile.base64)
-                        { cacheMaxAgeMinutes = Just 1440, contentType = contentType }
+                        (staticContentHttpHeaders { contentType = contentType, contentEncoding = Nothing })
                         |> continueWithStaticHttpResponse
 
                 Nothing ->
@@ -275,18 +274,18 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                             httpResponseOkWithBodyAsBase64
                                 (Just
                                     (if debug then
-                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.base64
+                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.gzip.base64
 
                                      else
-                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
+                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.gzip.base64
                                     )
                                 )
-                                (staticContentHttpHeaders "text/javascript")
+                                (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Just "gzip" })
                                 |> continueWithStaticHttpResponse
 
                         Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
                             httpResponseOkWithStringContent monacoHtmlDocument
-                                (staticContentHttpHeaders "text/html")
+                                (staticContentHttpHeaders { contentType = "text/html", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
                         Just Backend.Route.ApiRoute ->
