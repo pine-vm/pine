@@ -112,7 +112,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         GetFilesForRestoreProcess(
         IFileStoreReader fileStoreReader)
     {
-        var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
+        var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
         var recordingReader = new DelegatingFileStoreReader
         (
@@ -135,7 +135,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             .ToImmutableList();
 
         return (
-            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<string>()),
+            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<IImmutableList<string>>()),
             lastCompositionLogRecordHashBase16: compositionLogRecords.LastOrDefault().compositionRecordHashBase16);
     }
 
@@ -554,7 +554,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
     }
 
-    static public Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>
+    static public Result<string, FileStoreReaderProjectionResult>
         TestContinueWithCompositionEvent(
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
             IFileStoreReader fileStoreReader)
@@ -567,15 +567,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             using var projectedProcess =
                 LoadFromStoreAndRestoreProcess(new ProcessStoreReaderInFileStore(projectionResult.projectedReader), _ => { }).process;
+
+            return Result<string, FileStoreReaderProjectionResult>.ok(projectionResult);
         }
         catch (Exception e)
         {
-            return Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.err(
+            return Result<string, FileStoreReaderProjectionResult>.err(
                 "Failed with exception: " + e.ToString());
         }
-
-        return Result<string, (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)>.ok(
-            projectionResult);
     }
 
     public string ProcessElmAppEvent(IProcessStoreWriter storeWriter, string serializedEvent)

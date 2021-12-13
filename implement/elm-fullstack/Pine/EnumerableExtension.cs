@@ -16,7 +16,7 @@ static public class EnumerableExtension
     static public IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T>? orig) =>
         orig ?? Array.Empty<T>();
 
-    static public IEqualityComparer<IEnumerable<T>> EqualityComparer<T>() => new IEnumerableEqualityComparer<T>();
+    static public IEqualityComparer<T> EqualityComparer<T>() where T : IEnumerable<IComparable> => new IEnumerableEqualityComparer<T>();
 
     static public IComparer<T> Comparer<T>() where T : IEnumerable<IComparable> => new IEnumerableComparer<T>();
 
@@ -37,14 +37,14 @@ static public class EnumerableExtension
         }
     }
 
-    class IEnumerableEqualityComparer<T> : IEqualityComparer<IEnumerable<T>>
+    class IEnumerableEqualityComparer<T> : IEqualityComparer<T> where T : IEnumerable<IComparable>
     {
-        public bool Equals(IEnumerable<T>? x, IEnumerable<T>? y)
+        public bool Equals(T? x, T? y)
         {
             return ReferenceEquals(x, y) || (x != null && y != null && x.SequenceEqual(y));
         }
 
-        public int GetHashCode(IEnumerable<T> obj) => 0;
+        public int GetHashCode(T obj) => 0;
     }
 
     class IEnumerableComparer<T> : IComparer<T> where T : IEnumerable<IComparable>

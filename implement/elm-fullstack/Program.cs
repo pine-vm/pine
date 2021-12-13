@@ -282,7 +282,7 @@ public class Program
                 {
                     Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
-                    var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
+                    var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
                     var fileStoreWriter = new DelegatingFileStoreWriter
                     (

@@ -209,7 +209,7 @@ namespace ElmFullstack
                                     .ToImmutableDictionary(
                                         entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                                         entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                                    .WithComparers(EnumerableExtension.EqualityComparer<string>());
+                                    .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
                                 var value = ElmMake(
                                     elmCodeFiles: elmMakeRequestFiles,
@@ -363,7 +363,7 @@ namespace ElmFullstack
                         files.ToImmutableDictionary(
                             entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                             entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                        .WithComparers(EnumerableExtension.EqualityComparer<string>()));
+                        .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>()));
 
                 return mappedResult;
             }

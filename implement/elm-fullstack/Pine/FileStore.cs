@@ -296,7 +296,7 @@ public class EmptyFileStoreReader : IFileStoreReader
 
 static public class FileStoreExtension
 {
-    static public IEnumerable<IImmutableList<string>>? ListFiles(this IFileStoreReader fileStore) =>
+    static public IEnumerable<IImmutableList<string>> ListFiles(this IFileStoreReader fileStore) =>
         fileStore.ListFilesInDirectory(ImmutableList<string>.Empty);
 
     static public IFileStoreReader WithMappedPath(

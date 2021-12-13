@@ -8,7 +8,9 @@ using Pine;
 
 namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations;
 
-#nullable disable
+public record FileStoreReaderProjectionResult(
+    IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles,
+    IFileStoreReader projectedReader);
 
 public interface IProcessStoreWriter
 {
@@ -27,14 +29,14 @@ public interface IProcessStoreReader
 
     Composition.Component LoadComponent(string componentHash);
 
-    static public (IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles, IFileStoreReader projectedReader)
+    static public FileStoreReaderProjectionResult
         ProjectFileStoreReaderForAppendedCompositionLogEvent(
         IFileStoreReader originalFileStore,
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
     {
         var projectedFiles =
             new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(
-                comparer: EnumerableExtension.EqualityComparer<string>());
+                comparer: EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
         var fileStoreWriter = new DelegatingFileStoreWriter
         (
@@ -65,10 +67,23 @@ public interface IProcessStoreReader
 
                 return originalFileStore.GetFileContent(filePath);
             },
-            ListFilesInDirectoryDelegate: originalFileStore.ListFilesInDirectory
+            ListFilesInDirectoryDelegate: directoryPath =>
+            {
+                var fromProjectedFiles =
+                    projectedFiles.Keys
+                    .SelectMany(projectedFilePath =>
+                        projectedFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath) ?
+                        ImmutableList.Create(projectedFilePath.RemoveRange(0, directoryPath.Count))
+                        :
+                        ImmutableList<IImmutableList<string>>.Empty);
+
+                return
+                    originalFileStore.ListFilesInDirectory(directoryPath).Concat(fromProjectedFiles)
+                    .Distinct(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+            }
         );
 
-        return (
+        return new FileStoreReaderProjectionResult(
             projectedFiles: projectedFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
             projectedReader: projectedFileStoreReader);
     }

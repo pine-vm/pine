@@ -600,7 +600,7 @@ public class StartupAdminInterface
                             PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
                                 processStoreFileStore).files
                             .Select(filePathAndContent => filePathAndContent.Key)
-                            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<string>());
+                            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
                         getFilesForRestoreStopwatch.Stop();
 
@@ -826,7 +826,7 @@ public class StartupAdminInterface
             originalFileStore: processStoreFileStore,
             compositionLogEvent: compositionLogEvent);
 
-        if (testContinueResult.Ok.projectedFiles == null)
+        if (testContinueResult.Ok?.projectedFiles == null)
         {
             return (statusCode: 400, new AttemptContinueWithCompositionEventReport
             (
