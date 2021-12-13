@@ -64,7 +64,7 @@ namespace ElmFullstack
                         interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
             (Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
-                Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> previousEntryCompilationResult)
+                Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>? previousEntryCompilationResult)
             {
                 if (previousEntryCompilationResult?.Ok != null)
                     return (previousEntryCompilationResult, cacheItemTimeSource.Elapsed);
@@ -87,6 +87,10 @@ namespace ElmFullstack
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles,
             IImmutableList<CompilationIterationReport> iterationsReports);
 
+        public record StackFrame(
+            IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies,
+            CompilationIterationReport iterationReport);
+
         static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
@@ -95,13 +99,13 @@ namespace ElmFullstack
                 sourceFiles,
                 rootModuleName,
                 interfaceToHostRootModuleName,
-                ImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies, CompilationIterationReport previousIterationsReports)>.Empty);
+                ImmutableStack<StackFrame>.Empty);
 
         static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
             IImmutableList<string> interfaceToHostRootModuleName,
-            IImmutableStack<(IImmutableList<(CompilerSerialInterface.DependencyKey key, IReadOnlyList<byte> value)> discoveredDependencies, CompilationIterationReport iterationReport)> stack)
+            IImmutableStack<StackFrame> stack)
         {
             if (10 < stack.Count())
                 throw new Exception("Iteration stack depth > 10");
@@ -113,7 +117,7 @@ namespace ElmFullstack
                 .ToImmutableList();
 
             var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
-                compilerElmProgramCodeFiles: CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value,
+                compilerElmProgramCodeFiles: CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value.Ok!,
                 sourceFiles: sourceFiles,
                 rootModuleName: rootModuleName,
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
@@ -142,11 +146,19 @@ namespace ElmFullstack
 
             var compilationErrorsMissingElmMakeDependencies =
                 compilationErrors
-                .Where(error => error.error?.MissingDependencyError?.FirstOrDefault().ElmMakeDependency != null)
+                .SelectMany(error =>
+                {
+                    var dependencyKey = error.error?.MissingDependencyError?.FirstOrDefault();
+
+                    if (dependencyKey != null)
+                        return ImmutableList.Create((error, dependencyKey));
+
+                    return ImmutableList<(CompilerSerialInterface.LocatedCompilationError error, CompilerSerialInterface.DependencyKey dependencyKey)>.Empty;
+                })
                 .ToImmutableList();
 
             var otherErrors =
-                compilationErrors.Except(compilationErrorsMissingElmMakeDependencies)
+                compilationErrors.Except(compilationErrorsMissingElmMakeDependencies.Select(e => e.error))
                 .ToImmutableList();
 
             if (0 < otherErrors.Count)
@@ -179,14 +191,12 @@ namespace ElmFullstack
                 {
                     var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                    var dependencyKey =
-                        error.error.MissingDependencyError.FirstOrDefault();
-
-                    var elmMakeRequest =
-                        dependencyKey.ElmMakeDependency.FirstOrDefault();
-
                     TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
                         new(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
+
+                    var dependencyKey = error.dependencyKey;
+
+                    var elmMakeRequest = dependencyKey.ElmMakeDependency?.FirstOrDefault();
 
                     if (elmMakeRequest != null)
                     {
@@ -220,7 +230,7 @@ namespace ElmFullstack
                             completeDependencyReport(new CompilationIterationDependencyReport(dependencyKeySummary: "ElmMake")));
                     }
 
-                    throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error));
+                    throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
                 })
                 .ToImmutableList();
 
@@ -248,7 +258,9 @@ namespace ElmFullstack
             }
 
             var newStackFrame =
-                (newDependencies.Select(depAndReport => (depAndReport.Item1.key, depAndReport.Item1.result.Ok)).ToImmutableList(), currentIterationReport);
+                new StackFrame(
+                    newDependencies.Select(depAndReport => (depAndReport.Item1.key, depAndReport.Item1.result.Ok!)).ToImmutableList(),
+                    currentIterationReport);
 
             return AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
@@ -311,9 +323,9 @@ namespace ElmFullstack
 
             serializeStopwatch.Stop();
 
-            System.Diagnostics.Stopwatch prepareJsEngineStopwatch = null;
-            System.Diagnostics.Stopwatch inJsEngineStopwatch = null;
-            System.Diagnostics.Stopwatch deserializeStopwatch = null;
+            System.Diagnostics.Stopwatch? prepareJsEngineStopwatch = null;
+            System.Diagnostics.Stopwatch? inJsEngineStopwatch = null;
+            System.Diagnostics.Stopwatch? deserializeStopwatch = null;
 
             ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> compileNew()
             {
@@ -327,7 +339,7 @@ namespace ElmFullstack
 
                 var responseJson =
                     jsEngine.CallFunction("lowerSerialized", argumentsJson)
-                    ?.ToString();
+                    .ToString()!;
 
                 inJsEngineStopwatch.Stop();
 
@@ -341,11 +353,13 @@ namespace ElmFullstack
                                 IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
                                 IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>>(responseJson);
 
-                if (compilationResponse.Ok?.FirstOrDefault() == null)
+                var compilationResponseOk = compilationResponse.Ok?.FirstOrDefault();
+
+                if (compilationResponseOk == null)
                     throw new Exception("Protocol error: " + compilationResponse.Err);
 
                 var mappedResult =
-                    compilationResponse.Ok?.FirstOrDefault().map(files =>
+                    compilationResponseOk.map(files =>
                         files.ToImmutableDictionary(
                             entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                             entry => (IReadOnlyList<byte>)Convert.FromBase64String(entry.content.AsBase64))
@@ -438,20 +452,40 @@ namespace ElmFullstack
                     listFunctionToPublish);
         }
 
-        static readonly public Lazy<IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
+        static readonly public Lazy<Result<string, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
             new(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
 
-        static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
-            ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
-            .WithComparers(EnumerableExtension.EqualityComparer<string>())
-            .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.elm.json"))
-            .SetItem(ImmutableList.Create("src", "FileTree.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.FileTree.elm"))
-            .SetItem(ImmutableList.Create("src", "CompileFullstackApp.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.CompileFullstackApp.elm"))
-            .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmFullstack.compile_elm_program.src.Main.elm"));
+        static public Result<string, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
+            DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
+                filePaths:
+                    new[]
+                    {
+                        ImmutableList.Create("elm.json"),
+                        ImmutableList.Create("src", "FileTree.elm"),
+                        ImmutableList.Create("src", "CompileFullstackApp.elm"),
+                        ImmutableList.Create("src", "Main.elm")
+                    },
+                resourceNameCommonPrefix: "elm_fullstack.ElmFullstack.compile_elm_program.",
+                assembly: typeof(ElmAppCompilation).Assembly);
 
-        static byte[] GetManifestResourceStreamContent(string name)
+        static IImmutableDictionary<KeyT, ValueT>? SetItemOrReturnNull<KeyT, ValueT>(
+            IImmutableDictionary<KeyT, ValueT>? dict,
+            KeyT key,
+            ValueT? value)
+        {
+            if (dict == null || value == null)
+                return null;
+
+            return dict.SetItem(key, value);
+        }
+
+        static IReadOnlyList<byte>? GetManifestResourceStreamContent(string name)
         {
             using var stream = typeof(ElmAppCompilation).Assembly.GetManifestResourceStream(name);
+
+            if (stream == null)
+                return null;
+
             using var memoryStream = new System.IO.MemoryStream();
 
             stream.CopyTo(memoryStream);
@@ -459,10 +493,11 @@ namespace ElmFullstack
             return memoryStream.ToArray();
         }
 
-        static public string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError> compilationErrors)
+        static public string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)
         {
             var errorsText =
-                string.Join("\n\n", compilationErrors?.Select(DescribeCompilationError));
+                compilationErrors == null ? null :
+                string.Join("\n\n", compilationErrors.Select(DescribeCompilationError));
 
             return "Compilation failed with " + compilationErrors?.Count + " error" + (compilationErrors?.Count == 1 ? "" : "s") + ":\n\n" + errorsText;
         }
@@ -548,7 +583,7 @@ namespace ElmFullstack
 
         public record CompilationIterationReport(
             CompilationIterationCompilationReport compilation,
-            IReadOnlyList<TimedReport<CompilationIterationDependencyReport>> dependenciesReports,
+            IReadOnlyList<TimedReport<CompilationIterationDependencyReport>>? dependenciesReports,
             int? totalTimeSpentMilli);
 
         public record CompilationIterationCompilationReport(
@@ -563,8 +598,8 @@ namespace ElmFullstack
         public record TimedReport<T>(T report, int totalTimeSpentMilli);
 
         public record CompilationError(
-            string DependencyError = null,
-            string OtherError = null)
+            string? DependencyError = null,
+            string? OtherError = null)
         {
             static public CompilationError AsCompilationError(CompilerSerialInterface.CompilationError compilationError)
             {
@@ -577,14 +612,14 @@ namespace ElmFullstack
             }
         }
 
-        public record LocatedCompilationError(CompilerSerialInterface.LocationInSourceFiles location, CompilationError error);
+        public record LocatedCompilationError(CompilerSerialInterface.LocationInSourceFiles? location, CompilationError error);
     }
 
     namespace CompilerSerialInterface
     {
         public record CompilationError(
-            IReadOnlyList<string> OtherCompilationError = null,
-            IReadOnlyList<DependencyKey> MissingDependencyError = null);
+            IReadOnlyList<string>? OtherCompilationError = null,
+            IReadOnlyList<DependencyKey>? MissingDependencyError = null);
 
         public record LocatedInSourceFilesRecord(LocationInSourceFiles location);
 
@@ -601,8 +636,8 @@ namespace ElmFullstack
             bool enableDebug);
 
         public record ElmMakeOutputType(
-            IReadOnlyList<object> ElmMakeOutputTypeHtml = null,
-            IReadOnlyList<object> ElmMakeOutputTypeJs = null);
+            IReadOnlyList<object>? ElmMakeOutputTypeHtml = null,
+            IReadOnlyList<object>? ElmMakeOutputTypeJs = null);
 
         public record AppCodeEntry(IReadOnlyList<string> path, BytesJson content);
 

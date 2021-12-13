@@ -78,85 +78,286 @@ public class StartupPublicApp
             app.UseDeveloperExceptionPage();
         }
 
-        if (webAppAndElmAppConfig == null)
-        {
-            throw new Exception("Missing reference to the web app config.");
-        }
-
-        var applicationStoppingCancellationTokenSource = new System.Threading.CancellationTokenSource();
+        var state = new PublicAppState(webAppAndElmAppConfig: webAppAndElmAppConfig, getDateTimeOffset: getDateTimeOffset);
 
         appLifetime.ApplicationStopping.Register(() =>
         {
-            applicationStoppingCancellationTokenSource.Cancel();
+            state.applicationStoppingCancellationTokenSource.Cancel();
             _logger?.LogInformation("Public app noticed ApplicationStopping.");
         });
-
-        var nextHttpRequestIndex = 0;
 
         if (webAppAndElmAppConfig.WebAppConfiguration?.letsEncryptOptions != null)
             app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
-        var createVolatileProcessAttempts = 0;
 
-        var volatileProcesses = new ConcurrentDictionary<string, VolatileProcess>();
+        state.ProcessEventTimeHasArrived();
 
-        var appTaskCompleteHttpResponse = new ConcurrentDictionary<string, InterfaceToHost.HttpResponse>();
+        app
+            .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
+            .Run(state.Run);
+    }
 
-        System.Threading.Timer notifyTimeHasArrivedTimer = null;
+    class PublicAppState
+    {
+        long nextHttpRequestIndex = 0;
+
+        int createVolatileProcessAttempts = 0;
+
+        readonly ConcurrentDictionary<string, InterfaceToHost.HttpResponse> appTaskCompleteHttpResponse = new();
+
+        readonly ConcurrentDictionary<string, VolatileProcess> volatileProcesses = new();
+
+        readonly public System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
+
+        readonly WebAppAndElmAppConfig webAppAndElmAppConfig;
+        readonly Func<DateTimeOffset> getDateTimeOffset;
+
+        readonly System.Threading.Timer notifyTimeHasArrivedTimer;
+
+        readonly object nextTimeToNotifyLock = new();
+
         DateTimeOffset? lastAppEventTimeHasArrived = null;
-        InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStructure nextTimeToNotify = null;
-        var nextTimeToNotifyLock = new object();
+        InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStructure? nextTimeToNotify = null;
 
-        byte[] getBlobWithSHA256(byte[] sha256)
+        public PublicAppState(
+            WebAppAndElmAppConfig webAppAndElmAppConfig,
+            Func<DateTimeOffset> getDateTimeOffset)
         {
-            var matchFromSourceComposition =
-                webAppAndElmAppConfig?.SourceComposition == null ? null :
-                Composition.FindComponentByHash(webAppAndElmAppConfig.SourceComposition, sha256);
+            this.webAppAndElmAppConfig = webAppAndElmAppConfig;
+            this.getDateTimeOffset = getDateTimeOffset;
 
-            if (matchFromSourceComposition != null)
-            {
-                if (matchFromSourceComposition.BlobContent == null)
-                    throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
+            if (webAppAndElmAppConfig.InitOrMigrateCmds != null)
+                ForwardTasksFromResponseCmds(webAppAndElmAppConfig.InitOrMigrateCmds);
 
-                return matchFromSourceComposition.BlobContent.ToArray();
-            }
+            notifyTimeHasArrivedTimer = new System.Threading.Timer(
+                callback: _ =>
+                {
+                    if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                    {
+                        notifyTimeHasArrivedTimer?.Dispose();
+                        return;
+                    }
 
-            return BlobLibrary.GetBlobWithSHA256(sha256);
+                    lock (nextTimeToNotifyLock)
+                    {
+                        if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                        {
+                            notifyTimeHasArrivedTimer?.Dispose();
+                            return;
+                        }
+
+                        var localNextTimeToNotify = nextTimeToNotify;
+
+                        if (localNextTimeToNotify != null && localNextTimeToNotify.minimumPosixTimeMilli <= getDateTimeOffset().ToUnixTimeMilliseconds())
+                        {
+                            nextTimeToNotify = null;
+                            ProcessEventTimeHasArrived();
+                            return;
+                        }
+                    }
+
+                    if (!lastAppEventTimeHasArrived.HasValue ||
+                        NotifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value))
+                    {
+                        ProcessEventTimeHasArrived();
+                    }
+                },
+                state: null,
+                dueTime: TimeSpan.Zero,
+                period: TimeSpan.FromMilliseconds(10));
         }
 
-        InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
-            performProcessTaskRequestToVolatileProcess(
-            InterfaceToHost.RequestToVolatileProcessStruct requestToVolatileProcess)
+        public async System.Threading.Tasks.Task Run(HttpContext context)
         {
-            if (!volatileProcesses.TryGetValue(requestToVolatileProcess.processId, out var volatileProcess))
+            var currentDateTime = getDateTimeOffset();
+            var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
+            var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
+
+            var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
+
+            var httpRequestEvent =
+                await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
+
+            var httpRequestInterfaceEvent = new InterfaceToHost.AppEventStructure
             {
-                return new InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
-                (
-                    Err: new InterfaceToHost.RequestToVolatileProcessError
-                    (
-                        ProcessNotFound: new object()
-                    )
-                );
+                HttpRequestEvent = httpRequestEvent,
+            };
+
+            var preparedProcessEvent = PrepareProcessEventAndResultingRequests(httpRequestInterfaceEvent);
+
+            if (webAppAndElmAppConfig.WebAppConfiguration?.httpRequestEventSizeLimit < preparedProcessEvent.serializedInterfaceEvent?.Length)
+            {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsync("Request is too large.");
+                return;
             }
 
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            preparedProcessEvent.processEventAndResultingRequests();
 
-            var fromVolatileProcessResult = volatileProcess.ProcessRequest(requestToVolatileProcess.request);
+            var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
 
-            stopwatch.Stop();
-
-            return new InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
+            while (true)
             {
-                Ok = new InterfaceToHost.RequestToVolatileProcessComplete
+                if (appTaskCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
+                {
+                    var headerContentType =
+                        httpResponse.headersToAdd
+                        ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
+                        ?.values?.FirstOrDefault();
+
+                    context.Response.StatusCode = httpResponse.statusCode;
+
+                    foreach (var headerToAdd in httpResponse.headersToAdd.EmptyIfNull())
+                        context.Response.Headers[headerToAdd.name] = new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
+
+                    if (headerContentType != null)
+                        context.Response.ContentType = headerContentType;
+
+                    ReadOnlyMemory<byte>? contentAsByteArray = null;
+
+                    if (httpResponse?.bodyAsBase64 != null)
+                    {
+                        var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
+
+                        if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
+                        {
+                            throw new FormatException(
+                                "Failed to convert from base64. bytesWritten=" + bytesWritten +
+                                ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
+                                httpResponse.bodyAsBase64);
+                        }
+
+                        contentAsByteArray = buffer.AsMemory(0, bytesWritten);
+                    }
+
+                    context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
+
+                    if (contentAsByteArray != null)
+                        await context.Response.Body.WriteAsync(contentAsByteArray.Value);
+
+                    break;
+                }
+
+                if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
+                    throw new TimeoutException(
+                        "The app did not return a HTTP response within " +
+                        (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
+                        " seconds.");
+
+                System.Threading.Thread.Sleep(100);
+            }
+        }
+
+        public void ProcessEventTimeHasArrived()
+        {
+            var currentTime = getDateTimeOffset();
+
+            lastAppEventTimeHasArrived = currentTime;
+
+            ProcessEventAndResultingRequests(new InterfaceToHost.AppEventStructure
+            {
+                ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
                 (
-                    exceptionToString: fromVolatileProcessResult.Exception?.ToString(),
-                    returnValueToString: fromVolatileProcessResult.ReturnValue?.ToString(),
-                    durationInMilliseconds: stopwatch.ElapsedMilliseconds
+                    posixTimeMilli: currentTime.ToUnixTimeMilliseconds()
+                )
+            });
+        }
+
+        (string serializedInterfaceEvent, Action processEventAndResultingRequests) PrepareProcessEventAndResultingRequests(
+            InterfaceToHost.AppEventStructure interfaceEvent)
+        {
+            var serializedInterfaceEvent =
+                Newtonsoft.Json.JsonConvert.SerializeObject(
+                    interfaceEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
+
+            var processEvent = new Action(() =>
+            {
+                if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                    return;
+
+                try
+                {
+                    var serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+
+                    try
+                    {
+                        var structuredResponse =
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
+                                serializedResponse);
+
+                        if (structuredResponse.DecodeEventSuccess == null)
+                        {
+                            throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
+                        }
+
+                        var notifyWhenPosixTimeHasArrived = structuredResponse.DecodeEventSuccess.notifyWhenPosixTimeHasArrived;
+
+                        if (notifyWhenPosixTimeHasArrived != null)
+                        {
+                            System.Threading.Tasks.Task.Run(() =>
+                            {
+                                lock (nextTimeToNotifyLock)
+                                {
+                                    nextTimeToNotify = notifyWhenPosixTimeHasArrived;
+                                }
+                            });
+                        }
+
+                        ForwardTasksFromResponseCmds(structuredResponse.DecodeEventSuccess);
+                    }
+                    catch (Exception parseException)
+                    {
+                        throw new Exception(
+                            "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
+                            parseException);
+                    }
+                }
+                catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
+                {
+                    return;
+                }
+            });
+
+            return (serializedInterfaceEvent, processEvent);
+        }
+
+        void PerformProcessTaskAndFeedbackEvent(InterfaceToHost.StartTask taskWithId)
+        {
+            var taskResult = PerformProcessTask(taskWithId.task);
+
+            var interfaceEvent = new InterfaceToHost.AppEventStructure
+            {
+                TaskCompleteEvent = new InterfaceToHost.ResultFromTaskWithId
+                (
+                    taskId: taskWithId.taskId,
+                    taskResult: taskResult
                 )
             };
+
+            ProcessEventAndResultingRequests(interfaceEvent);
         }
 
-        InterfaceToHost.TaskResult performProcessTask(InterfaceToHost.Task task)
+        void ProcessEventAndResultingRequests(InterfaceToHost.AppEventStructure interfaceEvent)
+        {
+            var prepareProcessEvent = PrepareProcessEventAndResultingRequests(interfaceEvent);
+
+            prepareProcessEvent.processEventAndResultingRequests();
+        }
+
+        void ForwardTasksFromResponseCmds(InterfaceToHost.AppEventResponseStructure response)
+        {
+            foreach (var startTask in response.startTasks)
+            {
+                System.Threading.Tasks.Task.Run(() => PerformProcessTaskAndFeedbackEvent(startTask), applicationStoppingCancellationTokenSource.Token);
+            }
+
+            foreach (var completeHttpResponse in response.completeHttpResponses)
+            {
+                appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] = completeHttpResponse.response;
+            }
+        }
+
+        InterfaceToHost.TaskResult PerformProcessTask(InterfaceToHost.Task task)
         {
             var createVolatileProcess = task?.CreateVolatileProcess;
             var requestToVolatileProcess = task?.RequestToVolatileProcess;
@@ -166,7 +367,7 @@ public class StartupPublicApp
             {
                 try
                 {
-                    var volatileProcess = new VolatileProcess(getBlobWithSHA256, createVolatileProcess.programCode);
+                    var volatileProcess = new VolatileProcess(GetBlobWithSHA256, createVolatileProcess.programCode);
 
                     var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
 
@@ -213,7 +414,7 @@ public class StartupPublicApp
 
             if (requestToVolatileProcess != null)
             {
-                var response = performProcessTaskRequestToVolatileProcess(requestToVolatileProcess);
+                var response = PerformProcessTaskRequestToVolatileProcess(requestToVolatileProcess);
 
                 return new InterfaceToHost.TaskResult
                 {
@@ -224,242 +425,54 @@ public class StartupPublicApp
             throw new NotImplementedException("Unexpected task structure.");
         }
 
-        void performProcessTaskAndFeedbackEvent(InterfaceToHost.StartTask taskWithId)
+        byte[]? GetBlobWithSHA256(byte[] sha256)
         {
-            var taskResult = performProcessTask(taskWithId.task);
+            var matchFromSourceComposition =
+                webAppAndElmAppConfig?.SourceComposition == null ? null :
+                Composition.FindComponentByHash(webAppAndElmAppConfig.SourceComposition, sha256);
 
-            var interfaceEvent = new InterfaceToHost.AppEventStructure
+            if (matchFromSourceComposition != null)
             {
-                TaskCompleteEvent = new InterfaceToHost.ResultFromTaskWithId
+                if (matchFromSourceComposition.BlobContent == null)
+                    throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
+
+                return matchFromSourceComposition.BlobContent.ToArray();
+            }
+
+            return BlobLibrary.GetBlobWithSHA256(sha256);
+        }
+
+        InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
+            PerformProcessTaskRequestToVolatileProcess(
+            InterfaceToHost.RequestToVolatileProcessStruct requestToVolatileProcess)
+        {
+            if (!volatileProcesses.TryGetValue(requestToVolatileProcess.processId, out var volatileProcess))
+            {
+                return new InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
                 (
-                    taskId: taskWithId.taskId,
-                    taskResult: taskResult
+                    Err: new InterfaceToHost.RequestToVolatileProcessError
+                    (
+                        ProcessNotFound: new object()
+                    )
+                );
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var fromVolatileProcessResult = volatileProcess.ProcessRequest(requestToVolatileProcess.request);
+
+            stopwatch.Stop();
+
+            return new InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
+            {
+                Ok = new InterfaceToHost.RequestToVolatileProcessComplete
+                (
+                    exceptionToString: fromVolatileProcessResult.Exception?.ToString(),
+                    returnValueToString: fromVolatileProcessResult.ReturnValue?.ToString(),
+                    durationInMilliseconds: stopwatch.ElapsedMilliseconds
                 )
             };
-
-            processEventAndResultingRequests(interfaceEvent);
         }
-
-        void processEventAndResultingRequests(InterfaceToHost.AppEventStructure interfaceEvent)
-        {
-            var prepareProcessEvent = prepareProcessEventAndResultingRequests(interfaceEvent);
-
-            prepareProcessEvent.processEventAndResultingRequests();
-        }
-
-        void forwardTasksFromResponseCmds(InterfaceToHost.AppEventResponseStructure response)
-        {
-            foreach (var startTask in response.startTasks)
-            {
-                System.Threading.Tasks.Task.Run(() => performProcessTaskAndFeedbackEvent(startTask), applicationStoppingCancellationTokenSource.Token);
-            }
-
-            foreach (var completeHttpResponse in response.completeHttpResponses)
-            {
-                appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] = completeHttpResponse.response;
-            }
-        }
-
-        (string serializedInterfaceEvent, Action processEventAndResultingRequests) prepareProcessEventAndResultingRequests(
-            InterfaceToHost.AppEventStructure interfaceEvent)
-        {
-            var serializedInterfaceEvent = Newtonsoft.Json.JsonConvert.SerializeObject(interfaceEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
-
-            var processEvent = new Action(() =>
-            {
-                if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
-                    return;
-
-                string serializedResponse = null;
-
-                try
-                {
-                    serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
-                }
-                catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                InterfaceToHost.ResponseOverSerialInterface structuredResponse = null;
-
-                try
-                {
-                    structuredResponse =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                            serializedResponse);
-                }
-                catch (Exception parseException)
-                {
-                    throw new Exception(
-                        "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
-                        parseException);
-                }
-
-                if (structuredResponse?.DecodeEventSuccess == null)
-                {
-                    throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
-                }
-
-                var notifyWhenPosixTimeHasArrived = structuredResponse.DecodeEventSuccess.notifyWhenPosixTimeHasArrived;
-
-                if (notifyWhenPosixTimeHasArrived != null)
-                {
-                    System.Threading.Tasks.Task.Run(() =>
-                        {
-                            lock (nextTimeToNotifyLock)
-                            {
-                                nextTimeToNotify = notifyWhenPosixTimeHasArrived;
-                            }
-                        });
-                }
-
-                forwardTasksFromResponseCmds(structuredResponse.DecodeEventSuccess);
-            });
-
-            return (serializedInterfaceEvent, processEvent);
-        }
-
-        void processEventTimeHasArrived()
-        {
-            var currentTime = getDateTimeOffset();
-
-            lastAppEventTimeHasArrived = currentTime;
-
-            processEventAndResultingRequests(new InterfaceToHost.AppEventStructure
-            {
-                ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
-                (
-                    posixTimeMilli: currentTime.ToUnixTimeMilliseconds()
-                )
-            });
-        }
-
-        notifyTimeHasArrivedTimer = new System.Threading.Timer(
-            callback: _ =>
-            {
-                if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
-                {
-                    notifyTimeHasArrivedTimer?.Dispose();
-                    return;
-                }
-
-                lock (nextTimeToNotifyLock)
-                {
-                    if (applicationStoppingCancellationTokenSource.IsCancellationRequested)
-                    {
-                        notifyTimeHasArrivedTimer?.Dispose();
-                        return;
-                    }
-
-                    var localNextTimeToNotify = nextTimeToNotify;
-
-                    if (localNextTimeToNotify != null && localNextTimeToNotify.minimumPosixTimeMilli <= getDateTimeOffset().ToUnixTimeMilliseconds())
-                    {
-                        nextTimeToNotify = null;
-                        processEventTimeHasArrived();
-                        return;
-                    }
-                }
-
-                if (!lastAppEventTimeHasArrived.HasValue ||
-                    NotifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value))
-                {
-                    processEventTimeHasArrived();
-                }
-            },
-            state: null,
-            dueTime: TimeSpan.Zero,
-            period: TimeSpan.FromMilliseconds(10));
-
-        if (webAppAndElmAppConfig.InitOrMigrateCmds != null)
-            forwardTasksFromResponseCmds(webAppAndElmAppConfig.InitOrMigrateCmds);
-
-        processEventTimeHasArrived();
-
-        app
-            .Use(async (context, next) => await Asp.MiddlewareFromWebAppConfig(webAppAndElmAppConfig.WebAppConfiguration, context, next))
-            .Run(async (context) =>
-            {
-                var currentDateTime = getDateTimeOffset();
-                var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
-                var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
-
-                var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
-
-                var httpRequestEvent =
-                    await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
-
-                var httpRequestInterfaceEvent = new InterfaceToHost.AppEventStructure
-                {
-                    HttpRequestEvent = httpRequestEvent,
-                };
-
-                var preparedProcessEvent = prepareProcessEventAndResultingRequests(httpRequestInterfaceEvent);
-
-                if (webAppAndElmAppConfig.WebAppConfiguration?.httpRequestEventSizeLimit < preparedProcessEvent.serializedInterfaceEvent?.Length)
-                {
-                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                    await context.Response.WriteAsync("Request is too large.");
-                    return;
-                }
-
-                preparedProcessEvent.processEventAndResultingRequests();
-
-                var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
-
-                while (true)
-                {
-                    if (appTaskCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
-                    {
-                        var headerContentType =
-                            httpResponse.headersToAdd
-                            ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
-                            ?.values?.FirstOrDefault();
-
-                        context.Response.StatusCode = httpResponse.statusCode;
-
-                        foreach (var headerToAdd in (httpResponse.headersToAdd).EmptyIfNull())
-                            context.Response.Headers[headerToAdd.name] = new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
-
-                        if (headerContentType != null)
-                            context.Response.ContentType = headerContentType;
-
-                        byte[] contentAsByteArray = null;
-
-                        if (httpResponse?.bodyAsBase64 != null)
-                        {
-                            var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
-
-                            if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
-                            {
-                                throw new FormatException(
-                                    "Failed to convert from base64. bytesWritten=" + bytesWritten +
-                                    ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
-                                    httpResponse.bodyAsBase64);
-                            }
-
-                            contentAsByteArray = buffer.AsSpan(0, bytesWritten).ToArray();
-                        }
-
-                        context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
-
-                        if (contentAsByteArray != null)
-                            await context.Response.Body.WriteAsync(contentAsByteArray);
-
-                        break;
-                    }
-
-                    if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
-                        throw new TimeoutException(
-                            "The app did not return a HTTP response within " +
-                            (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
-                            " seconds.");
-
-                    System.Threading.Thread.Sleep(100);
-                }
-
-            });
     }
 
     static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEvent> AsPersistentProcessInterfaceHttpRequestEvent(
@@ -482,7 +495,7 @@ public class StartupPublicApp
 }
 
 public record WebAppAndElmAppConfig(
-    WebAppConfigurationJsonStructure WebAppConfiguration,
+    WebAppConfigurationJsonStructure? WebAppConfiguration,
     Func<string, string> ProcessEventInElmApp,
     Composition.Component SourceComposition,
     InterfaceToHost.AppEventResponseStructure InitOrMigrateCmds);

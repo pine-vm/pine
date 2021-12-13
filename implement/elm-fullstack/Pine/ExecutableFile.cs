@@ -24,10 +24,10 @@ public class ExecutableFile
         IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesNotExecutable,
         byte[] executableFile,
         string arguments,
-        IDictionary<string, string> environmentStrings,
-        IImmutableList<string> workingDirectory = null,
-        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesExecutable = null,
-        IReadOnlyDictionary<string, IReadOnlyList<byte>> environmentPathExecutableFiles = null)
+        IDictionary<string, string>? environmentStrings,
+        IImmutableList<string>? workingDirectory = null,
+        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>>? environmentFilesExecutable = null,
+        IReadOnlyDictionary<string, IReadOnlyList<byte>>? environmentPathExecutableFiles = null)
     {
         var environmentStringsDict =
             environmentStrings?.ToImmutableDictionary() ?? ImmutableDictionary<string, string>.Empty;
@@ -39,7 +39,7 @@ public class ExecutableFile
         string writeEnvironmentFile(KeyValuePair<IImmutableList<string>, IReadOnlyList<byte>> environmentFile)
         {
             var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.Key));
-            var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath);
+            var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath)!;
 
             Directory.CreateDirectory(environmentFileDirectory);
 
@@ -93,13 +93,13 @@ public class ExecutableFile
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ";" : ":";
 
         var environmentPathEntryBefore =
-            environmentStringsDict?.FirstOrDefault(c => c.Key.Equals("PATH", StringComparison.InvariantCultureIgnoreCase));
+            environmentStringsDict.FirstOrDefault(c => c.Key.Equals("PATH", StringComparison.InvariantCultureIgnoreCase));
 
-        var environmentPath = environmentPathExecutableFilesPathAbsolute + pathEnvironmentVarSeparator + environmentPathEntryBefore?.Value;
+        var environmentPath = environmentPathExecutableFilesPathAbsolute + pathEnvironmentVarSeparator + environmentPathEntryBefore.Value;
 
         var environmentStringsWithExecutableFiles =
             environmentStringsDict
-            .SetItem(environmentPathEntryBefore?.Key ?? "PATH", environmentPath);
+            .SetItem(environmentPathEntryBefore.Key ?? "PATH", environmentPath);
 
         var process = new Process
         {
@@ -156,7 +156,7 @@ public class ExecutableFile
         byte[] executableFile,
         string arguments,
         IDictionary<string, string> environmentStrings,
-        IImmutableList<string> workingDirectory = null) =>
+        IImmutableList<string>? workingDirectory = null) =>
         ExecuteFileWithArguments(
             environmentFilesNotExecutable: Composition.ToFlatDictionaryWithPathComparer(environmentFiles),
             executableFile: executableFile,

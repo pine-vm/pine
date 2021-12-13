@@ -20,7 +20,7 @@ static public class UserSecrets
             ImmutableList.Create(System.Web.HttpUtility.UrlEncode(site.TrimEnd('/'))), Encoding.UTF8.GetBytes(password));
     }
 
-    static public string LoadPasswordForSite(string site)
+    static public string? LoadPasswordForSite(string site)
     {
         if (site == null)
             return null;

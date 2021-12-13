@@ -12,8 +12,7 @@ public class Filesystem
     //  https://stackoverflow.com/questions/39224518/path-to-localappdata-in-asp-net-core-application#comment83608153_39225227
     static public string CacheDirectory =>
         Path.Combine(
-            Environment.GetEnvironmentVariable(
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME"),
+            Environment.GetEnvironmentVariable(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME")!,
             "pine", ".cache");
 
     static public IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>

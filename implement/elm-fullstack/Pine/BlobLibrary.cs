@@ -10,19 +10,22 @@ namespace Pine;
 
 public class BlobLibrary
 {
-    static public Func<Func<byte[], byte[]>, Func<byte[], byte[]>> OverrideGetBlobWithSHA256;
+    static public Func<Func<byte[], byte[]?>, Func<byte[], byte[]?>>? OverrideGetBlobWithSHA256;
 
     static readonly string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
 
     static string ContainerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 
-    static public byte[] GetBlobWithSHA256(byte[] sha256)
+    static public byte[]? GetBlobWithSHA256(byte[] sha256)
     {
         try
         {
             var getter = OverrideGetBlobWithSHA256?.Invoke(GetBlobWithSHA256Cached) ?? GetBlobWithSHA256Cached;
 
             var blobCandidate = getter(sha256);
+
+            if (blobCandidate == null)
+                return null;
 
             if (!(Enumerable.SequenceEqual(Composition.GetHash(Composition.Component.Blob(blobCandidate)), sha256) ||
                 Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate), sha256)))
@@ -38,10 +41,10 @@ public class BlobLibrary
         }
     }
 
-    static public byte[] GetBlobWithSHA256Cached(byte[] sha256) =>
+    static public byte[]? GetBlobWithSHA256Cached(byte[] sha256) =>
         GetBlobWithSHA256Cached(sha256, null);
 
-    static public byte[] GetBlobWithSHA256Cached(byte[] sha256, Func<byte[]> getIfNotCached)
+    static public byte[]? GetBlobWithSHA256Cached(byte[] sha256, Func<byte[]?>? getIfNotCached)
     {
         var sha256DirectoryName = "by-sha256";
 
@@ -71,7 +74,7 @@ public class BlobLibrary
         {
             var fromExplicitSource = getIfNotCached();
 
-            if (blobHasExpectedSHA256(fromExplicitSource))
+            if (fromExplicitSource != null && blobHasExpectedSHA256(fromExplicitSource))
                 return tryUpdateCacheAndContinueFromBlob(fromExplicitSource);
         }
 
@@ -82,7 +85,7 @@ public class BlobLibrary
                 throw new NotImplementedException("Received unexpected blob for '" + fileName + "'.");
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath)!);
 
             try
             {
@@ -96,7 +99,7 @@ public class BlobLibrary
             return responseContent;
         }
 
-        byte[] tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
+        byte[]? tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
         {
             if (httpResponse.StatusCode == HttpStatusCode.NotFound)
                 return null;
@@ -146,7 +149,7 @@ public class BlobLibrary
         return httpClient.GetAsync(url).Result;
     }
 
-    static public byte[] DownloadFromUrlAndExtractBlobWithMatchingHash(
+    static public byte[]? DownloadFromUrlAndExtractBlobWithMatchingHash(
         string sourceUrl,
         byte[] sha256)
     {
@@ -170,7 +173,7 @@ public class BlobLibrary
 
         yield return responseContent;
 
-        IEnumerator<byte[]> enumerator = null;
+        IEnumerator<byte[]>? enumerator = null;
 
         if (sourceUrl.EndsWith(".zip"))
         {

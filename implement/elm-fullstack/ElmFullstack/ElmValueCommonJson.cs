@@ -1,17 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 
 namespace ElmFullstack.ElmValueCommonJson;
 
 public record Maybe<JustT>
 {
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<object> Nothing;
+    public IReadOnlyList<object>? Nothing { init; get; }
 
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<JustT> Just;
+    public IReadOnlyList<JustT>? Just { init; get; }
 
     static public Maybe<JustT> just(JustT j) =>
         new() { Just = ImmutableList.Create(j) };
@@ -30,10 +29,10 @@ public record Maybe<JustT>
 public record Result<ErrT, OkT>
 {
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<ErrT> Err;
+    public IReadOnlyList<ErrT>? Err { init; get; }
 
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<OkT> Ok;
+    public IReadOnlyList<OkT>? Ok { init; get; }
 
     static public Result<ErrT, OkT> ok(OkT ok) =>
         new() { Ok = ImmutableList.Create(ok) };
@@ -44,8 +43,11 @@ public record Result<ErrT, OkT>
     public Result<ErrT, NewOkT> map<NewOkT>(Func<OkT, NewOkT> mapOk)
     {
         if (0 < Ok?.Count)
-            return Result<ErrT, NewOkT>.ok(mapOk(Ok.First()));
+            return Result<ErrT, NewOkT>.ok(mapOk(Ok[0]));
 
-        return Result<ErrT, NewOkT>.err(Err.FirstOrDefault());
+        if (Err == null)
+            throw new NullReferenceException();
+
+        return Result<ErrT, NewOkT>.err(Err[0]);
     }
 }

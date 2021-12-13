@@ -7,7 +7,7 @@ namespace Pine;
 
 public record ProcessWithLog<LogEntryT, ResultT>(
      (LogEntryT logEntry, Func<ProcessWithLog<LogEntryT, ResultT>> nextStep) LogEntry = default,
-     ResultT Result = default)
+     ResultT? Result = default)
 {
     public ProcessWithLog<LogEntryT, NewResultT> Continue<NewResultT>(
         Func<ResultT, ProcessWithLog<LogEntryT, NewResultT>> continuation) =>
@@ -89,7 +89,7 @@ static public class ProcessWithLogExtension
             return LogToActions(firstStep.LogEntry.nextStep(), logAction);
         }
 
-        return firstStep.Result;
+        return firstStep.Result!;
     }
 
     static public (IImmutableList<LogEntryT> log, ResultT result) LogToList<LogEntryT, ResultT>(
@@ -102,6 +102,6 @@ static public class ProcessWithLogExtension
             return (log.Insert(0, firstStep.LogEntry.logEntry), result);
         }
 
-        return (ImmutableList<LogEntryT>.Empty, firstStep.Result);
+        return (ImmutableList<LogEntryT>.Empty, firstStep.Result!);
     }
 }

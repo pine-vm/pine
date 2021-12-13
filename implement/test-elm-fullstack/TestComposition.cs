@@ -240,7 +240,7 @@ public class TestComposition
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                Composition.ComponentFromString(testCase);
+                Composition.ComponentFromString(testCase)!;
 
             var toStringResult =
                 Composition.StringFromComponent(asPineValue);
@@ -286,7 +286,7 @@ public class TestComposition
             var asPineValue =
                 Composition.ComponentFromUnsignedInteger(testCase);
 
-            Assert.IsNull(asPineValue.Err);
+            Assert.IsNotNull(asPineValue.Ok);
 
             var toIntegerResult =
                 Composition.UnsignedIntegerFromComponent(asPineValue.Ok);

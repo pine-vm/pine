@@ -17,9 +17,9 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     static string AdminWebHostUrlDefault => "http://localhost:19372";
 
-    readonly string publicWebHostUrlOverride;
+    readonly string? publicWebHostUrlOverride;
 
-    readonly string adminWebHostUrlOverride;
+    readonly string? adminWebHostUrlOverride;
 
     public string PublicWebHostUrl => publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
 
@@ -27,9 +27,9 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     readonly string testDirectory;
 
-    readonly string adminPassword;
+    readonly string? adminPassword;
 
-    readonly Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap;
+    readonly Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap;
 
     public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
@@ -38,7 +38,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     readonly IFileStore fileStore;
 
     public IWebHost StartWebHost(
-         Func<IFileStore, IFileStore> processStoreFileStoreMap = null)
+         Func<IFileStore, IFileStore>? processStoreFileStoreMap = null)
     {
         var webHost =
             (webHostBuilderMap ?? (builder => builder))
@@ -50,16 +50,16 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(fileStore) ?? fileStore))
             .Build();
 
-        webHost?.StartAsync().Wait();
+        webHost.StartAsync().Wait();
 
         return webHost;
     }
 
     static public WebHostAdminInterfaceTestSetup Setup(
-        Func<DateTimeOffset> persistentProcessHostDateTime = null,
-        string adminPassword = null,
-        IFileStore fileStore = null,
-        Composition.Component deployAppConfigAndInitElmState = null) =>
+        Func<DateTimeOffset>? persistentProcessHostDateTime = null,
+        string? adminPassword = null,
+        IFileStore? fileStore = null,
+        Composition.Component? deployAppConfigAndInitElmState = null) =>
         Setup(
             adminPassword: adminPassword,
             fileStore: fileStore,
@@ -68,13 +68,13 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             persistentProcessHostDateTime: persistentProcessHostDateTime);
 
     static public WebHostAdminInterfaceTestSetup Setup(
-        Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
-        string adminPassword = null,
-        IFileStore fileStore = null,
-        Composition.Component deployAppConfigAndInitElmState = null,
-        string adminWebHostUrlOverride = null,
-        string publicWebHostUrlOverride = null,
-        Func<DateTimeOffset> persistentProcessHostDateTime = null)
+        Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
+        string? adminPassword = null,
+        IFileStore? fileStore = null,
+        Composition.Component? deployAppConfigAndInitElmState = null,
+        string? adminWebHostUrlOverride = null,
+        string? publicWebHostUrlOverride = null,
+        Func<DateTimeOffset>? persistentProcessHostDateTime = null)
     {
         var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -132,13 +132,13 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     WebHostAdminInterfaceTestSetup(
         string testDirectory,
-        string adminPassword,
-        IFileStore fileStore,
-        Composition.Component deployAppConfigAndInitElmState,
-        Func<IWebHostBuilder, IWebHostBuilder> webHostBuilderMap,
-        string adminWebHostUrlOverride,
-        string publicWebHostUrlOverride,
-        Func<DateTimeOffset> persistentProcessHostDateTime = null)
+        string? adminPassword,
+        IFileStore? fileStore,
+        Composition.Component? deployAppConfigAndInitElmState,
+        Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
+        string? adminWebHostUrlOverride,
+        string? publicWebHostUrlOverride,
+        Func<DateTimeOffset>? persistentProcessHostDateTime = null)
     {
         this.testDirectory = testDirectory;
 
@@ -178,14 +178,14 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
     public ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
-        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
-            BuildProcessStoreFileStoreReaderInFileDirectory());
+        new(BuildProcessStoreFileStoreReaderInFileDirectory());
 
     public IEnumerable<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
     {
         var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-        ElmFullstack.WebHost.InterfaceToHost.AppEventStructure eventLogEntry(ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
+        ElmFullstack.WebHost.InterfaceToHost.AppEventStructure eventLogEntry(
+            ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
         {
             var component =
                 logEntry.LiteralStringUtf8 != null
@@ -211,7 +211,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             .Select(Encoding.UTF8.GetString)
             .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
             .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
-            .WhereNotNull()
-            .Select(updateElmAppStateForEvent => eventLogEntry(updateElmAppStateForEvent));
+            .WhereNotNull()!
+            .Select(eventLogEntry);
     }
 }

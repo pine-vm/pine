@@ -8,10 +8,9 @@ using Pine;
 
 namespace ElmFullstack.ProcessStore;
 
-public class ValueInFile
+public record ValueInFile(
+    string? LiteralString)
 {
-    public string LiteralString;
-
     /*
     Future: Reduce operation expenses by sharing objects: Support reusing values here by reference.
     public string HashBase16;
@@ -23,33 +22,22 @@ public class ValueInFile
     */
 }
 
-public class CompositionRecord
+public record CompositionRecord(
+    byte[] ParentHash,
+    string? SetStateLiteralString,
+    IReadOnlyList<string>? AppendedEventsLiteralString);
+
+public record CompositionRecordInFile(
+    string ParentHashBase16,
+    ValueInFile? SetState = default,
+    IReadOnlyList<ValueInFile>? AppendedEvents = default)
 {
-    public byte[] ParentHash;
-
-    public string SetStateLiteralString;
-
-    public IReadOnlyList<string> AppendedEventsLiteralString;
+    static public byte[] HashFromSerialRepresentation(byte[] serialized) => CommonConversion.HashSHA256(serialized);
 }
 
-public class CompositionRecordInFile
-{
-    public string ParentHashBase16;
-
-    public ValueInFile SetState;
-
-    public IReadOnlyList<ValueInFile> AppendedEvents;
-
-    static public byte[] HashFromSerialRepresentation(byte[] serialized) =>
-        CommonConversion.HashSHA256(serialized);
-}
-
-public class ReductionRecord
-{
-    public byte[] ReducedCompositionHash;
-
-    public string ReducedValueLiteralString;
-}
+public record ReductionRecord(
+    byte[] ReducedCompositionHash,
+    string? ReducedValueLiteralString);
 
 public interface IProcessStoreWriter
 {
@@ -62,7 +50,7 @@ public interface IProcessStoreReader
 {
     IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse();
 
-    ReductionRecord GetReduction(byte[] reducedCompositionHash);
+    ReductionRecord? GetReduction(byte[] reducedCompositionHash);
 }
 
 public class EmptyProcessStoreReader : IProcessStoreReader
@@ -72,24 +60,21 @@ public class EmptyProcessStoreReader : IProcessStoreReader
         yield break;
     }
 
-    public ReductionRecord GetReduction(byte[] reducedCompositionHash) => null;
+    public ReductionRecord? GetReduction(byte[] reducedCompositionHash) => null;
 }
 
 public class ProcessStoreInFileStore
 {
-    static public Newtonsoft.Json.JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
+    static public JsonSerializerSettings RecordSerializationSettings => new()
     {
         NullValueHandling = NullValueHandling.Ignore
     };
 
-    static readonly protected Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
+    static readonly protected JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
 
-    protected class ReductionRecordInFile
-    {
-        public string ReducedCompositionHashBase16;
-
-        public ValueInFile ReducedValue;
-    }
+    protected record ReductionRecordInFile(
+        string ReducedCompositionHashBase16,
+        ValueInFile ReducedValue);
 
     protected IFileStore fileStore;
 
@@ -100,7 +85,7 @@ public class ProcessStoreInFileStore
     protected IFileStoreWriter reductionFileStoreWriter => ((IFileStoreWriter)fileStore).ForSubdirectory("reduction");
 
     static protected IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
-        logFilesNames?.OrderBy(filePath => string.Join("", filePath));
+        logFilesNames.OrderBy(filePath => string.Join("", filePath));
 
     public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
         CompositionLogFileOrder(
@@ -123,7 +108,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         EnumerateCompositionsLogFilesPaths().Reverse()
         .SelectMany(compositionFilePath =>
             {
-                var fileContent = compositionFileStoreReader.GetFileContent(compositionFilePath);
+                var fileContent = compositionFileStoreReader.GetFileContent(compositionFilePath)!;
 
                 return
                     Encoding.UTF8.GetString(fileContent as byte[] ?? fileContent.ToArray())
@@ -131,7 +116,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                     .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord));
             });
 
-    public ReductionRecord GetReduction(byte[] reducedCompositionHash)
+    public ReductionRecord? GetReduction(byte[] reducedCompositionHash)
     {
         var reducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(reducedCompositionHash);
 
@@ -164,10 +149,10 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
 
             return new ReductionRecord
-            {
-                ReducedCompositionHash = reducedCompositionHash,
-                ReducedValueLiteralString = reductionRecordFromFile.ReducedValue?.LiteralString,
-            };
+            (
+                ReducedCompositionHash: reducedCompositionHash,
+                ReducedValueLiteralString: reductionRecordFromFile.ReducedValue?.LiteralString
+            );
         }
         catch (Exception e)
         {
@@ -184,9 +169,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 {
     Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath;
 
-    readonly object appendSerializedCompositionRecordLock = new object();
+    readonly object appendSerializedCompositionRecordLock = new();
 
-    IImmutableList<string> appendSerializedCompositionRecordLastFilePath = null;
+    IImmutableList<string>? appendSerializedCompositionRecordLastFilePath = null;
 
     public ProcessStoreWriterInFileStore(
         IFileStore fileStore,
@@ -230,10 +215,10 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
     public void StoreReduction(ReductionRecord record)
     {
         var recordInFile = new ReductionRecordInFile
-        {
-            ReducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(record.ReducedCompositionHash),
-            ReducedValue = new ValueInFile { LiteralString = record.ReducedValueLiteralString },
-        };
+        (
+            ReducedCompositionHashBase16: CommonConversion.StringBase16FromByteArray(record.ReducedCompositionHash),
+            ReducedValue: new ValueInFile(LiteralString: record.ReducedValueLiteralString)
+        );
 
         var fileName = recordInFile.ReducedCompositionHashBase16;
 

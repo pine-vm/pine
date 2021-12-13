@@ -5,9 +5,9 @@ using static Pine.Composition;
 namespace Pine;
 
 public record LoadCompositionOrigin(
-    LoadFromGitHubOrGitLab.LoadFromUrlSuccess FromGit = null,
-    object FromLocalFileSystem = null,
-    LoadFromElmEditor.ParseUrlResult FromEditor = null);
+    LoadFromGitHubOrGitLab.LoadFromUrlSuccess? FromGit = null,
+    object? FromLocalFileSystem = null,
+    LoadFromElmEditor.ParseUrlResult? FromEditor = null);
 
 static public class LoadComposition
 {
@@ -76,22 +76,21 @@ static public class LoadComposition
         if (loadFromGitSuccess?.rootCommit.hash == null)
             yield break;
 
-        if (loadFromGitSuccess?.firstParentCommitWithSameTree.hash != null &&
-            loadFromGitSuccess?.firstParentCommitWithSameTree.hash != loadFromGitSuccess.rootCommit.hash)
+        if (loadFromGitSuccess.firstParentCommitWithSameTree.hash != null &&
+            loadFromGitSuccess.firstParentCommitWithSameTree.hash != loadFromGitSuccess.rootCommit.hash)
         {
-            yield return "The first parent commit with same tree is " + loadFromGitSuccess?.urlInFirstParentCommitWithSameValueAtThisPath;
+            yield return "The first parent commit with same tree is " + loadFromGitSuccess.urlInFirstParentCommitWithSameValueAtThisPath;
         }
 
         var commitToDisplayParticipants =
-            loadFromGitSuccess?.firstParentCommitWithSameTree ??
-            loadFromGitSuccess?.rootCommit;
+            loadFromGitSuccess.firstParentCommitWithSameTree;
 
         static string describeGitParticipant(LoadFromGitHubOrGitLab.GitParticipantSignature participant) =>
             participant?.name + " <" + participant?.email + ">";
 
-        yield return "Participants from commit " + commitToDisplayParticipants?.hash + ":\n" +
-            "Author: " + describeGitParticipant(commitToDisplayParticipants?.content?.author) + "\n" +
-            "Committer: " + describeGitParticipant(commitToDisplayParticipants?.content?.committer);
+        yield return "Participants from commit " + commitToDisplayParticipants.hash + ":\n" +
+            "Author: " + describeGitParticipant(commitToDisplayParticipants.content.author) + "\n" +
+            "Committer: " + describeGitParticipant(commitToDisplayParticipants.content.committer);
     }
 
     static public ProcessWithLog<string, T> AsProcessWithStringLog<T>(T Result) => new(Result: Result);

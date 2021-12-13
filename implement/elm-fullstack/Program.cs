@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-12-10";
+    static public string AppVersionId => "2021-12-13";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -23,7 +23,7 @@ public class Program
         ElmFullstack.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
 
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
-            new CacheByFileName { CacheDirectory = Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip") };
+            new CacheByFileName(CacheDirectory: Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip"));
 
         var app = new CommandLineApplication
         {
@@ -77,7 +77,7 @@ public class Program
 
                 storeCmd.OnExecute(() =>
                 {
-                    UserSecrets.StorePasswordForSite(siteArgument.Value, passwordArgument.Value);
+                    UserSecrets.StorePasswordForSite(siteArgument.Value!, passwordArgument.Value!);
                 });
             });
 
@@ -104,7 +104,7 @@ public class Program
             var setupGroupCommands =
                 checkedInstallation.executableIsRegisteredOnPath
                 ?
-                new CommandLineApplication[0] :
+                Array.Empty<CommandLineApplication>() :
                 new[]
                 {
                         installCmd,
@@ -246,14 +246,13 @@ public class Program
             runServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
-            string[] publicWebHostUrlsDefault = new[] { "http://*", "https://*" };
 
 
             var processStorePathOption = runServerCmd.Option("--process-store-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
             var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
             var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
             var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
-            var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", publicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
+            var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
             var copyProcessOption = runServerCmd.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
             var deployOption = runServerCmd.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
 
@@ -263,7 +262,7 @@ public class Program
 
                 var publicAppUrls =
                     publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
-                    publicWebHostUrlsDefault;
+                    PublicWebHostUrlsDefault;
 
                 var copyProcess = copyProcessOption.Value();
 
@@ -286,17 +285,17 @@ public class Program
                     var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
                     var fileStoreWriter = new DelegatingFileStoreWriter
-                    {
-                        SetFileContentDelegate = file => files[file.path] = file.fileContent,
-                        AppendFileContentDelegate = file => files.AddOrUpdate(
-                            file.path, _ => file.fileContent,
-                            (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
-                        DeleteFileDelegate = path => files.Remove(path, out var _)
-                    };
+                    (
+                        SetFileContentDelegate: file => files[file.path] = file.fileContent,
+                        AppendFileContentDelegate: file => files.AddOrUpdate(
+                           file.path, _ => file.fileContent,
+                           (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
+                        DeleteFileDelegate: path => files.Remove(path, out var _)
+                    );
 
                     var fileStoreReader = new DelegatingFileStoreReader
-                    {
-                        ListFilesInDirectoryDelegate = path =>
+                    (
+                        ListFilesInDirectoryDelegate: path =>
                             files.Select(file =>
                             {
                                 if (!file.Key.Take(path.Count).SequenceEqual(path))
@@ -304,13 +303,13 @@ public class Program
 
                                 return file.Key.Skip(path.Count).ToImmutableList();
                             }).WhereNotNull(),
-                        GetFileContentDelegate = path =>
+                        GetFileContentDelegate: path =>
                         {
                             files.TryGetValue(path, out var fileContent);
 
                             return fileContent;
                         }
-                    };
+                    );
 
                     processStoreFileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
                 }
@@ -991,9 +990,9 @@ public class Program
 
         public string filteredSourceCompositionId;
 
-        public ResponseFromServerStruct responseFromServer;
+        public ResponseFromServerStruct? responseFromServer;
 
-        public string deployException;
+        public string? deployException;
 
         public int totalTimeSpentMilli;
 
@@ -1008,7 +1007,7 @@ public class Program
     static public DeployAppReport DeployApp(
         string sourcePath,
         string site,
-        string siteDefaultPassword,
+        string? siteDefaultPassword,
         bool initElmAppState,
         bool promptForPasswordOnConsole)
     {
@@ -1037,9 +1036,9 @@ public class Program
         Console.WriteLine(
             "Built app config " + filteredSourceCompositionId + " from " + sourceCompositionId + ".");
 
-        DeployAppReport.ResponseFromServerStruct responseFromServer = null;
+        DeployAppReport.ResponseFromServerStruct? responseFromServer = null;
 
-        Exception deployException = null;
+        Exception? deployException = null;
 
         try
         {
@@ -1159,7 +1158,7 @@ public class Program
     static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string enteredPassword)>
         AttemptHttpRequest(
         Func<System.Net.Http.HttpRequestMessage> buildRequestBeforeAddingCommonHeaders,
-        string defaultPassword,
+        string? defaultPassword,
         bool promptForPasswordOnConsole)
     {
         System.Net.Http.HttpRequestMessage buildRequest() =>
@@ -1169,7 +1168,7 @@ public class Program
 
         httpClient.Timeout = TimeSpan.FromMinutes(4);
 
-        void setHttpClientPassword(string password)
+        void setHttpClientPassword(string? password)
         {
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                 "Basic",
@@ -1263,11 +1262,11 @@ public class Program
         string beginTime,
         string source,
         string destination,
-        AppStateSummary appStateSummary = null,
-        ResponseFromServerStruct destinationResponseFromServer = null,
-        string destinationFileReport = null,
+        AppStateSummary? appStateSummary = null,
+        ResponseFromServerStruct? destinationResponseFromServer = null,
+        string? destinationFileReport = null,
         int? totalTimeSpentMilli = null,
-        object error = null);
+        object? error = null);
 
     public record ResponseFromServerStruct(int? statusCode, object body);
 
@@ -1526,8 +1525,8 @@ public class Program
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sourceAdminPassword))));
 
         var processHistoryFileStoreRemoteReader = new DelegatingFileStoreReader
-        {
-            ListFilesInDirectoryDelegate = directoryPath =>
+        (
+            ListFilesInDirectoryDelegate: directoryPath =>
             {
                 var httpRequestPath =
                     ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
@@ -1542,7 +1541,7 @@ public class Program
                     response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                     .Select(path => path.Split('/').ToImmutableList());
             },
-            GetFileContentDelegate = filePath =>
+            GetFileContentDelegate: filePath =>
             {
                 var httpRequestPath =
                     ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
@@ -1558,7 +1557,7 @@ public class Program
 
                 return response.Content.ReadAsByteArrayAsync().Result;
             }
-        };
+        );
 
         return ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }

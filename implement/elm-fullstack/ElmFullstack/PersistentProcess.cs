@@ -22,10 +22,9 @@ public interface IPersistentProcess
 //  A provisional special case for a process from an elm app. Migrations give an example of why the elm code should be modeled on the history as well.
 public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProcess, IDisposable
 {
-    static readonly Newtonsoft.Json.JsonSerializerSettings recordSerializationSettings =
-        ProcessStore.ProcessStoreInFileStore.RecordSerializationSettings;
+    static readonly JsonSerializerSettings recordSerializationSettings = ProcessStoreInFileStore.RecordSerializationSettings;
 
-    byte[] lastStateHash;
+    byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
 
     IDisposableProcessWithStringInterface process;
 
@@ -48,7 +47,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
 
         var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(new byte[0]);
 
-        string dictKeyForHash(byte[] hash) => Convert.ToBase64String(hash);
+        static string dictKeyForHash(byte[] hash) => Convert.ToBase64String(hash);
 
         var compositionRecords = new Dictionary<string, (byte[] compositionRecordHash, CompositionRecord compositionRecord)>();
 
@@ -58,21 +57,21 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         {
             {
                 var compositionRecordFromFile = JsonConvert.DeserializeObject<CompositionRecordInFile>(
-                    System.Text.Encoding.UTF8.GetString(serializedCompositionRecord));
+                    Encoding.UTF8.GetString(serializedCompositionRecord));
 
                 var compositionRecordHash = CompositionRecordInFile.HashFromSerialRepresentation(serializedCompositionRecord);
 
                 var compositionRecord =
                     new CompositionRecord
-                    {
-                        ParentHash =
+                    (
+                        ParentHash:
                             CommonConversion.ByteArrayFromStringBase16(compositionRecordFromFile.ParentHashBase16),
 
-                        SetStateLiteralString = compositionRecordFromFile.SetState?.LiteralString,
+                        SetStateLiteralString: compositionRecordFromFile.SetState?.LiteralString,
 
-                        AppendedEventsLiteralString =
-                            compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString)?.ToImmutableList(),
-                    };
+                        AppendedEventsLiteralString:
+                            compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString)?.ToImmutableList()
+                    );
 
                 var compositionChainElement = (compositionRecordHash, compositionRecord);
 
@@ -129,8 +128,6 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                 ").");
 
         logger?.Invoke("Found no composition record, default to initial state.");
-
-        lastStateHash = emptyInitHash;
     }
 
     static string Serialize(CompositionRecordInFile composition) =>
@@ -146,10 +143,10 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                 .ToImmutableList();
 
             var compositionRecord = new CompositionRecordInFile
-            {
-                ParentHashBase16 = CommonConversion.StringBase16FromByteArray(lastStateHash),
-                AppendedEvents = serializedEvents.Select(@event => new ValueInFile { LiteralString = @event }).ToImmutableList(),
-            };
+            (
+                ParentHashBase16: CommonConversion.StringBase16FromByteArray(lastStateHash),
+                AppendedEvents: serializedEvents.Select(@event => new ValueInFile(LiteralString: @event)).ToImmutableList()
+            );
 
             var serializedCompositionRecord =
                 Encoding.UTF8.GetBytes(Serialize(compositionRecord));
@@ -170,10 +167,10 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         {
             return
                 new ReductionRecord
-                {
-                    ReducedCompositionHash = lastStateHash,
-                    ReducedValueLiteralString = process.GetSerializedState(),
-                };
+                (
+                    ReducedCompositionHash: lastStateHash,
+                    ReducedValueLiteralString: process.GetSerializedState()
+                );
         }
     }
 
@@ -184,10 +181,10 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
             process.SetSerializedState(state);
 
             var compositionRecord = new CompositionRecordInFile
-            {
-                ParentHashBase16 = CommonConversion.StringBase16FromByteArray(lastStateHash),
-                SetState = new ValueInFile { LiteralString = state },
-            };
+            (
+                ParentHashBase16: CommonConversion.StringBase16FromByteArray(lastStateHash),
+                SetState: new ValueInFile(LiteralString: state)
+            );
 
             var serializedCompositionRecord =
                 Encoding.UTF8.GetBytes(Serialize(compositionRecord));
@@ -231,9 +228,9 @@ public class PersistentProcessWithControlFlowOverStoreWriter : IDisposableProces
         }
     }
 
-    string IProcess<string, string>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValueLiteralString;
+    string IProcess<string, string?>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValueLiteralString;
 
-    string IProcess<string, string>.SetSerializedState(string serializedState)
+    string? IProcess<string, string?>.SetSerializedState(string serializedState)
     {
         lock (process)
         {

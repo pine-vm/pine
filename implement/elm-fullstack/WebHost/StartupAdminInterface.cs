@@ -50,7 +50,7 @@ public class StartupAdminInterface
         this.logger = logger;
     }
 
-    public void ConfigureServices(IServiceCollection services)
+    public static void ConfigureServices(IServiceCollection services)
     {
         var serviceProvider = services.BuildServiceProvider();
 
@@ -59,22 +59,20 @@ public class StartupAdminInterface
         if (getDateTimeOffset == null)
         {
             getDateTimeOffset = () => DateTimeOffset.UtcNow;
-            services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset);
+            services.AddSingleton(getDateTimeOffset);
         }
     }
 
-    class PublicHostConfiguration
-    {
-        public PersistentProcess.PersistentProcessLiveRepresentation processLiveRepresentation;
-
-        public IWebHost webHost;
-    }
+    record PublicHostConfiguration(
+        PersistentProcess.PersistentProcessLiveRepresentation processLiveRepresentation,
+        IWebHost webHost);
 
     public void Configure(
         IApplicationBuilder app,
         IWebHostEnvironment env,
         IHostApplicationLifetime appLifetime,
-        Func<DateTimeOffset> getDateTimeOffset)
+        Func<DateTimeOffset> getDateTimeOffset,
+        FileStoreForProcessStore processStoreForFileStore)
     {
         if (env.IsDevelopment())
         {
@@ -85,14 +83,11 @@ public class StartupAdminInterface
 
         var adminPassword = configuration.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
-        var publicWebHostUrls =
-            configuration.GetValue<string>(Configuration.PublicWebHostUrlsSettingKey).Split(new[] { ',', ';' });
+        object avoidConcurrencyLock = new();
 
-        var processStoreFileStore = app.ApplicationServices.GetService<FileStoreForProcessStore>().fileStore;
+        var processStoreFileStore = processStoreForFileStore.fileStore;
 
-        object avoidConcurrencyLock = new object();
-
-        PublicHostConfiguration publicAppHost = null;
+        PublicHostConfiguration? publicAppHost = null;
 
         void stopPublicApp()
         {
@@ -126,8 +121,6 @@ public class StartupAdminInterface
             lock (avoidConcurrencyLock)
             {
                 stopPublicApp();
-
-                var newPublicAppConfig = new PublicHostConfiguration { };
 
                 logger.LogInformation("Begin to build the process live representation.");
 
@@ -178,10 +171,11 @@ public class StartupAdminInterface
                     }
                 }
 
-                IWebHost buildWebHost()
+                IWebHost buildWebHost(
+                    PersistentProcess.ProcessAppConfig processAppConfig,
+                    IReadOnlyList<string> publicWebHostUrls)
                 {
-                    var appConfigTree = Composition.ParseAsTreeWithStringPath(
-                        processLiveRepresentation.lastAppConfig.Value.appConfigComponent).Ok;
+                    var appConfigTree = Composition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent).Ok!;
 
                     var appConfigFilesNamesAndContents =
                         appConfigTree.EnumerateBlobsTransitive();
@@ -213,7 +207,7 @@ public class StartupAdminInterface
                                 httpsOptions.ServerCertificateSelector = (c, s) => FluffySpoon.AspNet.LetsEncrypt.LetsEncryptRenewalService.Certificate;
                             });
                         })
-                        .UseUrls(publicWebHostUrls)
+                        .UseUrls(publicWebHostUrls.ToArray())
                         .UseStartup<StartupPublicApp>()
                         .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
                         .ConfigureServices(services =>
@@ -234,28 +228,29 @@ public class StartupAdminInterface
                                             return elmEventResponse;
                                         }
                                     },
-                                    SourceComposition: processLiveRepresentation.lastAppConfig.Value.appConfigComponent,
+                                    SourceComposition: processAppConfig.appConfigComponent,
                                     InitOrMigrateCmds: restoreProcessResult.initOrMigrateCmds
                                 ));
                         })
                         .Build();
                 }
 
-                var webHost =
-                    processLiveRepresentation?.lastAppConfig?.appConfigComponent == null
-                    ?
-                    null
-                    :
-                    buildWebHost();
+                if (processLiveRepresentation?.lastAppConfig != null)
+                {
+                    var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
 
-                newPublicAppConfig.processLiveRepresentation = processLiveRepresentation;
-                newPublicAppConfig.webHost = webHost;
+                    var webHost = buildWebHost(
+                        processLiveRepresentation.lastAppConfig.Value,
+                        publicWebHostUrls: publicWebHostUrls);
 
-                webHost?.StartAsync(appLifetime.ApplicationStopping).Wait();
+                    webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
 
-                logger.LogInformation("Started the public app at '" + string.Join(",", publicWebHostUrls) + "'.");
+                    logger.LogInformation("Started the public app at '" + string.Join(",", publicWebHostUrls) + "'.");
 
-                publicAppHost = newPublicAppConfig;
+                    publicAppHost = new PublicHostConfiguration(
+                        processLiveRepresentation: processLiveRepresentation,
+                        webHost: webHost);
+                }
             }
         }
 
@@ -352,158 +347,158 @@ public class StartupAdminInterface
 
                 var apiRoutes = new[]
                 {
-                        new ApiRoute
+                    new ApiRoute
+                    (
+                        path : PathApiGetDeployedAppConfig,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        .Add("get", async (context, publicAppHost) =>
                         {
-                            path = PathApiGetDeployedAppConfig,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("get", async (context, publicAppHost) =>
+                            var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig?.appConfigComponent;
+
+                            if (appConfig == null)
                             {
-                                var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig?.appConfigComponent;
+                                context.Response.StatusCode = 404;
+                                await context.Response.WriteAsync("I did not find an app config in the history. Looks like no app was deployed so far.");
+                                return;
+                            }
 
-                                if (appConfig == null)
-                                {
-                                    context.Response.StatusCode = 404;
-                                    await context.Response.WriteAsync("I did not find an app config in the history. Looks like no app was deployed so far.");
-                                    return;
-                                }
+                            var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
 
-                                var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
+                            var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
 
-                                var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
+                            var appConfigZipArchive =
+                                ZipArchive.ZipArchiveFromEntries(
+                                    Composition.TreeToFlatDictionaryWithPathComparer(appConfigTree));
 
-                                var appConfigZipArchive =
-                                    ZipArchive.ZipArchiveFromEntries(
-                                        Composition.TreeToFlatDictionaryWithPathComparer(appConfigTree));
+                            context.Response.StatusCode = 200;
+                            context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
+                            context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString());
+                            context.Response.Headers.Add("Content-Type", new MediaTypeHeaderValue("application/zip").ToString());
 
-                                context.Response.StatusCode = 200;
-                                context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
-                                context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString());
-                                context.Response.Headers.Add("Content-Type", new MediaTypeHeaderValue("application/zip").ToString());
-
-                                await context.Response.Body.WriteAsync(appConfigZipArchive);
-                            }),
-                        },
-                        new ApiRoute
+                            await context.Response.Body.WriteAsync(appConfigZipArchive);
+                        })
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiElmAppState,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        .Add("get", async (context, publicAppHost) =>
                         {
-                            path = PathApiElmAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("get", async (context, publicAppHost) =>
+                            if (publicAppHost == null)
                             {
-                                if (publicAppHost == null)
+                                context.Response.StatusCode = 400;
+                                await context.Response.WriteAsync("Not possible because there is no app (state).");
+                                return;
+                            }
+
+                            var processLiveRepresentation = publicAppHost?.processLiveRepresentation;
+
+                            var components = new List<Composition.Component>();
+
+                            var storeWriter = new DelegatingProcessStoreWriter
+                            {
+                                StoreComponentDelegate = components.Add,
+                                StoreProvisionalReductionDelegate = _ => { },
+                                AppendCompositionLogRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
+                            };
+
+                            var reductionRecord =
+                                processLiveRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
+
+                            if (reductionRecord == null)
+                            {
+                                context.Response.StatusCode = 500;
+                                await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
+                                return;
+                            }
+
+                            var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
+
+                            var elmAppStateReductionComponent =
+                                components.First(c => CommonConversion.StringBase16FromByteArray(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
+
+                            var elmAppStateReductionString =
+                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.ToArray());
+
+                            context.Response.StatusCode = 200;
+                            context.Response.ContentType = "application/json";
+                            await context.Response.WriteAsync(elmAppStateReductionString);
+                        })
+                        .Add("post", async (context, publicAppHost) =>
+                        {
+                            if (publicAppHost == null)
+                            {
+                                context.Response.StatusCode = 400;
+                                await context.Response.WriteAsync("Not possible because there is no app (state).");
+                                return;
+                            }
+
+                            var elmAppStateToSet = new StreamReader(context.Request.Body, Encoding.UTF8).ReadToEndAsync().Result;
+
+                            var elmAppStateComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
+
+                            var appConfigValueInFile =
+                                new ValueInFileStructure
                                 {
-                                    context.Response.StatusCode = 400;
-                                    await context.Response.WriteAsync("Not possible because there is no app (state).");
-                                    return;
-                                }
-
-                                var processLiveRepresentation = publicAppHost?.processLiveRepresentation;
-
-                                var components = new List<Composition.Component>();
-
-                                var storeWriter = new DelegatingProcessStoreWriter
-                                {
-                                    StoreComponentDelegate = components.Add,
-                                    StoreProvisionalReductionDelegate = _ => { },
-                                    AppendCompositionLogRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
+                                    HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
                                 };
 
-                                var reductionRecord =
-                                    processLiveRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
+                            processStoreWriter.StoreComponent(elmAppStateComponent);
 
-                                if (reductionRecord == null)
+                            await attemptContinueWithCompositionEventAndSendHttpResponse(
+                                new CompositionLogRecordInFile.CompositionEvent
                                 {
-                                    context.Response.StatusCode = 500;
-                                    await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
-                                    return;
-                                }
+                                    SetElmAppState = appConfigValueInFile
+                                });
+                        })
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiDeployAndInitAppState,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true))
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiDeployAndMigrateAppState,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false))
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiReplaceProcessHistory,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        .Add("post", async (context, publicAppHost) =>
+                        {
+                            var memoryStream = new MemoryStream();
+                            context.Request.Body.CopyTo(memoryStream);
 
-                                var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
+                            var webAppConfigZipArchive = memoryStream.ToArray();
 
-                                var elmAppStateReductionComponent =
-                                    components.First(c => CommonConversion.StringBase16FromByteArray(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
+                            var replacementFiles =
+                                ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
+                                .Select(filePathAndContent =>
+                                    (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
+                                    , filePathAndContent.content))
+                                .ToImmutableList();
 
-                                var elmAppStateReductionString =
-                                    Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.ToArray());
-
-                                context.Response.StatusCode = 200;
-                                context.Response.ContentType = "application/json";
-                                await context.Response.WriteAsync(elmAppStateReductionString);
-                            })
-                            .Add("post", async (context, publicAppHost) =>
+                            lock (avoidConcurrencyLock)
                             {
-                                if (publicAppHost == null)
-                                {
-                                    context.Response.StatusCode = 400;
-                                    await context.Response.WriteAsync("Not possible because there is no app (state).");
-                                    return;
-                                }
+                                stopPublicApp();
 
-                                var elmAppStateToSet = new StreamReader(context.Request.Body, System.Text.Encoding.UTF8).ReadToEndAsync().Result;
+                                foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
+                                    processStoreFileStore.DeleteFile(filePath);
 
-                                var elmAppStateComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
+                                foreach (var replacementFile in replacementFiles)
+                                    processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
 
-                                var appConfigValueInFile =
-                                    new ValueInFileStructure
-                                    {
-                                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
-                                    };
+                                startPublicApp();
+                            }
 
-                                processStoreWriter.StoreComponent(elmAppStateComponent);
-
-                                await attemptContinueWithCompositionEventAndSendHttpResponse(
-                                    new CompositionLogRecordInFile.CompositionEvent
-                                    {
-                                        SetElmAppState = appConfigValueInFile
-                                    });
-                            }),
-                        },
-                        new ApiRoute
-                        {
-                            path = PathApiDeployAndInitAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true)),
-                        },
-                        new ApiRoute
-                        {
-                            path = PathApiDeployAndMigrateAppState,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false)),
-                        },
-                        new ApiRoute
-                        {
-                            path = PathApiReplaceProcessHistory,
-                            methods = ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
-                            .Add("post", async (context, publicAppHost) =>
-                            {
-                                var memoryStream = new MemoryStream();
-                                context.Request.Body.CopyTo(memoryStream);
-
-                                var webAppConfigZipArchive = memoryStream.ToArray();
-
-                                var replacementFiles =
-                                    ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
-                                    .Select(filePathAndContent =>
-                                        (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
-                                        , filePathAndContent.content))
-                                    .ToImmutableList();
-
-                                lock (avoidConcurrencyLock)
-                                {
-                                    stopPublicApp();
-
-                                    foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
-                                        processStoreFileStore.DeleteFile(filePath);
-
-                                    foreach (var replacementFile in replacementFiles)
-                                        processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
-
-                                    startPublicApp();
-                                }
-
-                                context.Response.StatusCode = 200;
-                                await context.Response.WriteAsync("Successfully replaced the process history.");
-                            }),
-                        },
+                            context.Response.StatusCode = 200;
+                            await context.Response.WriteAsync("Successfully replaced the process history.");
+                        })
+                    ),
                 };
 
                 foreach (var apiRoute in apiRoutes)
@@ -513,9 +508,9 @@ public class StartupAdminInterface
 
                     var matchingMethod =
                         apiRoute.methods
-                        ?.FirstOrDefault(m => m.Key.ToUpperInvariant() == context.Request.Method.ToUpperInvariant());
+                        .FirstOrDefault(m => m.Key.ToUpperInvariant() == context.Request.Method.ToUpperInvariant());
 
-                    if (matchingMethod?.Value == null)
+                    if (matchingMethod.Value == null)
                     {
                         var supportedMethodsNames =
                             apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
@@ -538,7 +533,7 @@ public class StartupAdminInterface
                         return;
                     }
 
-                    matchingMethod?.Value?.Invoke(context, publicAppHost);
+                    matchingMethod.Value?.Invoke(context, publicAppHost);
                     return;
                 }
 
@@ -638,18 +633,18 @@ public class StartupAdminInterface
                         deleteFilesStopwatch.Stop();
 
                         return new TruncateProcessHistoryReport
-                        {
-                            beginTime = beginTime,
-                            filesForRestoreCount = filesForRestore.Count,
-                            discoveredFilesCount = filePathsInProcessStorePartitions.Sum(partition => partition.Count),
-                            deletedFilesCount = totalDeletedFilesCount,
-                            storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
-                            storeReductionReport = storeReductionReport,
-                            getFilesForRestoreTimeSpentMilli = (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
-                            deleteFilesTimeSpentMilli = (int)deleteFilesStopwatch.ElapsedMilliseconds,
-                            lockedTimeSpentMilli = (int)lockStopwatch.ElapsedMilliseconds,
-                            totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                        };
+                        (
+                            beginTime: beginTime,
+                            filesForRestoreCount: filesForRestore.Count,
+                            discoveredFilesCount: filePathsInProcessStorePartitions.Sum(partition => partition.Count),
+                            deletedFilesCount: totalDeletedFilesCount,
+                            storeReductionTimeSpentMilli: (int)storeReductionStopwatch.ElapsedMilliseconds,
+                            storeReductionReport: storeReductionReport,
+                            getFilesForRestoreTimeSpentMilli: (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
+                            deleteFilesTimeSpentMilli: (int)deleteFilesStopwatch.ElapsedMilliseconds,
+                            lockedTimeSpentMilli: (int)lockStopwatch.ElapsedMilliseconds,
+                            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+                        );
                     }
                 }
 
@@ -734,8 +729,11 @@ public class StartupAdminInterface
                         var (statusCode, report) =
                             AttemptContinueWithCompositionEventAndCommit(compositionLogEvent, processStoreFileStore);
 
-                        report.storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds;
-                        report.storeReductionReport = storeReductionReport;
+                        report = report with
+                        {
+                            storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
+                            storeReductionReport = storeReductionReport
+                        };
 
                         startPublicApp();
 
@@ -797,22 +795,19 @@ public class StartupAdminInterface
         LinkHtmlElementFromUrl(apiRoute.path) +
         " [ " + string.Join(", ", apiRoute.methods.Select(m => m.Key.ToUpperInvariant())) + " ]";
 
-    class ApiRoute
-    {
-        public string path;
-
-        public ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>> methods;
-    }
+    record ApiRoute(
+        string path,
+        ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>> methods);
 
     static public string HtmlDocument(string body) =>
-        String.Join("\n",
+        string.Join("\n",
         new[]
         {
-                "<html>",
-                "<body>",
-                body,
-                "</body>",
-                "</html>"
+            "<html>",
+            "<body>",
+            body,
+            "</body>",
+            "</html>"
         });
 
     static public (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
@@ -834,12 +829,14 @@ public class StartupAdminInterface
         if (testContinueResult.Ok.projectedFiles == null)
         {
             return (statusCode: 400, new AttemptContinueWithCompositionEventReport
-            {
-                beginTime = beginTime,
-                compositionEvent = compositionLogEvent,
-                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-                result = Result<string, string>.err(testContinueResult.Err),
-            });
+            (
+                beginTime: beginTime,
+                compositionEvent: compositionLogEvent,
+                storeReductionReport: null,
+                storeReductionTimeSpentMilli: null,
+                totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                result: Result<string, string>.err(testContinueResult.Err)
+            ));
         }
 
         foreach (var projectedFilePathAndContent in testContinueResult.Ok.projectedFiles)
@@ -847,49 +844,33 @@ public class StartupAdminInterface
                 projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
 
         return (statusCode: 200, new AttemptContinueWithCompositionEventReport
-        {
-            beginTime = beginTime,
-            compositionEvent = compositionLogEvent,
-            totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-            result = Result<string, string>.ok("Successfully applied this composition event to the process."),
-        });
+        (
+            beginTime: beginTime,
+            compositionEvent: compositionLogEvent,
+            storeReductionReport: null,
+            storeReductionTimeSpentMilli: null,
+            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+            result: Result<string, string>.ok("Successfully applied this composition event to the process.")
+        ));
     }
 }
 
-public class AttemptContinueWithCompositionEventReport
-{
-    public string beginTime;
+public record AttemptContinueWithCompositionEventReport(
+    string beginTime,
+    CompositionLogRecordInFile.CompositionEvent compositionEvent,
+    PersistentProcess.StoreProvisionalReductionReport? storeReductionReport,
+    int? storeReductionTimeSpentMilli,
+    int totalTimeSpentMilli,
+    Result<string, string> result);
 
-    public CompositionLogRecordInFile.CompositionEvent compositionEvent;
-
-    public int storeReductionTimeSpentMilli;
-
-    public PersistentProcess.StoreProvisionalReductionReport? storeReductionReport;
-
-    public int totalTimeSpentMilli;
-
-    public Result<string, string> result;
-}
-
-public class TruncateProcessHistoryReport
-{
-    public string beginTime;
-
-    public int filesForRestoreCount;
-
-    public int discoveredFilesCount;
-
-    public int deletedFilesCount;
-
-    public int lockedTimeSpentMilli;
-
-    public int totalTimeSpentMilli;
-
-    public int storeReductionTimeSpentMilli;
-
-    public PersistentProcess.StoreProvisionalReductionReport? storeReductionReport;
-
-    public int getFilesForRestoreTimeSpentMilli;
-
-    public int deleteFilesTimeSpentMilli;
-}
+public record TruncateProcessHistoryReport(
+    string beginTime,
+    int filesForRestoreCount,
+    int discoveredFilesCount,
+    int deletedFilesCount,
+    int lockedTimeSpentMilli,
+    int totalTimeSpentMilli,
+    int storeReductionTimeSpentMilli,
+    PersistentProcess.StoreProvisionalReductionReport? storeReductionReport,
+    int getFilesForRestoreTimeSpentMilli,
+    int deleteFilesTimeSpentMilli);

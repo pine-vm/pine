@@ -28,7 +28,7 @@ public class TestLoadFromGithub
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app");
 
-        Assert.IsNull(loadFromGithubResult.Err, "No error: " + loadFromGithubResult.Err);
+        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
 
         var loadedFilesNamesAndContents =
             loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
@@ -63,7 +63,7 @@ public class TestLoadFromGithub
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/");
 
-        Assert.IsNull(loadFromGithubResult.Err, "No error: " + loadFromGithubResult.Err);
+        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
 
         var loadedFilesNamesAndContents =
             loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
@@ -98,7 +98,7 @@ public class TestLoadFromGithub
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md");
 
-        Assert.IsNull(loadFromGithubResult.Err, "No error: " + loadFromGithubResult.Err);
+        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
 
         var blobContent = loadFromGithubResult.Ok.tree.BlobContent;
 
@@ -118,7 +118,7 @@ public class TestLoadFromGithub
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications");
 
-        Assert.IsNull(loadFromGithubResult.Err, "No error: " + loadFromGithubResult.Err);
+        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
 
         Assert.AreEqual(
             "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications",
@@ -147,7 +147,7 @@ public class TestLoadFromGithub
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack");
 
-        Assert.IsNull(loadFromGithubResult.Err, "No error: " + loadFromGithubResult.Err);
+        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
 
         var loadedFilesPathsAndContents =
             loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
@@ -207,7 +207,7 @@ public class TestLoadFromGithub
                         getRepositoryFilesPartialForCommit:
                         consultServer);
 
-                Assert.IsNull(loadFromGitHubResult.Err, "No error: " + loadFromGitHubResult.Err);
+                Assert.IsNotNull(loadFromGitHubResult.Ok, "Failed to load from GitHub: " + loadFromGitHubResult.Err);
 
                 var blobContent = loadFromGitHubResult.Ok.tree.BlobContent;
 
@@ -229,7 +229,7 @@ public class TestLoadFromGithub
                         getRepositoryFilesPartialForCommit:
                         consultServer);
 
-                Assert.IsNull(loadFromGitHubResult.Err, "No error: " + loadFromGitHubResult.Err);
+                Assert.IsNotNull(loadFromGitHubResult.Ok, "Failed to load from GitHub: " + loadFromGitHubResult.Err);
 
                 var blobContent = loadFromGitHubResult.Ok.tree.BlobContent;
 

@@ -13,8 +13,7 @@ static public class Asp
 {
     class ClientsRateLimitStateContainer
     {
-        readonly public ConcurrentDictionary<string, RateLimitMutableContainer> RateLimitFromClientId =
-            new ConcurrentDictionary<string, RateLimitMutableContainer>();
+        readonly public ConcurrentDictionary<string, IMutableRateLimit> RateLimitFromClientId = new();
     }
 
     static public void ConfigureServices(IServiceCollection services)
@@ -23,11 +22,13 @@ static public class Asp
     }
 
     static public async Task MiddlewareFromWebAppConfig(
-        WebAppConfigurationJsonStructure webAppConfig, HttpContext context, Func<Task> next) =>
+        WebAppConfigurationJsonStructure? webAppConfig, HttpContext context, Func<Task> next) =>
         await RateLimitMiddlewareFromWebAppConfig(webAppConfig, context, next);
 
     static async Task RateLimitMiddlewareFromWebAppConfig(
-        WebAppConfigurationJsonStructure webAppConfig, HttpContext context, Func<Task> next)
+        WebAppConfigurationJsonStructure? webAppConfig,
+        HttpContext context,
+        Func<Task> next)
     {
         string ClientId()
         {
@@ -43,7 +44,7 @@ static public class Asp
         }
 
         var rateLimitFromClientId =
-            context.RequestServices.GetService<ClientsRateLimitStateContainer>().RateLimitFromClientId;
+            context.RequestServices.GetService<ClientsRateLimitStateContainer>()!.RateLimitFromClientId;
 
         var clientRateLimitState =
             rateLimitFromClientId.GetOrAdd(
@@ -51,7 +52,7 @@ static public class Asp
 
         if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
         {
-            await next?.Invoke();
+            await next.Invoke();
             return;
         }
 
@@ -60,10 +61,10 @@ static public class Asp
         return;
     }
 
-    static RateLimitMutableContainer BuildRateLimitContainerForClient(WebAppConfigurationJsonStructure jsonStructure)
+    static IMutableRateLimit BuildRateLimitContainerForClient(WebAppConfigurationJsonStructure? jsonStructure)
     {
         if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
-            return null;
+            return new MutableRateLimitAlwaysPassing();
 
         return new RateLimitMutableContainer(new RateLimitStateSingleWindow
         {
@@ -80,20 +81,17 @@ static public class Asp
             .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray()))
             .ToArray();
 
-        byte[] httpRequestBody = null;
+        using var stream = new MemoryStream();
 
-        using (var stream = new MemoryStream())
-        {
-            await httpRequest.Body.CopyToAsync(stream);
+        await httpRequest.Body.CopyToAsync(stream);
 
-            httpRequestBody = stream.ToArray();
-        }
+        var httpRequestBody = stream.ToArray();
 
         return new InterfaceToHost.HttpRequest
         (
             method: httpRequest.Method,
             uri: httpRequest.GetDisplayUrl(),
-            bodyAsBase64: httpRequestBody == null ? null : Convert.ToBase64String(httpRequestBody),
+            bodyAsBase64: Convert.ToBase64String(httpRequestBody),
             headers: httpHeaders
         );
     }

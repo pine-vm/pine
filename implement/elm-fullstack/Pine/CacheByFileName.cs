@@ -2,10 +2,8 @@
 
 namespace Pine;
 
-public class CacheByFileName
+public record CacheByFileName(string CacheDirectory)
 {
-    public string CacheDirectory { init; get; }
-
     public byte[] GetOrUpdate(string fileName, System.Func<byte[]> getNew)
     {
         var cacheFilePath = Path.Combine(CacheDirectory, fileName);
@@ -23,7 +21,10 @@ public class CacheByFileName
 
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
+            var directory = Path.GetDirectoryName(cacheFilePath);
+
+            if (directory != null)
+                Directory.CreateDirectory(directory);
 
             File.WriteAllBytes(cacheFilePath, file);
         }

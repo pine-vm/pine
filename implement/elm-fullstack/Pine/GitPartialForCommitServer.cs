@@ -31,9 +31,9 @@ public class GitPartialForCommitServer
         urls.ToList().ForEach(app.Urls.Add);
 
         var fileCache = new CacheByFileName
-        {
-            CacheDirectory = Path.Combine(fileCacheDirectory, ZipArchivePathPrefix.TrimStart('/'))
-        };
+        (
+            CacheDirectory: Path.Combine(fileCacheDirectory, ZipArchivePathPrefix.TrimStart('/'))
+        );
 
         /*
          * https://docs.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis?view=aspnetcore-6.0

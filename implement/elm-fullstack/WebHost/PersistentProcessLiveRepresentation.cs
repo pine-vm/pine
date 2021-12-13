@@ -28,6 +28,9 @@ public struct StoreProvisionalReductionReport
     public int? storeDependenciesTimeSpentMilli;
 }
 
+public record struct ProcessAppConfig(
+    Composition.Component appConfigComponent,
+    (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts);
 
 public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposable
 {
@@ -35,7 +38,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
     string lastCompositionLogRecordHashBase16;
 
-    public readonly (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)? lastAppConfig;
+    public readonly ProcessAppConfig? lastAppConfig;
 
     readonly IDisposableProcessWithStringInterface lastElmAppVolatileProcess;
 
@@ -97,7 +100,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
     PersistentProcessLiveRepresentation(
         string lastCompositionLogRecordHashBase16,
-        (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun))? lastAppConfig,
+        ProcessAppConfig? lastAppConfig,
         IDisposableProcessWithStringInterface lastElmAppVolatileProcess)
     {
         this.lastCompositionLogRecordHashBase16 = lastCompositionLogRecordHashBase16;
@@ -112,9 +115,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<string>());
 
         var recordingReader = new DelegatingFileStoreReader
-        {
-            ListFilesInDirectoryDelegate = fileStoreReader.ListFilesInDirectory,
-            GetFileContentDelegate = filePath =>
+        (
+            ListFilesInDirectoryDelegate: fileStoreReader.ListFilesInDirectory,
+            GetFileContentDelegate: filePath =>
             {
                 var fileContent = fileStoreReader.GetFileContent(filePath);
 
@@ -125,7 +128,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                 return fileContent;
             }
-        };
+        );
 
         var compositionLogRecords =
             EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(new ProcessStoreReaderInFileStore(recordingReader))
@@ -276,7 +279,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     processRepresentationDuringRestore?.lastElmAppVolatileProcess?.Dispose();
 
                     processRepresentationDuringRestore = new PersistentProcessLiveRepresentationDuringRestore(
-                        lastAppConfig: (compositionLogRecord.reduction.Value.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
+                        lastAppConfig: new ProcessAppConfig(compositionLogRecord.reduction.Value.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
                         lastElmAppVolatileProcess: newElmAppProcess,
                         initOrMigrateCmds: null);
 
@@ -323,7 +326,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     }
 
     record PersistentProcessLiveRepresentationDuringRestore(
-        (Composition.Component appConfigComponent, (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)? lastAppConfig,
+        ProcessAppConfig? lastAppConfig,
         IDisposableProcessWithStringInterface lastElmAppVolatileProcess,
         InterfaceToHost.AppEventResponseStructure initOrMigrateCmds);
 
@@ -401,7 +404,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok:
                 new PersistentProcessLiveRepresentationDuringRestore(
-                    lastAppConfig: (Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
+                    lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
                     lastElmAppVolatileProcess: newElmAppProcess,
                     initOrMigrateCmds: migrateEventResult?.Ok));
         }
@@ -429,7 +432,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok:
                 new PersistentProcessLiveRepresentationDuringRestore(
-                    lastAppConfig: (Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
+                    lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
                     lastElmAppVolatileProcess: newElmAppProcess,
                     initEventResult?.Ok));
         }
@@ -599,26 +602,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
-    static string ApplyCommonFormattingToJson(string originalJson)
-    {
-        try
-        {
-            return JsonConvert.SerializeObject(JsonConvert.DeserializeObject(originalJson));
-        }
-        catch
-        {
-            return originalJson;
-        }
-    }
-
     public void Dispose() => lastElmAppVolatileProcess?.Dispose();
 
-    public (ProvisionalReductionRecordInFile reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(
+    public (ProvisionalReductionRecordInFile? reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(
         IProcessStoreWriter storeWriter)
     {
         var report = new StoreProvisionalReductionReport();
 
-        string elmAppState = null;
+        string? elmAppState = null;
 
         var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
 

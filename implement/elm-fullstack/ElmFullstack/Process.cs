@@ -19,10 +19,10 @@ public interface IProcess<EventT, ResponseT>
 
     string GetSerializedState();
 
-    string SetSerializedState(string serializedState);
+    string? SetSerializedState(string serializedState);
 }
 
-public interface IProcessWithStringInterface : IProcess<string, string>
+public interface IProcessWithStringInterface : IProcess<string, string?>
 {
 }
 
@@ -61,7 +61,7 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
         javascriptEngine?.Dispose();
     }
 
-    public string ProcessEvent(string serializedEvent)
+    public string? ProcessEvent(string serializedEvent)
     {
         /*
         Avoid high memory usage as described in exploration 2020-02-02:
@@ -91,10 +91,10 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
 
         var jsReturnValue = javascriptEngine.CallFunction(ProcessFromElm019Code.getSerializedStateJsFunctionName);
 
-        return jsReturnValue?.ToString();
+        return jsReturnValue.ToString()!;
     }
 
-    public string SetSerializedState(string serializedState)
+    public string? SetSerializedState(string serializedState)
     {
         /*
         Avoid high memory usage as described in exploration 2020-02-02:
@@ -149,13 +149,13 @@ public class ProcessFromElm019Code
     static public string CompileElmToJavascript(
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
-        string elmMakeCommandAppendix = null) =>
+        string? elmMakeCommandAppendix = null) =>
         CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
 
     static public string CompileElmToHtml(
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
-        string elmMakeCommandAppendix = null) =>
+        string? elmMakeCommandAppendix = null) =>
         CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
 
     /*
@@ -182,7 +182,7 @@ public class ProcessFromElm019Code
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
-        string elmMakeCommandAppendix = null)
+        string? elmMakeCommandAppendix = null)
     {
         /*
         2020-04-01: Avoid the sporadic failures as reported at
@@ -378,7 +378,7 @@ public class ProcessFromElm019Code
         IEnumerable<(string functionNameInElm, string publicName, int arity)> functions)
     {
         var invokeExportStatementMatch =
-            Regex.Matches(javascriptFromElmMake, Regex.Escape("_Platform_export(")).OfType<Match>().LastOrDefault();
+            Regex.Matches(javascriptFromElmMake, Regex.Escape("_Platform_export(")).OfType<Match>().Last();
 
         var listFunctionToPublish =
             functions
@@ -440,9 +440,9 @@ public class ProcessFromElm019Code
     static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
         "$author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
 
-    static public string overrideElmMakeHomeDirectory = null;
+    static public string? overrideElmMakeHomeDirectory = null;
 
-    static string elmHomeDirectory;
+    static string? elmHomeDirectory;
 
     static public string GetElmHomeDirectory()
     {

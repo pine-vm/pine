@@ -15,7 +15,7 @@ public class TestElmInteractive
 
     record InteractiveScenarioTestResult(
         bool passed,
-        Exception exception);
+        Exception? exception);
 
     [TestMethod]
     public void TestElmInteractiveScenarios()
@@ -86,7 +86,7 @@ public class TestElmInteractive
                 {
                     var stepName = Path.GetFileName(stepDirectory);
 
-                    string submission = null;
+                    string? submission = null;
 
                     try
                     {

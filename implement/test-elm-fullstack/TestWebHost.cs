@@ -183,13 +183,13 @@ public class TestWebHost
             TestSetup.WithElmFullstackJson(
                 TestSetup.CounterElmWebApp,
                 new WebAppConfigurationJsonStructure
-                {
-                    singleRateLimitWindowPerClientIPv4Address = new WebAppConfigurationJsonStructure.RateLimitWindow
-                    {
-                        windowSizeInMs = 1000 * rateLimitWindowSize,
-                        limit = rateLimitWindowSize,
-                    },
-                });
+                (
+                    singleRateLimitWindowPerClientIPv4Address: new RateLimitWindow
+                    (
+                        windowSizeInMs: 1000 * rateLimitWindowSize,
+                        limit: rateLimitWindowSize
+                    )
+                ));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             deployAppConfigAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
@@ -198,7 +198,7 @@ public class TestWebHost
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
             .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
-            .WhereNotNull()
+            .WhereNotNull()!
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         HttpResponseMessage PostStringContentToPublicApp(string requestContent)
@@ -236,8 +236,8 @@ public class TestWebHost
             var secondBatchHttpResponses =
                 requestsBatches[1].Select(processEvent =>
                 {
-                        //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
-                        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
+                    //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
+                    letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
 
                     return PostStringContentToPublicApp(processEvent);
                 }).ToList();
@@ -291,7 +291,7 @@ public class TestWebHost
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
             .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
-            .WhereNotNull()
+            .WhereNotNull()!
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         HttpResponseMessage PostStringContentToPublicApp(string requestContent)
@@ -424,7 +424,7 @@ public class TestWebHost
 
         var response = publicAppClient.PostAsync("", new StringContent(requestContentString)).Result;
 
-        Assert.AreEqual("application/json", response.Content.Headers.ContentType.ToString());
+        Assert.AreEqual("application/json", response.Content.Headers.ContentType?.ToString());
 
         var responseContentString = response.Content.ReadAsStringAsync().Result;
 
@@ -517,7 +517,7 @@ public class TestWebHost
 
             Assert.AreEqual(
                 customHeaderValue,
-                echoCustomHeaderValues[0],
+                echoCustomHeaderValues?[0],
                 "Custom header value is propagated.");
         }
 
@@ -567,7 +567,7 @@ public class TestWebHost
                 publicAppClient.PostAsync("", new StringContent(postContent, System.Text.Encoding.UTF8));
         }
 
-        Action runBeforeMutateInFileStore = null;
+        Action? runBeforeMutateInFileStore = null;
 
         using var server = testSetup.StartWebHost(
             processStoreFileStoreMap: originalFileStore =>
@@ -969,13 +969,13 @@ public class TestWebHost
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
                 new (int addition, int expectedResponse)[]
                 {
-                        (0, 0),
-                        (1, 1),
-                        (3, 4),
-                        (5, 9),
-                        (7, 16),
-                        (11, 27),
-                        (-13, 14),
+                    (0, 0),
+                    (1, 1),
+                    (3, 4),
+                    (5, 9),
+                    (7, 16),
+                    (11, 27),
+                    (-13, 14),
                 }).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
@@ -983,13 +983,13 @@ public class TestWebHost
         var firstBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(0);
         var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
 
-        HttpClient originalServerPublicAppClient = null;
+        HttpClient? originalServerPublicAppClient = null;
 
         var replicaAdminInterfaceUrl = "http://localhost:18790";
         var replicaPublicAppUrl = "http://localhost:18791";
         var replicaAdminPassword = "replica-admin-password";
 
-        WebHostAdminInterfaceTestSetup replicaSetup = null;
+        WebHostAdminInterfaceTestSetup? replicaSetup = null;
 
         using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             adminPassword: originalHostAdminPassword,
@@ -1066,7 +1066,7 @@ public class TestWebHost
     [TestMethod]
     public void Web_host_supports_truncate_process_history()
     {
-        DateTimeOffset persistentProcessHostDateTime = new DateTimeOffset(year: 2021, month: 7, day: 13, hour: 13, 0, 0, TimeSpan.Zero);
+        DateTimeOffset persistentProcessHostDateTime = new(year: 2021, month: 7, day: 13, hour: 13, 0, 0, TimeSpan.Zero);
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
@@ -1093,7 +1093,7 @@ public class TestWebHost
 
         int countFilesInProcessFileStore() =>
             testSetup.BuildProcessStoreFileStoreReaderInFileDirectory()
-            .ListFilesInDirectory(ImmutableList<string>.Empty).Count();
+            .ListFilesInDirectory(ImmutableList<string>.Empty)?.Count() ?? 0;
 
         using var server = testSetup.StartWebHost();
 
@@ -1155,7 +1155,7 @@ public class TestWebHost
     [TestMethod]
     public void Web_host_clock_jumping_back_does_not_prevent_restoring_process_state()
     {
-        DateTimeOffset persistentProcessHostDateTime = new DateTimeOffset(year: 2021, month: 7, day: 13, hour: 13, 0, 0, TimeSpan.Zero);
+        DateTimeOffset persistentProcessHostDateTime = new(year: 2021, month: 7, day: 13, hour: 13, 0, 0, TimeSpan.Zero);
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
@@ -1249,10 +1249,10 @@ public class TestWebHost
         IFileStoreReader getCurrentFileStoreReader() => fileStoreWriter.Apply(new EmptyFileStoreReader());
 
         var fileStoreReader = new DelegatingFileStoreReader
-        {
-            GetFileContentDelegate = path => getCurrentFileStoreReader().GetFileContent(path),
-            ListFilesInDirectoryDelegate = path => getCurrentFileStoreReader().ListFilesInDirectory(path),
-        };
+        (
+            GetFileContentDelegate: path => getCurrentFileStoreReader().GetFileContent(path),
+            ListFilesInDirectoryDelegate: path => getCurrentFileStoreReader().ListFilesInDirectory(path)
+        );
 
         var fileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
 
@@ -1269,21 +1269,20 @@ public class TestWebHost
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
             deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
         {
-            using (var server = originalTestSetup.StartWebHost())
+            using var server = originalTestSetup.StartWebHost();
+
+            using var publicAppClient = originalTestSetup.BuildPublicAppHttpClient();
+
+            foreach (var (serializedEvent, expectedResponse) in allEventsAndExpectedResponses)
             {
-                using var publicAppClient = originalTestSetup.BuildPublicAppHttpClient();
+                var httpResponse =
+                    publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
 
-                foreach (var (serializedEvent, expectedResponse) in allEventsAndExpectedResponses)
-                {
-                    var httpResponse =
-                        publicAppClient.PostAsync("", new StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+                var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
-                    var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+                Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
 
-                    Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
-
-                    persistentProcessHostDateTime += TimeSpan.FromSeconds(1);
-                }
+                persistentProcessHostDateTime += TimeSpan.FromSeconds(1);
             }
         }
 
@@ -1292,12 +1291,12 @@ public class TestWebHost
 
         var lastWriteOperation = storeOriginalHistory.Last();
 
-        Assert.IsNotNull(lastWriteOperation.AppendFileContent.path, "Last write operation was append");
+        Assert.IsNotNull(lastWriteOperation.AppendFileContent?.path, "Last write operation was append");
 
         var storeHistoryWithCrash =
             storeOriginalHistory.SkipLast(1).Append(new RecordingFileStoreWriter.WriteOperation
             {
-                AppendFileContent = (lastWriteOperation.AppendFileContent.path, Enumerable.Repeat((byte)4, 123).ToImmutableList()),
+                AppendFileContent = (lastWriteOperation.AppendFileContent.Value.path, Enumerable.Repeat((byte)4, 123).ToImmutableList()),
             });
 
         var fileStoreReaderAfterCrash = RecordingFileStoreWriter.WriteOperation.Apply(storeHistoryWithCrash, new EmptyFileStoreReader());
@@ -1415,15 +1414,15 @@ public class TestWebHost
 
         readonly Action<IImmutableList<string>> deleteFile;
 
-        readonly Func<IImmutableList<string>, IReadOnlyList<byte>> getFileContent;
+        readonly Func<IImmutableList<string>, IReadOnlyList<byte>?> getFileContent;
 
         readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
 
         public FileStoreFromDelegates(
             Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent,
             Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent,
-             Action<IImmutableList<string>> deleteFile,
-            Func<IImmutableList<string>, IReadOnlyList<byte>> getFileContent,
+            Action<IImmutableList<string>> deleteFile,
+            Func<IImmutableList<string>, IReadOnlyList<byte>?> getFileContent,
             Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
         {
             this.setFileContent = setFileContent;
@@ -1439,7 +1438,7 @@ public class TestWebHost
         public void DeleteFile(IImmutableList<string> path) =>
             deleteFile(path);
 
-        public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) =>
+        public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) =>
             getFileContent(path);
 
         public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
@@ -1449,12 +1448,9 @@ public class TestWebHost
             setFileContent(path, fileContent);
     }
 
-    class Web_host_propagates_HTTP_headers_Response_Entry
-    {
-        public string name = null;
-
-        public string[] values = null;
-    }
+    record Web_host_propagates_HTTP_headers_Response_Entry(
+        string name,
+        IReadOnlyList<string> values);
 
     static HttpResponseMessage HttpPostStringContentAtRoot(
         HttpClient client, string requestContent) =>

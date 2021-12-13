@@ -7,13 +7,13 @@ namespace Pine;
 
 static public class EnumerableExtension
 {
-    static public IEnumerable<T> WhereHasValue<T>(this IEnumerable<T?> orig) where T : struct =>
-        orig?.Where(i => i.HasValue).Select(i => i.Value);
+    static public IEnumerable<T>? WhereHasValue<T>(this IEnumerable<T?>? orig) where T : struct =>
+        orig?.Where(i => i.HasValue).Select(i => i!.Value);
 
-    static public IEnumerable<T> WhereNotNull<T>(this IEnumerable<T> orig) where T : class =>
-        orig?.Where(i => i != null);
+    static public IEnumerable<T>? WhereNotNull<T>(this IEnumerable<T?>? orig) where T : class =>
+        orig?.Where(i => i != null).Cast<T>();
 
-    static public IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T> orig) =>
+    static public IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T>? orig) =>
         orig ?? Array.Empty<T>();
 
     static public IEqualityComparer<IEnumerable<T>> EqualityComparer<T>() => new IEnumerableEqualityComparer<T>();
@@ -39,9 +39,9 @@ static public class EnumerableExtension
 
     class IEnumerableEqualityComparer<T> : IEqualityComparer<IEnumerable<T>>
     {
-        public bool Equals(IEnumerable<T> x, IEnumerable<T> y)
+        public bool Equals(IEnumerable<T>? x, IEnumerable<T>? y)
         {
-            return Object.ReferenceEquals(x, y) || (x != null && y != null && x.SequenceEqual(y));
+            return ReferenceEquals(x, y) || (x != null && y != null && x.SequenceEqual(y));
         }
 
         public int GetHashCode(IEnumerable<T> obj) => 0;
@@ -49,7 +49,7 @@ static public class EnumerableExtension
 
     class IEnumerableComparer<T> : IComparer<T> where T : IEnumerable<IComparable>
     {
-        public int Compare([AllowNull] IEnumerable<IComparable> x, [AllowNull] IEnumerable<IComparable> y)
+        public static int Compare([AllowNull] IEnumerable<IComparable> x, [AllowNull] IEnumerable<IComparable> y)
         {
             if (x == y)
                 return 0;
@@ -84,9 +84,9 @@ static public class EnumerableExtension
             }
         }
 
-        public int Compare([AllowNull] T x, [AllowNull] T y)
+        public int Compare(T? x, T? y)
         {
-            return Compare((IEnumerable<IComparable>)x, (IEnumerable<IComparable>)y);
+            return IEnumerableComparer<T>.Compare(x, (IEnumerable<IComparable>?)y);
         }
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Text;
 using ElmFullstack;
@@ -15,7 +14,7 @@ public class ElmInteractive
     static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
         TreeWithStringPath appCodeTree,
         string submission,
-        IReadOnlyList<string> previousLocalSubmissions = null)
+        IReadOnlyList<string>? previousLocalSubmissions = null)
     {
         using var jsEngine = PrepareJsEngineToEvaluateElm();
 
@@ -30,14 +29,14 @@ public class ElmInteractive
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         TreeWithStringPath appCodeTree,
         string submission,
-        IReadOnlyList<string> previousLocalSubmissions = null)
+        IReadOnlyList<string>? previousLocalSubmissions = null)
     {
         var modulesTexts =
             appCodeTree == null ? null
             :
-            TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree))
+            TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree)!)
             .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
-            .WhereNotNull()
+            .WhereNotNull()!
             .ToImmutableList();
 
         var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
@@ -50,24 +49,22 @@ public class ElmInteractive
         );
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson)
-            ?.ToString();
+            evalElmPreparedJsEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson).ToString()!;
 
         var responseStructure =
-            Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateSubmissionResponseStructure>(
-                responseJson);
+            Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateSubmissionResponseStructure>(responseJson);
 
         if (responseStructure.DecodedArguments == null)
             throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
 
         if (responseStructure.DecodedArguments.Evaluated == null)
-            return Result<string, SubmissionResponseValueStructure>.err(responseStructure.DecodedArguments.FailedToEvaluate);
+            return Result<string, SubmissionResponseValueStructure>.err(responseStructure.DecodedArguments.FailedToEvaluate!);
 
         return Result<string, SubmissionResponseValueStructure>.ok(
             responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue);
     }
 
-    static TreeWithStringPath compileTree(TreeWithStringPath sourceTree)
+    static TreeWithStringPath? compileTree(TreeWithStringPath? sourceTree)
     {
         if (sourceTree == null)
             return null;
@@ -120,50 +117,31 @@ public class ElmInteractive
     }
 
     static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> ParseElmSyntaxAppCodeFiles() =>
-        ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
-        .WithComparers(EnumerableExtension.EqualityComparer<string>())
-        .SetItem(ImmutableList.Create("elm.json"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.elm.json"))
-        .SetItem(ImmutableList.Create("src", "Pine.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Pine.elm"))
-        .SetItem(ImmutableList.Create("src", "ElmInteractive.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.ElmInteractive.elm"))
-        .SetItem(ImmutableList.Create("src", "Main.elm"), GetManifestResourceStreamContent("elm_fullstack.ElmInteractive.interpret_elm_program.src.Main.elm"));
+        DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
+            filePaths: new[]
+            {
+                ImmutableList.Create("elm.json"),
+                ImmutableList.Create("src", "Pine.elm"),
+                ImmutableList.Create("src", "ElmInteractive.elm"),
+                ImmutableList.Create("src", "Main.elm")
+            },
+            resourceNameCommonPrefix: "elm_fullstack.ElmInteractive.interpret_elm_program.",
+            assembly: typeof(ElmInteractive).Assembly).Ok!;
 
-    static byte[] GetManifestResourceStreamContent(string name)
-    {
-        using var stream = typeof(ElmInteractive).Assembly.GetManifestResourceStream(name);
-        using var memoryStream = new MemoryStream();
+    record EvaluateSubmissionResponseStructure
+        (string? FailedToDecodeArguments = null,
+        DecodedArgumentsSctructure? DecodedArguments = null);
 
-        stream.CopyTo(memoryStream);
+    record DecodedArgumentsSctructure(
+        string? FailedToEvaluate = null,
+        EvaluatedSctructure? Evaluated = null);
 
-        return memoryStream.ToArray();
-    }
+    record EvaluatedSctructure(
+        object? SubmissionResponseNoValue = null,
+        SubmissionResponseValueStructure? SubmissionResponseValue = null);
 
-    class EvaluateSubmissionResponseStructure
-    {
-        public string FailedToDecodeArguments = null;
-
-        public DecodedArgumentsSctructure DecodedArguments = null;
-    }
-
-    class DecodedArgumentsSctructure
-    {
-        public string FailedToEvaluate = null;
-
-        public EvaluatedSctructure Evaluated = null;
-    }
-
-    class EvaluatedSctructure
-    {
-        public object SubmissionResponseNoValue = null;
-
-        public SubmissionResponseValueStructure SubmissionResponseValue = null;
-    }
-
-    public class SubmissionResponseValueStructure
-    {
-        public string valueAsElmExpressionText = null;
-
-        public string valueAsJsonString = null;
-
-        public string typeText = null;
-    }
+    public record SubmissionResponseValueStructure(
+        string valueAsElmExpressionText,
+        string valueAsJsonString,
+        string typeText);
 }

@@ -8,6 +8,8 @@ using Pine;
 
 namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations;
 
+#nullable disable
+
 public interface IProcessStoreWriter
 {
     (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent);
@@ -35,17 +37,17 @@ public interface IProcessStoreReader
                 comparer: EnumerableExtension.EqualityComparer<string>());
 
         var fileStoreWriter = new DelegatingFileStoreWriter
-        {
-            SetFileContentDelegate = pathAndFileContent => projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
-            AppendFileContentDelegate = pathAndFileContent =>
+        (
+            SetFileContentDelegate: pathAndFileContent => projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
+            AppendFileContentDelegate: pathAndFileContent =>
             {
                 if (!projectedFiles.TryGetValue(pathAndFileContent.path, out var fileContentBefore))
                     fileContentBefore = originalFileStore.GetFileContent(pathAndFileContent.path);
 
-                projectedFiles[pathAndFileContent.path] = (fileContentBefore ?? new byte[] { }).Concat(pathAndFileContent.fileContent).ToArray();
+                projectedFiles[pathAndFileContent.path] = (fileContentBefore ?? Array.Empty<byte>()).Concat(pathAndFileContent.fileContent).ToArray();
             },
-            DeleteFileDelegate = _ => throw new Exception("Unexpected operation delete file."),
-        };
+            DeleteFileDelegate: _ => throw new Exception("Unexpected operation delete file.")
+        );
 
         var processStoreWriter = new ProcessStoreWriterInFileStore(
             originalFileStore,
@@ -55,16 +57,16 @@ public interface IProcessStoreReader
         processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
 
         var projectedFileStoreReader = new DelegatingFileStoreReader
-        {
-            GetFileContentDelegate = filePath =>
+        (
+            GetFileContentDelegate: filePath =>
             {
                 if (projectedFiles.TryGetValue(filePath, out var projectFileContent))
                     return projectFileContent;
 
                 return originalFileStore.GetFileContent(filePath);
             },
-            ListFilesInDirectoryDelegate = originalFileStore.ListFilesInDirectory,
-        };
+            ListFilesInDirectoryDelegate: originalFileStore.ListFilesInDirectory
+        );
 
         return (
             projectedFiles: projectedFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
@@ -186,7 +188,7 @@ public class ProcessStoreInFileStore
 {
     static readonly protected IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
 
-    static public JsonSerializerSettings RecordSerializationSettings => new JsonSerializerSettings
+    static public JsonSerializerSettings RecordSerializationSettings => new()
     {
         NullValueHandling = NullValueHandling.Ignore
     };
@@ -458,7 +460,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     readonly Func<DateTimeOffset> getTimeForCompositionLogBatch;
 
-    readonly object appendLock = new object();
+    readonly object appendLock = new();
 
     (string hashBase16, IImmutableList<string> filePath)? lastCompositionRecord;
 

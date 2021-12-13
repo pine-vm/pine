@@ -13,16 +13,16 @@ namespace Pine;
 
 public class VolatileProcess
 {
-    readonly object @lock = new object();
+    readonly object @lock = new();
 
-    ScriptState<object> scriptState;
+    ScriptState<object>? scriptState;
 
     readonly MetadataReferenceResolver metadataResolver;
 
-    readonly Func<byte[], byte[]> getFileFromHashSHA256;
+    readonly Func<byte[], byte[]?> getFileFromHashSHA256;
 
     public VolatileProcess(
-        Func<byte[], byte[]> getFileFromHashSHA256,
+        Func<byte[], byte[]?> getFileFromHashSHA256,
         string csharpScript)
     {
         this.getFileFromHashSHA256 = getFileFromHashSHA256;
@@ -87,22 +87,20 @@ public class VolatileProcess
 
     class MetadataResolver : MetadataReferenceResolver
     {
-        readonly object @lock = new object();
+        readonly object @lock = new();
 
-        readonly Func<byte[], byte[]> getFileFromHashSHA256;
+        readonly Func<byte[], byte[]?> getFileFromHashSHA256;
 
         ImmutableList<AssemblyMetadata> resolvedAssemblies = ImmutableList<AssemblyMetadata>.Empty;
 
-        static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies =
-            new ConcurrentBag<(AssemblyMetadata, byte[])>();
+        static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = new();
 
-        static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new ConcurrentDictionary<string, Assembly>();
+        static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new();
 
         static readonly ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>> resolveReferenceCache =
-            new ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>>(
-                new ResolveReferenceRequestEqualityComparer());
+            new(new ResolveReferenceRequestEqualityComparer());
 
-        public MetadataResolver(Func<byte[], byte[]> getFileFromHashSHA256)
+        public MetadataResolver(Func<byte[], byte[]?> getFileFromHashSHA256)
         {
             this.getFileFromHashSHA256 = getFileFromHashSHA256;
         }
@@ -113,7 +111,7 @@ public class VolatileProcess
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
         }
 
-        static private Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+        static private Assembly? CurrentDomain_AssemblyResolve(object? sender, ResolveEventArgs args)
         {
             /*
              * Value observed for args.Name:
@@ -150,15 +148,15 @@ public class VolatileProcess
             return null;
         }
 
-        public override bool Equals(object other) => this == other;
+        public override bool Equals(object? other) => this == other;
 
         public override int GetHashCode() => 0;
 
 
-        struct ResolveReferenceRequest
+        record struct ResolveReferenceRequest
         {
             public string reference;
-            public string baseFilePath;
+            public string? baseFilePath;
             public MetadataReferenceProperties properties;
         }
 
@@ -172,7 +170,10 @@ public class VolatileProcess
             public int GetHashCode(ResolveReferenceRequest obj) => 0;
         }
 
-        public override ImmutableArray<PortableExecutableReference> ResolveReference(string reference, string baseFilePath, MetadataReferenceProperties properties)
+        public override ImmutableArray<PortableExecutableReference> ResolveReference(
+            string reference,
+            string? baseFilePath,
+            MetadataReferenceProperties properties)
         {
             //  Implement cache to avoid more memory usage (https://github.com/dotnet/roslyn/issues/33304)
 
@@ -232,10 +233,5 @@ public class VolatileProcess
         }
     }
 
-    public class RunResult
-    {
-        public object ReturnValue;
-
-        public Exception Exception;
-    }
+    public record RunResult(object? ReturnValue = null, Exception? Exception = null);
 }

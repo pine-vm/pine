@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Pine;
 
@@ -14,8 +16,10 @@ static public class Configuration
 
     static public string PublicWebHostUrlsSettingKey = "publicWebHostUrls";
 
+    static public string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
+
     //  https://en.wikipedia.org/wiki/Basic_access_authentication
-    static public string BasicAuthenticationForAdmin(string password) => ":" + password;
+    static public string BasicAuthenticationForAdmin(string? password) => ":" + password;
 
     static public IWebHostBuilder WithProcessStoreFileStore(
         this IWebHostBuilder orig,
@@ -48,49 +52,30 @@ static public class Configuration
 
     static public IWebHostBuilder WithSettingAdminPassword(
         this IWebHostBuilder orig,
-        string adminPassword) =>
+        string? adminPassword) =>
         orig.UseSetting(AdminPasswordSettingKey, adminPassword);
 
     static public IWebHostBuilder WithSettingDateTimeOffsetDelegate(
         this IWebHostBuilder orig,
         Func<DateTimeOffset> getDateTimeOffset) =>
-        orig.ConfigureServices(services => services.AddSingleton<Func<DateTimeOffset>>(getDateTimeOffset));
+        orig.ConfigureServices(services => services.AddSingleton(getDateTimeOffset));
 
     static public IWebHostBuilder WithSettingPublicWebHostUrls(
         this IWebHostBuilder orig,
         string[] urls) =>
-        orig.UseSetting(PublicWebHostUrlsSettingKey, String.Join(",", urls));
+        orig.UseSetting(PublicWebHostUrlsSettingKey, string.Join(",", urls));
+
+    static public IReadOnlyList<string> GetSettingPublicWebHostUrls(
+        this IConfiguration? configuration) =>
+        configuration?.GetValue<string>(PublicWebHostUrlsSettingKey).Split(new[] { ',', ';' }) ??
+        PublicWebHostUrlsDefault;
 
     static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>
         context.RequestServices.GetService<Func<DateTimeOffset>>()();
 }
 
-public class FileStoreForProcessStore
-{
-    readonly public IFileStore fileStore;
+public record FileStoreForProcessStore(IFileStore fileStore);
 
-    public FileStoreForProcessStore(IFileStore fileStore)
-    {
-        this.fileStore = fileStore;
-    }
-}
+public record FileStoreForProcessStoreReader(IFileStore fileStore);
 
-public class FileStoreForProcessStoreReader
-{
-    readonly public IFileStore fileStore;
-
-    public FileStoreForProcessStoreReader(IFileStore fileStore)
-    {
-        this.fileStore = fileStore;
-    }
-}
-
-public class WebAppConfigurationZipArchive
-{
-    readonly public byte[] zipArchive;
-
-    public WebAppConfigurationZipArchive(byte[] zipArchive)
-    {
-        this.zipArchive = zipArchive;
-    }
-}
+public record WebAppConfigurationZipArchive(byte[] zipArchive);

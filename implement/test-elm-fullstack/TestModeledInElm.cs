@@ -25,7 +25,7 @@ public class TestModeledInElm
     /*
     Get the value from `tests` in the Elm module `Main`.
     */
-    static string GetTestsValueFromModuleMain(
+    static string? GetTestsValueFromModuleMain(
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmAppFiles)
     {
         var javascriptFromElmMake = ProcessFromElm019Code.CompileElmToJavascript(
@@ -52,12 +52,12 @@ public class TestModeledInElm
     [TestMethod]
     public void Test_modeled_in_Elm()
     {
-        var elmAppsDirectories = Directory.GetDirectories(
-            FilePathStringFromPath(PathToDirectoryWithTestsModeledInElm));
+        var elmAppsDirectories =
+            Directory.GetDirectories(FilePathStringFromPath(PathToDirectoryWithTestsModeledInElm));
 
         Assert.IsTrue(0 < elmAppsDirectories?.Length, "Found directories containing Elm apps.");
 
-        foreach (var elmAppDirectory in elmAppsDirectories)
+        foreach (var elmAppDirectory in elmAppsDirectories!)
         {
             var elmAppSubdirectory = Path.GetRelativePath(
                 FilePathStringFromPath(PathToDirectoryWithTestsModeledInElm), elmAppDirectory);
@@ -72,7 +72,7 @@ public class TestModeledInElm
                 Assert.IsNotNull(testsValue, "testsValue on interface is not null.");
 
                 var testsResultEntries =
-                    System.Text.Json.JsonSerializer.Deserialize<FromElmTestResultEntry[]>(testsValue.ToString());
+                    System.Text.Json.JsonSerializer.Deserialize<FromElmTestResultEntry[]>(testsValue.ToString())!;
 
                 Assert.IsTrue(0 < testsResultEntries.Length, "Number of test result entries is greater than zero.");
 
@@ -101,12 +101,8 @@ public class TestModeledInElm
         }
     }
 
-    class FromElmTestResultEntry
-    {
-        public string testName { set; get; } = null;
-
-        public string expected { set; get; } = null;
-
-        public string derived { set; get; } = null;
-    }
+    record FromElmTestResultEntry(
+        string testName,
+        string expected,
+        string derived);
 }

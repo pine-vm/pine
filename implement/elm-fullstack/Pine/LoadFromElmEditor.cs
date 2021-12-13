@@ -38,7 +38,7 @@ namespace Pine
             /// </summary>
             static public IImmutableList<byte> ApplyBlobChanges(
                 IReadOnlyList<BlobChangeSequenceElement> changes,
-                IImmutableList<byte> blobBefore)
+                IImmutableList<byte>? blobBefore)
             {
                 static (IImmutableList<byte> originalBlobRemainingBytes, IImmutableList<byte> changedBlobBytes) applyChange(
                     BlobChangeSequenceElement change, IImmutableList<byte> originalBlobRemainingBytes, IImmutableList<byte> changedBlobBytes)
@@ -90,9 +90,9 @@ namespace Pine
          *      | AddBytes Bytes.Bytes
          * */
         public record BlobChangeSequenceElement(
-            IReadOnlyList<int> ReuseBytes = default,
-            IReadOnlyList<int> RemoveBytes = default,
-            IReadOnlyList<Bytes> AddBytes = default);
+            IReadOnlyList<int>? ReuseBytes = default,
+            IReadOnlyList<int>? RemoveBytes = default,
+            IReadOnlyList<Bytes>? AddBytes = default);
 
         public record Bytes(string AsBase64);
     }
@@ -101,9 +101,9 @@ namespace Pine
     {
         public record ParseUrlResult(
             string projectStateString,
-            string projectStateDeflateBase64String,
-            string projectStateHashString,
-            string filePathToOpenString);
+            string? projectStateDeflateBase64String,
+            string? projectStateHashString,
+            string? filePathToOpenString);
 
         public record ProjectState(ProjectState_2021_01.ProjectState version_2021_01);
 
@@ -117,7 +117,7 @@ namespace Pine
         /// https://elm-editor.com/?project-state-deflate-base64=XZDLasMwEEX%2FZdZO5Ecip97FLYVQWmi3RgQ9xg9qW0aSQ4vRv9cyZNHsZg5zzwyzwA2N7fR4TeM0ucYJFAsIbhEKaJ2bbEFI07l2FnupB4L9sKvnvreOy%2B%2BHzhlEkh9SeowF5bROMFMyTzOV01qIk0xOT5InlMcCkZJumHoccHQEf3iod3ya7KZE1TltiMKaz70LHCJQXV2jwVHiq9FDuV24gMFB3%2FBDK7RQVCwC2fKxwbLXIoCqAmvkmn7n3bhf3cCiaoEvnC2Wv24LHbOc%2BSjAoLpTurGzUnewNjZspYf1M5fnc3N5%2BXwDv4399x0z5hlj3vs%2F&project-state-hash=c34a6a5e4ee0ea6308c9965dfbfbe68d28ecc07dca1cba8f9a2dac50700324e9&file-path-to-open=src%2FMain.elm
         /// 
         /// </summary>
-        static public ParseUrlResult ParseUrl(string url)
+        static public ParseUrlResult? ParseUrl(string url)
         {
             try
             {
@@ -161,7 +161,7 @@ namespace Pine
                 return Result<string, LoadFromUrlSuccess>.err("Failed to parse string '" + sourceUrl + "' as Elm Editor URL.");
 
             LoadFromUrlSuccess returnValueFromTree(Composition.TreeWithStringPath tree) =>
-                new LoadFromUrlSuccess(parsedUrl: parsedUrl, tree: tree);
+                new(parsedUrl: parsedUrl, tree: tree);
 
             if (LoadFromGitHubOrGitLab.ParseUrl(parsedUrl.projectStateString) != null)
             {
@@ -189,7 +189,7 @@ namespace Pine
 
             var projectState = System.Text.Json.JsonSerializer.Deserialize<ProjectState>(
                 parsedUrl.projectStateString,
-                options: jsonSerializerOptions);
+                options: jsonSerializerOptions)!;
 
             if (projectState.version_2021_01 != null)
             {
@@ -203,7 +203,7 @@ namespace Pine
 
         static public Result<string, Composition.TreeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
         {
-            Composition.TreeWithStringPath baseComposition = null;
+            Composition.TreeWithStringPath? baseComposition = null;
 
             if (projectState.@base != null)
             {
@@ -230,7 +230,7 @@ namespace Pine
         /// </summary>
         static public Result<string, Composition.TreeWithStringPath> ApplyProjectStateDifference_2021_01(
             ProjectState_2021_01.ProjectStateDifference differenceFromBase,
-            Composition.TreeWithStringPath baseComposition)
+            Composition.TreeWithStringPath? baseComposition)
         {
             var compositionAfterRemovals =
                 differenceFromBase.removeNodes.Aggregate(

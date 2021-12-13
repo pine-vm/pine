@@ -12,7 +12,7 @@ namespace test_elm_fullstack
     [TestClass]
     public class TestElmEditor
     {
-        static string NormalizeStringTestingElmFormat(string originalString) =>
+        static string? NormalizeStringTestingElmFormat(string? originalString) =>
             originalString?.Trim()?.Replace("\n\r", "\n")?.Replace("\r\n", "\n");
 
         [TestMethod]
@@ -56,9 +56,9 @@ a =
 
             var formatRequest =
                 new ElmEditorApi.ElmEditorApiRequestStructure
-                {
-                    FormatElmModuleTextRequest = ImmutableList.Create(elmModuleTextBeforeFormatting)
-                };
+                (
+                    FormatElmModuleTextRequest: ImmutableList.Create(elmModuleTextBeforeFormatting)
+                );
 
             var httpResponse =
                 publicAppClient
@@ -90,23 +90,15 @@ a =
 
     namespace ElmEditorApi
     {
-        public class ElmEditorApiRequestStructure
-        {
-            public IReadOnlyList<string> FormatElmModuleTextRequest;
-        }
+        public record ElmEditorApiRequestStructure(
+            IReadOnlyList<string> FormatElmModuleTextRequest);
 
-        public class ElmEditorApiResponseStructure
-        {
-            public IReadOnlyList<FormatElmModuleTextResponseStructure> FormatElmModuleTextResponse;
+        public record ElmEditorApiResponseStructure(
+            IReadOnlyList<FormatElmModuleTextResponseStructure>? FormatElmModuleTextResponse = default,
+            IReadOnlyList<string>? ErrorResponse = default);
 
-            public IReadOnlyList<string> ErrorResponse;
-        }
-
-        public class FormatElmModuleTextResponseStructure
-        {
-            public ElmFullstack.ElmValueCommonJson.Maybe<string> formattedText;
-
-            public ExecutableFile.ProcessOutput processOutput;
-        }
+        public record FormatElmModuleTextResponseStructure(
+            ElmFullstack.ElmValueCommonJson.Maybe<string> formattedText,
+            ExecutableFile.ProcessOutput processOutput);
     }
 }

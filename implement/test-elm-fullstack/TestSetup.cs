@@ -15,7 +15,7 @@ public class TestSetup
 
     static public Composition.Component AppConfigComponentFromFiles(
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> appFiles) =>
-        Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles));
+        Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
 
     static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
@@ -103,21 +103,20 @@ public class TestSetup
 
     static public IProcessStoreReader EmptyProcessStoreReader() =>
         new ProcessStoreReaderFromDelegates
-        {
-            EnumerateSerializedCompositionsRecordsReverseDelegate = () => Array.Empty<byte[]>(),
-            GetReductionDelegate = _ => null,
-        };
+        (
+            EnumerateSerializedCompositionsRecordsReverseDelegate: () => Array.Empty<byte[]>(),
+            GetReductionDelegate: _ => null
+        );
 }
 
-class ProcessStoreReaderFromDelegates : IProcessStoreReader
+record ProcessStoreReaderFromDelegates(
+    Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate,
+    Func<byte[], ReductionRecord?> GetReductionDelegate)
+    : IProcessStoreReader
 {
-    public Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate;
-
-    public Func<byte[], ReductionRecord> GetReductionDelegate;
-
     public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
         EnumerateSerializedCompositionsRecordsReverseDelegate();
 
-    public ReductionRecord GetReduction(byte[] reducedCompositionHash) =>
+    public ReductionRecord? GetReduction(byte[] reducedCompositionHash) =>
         GetReductionDelegate(reducedCompositionHash);
 }

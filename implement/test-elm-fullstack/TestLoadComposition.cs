@@ -50,7 +50,7 @@ public class TestLoadComposition
                     loadCompositionResult.result.Ok.tree.EnumerateBlobsTransitive()
                     .Select(blobAtPath =>
                     {
-                        string utf8 = null;
+                        string? utf8 = null;
 
                         try
                         {
@@ -68,7 +68,7 @@ public class TestLoadComposition
                     })
                     .ToImmutableList();
 
-                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.tree);
+                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.tree)!;
                 var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
 
                 Assert.AreEqual(testCase.expectedCompositionId, compositionId);

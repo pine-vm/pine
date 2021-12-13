@@ -27,8 +27,8 @@ public record ElmTestRsReportJsonEntryFailureReason(
     ElmTestRsReportJsonEntryFailureReasonData data);
 
 public record ElmTestRsReportJsonEntryFailureReasonData(
-    string @String = null,
-    ElmTestRsReportJsonEntryFailureReasonDataEquality Equality = null);
+    string? @String = null,
+    ElmTestRsReportJsonEntryFailureReasonDataEquality? Equality = null);
 
 public record ElmTestRsReportJsonEntryFailureReasonDataEquality(
     string expected,
@@ -92,11 +92,11 @@ public class ElmTestRs
             ("3a1611329306d24b24fd6b98418ddec9ee79c044623e712093db24eba6a573df",
             @"https://github.com/denoland/deno/releases/download/v1.16.2/deno-x86_64-pc-windows-msvc.zip"));
 
-    static public byte[] ElmTestRsExecutableFileForCurrentOs() => LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
+    static public byte[]? ElmTestRsExecutableFileForCurrentOs() => LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
-    static public byte[] DenoExecutableFileForCurrentOs() => LoadFileForCurrentOs(DenoExecutableFileByOs);
+    static public byte[]? DenoExecutableFileForCurrentOs() => LoadFileForCurrentOs(DenoExecutableFileByOs);
 
-    static public byte[] LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
+    static public byte[]? LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
     {
         var hashAndRemoteSource =
             dict.FirstOrDefault(c => RuntimeInformation.IsOSPlatform(c.Key)).Value;
@@ -114,7 +114,7 @@ public class ElmTestRs
     static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmProjectFiles)
     {
-        var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs();
+        var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
 
         var elmExecutableFileName = "elm.exe";
 
@@ -125,7 +125,7 @@ public class ElmTestRs
 
         var environmentPathExecutableFiles =
             ImmutableDictionary<string, IReadOnlyList<byte>>.Empty
-            .SetItem("deno", DenoExecutableFileForCurrentOs());
+            .SetItem("deno", DenoExecutableFileForCurrentOs()!);
 
         var environmentFilesExecutable =
             ImmutableDictionary.Create<IImmutableList<string>, IReadOnlyList<byte>>()
@@ -165,7 +165,7 @@ public class ElmTestRs
 
         serializeOptions.Converters.Add(new ElmTestRsReportJsonEntryFailureReasonDataJsonConverter());
 
-        return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, serializeOptions);
+        return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, serializeOptions)!;
     }
 
     static public (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
@@ -226,13 +226,16 @@ public class ElmTestRs
                     );
                 }
 
-                return ImmutableList.Create("", failureReasonData.String, "");
+                if (failureReasonData.String != null)
+                    return ImmutableList.Create("", failureReasonData.String, "");
+
+                throw new System.Exception("Incomplete match on sum type.");
             }
 
             var textsFromFailures =
                 @event.failures.EmptyIfNull()
                 .Select(failure => failure.reason?.data)
-                .WhereNotNull()
+                .WhereNotNull()!
                 .SelectMany(renderFailureReasonData)
                 .ToImmutableList();
 
@@ -247,7 +250,7 @@ public class ElmTestRs
     }
 }
 
-public record ElmTestRsConsoleOutputColor(object Default = null, object Red = null, object Green = null)
+public record ElmTestRsConsoleOutputColor(object? Default = null, object? Red = null, object? Green = null)
 {
     static public ElmTestRsConsoleOutputColor DefaultColor => new ElmTestRsConsoleOutputColor(Default: new object());
     static public ElmTestRsConsoleOutputColor RedColor => new ElmTestRsConsoleOutputColor(Red: new object());

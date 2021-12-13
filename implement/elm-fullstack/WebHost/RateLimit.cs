@@ -10,7 +10,12 @@ public interface IRateLimit
 
 public interface IMutableRateLimit
 {
-    bool AttemptPass(Int64 time);
+    bool AttemptPass(long time);
+}
+
+public class MutableRateLimitAlwaysPassing : IMutableRateLimit
+{
+    public bool AttemptPass(long time) => true;
 }
 
 public class RateLimitStateSingleWindow : IRateLimit
@@ -18,11 +23,11 @@ public class RateLimitStateSingleWindow : IRateLimit
     public int limit;
     public int windowSize;
 
-    public Int64[] passes;
+    public long[] passes;
 
-    public (IRateLimit newState, bool passed) AttemptPass(Int64 attemptTime)
+    public (IRateLimit newState, bool passed) AttemptPass(long attemptTime)
     {
-        var previousPassTime = passes?.Skip(limit - 1).Cast<Int64?>().FirstOrDefault();
+        var previousPassTime = passes?.Skip(limit - 1).Cast<long?>().FirstOrDefault();
 
         var previousPassAge = attemptTime - previousPassTime;
 
@@ -34,7 +39,7 @@ public class RateLimitStateSingleWindow : IRateLimit
             {
                 limit = limit,
                 windowSize = windowSize,
-                passes = new[] { attemptTime }.Concat(passes ?? new Int64[0]).Take(limit).ToArray(),
+                passes = new[] { attemptTime }.Concat(passes ?? Array.Empty<long>()).Take(limit).ToArray(),
             },
             true);
     }
@@ -42,7 +47,7 @@ public class RateLimitStateSingleWindow : IRateLimit
 
 public class RateLimitMutableContainer : IMutableRateLimit
 {
-    readonly object @lock = new object();
+    readonly object @lock = new();
 
     IRateLimit rateLimitState;
 
@@ -51,7 +56,7 @@ public class RateLimitMutableContainer : IMutableRateLimit
         rateLimitState = init;
     }
 
-    public bool AttemptPass(Int64 time)
+    public bool AttemptPass(long time)
     {
         lock (@lock)
         {

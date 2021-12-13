@@ -9,7 +9,7 @@ namespace Pine;
 
 public interface IFileStoreReader
 {
-    IReadOnlyList<byte> GetFileContent(IImmutableList<string> path);
+    IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path);
 
     IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath);
 }
@@ -24,26 +24,23 @@ public interface IFileStoreWriter
     void DeleteFile(IImmutableList<string> path);
 }
 
-public class DelegatingFileStoreReader : IFileStoreReader
+public record DelegatingFileStoreReader(
+    Func<IImmutableList<string>, IReadOnlyList<byte>?> GetFileContentDelegate,
+    Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> ListFilesInDirectoryDelegate)
+    : IFileStoreReader
 {
-    public Func<IImmutableList<string>, IReadOnlyList<byte>> GetFileContentDelegate;
-
-    public Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> ListFilesInDirectoryDelegate;
-
-    public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
+    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         ListFilesInDirectoryDelegate(directoryPath);
 }
 
-public class DelegatingFileStoreWriter : IFileStoreWriter
+public record DelegatingFileStoreWriter(
+    Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> AppendFileContentDelegate,
+    Action<IImmutableList<string>> DeleteFileDelegate,
+    Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> SetFileContentDelegate)
+    : IFileStoreWriter
 {
-    public Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> AppendFileContentDelegate;
-
-    public Action<IImmutableList<string>> DeleteFileDelegate;
-
-    public Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> SetFileContentDelegate;
-
     public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
         AppendFileContentDelegate((path, fileContent));
 
@@ -98,7 +95,8 @@ public class FileStoreFromSystemIOFile : IFileStore
 
         var directoryPath = Path.GetDirectoryName(filePath);
 
-        EnsureDirectoryExists(directoryPath);
+        if (directoryPath != null)
+            EnsureDirectoryExists(directoryPath);
 
         File.WriteAllBytes(filePath, fileContent as byte[] ?? fileContent.ToArray());
     }
@@ -109,14 +107,15 @@ public class FileStoreFromSystemIOFile : IFileStore
 
         var directoryPath = Path.GetDirectoryName(filePath);
 
-        EnsureDirectoryExists(directoryPath);
+        if (directoryPath != null)
+            EnsureDirectoryExists(directoryPath);
 
         using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write);
 
         fileStream.Write(fileContent as byte[] ?? fileContent.ToArray());
     }
 
-    public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path)
+    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path)
     {
         var filePath = CombinePath(path);
 
@@ -171,7 +170,7 @@ public class FileStoreFromWriterAndReader : IFileStore
     public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
         writer.SetFileContent(path, fileContent);
 
-    public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) =>
+    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) =>
         reader.GetFileContent(path);
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
@@ -187,93 +186,90 @@ public class RecordingFileStoreWriter : IFileStoreWriter
     public IFileStoreReader Apply(IFileStoreReader fileStoreReader) =>
         WriteOperation.Apply(history, fileStoreReader);
 
-    public class WriteOperation
+    public record WriteOperation(
+        (IImmutableList<string> path, IReadOnlyList<byte> fileContent)? SetFileContent = null,
+        (IImmutableList<string> path, IReadOnlyList<byte> fileContent)? AppendFileContent = null,
+        IImmutableList<string>? DeleteFile = null)
     {
-        public (IImmutableList<string> path, IReadOnlyList<byte> fileContent) SetFileContent { get; init; }
-
-        public (IImmutableList<string> path, IReadOnlyList<byte> fileContent) AppendFileContent { get; init; }
-
-        public IImmutableList<string> DeleteFile { get; init; }
-
         static public IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
             writeOperations.Aggregate(fileStoreReader, (previousState, writeOperation) => writeOperation.Apply(previousState));
 
         public IFileStoreReader Apply(IFileStoreReader previousState)
         {
-            if (SetFileContent.path != null)
+            if (SetFileContent?.path != null)
             {
                 return new DelegatingFileStoreReader
-                {
-                    GetFileContentDelegate = filePath =>
+                (
+                    GetFileContentDelegate: filePath =>
                     {
                         var previousFileContent = previousState.GetFileContent(filePath);
 
-                        if (filePath.SequenceEqual(SetFileContent.path))
+                        if (filePath.SequenceEqual(SetFileContent.Value.path))
                         {
-                            return SetFileContent.fileContent;
+                            return SetFileContent.Value.fileContent;
                         }
 
                         return previousFileContent;
                     },
-                    ListFilesInDirectoryDelegate = directoryPath =>
+                    ListFilesInDirectoryDelegate: directoryPath =>
                     {
                         var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
-                        if (SetFileContent.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                        if (SetFileContent.Value.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
                         {
-                            return previousFilesInDirectory.Append(SetFileContent.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
+                            return previousFilesInDirectory.Append(SetFileContent.Value.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
                         }
 
                         return previousFilesInDirectory;
                     }
-                };
+                );
             }
 
-            if (AppendFileContent.path != null)
+            if (AppendFileContent?.path != null)
             {
                 return new DelegatingFileStoreReader
-                {
-                    GetFileContentDelegate = filePath =>
+                (
+                    GetFileContentDelegate: filePath =>
                     {
                         var previousFileContent = previousState.GetFileContent(filePath);
 
-                        if (filePath.SequenceEqual(AppendFileContent.path))
+                        if (filePath.SequenceEqual(AppendFileContent.Value.path))
                         {
-                            return (previousFileContent ?? Array.Empty<byte>()).Concat(AppendFileContent.fileContent).ToList();
+                            return (previousFileContent ?? Array.Empty<byte>()).Concat(AppendFileContent.Value.fileContent).ToList();
                         }
 
                         return previousFileContent;
                     },
-                    ListFilesInDirectoryDelegate = directoryPath =>
+                    ListFilesInDirectoryDelegate: directoryPath =>
                     {
                         var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
-                        if (AppendFileContent.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                        if (AppendFileContent.Value.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
                         {
-                            return previousFilesInDirectory.Append(AppendFileContent.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
+                            return previousFilesInDirectory.Append(AppendFileContent.Value.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
                         }
 
                         return previousFilesInDirectory;
                     }
-                };
+                );
             }
 
             if (DeleteFile != null)
             {
                 return new DelegatingFileStoreReader
-                {
-                    GetFileContentDelegate = filePath =>
+                (
+                    GetFileContentDelegate: filePath =>
                     {
                         if (filePath.SequenceEqual(DeleteFile))
                             return null;
 
                         return previousState.GetFileContent(filePath);
                     },
-                    ListFilesInDirectoryDelegate = directoryPath =>
-                        previousState
-                        .ListFilesInDirectory(directoryPath)
-                        .Where(filePathInDirectory => !directoryPath.AddRange(filePathInDirectory).SequenceEqual(DeleteFile))
-                };
+                    ListFilesInDirectoryDelegate: directoryPath =>
+                       previousState
+                       .ListFilesInDirectory(directoryPath)
+                       .Where(filePathInDirectory => !directoryPath.AddRange(filePathInDirectory).SequenceEqual(DeleteFile))
+                );
             }
 
             throw new Exception("Invalid construction");
@@ -292,7 +288,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
 public class EmptyFileStoreReader : IFileStoreReader
 {
-    public IReadOnlyList<byte> GetFileContent(IImmutableList<string> path) => null;
+    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) => null;
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         ImmutableList<IImmutableList<string>>.Empty;
@@ -300,16 +296,16 @@ public class EmptyFileStoreReader : IFileStoreReader
 
 static public class FileStoreExtension
 {
-    static public IEnumerable<IImmutableList<string>> ListFiles(this IFileStoreReader fileStore) =>
+    static public IEnumerable<IImmutableList<string>>? ListFiles(this IFileStoreReader fileStore) =>
         fileStore.ListFilesInDirectory(ImmutableList<string>.Empty);
 
     static public IFileStoreReader WithMappedPath(
-        this IFileStoreReader originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
+        this IFileStoreReader originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
         new DelegatingFileStoreReader
-        {
-            GetFileContentDelegate = originalPath => originalFileStore.GetFileContent(pathMap(originalPath)),
-            ListFilesInDirectoryDelegate = originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath)),
-        };
+        (
+            GetFileContentDelegate: originalPath => originalFileStore.GetFileContent(pathMap(originalPath)),
+            ListFilesInDirectoryDelegate: originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath))
+        );
 
     static public IFileStoreReader ForSubdirectory(this IFileStoreReader originalFileStore, string directoryName) =>
         ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
@@ -319,13 +315,13 @@ static public class FileStoreExtension
         WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
 
     static public IFileStoreWriter WithMappedPath(
-        this IFileStoreWriter originalFileStore, System.Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
+        this IFileStoreWriter originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
         new DelegatingFileStoreWriter
-        {
-            SetFileContentDelegate = pathAndFileContent => originalFileStore.SetFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
-            AppendFileContentDelegate = pathAndFileContent => originalFileStore.AppendFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
-            DeleteFileDelegate = originalPath => originalFileStore.DeleteFile(pathMap(originalPath)),
-        };
+        (
+            SetFileContentDelegate: pathAndFileContent => originalFileStore.SetFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
+            AppendFileContentDelegate: pathAndFileContent => originalFileStore.AppendFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
+            DeleteFileDelegate: originalPath => originalFileStore.DeleteFile(pathMap(originalPath))
+        );
 
     static public IFileStoreWriter ForSubdirectory(this IFileStoreWriter originalFileStore, string directoryName) =>
         ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
