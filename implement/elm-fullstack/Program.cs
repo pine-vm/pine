@@ -371,7 +371,7 @@ public class Program
                         compositionLogEvent: compositionLogEvent,
                         fileStoreReader: processStoreFileStore);
 
-                    if (testDeployResult.Ok.projectedFiles == null)
+                    if (testDeployResult.Ok?.projectedFiles == null)
                     {
                         throw new Exception("Attempt to deploy app config failed: " + testDeployResult.Err);
                     }
