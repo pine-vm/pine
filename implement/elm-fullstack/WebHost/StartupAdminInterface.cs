@@ -329,12 +329,16 @@ public class StartupAdminInterface
 
                     var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
+                    var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent));
+
+                    logger.LogInformation("Got request to deploy app config " + appConfigHashBase16);
+
                     processStoreWriter.StoreComponent(appConfigComponent);
 
                     var appConfigValueInFile =
                         new ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                            HashBase16 = appConfigHashBase16
                         };
 
                     var compositionLogEvent =
@@ -727,7 +731,10 @@ public class StartupAdminInterface
                         storeReductionStopwatch.Stop();
 
                         var (statusCode, report) =
-                            AttemptContinueWithCompositionEventAndCommit(compositionLogEvent, processStoreFileStore);
+                            AttemptContinueWithCompositionEventAndCommit(
+                                compositionLogEvent,
+                                processStoreFileStore,
+                                testContinueLogger: logEntry => logger.LogInformation(logEntry));
 
                         report = report with
                         {
@@ -742,8 +749,13 @@ public class StartupAdminInterface
                 }
 
                 async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
-                    CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
+                    CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+                    ILogger? logger = null)
                 {
+                    logger?.LogInformation(
+                        "Begin attempt to continue with composition event: " +
+                        Newtonsoft.Json.JsonConvert.SerializeObject(compositionLogEvent));
+
                     var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
 
                     var responseBodyString = Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport);
@@ -812,7 +824,8 @@ public class StartupAdminInterface
 
     static public (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
-        IFileStore processStoreFileStore)
+        IFileStore processStoreFileStore,
+        Action<string>? testContinueLogger = null)
     {
         var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
@@ -820,7 +833,8 @@ public class StartupAdminInterface
 
         var testContinueResult = PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
             compositionLogEvent: compositionLogEvent,
-            fileStoreReader: processStoreFileStore);
+            fileStoreReader: processStoreFileStore,
+            logger: testContinueLogger);
 
         var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
             originalFileStore: processStoreFileStore,

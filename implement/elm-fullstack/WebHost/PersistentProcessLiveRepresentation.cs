@@ -557,7 +557,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     static public Result<string, FileStoreReaderProjectionResult>
         TestContinueWithCompositionEvent(
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
-            IFileStoreReader fileStoreReader)
+            IFileStoreReader fileStoreReader,
+            Action<string>? logger = null)
     {
         var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
             originalFileStore: fileStoreReader,
@@ -566,7 +567,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         try
         {
             using var projectedProcess =
-                LoadFromStoreAndRestoreProcess(new ProcessStoreReaderInFileStore(projectionResult.projectedReader), _ => { }).process;
+                LoadFromStoreAndRestoreProcess(
+                    new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
+                    logger: message => logger?.Invoke(message)).process;
 
             return Result<string, FileStoreReaderProjectionResult>.ok(projectionResult);
         }
