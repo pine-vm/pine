@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-12-13";
+    static public string AppVersionId => "2021-12-14";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -247,8 +247,7 @@ public class Program
 
             var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
 
-
-            var processStorePathOption = runServerCmd.Option("--process-store-path", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
+            var processStoreOption = runServerCmd.Option("--process-store", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
             var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
             var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
             var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
@@ -258,7 +257,7 @@ public class Program
 
             runServerCmd.OnExecute(() =>
             {
-                var processStorePath = processStorePathOption.Value();
+                var processStorePath = processStoreOption.Value();
 
                 var publicAppUrls =
                     publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??

@@ -25,6 +25,6 @@ RUN dotnet "/elm-fullstack/dotnet/elm-fs.dll"  deploy  /docker-image-default-app
 
 WORKDIR /elm-fullstack
 
-ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fs.dll", "run-server", "--process-store-path=/elm-fullstack/process-store"]
+ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fs.dll", "run-server", "--process-store=/elm-fullstack/process-store"]
 
 # ENV APPSETTING_adminPassword="password-for-admin-interface"
