@@ -206,9 +206,21 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
         var aggregateFileSize =
             blobs.Sum(file => file.blobContent.Count);
 
+        var filesBySize =
+            blobs.OrderByDescending(file => file.blobContent.Count).ToImmutableList();
+
+        var largestFilesToDisplay =
+            filesBySize.Take(3).ToImmutableList();
+
         if (loadCompositionLimitAggregateFileSize < aggregateFileSize)
         {
-            return responseErrorExceedingLimit("Aggregate file size: " + aggregateFileSize);
+            var largestFilesDescriptions =
+                largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.blobContent.Count + " bytes)");
+
+            return responseErrorExceedingLimit(
+                "Aggregate file size: " + aggregateFileSize +
+                " bytes. Following are the largest " + largestFilesToDisplay.Count +
+                " files:\n" + string.Join("\n", largestFilesDescriptions));
         }
 
         var maximumPathLength =

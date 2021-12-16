@@ -1248,7 +1248,7 @@ loadFromGitCmd urlIntoGitRepository =
                     Json.Decode.succeed (Ok loadComposition)
 
                 FrontendBackendInterface.ErrorResponse error ->
-                    Json.Decode.succeed (Err ("The server reported an error: " ++ error))
+                    Json.Decode.succeed (Err ("The server reported an error:\n" ++ error))
 
                 _ ->
                     Json.Decode.fail "Unexpected response: Not a LoadCompositionResponse"
@@ -2273,7 +2273,11 @@ elementToDisplayLoadFromGitError =
 
 dialogErrorElementFromDescription : String -> Element.Element e
 dialogErrorElementFromDescription =
-    Element.text >> List.singleton >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
+    Html.text
+        >> Element.html
+        >> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
+        >> List.singleton
+        >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
 
 
 projectSummaryElementForDialog : FileTreeInWorkspace.FileTreeNode -> Element.Element e
