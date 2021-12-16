@@ -2130,12 +2130,15 @@ a:hover {
 viewLoadFromGitDialog : LoadFromGitDialogState -> PopupWindowAttributes Event
 viewLoadFromGitDialog dialogState =
     let
-        userInputBeginLoadingEvent =
-            UserInputLoadFromGit
-                (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
+        userInputBeginLoadingDialogEvent =
+            LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository }
 
-        offerContinueWithBeginLoading =
-            String.trim dialogState.urlIntoGitRepository /= ""
+        userInputBeginLoadingEvent =
+            UserInputLoadFromGit userInputBeginLoadingDialogEvent
+
+        userInputBeginLoadingCouldHaveEffect =
+            updateForUserInputLoadFromGit { time = Time.millisToPosix 0 } userInputBeginLoadingDialogEvent dialogState
+                /= ( dialogState, Cmd.none )
 
         urlInputElement =
             Element.Input.text
@@ -2162,7 +2165,7 @@ viewLoadFromGitDialog dialogState =
                     , sendRequestButton
                         |> Element.el
                             [ Element.centerX
-                            , elementTransparent (not offerContinueWithBeginLoading)
+                            , elementTransparent (not userInputBeginLoadingCouldHaveEffect)
                             ]
                     ]
                         |> Element.column
