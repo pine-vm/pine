@@ -161,6 +161,7 @@ type alias ElmMakeResultStructure =
 
 type Event
     = TimeHasArrived Time.Posix
+    | UserInputLoadFromGitOpenDialog
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
     | UserInputLoadOrImportTakeProjectStateEvent LoadOrImportProjectStateOrigin
     | UserInputClosePopup
@@ -195,8 +196,7 @@ type WorkspaceEventStructure
 
 
 type UserInputLoadFromGitEventStructure
-    = LoadFromGitOpenDialog
-    | LoadFromGitEnterUrlEvent { urlIntoGitRepository : String }
+    = LoadFromGitEnterUrlEvent { urlIntoGitRepository : String }
     | LoadFromGitBeginRequestEvent { urlIntoGitRepository : String }
 
 
@@ -433,7 +433,7 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputLoadFromGit LoadFromGitOpenDialog ->
+        UserInputLoadFromGitOpenDialog ->
             ( { stateBefore
                 | popup =
                     Just
@@ -449,51 +449,19 @@ update event stateBefore =
             , focusInputUrlElementCmd
             )
 
-        UserInputLoadFromGit (LoadFromGitEnterUrlEvent { urlIntoGitRepository }) ->
+        UserInputLoadFromGit dialogEvent ->
             case stateBefore.popup of
                 Just (ModalDialog (LoadFromGitDialog dialogStateBefore)) ->
-                    if dialogStateBefore.request /= Nothing || dialogStateBefore.loadCompositionResult /= Nothing then
-                        ( stateBefore, Cmd.none )
-
-                    else
-                        let
-                            dialogState =
-                                { urlIntoGitRepository = urlIntoGitRepository
-                                , request = Nothing
-                                , loadCompositionResult = Nothing
-                                }
-                        in
-                        ( { stateBefore | popup = Just (ModalDialog (LoadFromGitDialog dialogState)) }
-                        , Cmd.none
-                        )
+                    let
+                        ( dialogState, cmd ) =
+                            updateForUserInputLoadFromGit { time = stateBefore.time } dialogEvent dialogStateBefore
+                    in
+                    ( { stateBefore | popup = Just (ModalDialog (LoadFromGitDialog dialogState)) }
+                    , cmd
+                    )
 
                 _ ->
                     ( stateBefore, Cmd.none )
-
-        UserInputLoadFromGit (LoadFromGitBeginRequestEvent { urlIntoGitRepository }) ->
-            let
-                trimmedUrl =
-                    String.trim urlIntoGitRepository
-            in
-            if trimmedUrl == "" then
-                ( stateBefore, Cmd.none )
-
-            else
-                case stateBefore.popup of
-                    Just (ModalDialog (LoadFromGitDialog _)) ->
-                        let
-                            dialogState =
-                                { urlIntoGitRepository = urlIntoGitRepository
-                                , request = Just { url = urlIntoGitRepository, time = stateBefore.time }
-                                , loadCompositionResult = Nothing
-                                }
-                        in
-                        ( { stateBefore | popup = Just (ModalDialog (LoadFromGitDialog dialogState)) }
-                        , loadFromGitCmd urlIntoGitRepository
-                        )
-
-                    _ ->
-                        ( stateBefore, Cmd.none )
 
         UserInputLoadOrImportTakeProjectStateEvent origin ->
             let
@@ -648,6 +616,46 @@ update event stateBefore =
 
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+updateForUserInputLoadFromGit : { time : Time.Posix } -> UserInputLoadFromGitEventStructure -> LoadFromGitDialogState -> ( LoadFromGitDialogState, Cmd Event )
+updateForUserInputLoadFromGit { time } event dialogStateBefore =
+    case event of
+        LoadFromGitEnterUrlEvent { urlIntoGitRepository } ->
+            if dialogStateBefore.request /= Nothing || dialogStateBefore.loadCompositionResult /= Nothing then
+                ( dialogStateBefore, Cmd.none )
+
+            else
+                let
+                    dialogState =
+                        { urlIntoGitRepository = urlIntoGitRepository
+                        , request = Nothing
+                        , loadCompositionResult = Nothing
+                        }
+                in
+                ( dialogState
+                , Cmd.none
+                )
+
+        LoadFromGitBeginRequestEvent { urlIntoGitRepository } ->
+            let
+                trimmedUrl =
+                    String.trim urlIntoGitRepository
+            in
+            if trimmedUrl == "" then
+                ( dialogStateBefore, Cmd.none )
+
+            else
+                let
+                    dialogState =
+                        { urlIntoGitRepository = urlIntoGitRepository
+                        , request = Just { url = urlIntoGitRepository, time = time }
+                        , loadCompositionResult = Nothing
+                        }
+                in
+                ( dialogState
+                , loadFromGitCmd urlIntoGitRepository
+                )
 
 
 updateWorkspace : { time : Time.Posix } -> WorkspaceEventStructure -> WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
@@ -2197,7 +2205,7 @@ viewLoadFromGitDialog dialogState =
                 |> Maybe.withDefault Element.none
 
         exampleUrl =
-            "https://github.com/onlinegamemaker/making-online-games/tree/b245b088c7e8a7067bf78a782ec0354b8c82a0c9/games-program-codes/simple-snake"
+            "https://github.com/onlinegamemaker/making-online-games/tree/04f68edb04d9bc366f17f6123b189a6f577abb67/games-program-codes/simple-snake"
     in
     { title = "Load Project from Git Repository"
     , titleIcon = Just FontAwesome.Solid.cloudDownloadAlt
@@ -3098,7 +3106,7 @@ titlebarMenuEntryDropdownContent state menuEntry =
             case menuEntry of
                 ProjectMenuEntry ->
                     [ titlebarMenuEntry
-                        (UserInputLoadFromGit LoadFromGitOpenDialog)
+                        UserInputLoadFromGitOpenDialog
                         (Just FontAwesome.Solid.cloudDownloadAlt)
                         "Load From Git Repository"
                         True
