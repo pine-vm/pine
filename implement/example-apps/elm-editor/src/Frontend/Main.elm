@@ -471,21 +471,29 @@ update event stateBefore =
                     ( stateBefore, Cmd.none )
 
         UserInputLoadFromGit (LoadFromGitBeginRequestEvent { urlIntoGitRepository }) ->
-            case stateBefore.popup of
-                Just (ModalDialog (LoadFromGitDialog _)) ->
-                    let
-                        dialogState =
-                            { urlIntoGitRepository = urlIntoGitRepository
-                            , request = Just { url = urlIntoGitRepository, time = stateBefore.time }
-                            , loadCompositionResult = Nothing
-                            }
-                    in
-                    ( { stateBefore | popup = Just (ModalDialog (LoadFromGitDialog dialogState)) }
-                    , loadFromGitCmd urlIntoGitRepository
-                    )
+            let
+                trimmedUrl =
+                    String.trim urlIntoGitRepository
+            in
+            if trimmedUrl == "" then
+                ( stateBefore, Cmd.none )
 
-                _ ->
-                    ( stateBefore, Cmd.none )
+            else
+                case stateBefore.popup of
+                    Just (ModalDialog (LoadFromGitDialog _)) ->
+                        let
+                            dialogState =
+                                { urlIntoGitRepository = urlIntoGitRepository
+                                , request = Just { url = urlIntoGitRepository, time = stateBefore.time }
+                                , loadCompositionResult = Nothing
+                                }
+                        in
+                        ( { stateBefore | popup = Just (ModalDialog (LoadFromGitDialog dialogState)) }
+                        , loadFromGitCmd urlIntoGitRepository
+                        )
+
+                    _ ->
+                        ( stateBefore, Cmd.none )
 
         UserInputLoadOrImportTakeProjectStateEvent origin ->
             let
@@ -2118,6 +2126,9 @@ viewLoadFromGitDialog dialogState =
             UserInputLoadFromGit
                 (LoadFromGitBeginRequestEvent { urlIntoGitRepository = dialogState.urlIntoGitRepository })
 
+        offerContinueWithBeginLoading =
+            String.trim dialogState.urlIntoGitRepository /= ""
+
         urlInputElement =
             Element.Input.text
                 [ Element.Background.color backgroundColor
@@ -2143,7 +2154,7 @@ viewLoadFromGitDialog dialogState =
                     , sendRequestButton
                         |> Element.el
                             [ Element.centerX
-                            , elementTransparent (not (dialogState.urlIntoGitRepository /= ""))
+                            , elementTransparent (not offerContinueWithBeginLoading)
                             ]
                     ]
                         |> Element.column
