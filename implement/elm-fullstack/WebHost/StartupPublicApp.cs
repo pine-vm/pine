@@ -187,7 +187,7 @@ public class StartupPublicApp
 
             if (webAppAndElmAppConfig.WebAppConfiguration?.httpRequestEventSizeLimit < preparedProcessEvent.serializedInterfaceEvent?.Length)
             {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                context.Response.StatusCode = StatusCodes.Status413RequestEntityTooLarge;
                 await context.Response.WriteAsync("Request is too large.");
                 return;
             }

@@ -311,7 +311,7 @@ public class TestWebHost
 
         Assert.AreEqual(
             HttpStatusCode.OK,
-            PostStringContentToPublicApp("small enough content" + new String('_', sufficientlySmallRequestContentSize)).StatusCode,
+            PostStringContentToPublicApp("small enough content" + new string('_', sufficientlySmallRequestContentSize)).StatusCode,
             "Receive OK status code for sufficiently small request.");
 
         Assert.AreEqual(
@@ -320,9 +320,9 @@ public class TestWebHost
             "Sufficiently small HTTP request ended up in event.");
 
         Assert.AreEqual(
-            HttpStatusCode.BadRequest,
-            PostStringContentToPublicApp("too large content" + new String('_', requestSizeLimit)).StatusCode,
-            "Receive BadRequest status code for too large request.");
+            HttpStatusCode.RequestEntityTooLarge,
+            PostStringContentToPublicApp("too large content" + new string('_', requestSizeLimit)).StatusCode,
+            "Receive non-OK status code for too large request.");
 
         Assert.AreEqual(
             httpRequestEventsInStoreBefore + 1,
