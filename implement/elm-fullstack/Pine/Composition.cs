@@ -498,7 +498,7 @@ public class Composition
 
     static public Result<string, Component> Deserialize(
         IReadOnlyList<byte> serializedComponent,
-        Func<IReadOnlyList<byte>, IReadOnlyList<byte>> loadSerializedComponentByHash)
+        Func<IReadOnlyList<byte>, IReadOnlyList<byte>?> loadSerializedComponentByHash)
     {
         var asciiStringUpToNull =
             System.Text.Encoding.ASCII.GetString(serializedComponent.TakeWhile(c => c != '\0').ToArray());

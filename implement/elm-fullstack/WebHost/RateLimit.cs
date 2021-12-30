@@ -1,11 +1,11 @@
-using System;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace ElmFullstack.WebHost;
 
 public interface IRateLimit
 {
-    (IRateLimit newState, bool passed) AttemptPass(Int64 time);
+    (IRateLimit newState, bool passed) AttemptPass(long time);
 }
 
 public interface IMutableRateLimit
@@ -18,29 +18,32 @@ public class MutableRateLimitAlwaysPassing : IMutableRateLimit
     public bool AttemptPass(long time) => true;
 }
 
-public class RateLimitStateSingleWindow : IRateLimit
+public record RateLimitStateSingleWindow(
+    int limit,
+    int windowSize,
+    IImmutableQueue<long> passes) : IRateLimit
 {
-    public int limit;
-    public int windowSize;
-
-    public long[] passes;
-
     public (IRateLimit newState, bool passed) AttemptPass(long attemptTime)
     {
-        var previousPassTime = passes?.Skip(limit - 1).Cast<long?>().FirstOrDefault();
+        var previousPassTime = this.passes.Reverse().Skip(limit - 1).Cast<long?>().FirstOrDefault();
 
         var previousPassAge = attemptTime - previousPassTime;
 
         if (previousPassAge < windowSize)
             return (this, false);
 
+        var passes = this.passes.Enqueue(attemptTime);
+
+        while (limit < passes.Count())
+            passes = passes.Dequeue();
+
         return
             (new RateLimitStateSingleWindow
-            {
-                limit = limit,
-                windowSize = windowSize,
-                passes = new[] { attemptTime }.Concat(passes ?? Array.Empty<long>()).Take(limit).ToArray(),
-            },
+            (
+                limit: limit,
+                windowSize: windowSize,
+                passes: passes
+            ),
             true);
     }
 }

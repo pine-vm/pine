@@ -70,7 +70,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                         SetStateLiteralString: compositionRecordFromFile.SetState?.LiteralString,
 
                         AppendedEventsLiteralString:
-                            compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString)?.ToImmutableList()
+                            compositionRecordFromFile.AppendedEvents?.Select(@event => @event.LiteralString!)?.ToImmutableList()
                     );
 
                 var compositionChainElement = (compositionRecordHash, compositionRecord);
@@ -92,7 +92,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                     if (reduction != null)
                     {
                         compositionChain.Pop();
-                        process.SetSerializedState(reduction.ReducedValueLiteralString);
+                        process.SetSerializedState(reduction.ReducedValueLiteralString!);
                         lastStateHash = reduction.ReducedCompositionHash;
                     }
 
@@ -228,9 +228,9 @@ public class PersistentProcessWithControlFlowOverStoreWriter : IDisposableProces
         }
     }
 
-    string IProcess<string, string?>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValueLiteralString;
+    string IProcess<string, string>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValueLiteralString!;
 
-    string? IProcess<string, string?>.SetSerializedState(string serializedState)
+    string? IProcess<string, string>.SetSerializedState(string serializedState)
     {
         lock (process)
         {

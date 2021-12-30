@@ -33,7 +33,7 @@ static public class Configuration
 
     static public IWebHostBuilder WithSettingProcessStoreSeparateReaderDirectoryPath(
         this IWebHostBuilder orig,
-        string processStoreSeparateReaderDirectoryPath) =>
+        string? processStoreSeparateReaderDirectoryPath) =>
         orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(
             new FileStoreForProcessStoreReader(
                 processStoreSeparateReaderDirectoryPath == null
@@ -71,11 +71,11 @@ static public class Configuration
         PublicWebHostUrlsDefault;
 
     static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>
-        context.RequestServices.GetService<Func<DateTimeOffset>>()();
+        context.RequestServices.GetService<Func<DateTimeOffset>>()!();
 }
 
 public record FileStoreForProcessStore(IFileStore fileStore);
 
-public record FileStoreForProcessStoreReader(IFileStore fileStore);
+public record FileStoreForProcessStoreReader(IFileStore? fileStore);
 
 public record WebAppConfigurationZipArchive(byte[] zipArchive);

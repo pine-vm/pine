@@ -25,9 +25,9 @@ public interface IProcessStoreReader
 {
     IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse();
 
-    ProvisionalReductionRecordInFile LoadProvisionalReduction(string reducedCompositionLogRecordHash);
+    ProvisionalReductionRecordInFile? LoadProvisionalReduction(string reducedCompositionLogRecordHash);
 
-    Composition.Component LoadComponent(string componentHash);
+    Composition.Component? LoadComponent(string componentHash);
 
     static public FileStoreReaderProjectionResult
         ProjectFileStoreReaderForAppendedCompositionLogEvent(
@@ -91,40 +91,34 @@ public interface IProcessStoreReader
     static public IProcessStoreReader EmptyProcessStoreReader()
     {
         return new DelegatingProcessStoreReader
-        {
-            LoadComponentDelegate = _ => null,
-            LoadProvisionalReductionDelegate = _ => null,
-            EnumerateSerializedCompositionLogRecordsReverseDelegate = () => ImmutableList<byte[]>.Empty
-        };
+        (
+            LoadComponentDelegate: _ => null,
+            LoadProvisionalReductionDelegate: _ => null,
+            EnumerateSerializedCompositionLogRecordsReverseDelegate: () => ImmutableList<byte[]>.Empty
+        );
     }
 }
 
-class DelegatingProcessStoreReader : IProcessStoreReader
+record DelegatingProcessStoreReader(
+    Func<IEnumerable<byte[]>> EnumerateSerializedCompositionLogRecordsReverseDelegate,
+    Func<string, Composition.Component?> LoadComponentDelegate,
+    Func<string, ProvisionalReductionRecordInFile?> LoadProvisionalReductionDelegate) : IProcessStoreReader
 {
-    public Func<IEnumerable<byte[]>> EnumerateSerializedCompositionLogRecordsReverseDelegate;
-
-    public Func<string, Composition.Component> LoadComponentDelegate;
-
-    public Func<string, ProvisionalReductionRecordInFile> LoadProvisionalReductionDelegate;
-
     public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse() =>
         EnumerateSerializedCompositionLogRecordsReverseDelegate();
 
-    public Composition.Component LoadComponent(string componentHash) =>
+    public Composition.Component? LoadComponent(string componentHash) =>
         LoadComponentDelegate(componentHash);
 
-    public ProvisionalReductionRecordInFile LoadProvisionalReduction(string reducedCompositionLogRecordHash) =>
+    public ProvisionalReductionRecordInFile? LoadProvisionalReduction(string reducedCompositionLogRecordHash) =>
         LoadProvisionalReductionDelegate(reducedCompositionLogRecordHash);
 }
 
-public class DelegatingProcessStoreWriter : IProcessStoreWriter
+public record DelegatingProcessStoreWriter(
+    Func<CompositionLogRecordInFile.CompositionEvent, (byte[] recordHash, string recordHashBase16)> AppendCompositionLogRecordDelegate,
+    Action<Composition.Component> StoreComponentDelegate,
+    Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate) : IProcessStoreWriter
 {
-    public Func<CompositionLogRecordInFile.CompositionEvent, (byte[] recordHash, string recordHashBase16)> AppendCompositionLogRecordDelegate;
-
-    public Action<Composition.Component> StoreComponentDelegate;
-
-    public Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate;
-
     public (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
         AppendCompositionLogRecordDelegate(compositionEvent);
 
@@ -135,16 +129,15 @@ public class DelegatingProcessStoreWriter : IProcessStoreWriter
         StoreProvisionalReductionDelegate(reduction);
 }
 
-public class ValueInFileStructure
-{
-    public string HashBase16;
+public record ValueInFileStructure(
+    string? HashBase16 = null,
+    string? LiteralStringUtf8 = null);
 
-    public string LiteralStringUtf8;
-}
-
-public class CompositionLogRecordInFile
+public record CompositionLogRecordInFile(
+    string? parentHashBase16,
+    CompositionLogRecordInFile.CompositionEvent compositionEvent)
 {
-    static public string CompositionLogFirstRecordParentHashBase16 => null;
+    static public string? CompositionLogFirstRecordParentHashBase16 => null;
 
     static public string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
         CommonConversion.StringBase16FromByteArray(HashFromCompositionRecord(compositionRecord));
@@ -152,27 +145,13 @@ public class CompositionLogRecordInFile
     static public byte[] HashFromCompositionRecord(byte[] compositionRecord) =>
         Composition.GetHash(Composition.Component.Blob(compositionRecord));
 
-    public string parentHashBase16;
-
-    public CompositionEvent compositionEvent;
-
-    public class CompositionEvent
+    public record CompositionEvent(
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? UpdateElmAppStateForEvent = null,
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? SetElmAppState = null,
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? DeployAppConfigAndInitElmAppState = null,
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? DeployAppConfigAndMigrateElmAppState = null,
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? RevertProcessTo = null)
     {
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public ValueInFileStructure UpdateElmAppStateForEvent;
-
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public ValueInFileStructure SetElmAppState;
-
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public ValueInFileStructure DeployAppConfigAndInitElmAppState;
-
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public ValueInFileStructure DeployAppConfigAndMigrateElmAppState;
-
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public ValueInFileStructure RevertProcessTo;
-
         static public CompositionEvent EventForDeployAppConfig(
             ValueInFileStructure appConfigValueInFile,
             bool initElmAppState) =>
@@ -190,14 +169,10 @@ public class CompositionLogRecordInFile
     }
 }
 
-public class ProvisionalReductionRecordInFile
-{
-    public string reducedCompositionHashBase16;
-
-    public ValueInFileStructure elmAppState;
-
-    public ValueInFileStructure appConfig;
-}
+public record ProvisionalReductionRecordInFile(
+    string reducedCompositionHashBase16,
+    ValueInFileStructure? elmAppState,
+    ValueInFileStructure? appConfig);
 
 public class ProcessStoreInFileStore
 {
@@ -235,7 +210,7 @@ public class ProcessStoreInFileStore
     static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer = EnumerableExtension.Comparer<IImmutableList<string>>();
 
     static protected IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesPaths) =>
-        logFilesPaths?.OrderBy(filePath => filePath, CompositionLogFileOrderPathComparer);
+        logFilesPaths.OrderBy(filePath => filePath, CompositionLogFileOrderPathComparer);
 
     static public byte[] Serialize(CompositionLogRecordInFile record) =>
         Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(record, recordSerializationSettings));
@@ -262,10 +237,10 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         this.fileStore = fileStore;
     }
 
-    IReadOnlyList<byte> LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
+    IReadOnlyList<byte>? LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
         LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16FromByteArray(componentHash));
 
-    IReadOnlyList<byte> LoadComponentSerialRepresentationForHash(string componentHashBase16)
+    IReadOnlyList<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
     {
         var filePath =
             GetFilePathForComponentInComponentFileStore(componentHashBase16);
@@ -283,7 +258,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         return originalFile;
     }
 
-    public Composition.Component LoadComponent(string componentHashBase16)
+    public Composition.Component? LoadComponent(string componentHashBase16)
     {
         var fromComponentStore = LoadComponentSerialRepresentationForHash(componentHashBase16);
 
@@ -302,7 +277,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         return loadComponentResult.Ok;
     }
 
-    public ProvisionalReductionRecordInFile LoadProvisionalReduction(string reducedCompositionHash)
+    public ProvisionalReductionRecordInFile? LoadProvisionalReduction(string reducedCompositionHash)
     {
         var filePath = ImmutableList.Create(reducedCompositionHash);
 
@@ -349,9 +324,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         .Select(filePathAndRecord => filePathAndRecord.record);
 
     public IEnumerable<(IImmutableList<string> filePath, byte[] record)> EnumerateSerializedCompositionLogRecordsWithFilePathReverse() =>
-        EnumerateSerializedCompositionLogRecordsReverse_Beginning_2021_07()
-        .Concat(EnumerateSerializedCompositionLogRecordsReverse_Before_2021_07()
-            .Select<byte[], (IImmutableList<string> filePath, byte[] record)>(record => (null, record)));
+        EnumerateSerializedCompositionLogRecordsReverse_Beginning_2021_07();
 
     public IEnumerable<(IImmutableList<string>, byte[])> EnumerateSerializedCompositionLogRecordsReverse_Beginning_2021_07()
     {
@@ -362,10 +335,18 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
         var sequenceBeforeConsideringRevertEvent =
             compositionLogFilesReversed
-            .SelectMany(filePath => SplitFileContentIntoCompositionLogRecords(
-                CompositionLogLiteralFileStore.GetFileContent(filePath)).Select(record => (filePath, record)).Reverse());
+            .SelectMany(filePath =>
+            {
+                var fileContent = CompositionLogLiteralFileStore.GetFileContent(filePath);
 
-        string revertToHashBase16 = null;
+                if (fileContent == null)
+                    return ImmutableList<(IImmutableList<string>, IReadOnlyList<byte>)>.Empty;
+
+                return
+                    SplitFileContentIntoCompositionLogRecords(fileContent).Select(record => (filePath, record)).Reverse();
+            });
+
+        string? revertToHashBase16 = null;
 
         foreach (var recordFilePathAndContent in sequenceBeforeConsideringRevertEvent)
         {
@@ -430,7 +411,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
         var nextHashBase16 = CommonConversion.StringBase16FromByteArray(compositionHeadHash);
 
-        while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
+        while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16 && nextHashBase16 != null)
         {
             var compositionRecordComponent = LoadComponent(nextHashBase16);
 
@@ -495,20 +476,21 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         lastCompositionRecord =
             originalStoreLastCompositionRecord.record == null
             ?
-            (CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16, null)
+            null
             :
             (CompositionLogRecordInFile.HashBase16FromCompositionRecord(originalStoreLastCompositionRecord.record), originalStoreLastCompositionRecord.filePath);
     }
 
-    public (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent)
+    public (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(
+        CompositionLogRecordInFile.CompositionEvent compositionEvent)
     {
         lock (appendLock)
         {
             var compositionLogRecordStructure = new CompositionLogRecordInFile
-            {
-                parentHashBase16 = lastCompositionRecord?.hashBase16,
-                compositionEvent = compositionEvent,
-            };
+            (
+                parentHashBase16: lastCompositionRecord?.hashBase16,
+                compositionEvent: compositionEvent
+            );
 
             var dateTime = getTimeForCompositionLogBatch();
 
@@ -519,9 +501,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                 CompositionLogFileOrder(
                     new[]
                     {
-                            lastCompositionRecord?.filePath,
-                            ImmutableList.Create(dayDirectoryName, fileName),
-                    }.Where(p => p != null))
+                        lastCompositionRecord?.filePath,
+                        ImmutableList.Create(dayDirectoryName, fileName),
+                    }.WhereNotNull())
                 .Last();
 
             var compositionLogRecordSerialized = GetCompositionLogRecordSerialized(compositionLogRecordStructure);
@@ -531,7 +513,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
             var compositionLogRecordSerializedWithDelimiter =
                 compositionLogRecordSerialized.Concat(compositionLogEntryDelimiter)
-                .ToArray();
+                .ToImmutableList();
 
             CompositionLogLiteralFileStore.AppendFileContent(filePath, compositionLogRecordSerializedWithDelimiter);
 

@@ -7,14 +7,14 @@ namespace elm_fullstack.ElmInteractive;
 
 public class InteractiveSession : IDisposable
 {
-    readonly TreeWithStringPath appCodeTree;
+    readonly TreeWithStringPath? appCodeTree;
 
     readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
         new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
     readonly IList<string> previousSubmissions = new List<string>();
 
-    public InteractiveSession(TreeWithStringPath appCodeTree)
+    public InteractiveSession(TreeWithStringPath? appCodeTree)
     {
         this.appCodeTree = appCodeTree;
     }

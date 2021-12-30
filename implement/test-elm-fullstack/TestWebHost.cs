@@ -198,7 +198,7 @@ public class TestWebHost
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
             .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
-            .WhereNotNull()!
+            .WhereNotNull()
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         HttpResponseMessage PostStringContentToPublicApp(string requestContent)
@@ -291,7 +291,7 @@ public class TestWebHost
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
             .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
-            .WhereNotNull()!
+            .WhereNotNull()
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         HttpResponseMessage PostStringContentToPublicApp(string requestContent)
@@ -1332,9 +1332,9 @@ public class TestWebHost
             ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                 new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(testDirectory)),
-                    _ => { }).process)
+                    _ => { }).process!)
         {
-            var restoredProcessLastDeployedAppComponent = restoredProcess.lastAppConfig?.appConfigComponent;
+            var restoredProcessLastDeployedAppComponent = restoredProcess.lastAppConfig.appConfigComponent;
 
             Assert.IsNotNull(
                 restoredProcessLastDeployedAppComponent,

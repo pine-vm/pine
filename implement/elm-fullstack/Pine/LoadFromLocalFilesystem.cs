@@ -4,7 +4,7 @@ namespace Pine;
 
 static public class LoadFromLocalFilesystem
 {
-    static public Composition.TreeWithStringPath LoadSortedTreeFromPath(string path)
+    static public Composition.TreeWithStringPath? LoadSortedTreeFromPath(string path)
     {
         if (File.Exists(path))
             return Composition.TreeWithStringPath.Blob(blobContent: File.ReadAllBytes(path));

@@ -119,8 +119,8 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Basic",
-            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                ElmFullstack.WebHost.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(
+                Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
         return client;
     }
@@ -174,8 +174,8 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         }
     }
 
-    public Pine.IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
-            new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+    public IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
+        new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
     public ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
         new(BuildProcessStoreFileStoreReaderInFileDirectory());
@@ -192,13 +192,13 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                 ?
                 Composition.Component.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
                 :
-                processStoreReader.LoadComponent(logEntry.HashBase16);
+                processStoreReader.LoadComponent(logEntry.HashBase16!);
 
             if (component == null)
                 throw new Exception("component == null");
 
             if (component.BlobContent == null)
-                throw new Exception("component.BlobContent == null");
+                throw new Exception("component is not a blob");
 
             var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
 
@@ -211,7 +211,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             .Select(Encoding.UTF8.GetString)
             .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
             .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
-            .WhereNotNull()!
+            .WhereNotNull()
             .Select(eventLogEntry);
     }
 }

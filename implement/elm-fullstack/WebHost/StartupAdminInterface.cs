@@ -157,7 +157,7 @@ public class StartupAdminInterface
 
                                 lock (avoidConcurrencyLock)
                                 {
-                                    var (reductionRecord, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter);
+                                    var (reductionRecord, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter!);
                                 }
 
                                 cyclicReductionStoreLastTime = currentDateTime;
@@ -221,7 +221,7 @@ public class StartupAdminInterface
                                         {
                                             var elmEventResponse =
                                                 processLiveRepresentation.ProcessElmAppEvent(
-                                                    processStoreWriter, serializedEvent);
+                                                    processStoreWriter!, serializedEvent);
 
                                             maintainStoreReductions();
 
@@ -240,7 +240,7 @@ public class StartupAdminInterface
                     var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
 
                     var webHost = buildWebHost(
-                        processLiveRepresentation.lastAppConfig.Value,
+                        processLiveRepresentation.lastAppConfig,
                         publicWebHostUrls: publicWebHostUrls);
 
                     webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
@@ -354,10 +354,10 @@ public class StartupAdminInterface
                     new ApiRoute
                     (
                         path : PathApiGetDeployedAppConfig,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
-                            var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig?.appConfigComponent;
+                            var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig.appConfigComponent;
 
                             if (appConfig == null)
                             {
@@ -369,6 +369,9 @@ public class StartupAdminInterface
                             var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
 
                             var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
+
+                            if (appConfigTree == null)
+                                throw   new Exception("Failed to parse as tree with string path");
 
                             var appConfigZipArchive =
                                 ZipArchive.ZipArchiveFromEntries(
@@ -385,7 +388,7 @@ public class StartupAdminInterface
                     new ApiRoute
                     (
                         path : PathApiElmAppState,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
                             if (publicAppHost == null)
@@ -400,11 +403,11 @@ public class StartupAdminInterface
                             var components = new List<Composition.Component>();
 
                             var storeWriter = new DelegatingProcessStoreWriter
-                            {
-                                StoreComponentDelegate = components.Add,
-                                StoreProvisionalReductionDelegate = _ => { },
-                                AppendCompositionLogRecordDelegate = _ => throw new Exception("Unexpected use of interface."),
-                            };
+                            (
+                                StoreComponentDelegate: components.Add,
+                                StoreProvisionalReductionDelegate: _ => { },
+                                AppendCompositionLogRecordDelegate: _ => throw new Exception("Unexpected use of interface.")
+                            );
 
                             var reductionRecord =
                                 processLiveRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
@@ -421,8 +424,11 @@ public class StartupAdminInterface
                             var elmAppStateReductionComponent =
                                 components.First(c => CommonConversion.StringBase16FromByteArray(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
 
+                            if(elmAppStateReductionComponent.BlobContent == null)
+                                throw   new Exception("elmAppStateReductionComponent is not a blob");
+
                             var elmAppStateReductionString =
-                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.ToArray());
+                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent);
 
                             context.Response.StatusCode = 200;
                             context.Response.ContentType = "application/json";
@@ -459,19 +465,19 @@ public class StartupAdminInterface
                     new ApiRoute
                     (
                         path : PathApiDeployAndInitAppState,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true))
                     ),
                     new ApiRoute
                     (
                         path : PathApiDeployAndMigrateAppState,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false))
                     ),
                     new ApiRoute
                     (
                         path : PathApiReplaceProcessHistory,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>>.Empty
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("post", async (context, publicAppHost) =>
                         {
                             var memoryStream = new MemoryStream();
@@ -809,7 +815,7 @@ public class StartupAdminInterface
 
     record ApiRoute(
         string path,
-        ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration, System.Threading.Tasks.Task>> methods);
+        ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>> methods);
 
     static public string HtmlDocument(string body) =>
         string.Join("\n",
@@ -849,7 +855,7 @@ public class StartupAdminInterface
                 storeReductionReport: null,
                 storeReductionTimeSpentMilli: null,
                 totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
-                result: Result<string, string>.err(testContinueResult.Err)
+                result: Result<string, string>.err(testContinueResult.Err!)
             ));
         }
 

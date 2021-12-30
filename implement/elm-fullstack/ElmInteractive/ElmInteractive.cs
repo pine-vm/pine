@@ -27,7 +27,7 @@ public class ElmInteractive
 
     static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-        TreeWithStringPath appCodeTree,
+        TreeWithStringPath? appCodeTree,
         string submission,
         IReadOnlyList<string>? previousLocalSubmissions = null)
     {
@@ -36,7 +36,7 @@ public class ElmInteractive
             :
             TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree)!)
             .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
-            .WhereNotNull()!
+            .WhereNotNull()
             .ToImmutableList();
 
         var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(

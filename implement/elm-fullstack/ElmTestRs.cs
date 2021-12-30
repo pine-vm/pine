@@ -235,7 +235,7 @@ public class ElmTestRs
             var textsFromFailures =
                 @event.failures.EmptyIfNull()
                 .Select(failure => failure.reason?.data)
-                .WhereNotNull()!
+                .WhereNotNull()
                 .SelectMany(renderFailureReasonData)
                 .ToImmutableList();
 

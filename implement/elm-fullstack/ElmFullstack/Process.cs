@@ -22,7 +22,7 @@ public interface IProcess<EventT, ResponseT>
     string? SetSerializedState(string serializedState);
 }
 
-public interface IProcessWithStringInterface : IProcess<string, string?>
+public interface IProcessWithStringInterface : IProcess<string, string>
 {
 }
 
@@ -61,7 +61,7 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
         javascriptEngine?.Dispose();
     }
 
-    public string? ProcessEvent(string serializedEvent)
+    public string ProcessEvent(string serializedEvent)
     {
         /*
         Avoid high memory usage as described in exploration 2020-02-02:
@@ -77,7 +77,7 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
         var jsReturnValue = javascriptEngine.CallFunction(
             ProcessFromElm019Code.processEventSyncronousJsFunctionName, serializedEvent);
 
-        return jsReturnValue?.ToString();
+        return jsReturnValue.ToString()!;
     }
 
     public string GetSerializedState()
@@ -264,9 +264,9 @@ public class ProcessFromElm019Code
     static public byte[] GetElmExecutableFile =>
         CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
 
-    static public byte[] GetElmExecutableFileCompressedGzip =>
+    static public byte[]? GetElmExecutableFileCompressedGzip =>
         BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
-            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
             ?
             /*
             Loaded 2019-10-29 from

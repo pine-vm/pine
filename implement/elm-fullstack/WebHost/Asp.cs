@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -67,10 +68,11 @@ static public class Asp
             return new MutableRateLimitAlwaysPassing();
 
         return new RateLimitMutableContainer(new RateLimitStateSingleWindow
-        {
-            limit = jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
-            windowSize = jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
-        });
+        (
+            limit: jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
+            windowSize: jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
+            passes: ImmutableQueue<long>.Empty
+        ));
     }
 
     static public async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(

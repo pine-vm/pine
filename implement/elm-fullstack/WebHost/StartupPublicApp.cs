@@ -498,4 +498,4 @@ public record WebAppAndElmAppConfig(
     WebAppConfigurationJsonStructure? WebAppConfiguration,
     Func<string, string> ProcessEventInElmApp,
     Composition.Component SourceComposition,
-    InterfaceToHost.AppEventResponseStructure InitOrMigrateCmds);
+    InterfaceToHost.AppEventResponseStructure? InitOrMigrateCmds);

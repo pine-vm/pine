@@ -39,15 +39,6 @@ static public class LoadComposition
             .WithLogEntryAdded("Trying to load from local file system...")
             .MapResult(sourcePath =>
             {
-                if (!(System.IO.Directory.Exists(sourcePath) || System.IO.File.Exists(sourcePath)))
-                {
-                    return
-                        new Result<string, TreeWithStringPath>
-                        {
-                            Err = "I did not find a file or directory at '" + sourcePath + "'.",
-                        };
-                }
-
                 try
                 {
                     var treeComponentFromSource = LoadFromLocalFilesystem.LoadSortedTreeFromPath(sourcePath);
@@ -55,7 +46,7 @@ static public class LoadComposition
                     if (treeComponentFromSource == null)
                         return new Result<string, TreeWithStringPath>
                         {
-                            Err = "Return value was null",
+                            Err = "I did not find a file or directory at '" + sourcePath + "'.",
                         };
 
                     return

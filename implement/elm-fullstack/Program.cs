@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-12-18";
+    static public string AppVersionId => "2021-12-30";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -40,7 +40,7 @@ public class Program
         {
             var (commandName, checkInstallation) = CheckIfExecutableIsRegisteredOnPath();
 
-            installCmd.Description = "Installs the '" + commandName + "' command for the current user account.";
+            installCmd.Description = "Install the '" + commandName + "' command for the current user account.";
             installCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             installCmd.OnExecute(() =>
@@ -114,12 +114,12 @@ public class Program
             {
                     new
                     {
-                        title = "Set up your development environment",
+                        title = "Set up your development environment:",
                         commands = setupGroupCommands,
                     },
                     new
                     {
-                        title = "operate servers and maintain live systems",
+                        title = "Operate servers and maintain live systems:",
                         commands = new[]
                         {
                             runServerCmd,
@@ -131,7 +131,7 @@ public class Program
                     },
                     new
                     {
-                        title = "develop and learn",
+                        title = "Develop and learn:",
                         commands = new[]
                         {
                             compileAppCmd,
@@ -153,16 +153,16 @@ public class Program
                 }).ToImmutableList(),
             });
 
-            foreach (var appCmd in app.Commands)
+            foreach (var topLevelCmd in app.Commands)
             {
-                var cmdPrimaryName = appCmd.Names.FirstOrDefault();
+                var cmdPrimaryName = topLevelCmd.Names.FirstOrDefault()!;
 
                 helpCmd.Command(cmdPrimaryName, helpForAppCmd =>
                 {
-                    foreach (var additionalName in appCmd.Names.Except(new[] { cmdPrimaryName }))
+                    foreach (var additionalName in topLevelCmd.Names.Except(new[] { cmdPrimaryName }))
                         helpForAppCmd.AddName(additionalName);
 
-                    CommandExtension.ConfigureHelpCommandForCommand(helpForAppCmd, appCmd);
+                    CommandExtension.ConfigureHelpCommandForCommand(helpForAppCmd, topLevelCmd);
                 });
             }
 
@@ -242,7 +242,7 @@ public class Program
     static CommandLineApplication AddRunServerCmd(CommandLineApplication app) =>
         app.Command("run-server", runServerCmd =>
         {
-            runServerCmd.Description = "Run a server with a web-based admin interface. This admin interface supports deployments, migrations, etc.";
+            runServerCmd.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
             runServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
@@ -269,53 +269,56 @@ public class Program
                 {
                     Console.WriteLine("Deleting the previous process state from '" + processStorePath + "'...");
 
-                    if (System.IO.Directory.Exists(processStorePath))
-                        System.IO.Directory.Delete(processStorePath, true);
+                    if (Directory.Exists(processStorePath))
+                        Directory.Delete(processStorePath, true);
 
                     Console.WriteLine("Completed deleting the previous process state from '" + processStorePath + "'.");
                 }
 
-                IFileStore processStoreFileStore = null;
-
-                if (processStorePath == null)
+                IFileStore buildProcessStoreFileStore()
                 {
-                    Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
+                    if (processStorePath == null)
+                    {
+                        Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
-                    var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+                        var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
-                    var fileStoreWriter = new DelegatingFileStoreWriter
-                    (
-                        SetFileContentDelegate: file => files[file.path] = file.fileContent,
-                        AppendFileContentDelegate: file => files.AddOrUpdate(
-                           file.path, _ => file.fileContent,
-                           (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
-                        DeleteFileDelegate: path => files.Remove(path, out var _)
-                    );
+                        var fileStoreWriter = new DelegatingFileStoreWriter
+                        (
+                            SetFileContentDelegate: file => files[file.path] = file.fileContent,
+                            AppendFileContentDelegate: file => files.AddOrUpdate(
+                               file.path, _ => file.fileContent,
+                               (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
+                            DeleteFileDelegate: path => files.Remove(path, out var _)
+                        );
 
-                    var fileStoreReader = new DelegatingFileStoreReader
-                    (
-                        ListFilesInDirectoryDelegate: path =>
-                            files.Select(file =>
+                        var fileStoreReader = new DelegatingFileStoreReader
+                        (
+                            ListFilesInDirectoryDelegate: path =>
+                                files.Select(file =>
+                                {
+                                    if (!file.Key.Take(path.Count).SequenceEqual(path))
+                                        return null;
+
+                                    return file.Key.Skip(path.Count).ToImmutableList();
+                                }).WhereNotNull(),
+                            GetFileContentDelegate: path =>
                             {
-                                if (!file.Key.Take(path.Count).SequenceEqual(path))
-                                    return null;
+                                files.TryGetValue(path, out var fileContent);
 
-                                return file.Key.Skip(path.Count).ToImmutableList();
-                            }).WhereNotNull(),
-                        GetFileContentDelegate: path =>
-                        {
-                            files.TryGetValue(path, out var fileContent);
+                                return fileContent;
+                            }
+                        );
 
-                            return fileContent;
-                        }
-                    );
-
-                    processStoreFileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
+                        return new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
+                    }
+                    else
+                    {
+                        return new FileStoreFromSystemIOFile(processStorePath);
+                    }
                 }
-                else
-                {
-                    processStoreFileStore = new FileStoreFromSystemIOFile(processStorePath);
-                }
+
+                var processStoreFileStore = buildProcessStoreFileStore();
 
                 if (copyProcess != null)
                 {
@@ -330,13 +333,15 @@ public class Program
 
                 var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
-                if (deployOption.HasValue())
+                var deployOptionValue = deployOption.Value();
+
+                if (deployOptionValue != null)
                 {
                     Console.WriteLine("Loading app config to deploy...");
 
                     var appConfigZipArchive =
                         ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                            sourcePath: deployOption.Value()).configZipArchive;
+                            sourcePath: deployOptionValue).configZipArchive;
 
                     var appConfigTree =
                         Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
@@ -417,12 +422,12 @@ public class Program
 
             deployCmd.OnExecute(() =>
             {
-                var site = siteArgument.Value;
+                var site = siteArgument.Value!;
                 var sitePassword = passwordFromSite(site);
 
                 var deployReport =
                     DeployApp(
-                        sourcePath: sourceArgument.Value,
+                        sourcePath: sourceArgument.Value!,
                         site: site,
                         siteDefaultPassword: sitePassword,
                         initElmAppState: initAppStateOption.HasValue(),
@@ -448,7 +453,7 @@ public class Program
 
             copyAppStateCmd.OnExecute(() =>
             {
-                var source = sourceArgument.Value;
+                var source = sourceArgument.Value!;
                 var sourcePassword = passwordFromSource(source);
 
                 var destination = destinationArgument.Value;
@@ -483,7 +488,7 @@ public class Program
 
             copyProcessCmd.OnExecute(() =>
             {
-                var site = MapSiteForCommandLineArgument(siteArgument.Value);
+                var site = MapSiteForCommandLineArgument(siteArgument.Value!);
                 var sitePassword = passwordFromSite(site);
 
                 sitePassword =
@@ -495,7 +500,7 @@ public class Program
                 Console.WriteLine("Begin reading process history from '" + site + "' ...");
 
                 var (files, lastCompositionLogRecordHashBase16) =
-                    ReadFilesForRestoreProcessFromAdminInterface(site, sitePassword);
+                    ReadFilesForRestoreProcessFromAdminInterface(site, sitePassword!);
 
                 Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + site + "'.");
 
@@ -521,7 +526,7 @@ public class Program
 
             truncateProcessHistoryCmd.OnExecute(() =>
             {
-                var site = siteArgument.Value;
+                var site = siteArgument.Value!;
                 var sitePassword = passwordFromSite(site);
 
                 var report =
@@ -546,7 +551,7 @@ public class Program
 
             compileCmd.OnExecute(() =>
             {
-                var compileReport = CompileAppAndSaveCompositionToZipArchive(sourceArgument.Value).report;
+                var compileReport = CompileAppAndSaveCompositionToZipArchive(sourceArgument.Value!).report;
 
                 WriteReportToFileInReportDirectory(
                     reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
@@ -574,7 +579,7 @@ public class Program
 
                 void saveTextToFileAndReportToConsole(string filePath, string text)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                    Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
                     File.WriteAllText(filePath, text ?? "", System.Text.Encoding.UTF8);
                     Console.WriteLine("Saved " + text?.Length + " characters to " + filePath);
@@ -626,32 +631,34 @@ public class Program
             });
         });
 
-    static (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles)
+    static (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>? compiledAppFiles)
         CompileAppAndSaveCompositionToZipArchive(string sourcePath)
     {
         var compileResult = CompileApp(sourcePath);
 
-        var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
-        var compiledFiles = Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
+        if (compileResult.compiledAppFiles != null)
+        {
+            var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
+            var compiledFiles = Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
 
-        var compiledCompositionArchive = ZipArchive.ZipArchiveFromEntries(compiledFiles);
+            var compiledCompositionArchive = ZipArchive.ZipArchiveFromEntries(compiledFiles);
 
-        var outputCompositionFileName = compileResult.report.compiledCompositionId + ".zip";
+            var outputCompositionFileName = compileResult.report.compiledCompositionId + ".zip";
 
-        var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
+            var outputCompositionFilePath = Path.Combine(ReportFilePath, outputCompositionFileName);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath));
-        File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
-        Console.WriteLine("\nSaved compiled composition " + compileResult.report.compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputCompositionFilePath)!);
+            File.WriteAllBytes(outputCompositionFilePath, compiledCompositionArchive);
+
+            Console.WriteLine("\nSaved compiled composition " + compileResult.report.compiledCompositionId + " to '" + outputCompositionFilePath + "'.");
+        }
 
         return compileResult;
     }
 
-    static public (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles)
+    static public (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>? compiledAppFiles)
         CompileApp(string sourcePath)
     {
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> compiledAppFiles = null;
-
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var report = new CompileAppReport
@@ -703,10 +710,10 @@ public class Program
             {
                 Console.WriteLine("\n" + ElmFullstack.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err) + "\n");
 
-                return (report with { compilationErrors = compilationResult.Err, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds }, compiledAppFiles);
+                return (report with { compilationErrors = compilationResult.Err, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds }, null);
             }
 
-            compiledAppFiles = compilationResult.Ok.compiledAppFiles;
+            var compiledAppFiles = compilationResult.Ok.compiledAppFiles;
 
             var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
             var compiledComposition = Composition.FromTreeWithStringPath(compiledTree);
@@ -733,7 +740,7 @@ public class Program
 
             return
                 (report with { compilationException = e.ToString(), totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds },
-                compiledAppFiles);
+                null);
         }
     }
 
@@ -763,7 +770,7 @@ public class Program
                 Console.WriteLine(
                     "---- Elm Interactive v" + AppVersionId + " ----");
 
-                Composition.TreeWithStringPath contextAppCodeTree = null;
+                Composition.TreeWithStringPath? contextAppCodeTree = null;
 
                 var contextAppPath = contextAppOption.Value();
 
@@ -831,7 +838,7 @@ public class Program
 
             describeCmd.OnExecute(() =>
             {
-                var sourcePath = sourcePathParameter.Value;
+                var sourcePath = sourcePathParameter.Value!;
 
                 var loadCompositionResult =
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
@@ -842,14 +849,14 @@ public class Program
                     throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
                 }
 
-                var composition = Composition.FromTreeWithStringPath(loadCompositionResult?.Ok.tree);
+                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.Ok.tree);
 
                 var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
 
                 Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
                 var blobs =
-                    loadCompositionResult?.Ok.tree.EnumerateBlobsTransitive()
+                    loadCompositionResult.Ok.tree.EnumerateBlobsTransitive()
                     .ToImmutableList();
 
                 var compositionDescription =
@@ -888,15 +895,15 @@ public class Program
 
             runCacheServerCmd.OnExecute(() =>
             {
-                var urls = urlOption.Values;
-                var gitCloneUrlPrefixes = gitCloneUrlPrefixOption.Values;
-                var fileCacheDirectory = fileCacheDirectoryOption.Value();
+                var urls = urlOption.Values!;
+                var gitCloneUrlPrefixes = gitCloneUrlPrefixOption.Values!;
+                var fileCacheDirectory = fileCacheDirectoryOption.Value()!;
 
                 Console.WriteLine("Starting HTTP server with git cache...");
 
                 var serverTask = GitPartialForCommitServer.Run(
-                    urls: urls,
-                    gitCloneUrlPrefixes: gitCloneUrlPrefixes,
+                    urls: urls!,
+                    gitCloneUrlPrefixes: gitCloneUrlPrefixes!,
                     fileCacheDirectory: fileCacheDirectory);
 
                 Console.WriteLine("Completed starting HTTP server with git cache at '" + string.Join(", ", urls) + "'.");
@@ -905,13 +912,14 @@ public class Program
             });
         });
 
-    static Func<string, string> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(CommandLineApplication cmd, string siteName = null)
+    static Func<string?, string?> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(
+        CommandLineApplication cmd, string? siteName = null)
     {
         siteName ??= "site";
 
         var sitePasswordOption = cmd.Option("--" + siteName + "-password", "Password to access the " + siteName + ".", CommandOptionType.SingleValue);
 
-        return site => sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
+        return site => site == null ? null : sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
     }
 
     static CommandArgument ProcessSiteArgumentOnCommand(CommandLineApplication cmd) =>
@@ -947,10 +955,10 @@ public class Program
         var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
         return (compositionId, summary: new SourceSummaryStructure
-        {
-            numberOfFiles = allBlobs.Count,
-            totalSizeOfFilesContents = allBlobs.Select(blob => blob.blobContent.Count).Sum(),
-        });
+        (
+            numberOfFiles: allBlobs.Count,
+            totalSizeOfFilesContents: allBlobs.Select(blob => blob.blobContent.Count).Sum()
+        ));
     }
 
     public record CompileAppReport(
@@ -960,47 +968,31 @@ public class Program
         string sourceCompositionId,
         SourceSummaryStructure sourceSummary,
         IReadOnlyList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports,
-        IReadOnlyList<ElmFullstack.ElmAppCompilation.LocatedCompilationError> compilationErrors,
-        string compilationException,
+        IReadOnlyList<ElmFullstack.ElmAppCompilation.LocatedCompilationError>? compilationErrors,
+        string? compilationException,
         int? compilationTimeSpentMilli,
         string compiledCompositionId,
         int? totalTimeSpentMilli);
 
-    public class SourceSummaryStructure
+    public record SourceSummaryStructure(
+        int numberOfFiles,
+        int totalSizeOfFilesContents);
+
+    public record DeployAppReport(
+        bool initElmAppState,
+        string site,
+        string beginTime,
+        string sourcePath,
+        string sourceCompositionId,
+        SourceSummaryStructure sourceSummary,
+        string filteredSourceCompositionId,
+        DeployAppReport.ResponseFromServerStruct? responseFromServer,
+        string? deployException,
+        int totalTimeSpentMilli)
     {
-        public int numberOfFiles;
-
-        public int totalSizeOfFilesContents;
-    }
-
-    public class DeployAppReport
-    {
-        public bool initElmAppState;
-
-        public string site;
-
-        public string beginTime;
-
-        public string sourcePath;
-
-        public string sourceCompositionId;
-
-        public SourceSummaryStructure sourceSummary;
-
-        public string filteredSourceCompositionId;
-
-        public ResponseFromServerStruct? responseFromServer;
-
-        public string? deployException;
-
-        public int totalTimeSpentMilli;
-
-        public class ResponseFromServerStruct
-        {
-            public int? statusCode;
-
-            public object body;
-        }
+        public record ResponseFromServerStruct(
+            int? statusCode,
+            object body);
     }
 
     static public DeployAppReport DeployApp(
@@ -1086,10 +1078,10 @@ public class Program
                 catch { }
 
                 responseFromServer = new DeployAppReport.ResponseFromServerStruct
-                {
-                    statusCode = (int)httpResponse.StatusCode,
-                    body = responseBodyReport,
-                };
+                (
+                    statusCode: (int)httpResponse.StatusCode,
+                    body: responseBodyReport
+                );
             }
             else
             {
@@ -1126,10 +1118,10 @@ public class Program
                         processStoreFileStore);
 
                 responseFromServer = new DeployAppReport.ResponseFromServerStruct
-                {
-                    statusCode = statusCode,
-                    body = responseReport,
-                };
+                (
+                    statusCode: statusCode,
+                    body: responseReport
+                );
             }
         }
         catch (Exception e)
@@ -1140,18 +1132,18 @@ public class Program
         }
 
         return new DeployAppReport
-        {
-            initElmAppState = initElmAppState,
-            site = site,
-            beginTime = beginTime,
-            sourcePath = sourcePath,
-            sourceCompositionId = sourceCompositionId,
-            sourceSummary = sourceSummary,
-            filteredSourceCompositionId = filteredSourceCompositionId,
-            responseFromServer = responseFromServer,
-            deployException = deployException?.ToString(),
-            totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-        };
+        (
+            initElmAppState: initElmAppState,
+            site: site,
+            beginTime: beginTime,
+            sourcePath: sourcePath,
+            sourceCompositionId: sourceCompositionId,
+            sourceSummary: sourceSummary,
+            filteredSourceCompositionId: filteredSourceCompositionId,
+            responseFromServer: responseFromServer,
+            deployException: deployException?.ToString(),
+            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+        );
     }
 
     static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string enteredPassword)>
@@ -1273,9 +1265,9 @@ public class Program
 
     static CopyElmAppStateReport CopyElmAppState(
         string source,
-        string sourceDefaultPassword,
+        string? sourceDefaultPassword,
         string destination,
-        string destinationDefaultPassword)
+        string? destinationDefaultPassword)
     {
         var report = new CopyElmAppStateReport
         (
@@ -1322,7 +1314,7 @@ public class Program
 
         string saveToFile(string filePath)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
             File.WriteAllBytes(filePath, appStateSerial);
 
@@ -1365,7 +1357,7 @@ public class Program
 
     static ResponseFromServerStruct SetElmAppStateViaAdminInterface(
         string site,
-        string siteDefaultPassword,
+        string? siteDefaultPassword,
         byte[] elmAppStateSerialized,
         bool promptForPasswordOnConsole)
     {
@@ -1417,7 +1409,7 @@ public class Program
 
     static byte[] GetElmAppStateViaAdminInterface(
         string site,
-        string siteDefaultPassword,
+        string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
     {
         var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
@@ -1443,27 +1435,20 @@ public class Program
         return elmAppStateSerialized;
     }
 
-    class TruncateProcessHistoryReport
+    record TruncateProcessHistoryReport(
+        string beginTime,
+        string site,
+        TruncateProcessHistoryReport.ResponseFromServerStruct responseFromServer,
+        int totalTimeSpentMilli)
     {
-        public string beginTime;
-
-        public string site;
-
-        public ResponseFromServerStruct responseFromServer;
-
-        public int totalTimeSpentMilli;
-
-        public class ResponseFromServerStruct
-        {
-            public int? statusCode;
-
-            public object body;
-        }
+        public record ResponseFromServerStruct(
+            int? statusCode,
+            object body);
     }
 
     static TruncateProcessHistoryReport TruncateProcessHistory(
         string site,
-        string siteDefaultPassword,
+        string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
     {
         var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
@@ -1499,18 +1484,18 @@ public class Program
         catch { }
 
         var responseFromServer = new TruncateProcessHistoryReport.ResponseFromServerStruct
-        {
-            statusCode = (int)httpResponse.StatusCode,
-            body = responseBodyReport,
-        };
+        (
+            statusCode: (int)httpResponse.StatusCode,
+            body: responseBodyReport
+        );
 
         return new TruncateProcessHistoryReport
-        {
-            beginTime = beginTime,
-            site = site,
-            responseFromServer = responseFromServer,
-            totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds,
-        };
+        (
+            beginTime: beginTime,
+            site: site,
+            responseFromServer: responseFromServer,
+            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+        );
     }
 
     static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
@@ -1636,7 +1621,7 @@ public class Program
 
         var environmentVariableScope = EnvironmentVariableTarget.User;
 
-        string getCurrentValueOfEnvironmentVariable() =>
+        string? getCurrentValueOfEnvironmentVariable() =>
             Environment.GetEnvironmentVariable(environmentVariableName, environmentVariableScope);
 
         var (executableFilePath, executableDirectoryPath, executableFileName) = GetCurrentProcessExecutableFilePathAndComponents();
@@ -1665,8 +1650,8 @@ public class Program
                     //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
                     Console.WriteLine(
-                    "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-                    "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+                        "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+                        "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
                 });
 
                 return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
@@ -1675,7 +1660,7 @@ public class Program
             {
                 var destinationExecutableFilePath = "/bin/" + commandName;
 
-                byte[] currentRegisteredFileContent = null;
+                byte[]? currentRegisteredFileContent = null;
 
                 if (File.Exists(destinationExecutableFilePath))
                 {
@@ -1756,21 +1741,21 @@ public class Program
 
         var filePath = Path.Combine(ReportFilePath, fileName);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
         File.WriteAllBytes(filePath, System.Text.Encoding.UTF8.GetBytes(reportContent));
 
         Console.WriteLine("Saved report to file '" + filePath + "'.");
     }
 
-    static string GetCurrentProcessExecutableFilePath() =>
-        System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+    static string? GetCurrentProcessExecutableFilePath() =>
+        System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
 
     static (string filePath, string directoryPath, string fileName) GetCurrentProcessExecutableFilePathAndComponents()
     {
-        var filePath = GetCurrentProcessExecutableFilePath();
+        var filePath = GetCurrentProcessExecutableFilePath()!;
 
-        return (filePath, System.IO.Path.GetDirectoryName(filePath), System.IO.Path.GetFileName(filePath));
+        return (filePath, Path.GetDirectoryName(filePath), Path.GetFileName(filePath));
     }
 
     static System.Net.Http.HttpRequestMessage AddUserAgentHeader(
