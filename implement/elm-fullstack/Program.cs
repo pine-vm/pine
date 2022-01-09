@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2021-12-30";
+    static public string AppVersionId => "2022-01-09";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -828,13 +828,16 @@ public class Program
     static CommandLineApplication AddDescribeCmd(CommandLineApplication app) =>
         app.Command("describe", describeCmd =>
         {
-            describeCmd.Description = "Describe the artifact at the given path. Valid paths can be URLs into git repositories or in the local file system.";
+            describeCmd.Description = "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.";
             describeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var sourcePathParameter =
                 describeCmd
                 .Argument("source-path", "Path to the artifact. This can be a local directory or a URL.")
                 .IsRequired(allowEmptyStrings: false, errorMessage: "The source argument is missing. From where should I load the artifact?");
+
+            var listBlobsOption =
+                describeCmd.Option("--list-blobs", "List blobs in the artifact", CommandOptionType.NoValue);
 
             describeCmd.OnExecute(() =>
             {
@@ -855,24 +858,35 @@ public class Program
 
                 Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
-                var blobs =
-                    loadCompositionResult.Ok.tree.EnumerateBlobsTransitive()
-                    .ToImmutableList();
-
                 var compositionDescription =
-                    loadCompositionResult?.Ok.tree.BlobContent == null
-                    ?
-                    ("a tree containing " + blobs.Count + " blobs:\n" +
-                    string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path))))
-                    :
-                    "a blob containing " + loadCompositionResult?.Ok.tree.BlobContent.Length + " bytes";
+                    string.Join(
+                        "\n",
+                        DescribeCompositionForHumans(loadCompositionResult.Ok.tree, listBlobs: listBlobsOption.HasValue()));
 
-                Console.WriteLine(
-                    "Composition " + compositionId + " is " + compositionDescription);
+                Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
 
                 return 0;
             });
         });
+
+    static public IEnumerable<string> DescribeCompositionForHumans(
+        Composition.TreeWithStringPath composition,
+        bool listBlobs)
+    {
+        if (composition.BlobContent == null)
+        {
+            var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
+
+            yield return "a tree containing " + blobs.Count + " blobs with an aggregate size of " + blobs.Sum(blob => blob.blobContent.Count) + " bytes.";
+
+            if (listBlobs)
+                yield return "blobs paths and sizes:\n" + string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path) + " (" + blobAtPath.blobContent.Count + ")"));
+
+            yield break;
+        }
+
+        yield return "a blob containing " + composition.BlobContent.Length + " bytes";
+    }
 
     static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
         app.Command("run-cache-server", runCacheServerCmd =>
