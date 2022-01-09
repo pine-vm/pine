@@ -21,7 +21,7 @@ using System.Linq;
 
 
 int loadCompositionLimitFileCount = 110;
-int loadCompositionLimitAggregateFileSize = 800_000;
+int loadCompositionLimitAggregateFileSize = 900_000;
 int loadCompositionLimitMaximumPathLength = 200;
 
 
