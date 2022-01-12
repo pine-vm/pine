@@ -17,22 +17,22 @@ public class VolatileProcess
 
     ScriptState<object>? scriptState;
 
-    readonly MetadataReferenceResolver metadataResolver;
+    readonly MetadataResolver metadataResolver;
 
     readonly Func<byte[], byte[]?> getFileFromHashSHA256;
 
     public VolatileProcess(
         Func<byte[], byte[]?> getFileFromHashSHA256,
-        string csharpScript)
+        string csharpScriptCode)
     {
         this.getFileFromHashSHA256 = getFileFromHashSHA256;
 
-        metadataResolver = new MetadataResolver(getFileFromHashSHA256);
+        metadataResolver = new MetadataResolver(csharpScriptCode: csharpScriptCode, getFileFromHashSHA256);
 
-        var runSetupScriptResult = RunScript(csharpScript);
+        var runSetupScriptResult = RunScript(csharpScriptCode);
 
         if (runSetupScriptResult.Exception != null)
-            throw new Exception("Failed to setup the volatile process:" + runSetupScriptResult.Exception.ToString());
+            throw new Exception("Failed to setup the volatile process: " + runSetupScriptResult.Exception.ToString());
     }
 
     /// <summary>
@@ -61,9 +61,58 @@ public class VolatileProcess
             }
             catch (Exception e)
             {
+                string? metadataNotFoundErrorsDetails = null;
+
+                if (e is CompilationErrorException compilationErrorException)
+                {
+                    var metadataNotFoundErrors =
+                        compilationErrorException.Diagnostics
+                        .Where(d => d.Severity == DiagnosticSeverity.Error && d.Id == "CS0006")
+                        .ToImmutableList();
+
+                    if (metadataNotFoundErrors.Any())
+                    {
+                        var metadataNotFoundErrorsReports =
+                            metadataNotFoundErrors
+                            .Select(error =>
+                            {
+                                var referencesCandidates =
+                                    error.GetMessage().Split('\'').Where(c => !c.Contains(' ')).ToImmutableList();
+
+                                var referencesCandidatesDetails =
+                                    referencesCandidates
+                                    .Select(referenceCandidate =>
+                                    {
+                                        var referenceResolution =
+                                            metadataResolver.ResolutionsFromAssemblyReference(referenceCandidate)?.ToImmutableList() ??
+                                            ImmutableList<(string url, IEnumerable<Composition.TreeWithStringPath>? loadedTrees)>.Empty;
+
+                                        return string.Join("\n",
+                                            "Found " + referenceResolution.Count + " hint URLS for reference " + referenceCandidate + ":",
+                                            DescribeAssemblyResolutionForErrorMessage(referenceResolution));
+
+                                    }).ToImmutableList();
+
+                                return string.Join("\n",
+                                    "Details on error regarding reference resolution:",
+                                    error.GetMessage(),
+                                    "Found " + referencesCandidates.Count + " candidate(s) for references: " + string.Join(", ", referencesCandidates),
+                                    string.Join("\n", referencesCandidatesDetails));
+                            });
+
+                        metadataNotFoundErrorsDetails = string.Join("\n", metadataNotFoundErrorsReports);
+                    }
+                }
+
+                var detailsComposition =
+                    string.Join("\n",
+                    new[] { (title: nameof(metadataNotFoundErrorsDetails), detailsString: metadataNotFoundErrorsDetails) }
+                    .Where(namedDetail => namedDetail.detailsString != null)
+                    .Select(namedDetail => namedDetail.title + ":\n" + namedDetail.detailsString));
+
                 return new RunResult
                 {
-                    Exception = e,
+                    Exception = new Exception(detailsComposition, e)
                 };
             }
 
@@ -73,6 +122,32 @@ public class VolatileProcess
                 ReturnValue = scriptState.ReturnValue,
             };
         }
+    }
+
+    static string DescribeAssemblyResolutionForErrorMessage(
+        IEnumerable<(string url, IEnumerable<Composition.TreeWithStringPath>? loadedTrees)> resolution)
+    {
+        return string.Join("\n",
+            resolution.Select(urlAndLoadedTrees =>
+                {
+                    var loadedTrees =
+                        urlAndLoadedTrees.loadedTrees?.ToImmutableList() ?? ImmutableList<Composition.TreeWithStringPath>.Empty;
+
+                    return
+                        string.Join("\n",
+                        "Found " + loadedTrees.Count + " trees under URL " + urlAndLoadedTrees.url + ":",
+                        string.Join("\n", loadedTrees.Select(DescribeTreeContentsForErrorMessage)));
+                }));
+    }
+
+    static string DescribeTreeContentsForErrorMessage(Composition.TreeWithStringPath tree)
+    {
+        return string.Join("\n",
+            tree.EnumerateBlobsTransitive().Select(blobAtPath =>
+            "Found " +
+            CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(
+                blobAtPath.blobContent as byte[] ?? blobAtPath.blobContent.ToArray())) +
+                " at " + string.Join("/", blobAtPath.path)));
     }
 
     public RunResult ProcessRequest(string request)
@@ -89,6 +164,8 @@ public class VolatileProcess
     {
         readonly object @lock = new();
 
+        readonly SyntaxTree csharpScriptCodeSyntaxTree;
+
         readonly Func<byte[], byte[]?> getFileFromHashSHA256;
 
         ImmutableList<AssemblyMetadata> resolvedAssemblies = ImmutableList<AssemblyMetadata>.Empty;
@@ -97,11 +174,35 @@ public class VolatileProcess
 
         static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new();
 
+        readonly ConcurrentDictionary<string, IEnumerable<string>> hintUrlsFromAssemblyReference = new();
+
+        readonly ConcurrentDictionary<string, IEnumerable<Composition.TreeWithStringPath>> loadedTreesFromUrl = new();
+
         static readonly ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>> resolveReferenceCache =
             new(new ResolveReferenceRequestEqualityComparer());
 
-        public MetadataResolver(Func<byte[], byte[]?> getFileFromHashSHA256)
+        public IEnumerable<(string url, IEnumerable<Composition.TreeWithStringPath>? loadedTrees)>? ResolutionsFromAssemblyReference(string assemblyReference)
         {
+            hintUrlsFromAssemblyReference.TryGetValue(assemblyReference, out var hintUrls);
+
+            if (hintUrls == null)
+                yield break;
+
+            foreach (var hintUrl in hintUrls)
+            {
+                loadedTreesFromUrl.TryGetValue(hintUrl, out var loadedTrees);
+
+                yield return (hintUrl, loadedTrees);
+            }
+        }
+
+        public MetadataResolver(
+            string csharpScriptCode,
+            // TODO: Make getFileFromHashSHA256 optional after migration phase.
+            Func<byte[], byte[]?> getFileFromHashSHA256)
+        {
+            csharpScriptCodeSyntaxTree = CSharpScript.Create(csharpScriptCode).GetCompilation().SyntaxTrees.First();
+
             this.getFileFromHashSHA256 = getFileFromHashSHA256;
         }
 
@@ -187,14 +288,14 @@ public class VolatileProcess
             if (resolveReferenceCache.TryGetValue(request, out var resolvedReferences))
                 return resolvedReferences;
 
-            resolvedReferences = ResolveReferenceWithoutCache(request);
+            resolvedReferences = ResolveReferenceWithoutAssemblyCache(request);
 
             resolveReferenceCache[request] = resolvedReferences;
 
             return resolvedReferences;
         }
 
-        ImmutableArray<PortableExecutableReference> ResolveReferenceWithoutCache(ResolveReferenceRequest request)
+        ImmutableArray<PortableExecutableReference> ResolveReferenceWithoutAssemblyCache(ResolveReferenceRequest request)
         {
             lock (@lock)
             {
@@ -206,7 +307,23 @@ public class VolatileProcess
                 {
                     var hash = CommonConversion.ByteArrayFromStringBase16(sha256Match.Groups[1].Value);
 
-                    var assembly = getFileFromHashSHA256?.Invoke(hash);
+                    var hintUrls =
+                        hintUrlsFromAssemblyReference.GetOrAdd(
+                            request.reference,
+                            ParseHintUrlsFromAssemblyReference);
+
+                    var assemblyFromCacheOrLink =
+                        BlobLibrary.GetBlobWithSHA256Cached(
+                        hash,
+                        getIfNotCached: () =>
+                        {
+                            if (hintUrls == null)
+                                return null;
+
+                            return GetBlobFromHashAndHintUrls(hash, hintUrls)?.ToArray();
+                        });
+
+                    var assembly = assemblyFromCacheOrLink ?? getFileFromHashSHA256?.Invoke(hash);
 
                     if (assembly == null)
                         return new ImmutableArray<PortableExecutableReference>();
@@ -230,6 +347,92 @@ public class VolatileProcess
                     request.reference,
                     request.baseFilePath,
                     request.properties);
+        }
+
+        IEnumerable<string> ParseHintUrlsFromAssemblyReference(string assemblyReference)
+        {
+            var allNodesAndTokens =
+                csharpScriptCodeSyntaxTree.GetRoot()
+                .DescendantNodesAndTokens(descendIntoChildren: _ => true, descendIntoTrivia: true)
+                .ToImmutableList();
+
+            var allTrivia =
+                csharpScriptCodeSyntaxTree.GetRoot()
+                .DescendantTrivia(descendIntoChildren: _ => true, descendIntoTrivia: true)
+                .ToImmutableList();
+
+            var allCommentsByLocation =
+                allTrivia.Where(IsComment).OrderBy(trivia => trivia.SpanStart).ToImmutableList();
+
+            var tokensContainingReference =
+                allNodesAndTokens
+                .Where(nodeOrToken => nodeOrToken.IsToken && nodeOrToken.ToString().Contains(assemblyReference))
+                .ToImmutableList();
+
+            var commentsBeforeReference =
+                tokensContainingReference
+                .SelectMany(tokenContainingRef =>
+                    allCommentsByLocation
+                    .Where(c => c.SpanStart < tokenContainingRef.SpanStart)
+                    .TakeLast(1)).ToImmutableList();
+
+            var linksFromComments =
+                commentsBeforeReference
+                .SelectMany(comment => EnumerateUrlsFromText(comment.ToFullString()))
+                .ToImmutableList();
+
+            return linksFromComments.Select(url => url.ToString());
+        }
+
+        IReadOnlyList<byte>? GetBlobFromHashAndHintUrls(byte[] hash, IEnumerable<string> hintUrls)
+        {
+            foreach (var hintUrl in hintUrls)
+            {
+                var hintUrlTrees =
+                    loadedTreesFromUrl.GetOrAdd(
+                        hintUrl,
+                        hintUrl =>
+                        {
+                            try
+                            {
+                                return BlobLibrary.DownloadFromUrlAndExtractTrees(hintUrl).ToImmutableList();
+                            }
+                            catch { }
+
+                            return ImmutableList<Composition.TreeWithStringPath>.Empty;
+                        });
+
+                if (hintUrlTrees == null)
+                    continue;
+
+                foreach (var tree in hintUrlTrees)
+                {
+                    var matchingBlob =
+                        tree.EnumerateBlobsTransitive()
+                        .Select(blobWithPath => blobWithPath.blobContent)
+                        .FirstOrDefault(BlobLibrary.BlobHasSHA256(hash));
+
+                    if (matchingBlob != null)
+                        return matchingBlob;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    static bool IsComment(SyntaxTrivia trivia) =>
+        trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineCommentTrivia) ||
+        trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineCommentTrivia);
+
+    static public IEnumerable<Uri> EnumerateUrlsFromText(string text)
+    {
+        foreach (var nonSpace in Regex.Split(text, "\\s+"))
+        {
+            if (Uri.TryCreate(nonSpace, UriKind.Absolute, out var uri))
+            {
+                yield return uri;
+            }
         }
     }
 

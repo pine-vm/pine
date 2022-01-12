@@ -52,9 +52,7 @@ public class BlobLibrary
 
         var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
 
-        bool blobHasExpectedSHA256(byte[] blobCandidate) =>
-            Enumerable.SequenceEqual(Composition.GetHash(Composition.Component.Blob(blobCandidate)), sha256) ||
-            Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate), sha256);
+        var blobHasExpectedSHA256 = BlobHasSHA256(sha256);
 
         try
         {
@@ -153,14 +151,19 @@ public class BlobLibrary
         string sourceUrl,
         byte[] sha256)
     {
-        bool blobHasExpectedSHA256(byte[] blobCandidate) =>
-            Enumerable.SequenceEqual(Composition.GetHash(Composition.Component.Blob(blobCandidate)), sha256) ||
-            Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate), sha256);
-
-        return DownloadFromUrlAndExtractBlobs(sourceUrl).FirstOrDefault(blobHasExpectedSHA256);
+        return DownloadFromUrlAndExtractBlobs(sourceUrl).FirstOrDefault(BlobHasSHA256(sha256))?.ToArray();
     }
 
-    static public IEnumerable<byte[]> DownloadFromUrlAndExtractBlobs(string sourceUrl)
+    static public Func<IReadOnlyList<byte>, bool> BlobHasSHA256(byte[] sha256) =>
+        blobCandidate =>
+        Enumerable.SequenceEqual(Composition.GetHash(Composition.Component.Blob(blobCandidate)), sha256) ||
+        Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate as byte[] ?? blobCandidate.ToArray()), sha256);
+
+    static public IEnumerable<IReadOnlyList<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
+        DownloadFromUrlAndExtractTrees(sourceUrl)
+        .SelectMany(tree => tree.EnumerateBlobsTransitive().Select(blob => blob.blobContent));
+
+    static public IEnumerable<Composition.TreeWithStringPath> DownloadFromUrlAndExtractTrees(string sourceUrl)
     {
         var httpResponse = DownloadViaHttp(sourceUrl);
 
@@ -171,50 +174,38 @@ public class BlobLibrary
 
         var responseContent = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
-        yield return responseContent;
+        if (responseContent == null)
+            yield break;
 
-        IEnumerator<byte[]>? enumerator = null;
+        yield return Composition.TreeWithStringPath.Blob(responseContent);
 
-        if (sourceUrl.EndsWith(".zip"))
         {
+            Composition.TreeWithStringPath? fromZipArchive = null;
+
             try
             {
-                enumerator = ZipArchive.EntriesFromZipArchive(responseContent).Select(c => c.content).GetEnumerator();
+                fromZipArchive =
+                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                        ZipArchive.EntriesFromZipArchive(responseContent));
             }
             catch { }
+
+            if (fromZipArchive != null)
+                yield return fromZipArchive;
         }
 
         if (sourceUrl.EndsWith(".tar.gz"))
         {
-            try
-            {
-                enumerator =
-                    SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(CommonConversion.DecompressGzip(responseContent))).Entries
-                    .Select(entry =>
-                    {
-                        using (var memoryStream = new MemoryStream())
-                        {
-                            using (var tarEntryStream = entry.OpenEntryStream())
-                            {
-                                tarEntryStream.CopyTo(memoryStream);
-                                return memoryStream.ToArray();
-                            }
-                        }
-                    }).GetEnumerator();
-            }
-            catch { }
-        }
+            Composition.TreeWithStringPath? fromTarArchive = null;
 
-        if (enumerator != null)
-        {
             try
             {
-                if (!enumerator.MoveNext())
-                    yield break;
+                fromTarArchive = TarArchive.TreeWithStringPathFromTarArchive(CommonConversion.DecompressGzip(responseContent));
             }
             catch { }
 
-            yield return enumerator.Current;
+            if (fromTarArchive != null)
+                yield return fromTarArchive;
         }
     }
 }

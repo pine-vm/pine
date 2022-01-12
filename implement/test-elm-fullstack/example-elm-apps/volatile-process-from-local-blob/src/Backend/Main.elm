@@ -44,12 +44,12 @@ volatileProcessCmdsFromState state =
         Nothing ->
             []
 
-        Just _ ->
+        Just pendingHttpRequest ->
             case state.volatileProcessId of
                 Nothing ->
                     [ ElmFullstack.CreateVolatileProcess
                         { programCode = Backend.VolatileProcess.programCode
-                        , update = updateForCreateVolatileProcess
+                        , update = updateForCreateVolatileProcess pendingHttpRequest
                         }
                     ]
 
@@ -57,16 +57,22 @@ volatileProcessCmdsFromState state =
                     [ ElmFullstack.RequestToVolatileProcess
                         { processId = volatileProcessId
                         , request = ""
-                        , update = updateForRequestToVolatileProcess
+                        , update = updateForRequestToVolatileProcess pendingHttpRequest
                         }
                     ]
 
 
-updateForCreateVolatileProcess : ElmFullstack.CreateVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
-updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
+updateForCreateVolatileProcess : ElmFullstack.HttpRequestEventStruct -> ElmFullstack.CreateVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse stateBefore =
     case createVolatileProcessResponse of
-        Err _ ->
-            ( stateBefore, [] )
+        Err { exceptionToString } ->
+            ( stateBefore
+            , [ ElmFullstack.RespondToHttpRequest
+                    { httpRequestId = pendingHttpRequest.httpRequestId
+                    , response = httpResponseInternalServerError ("Error creating volatile process: " ++ exceptionToString)
+                    }
+              ]
+            )
 
         Ok { processId } ->
             let
@@ -76,44 +82,42 @@ updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
             ( state, state |> volatileProcessCmdsFromState )
 
 
-updateForRequestToVolatileProcess : ElmFullstack.RequestToVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
-updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
+updateForRequestToVolatileProcess : ElmFullstack.HttpRequestEventStruct -> ElmFullstack.RequestToVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessResponse stateBefore =
     let
-        bodyFromString =
-            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+        httpResponse =
+            case requestToVolatileProcessResponse of
+                Err ElmFullstack.ProcessNotFound ->
+                    httpResponseInternalServerError "Error running in volatile process: ProcessNotFound"
 
-        httpResponseInternalServerError errorMessage =
-            { statusCode = 500
-            , bodyAsBase64 = bodyFromString errorMessage
-            , headersToAdd = []
-            }
+                Ok requestToVolatileProcessComplete ->
+                    case requestToVolatileProcessComplete.exceptionToString of
+                        Just exceptionToString ->
+                            httpResponseInternalServerError ("Error running in volatile process: Exception: " ++ exceptionToString)
+
+                        Nothing ->
+                            { statusCode = 200
+                            , bodyAsBase64 = Maybe.andThen bodyFromString requestToVolatileProcessComplete.returnValueToString
+                            , headersToAdd = []
+                            }
     in
-    case stateBefore.pendingHttpRequest of
-        Nothing ->
-            ( stateBefore, [] )
+    ( { stateBefore | pendingHttpRequest = Nothing }
+    , [ ElmFullstack.RespondToHttpRequest
+            { httpRequestId = pendingHttpRequest.httpRequestId
+            , response = httpResponse
+            }
+      ]
+    )
 
-        Just pendingHttpRequest ->
-            let
-                httpResponse =
-                    case requestToVolatileProcessResponse of
-                        Err _ ->
-                            httpResponseInternalServerError "Error running in volatile process."
 
-                        Ok requestToVolatileProcessComplete ->
-                            case requestToVolatileProcessComplete.exceptionToString of
-                                Just exceptionToString ->
-                                    httpResponseInternalServerError ("Exception in volatile process: " ++ exceptionToString)
+httpResponseInternalServerError : String -> ElmFullstack.HttpResponse
+httpResponseInternalServerError errorMessage =
+    { statusCode = 500
+    , bodyAsBase64 = bodyFromString errorMessage
+    , headersToAdd = []
+    }
 
-                                Nothing ->
-                                    { statusCode = 200
-                                    , bodyAsBase64 = Maybe.andThen bodyFromString requestToVolatileProcessComplete.returnValueToString
-                                    , headersToAdd = []
-                                    }
-            in
-            ( { stateBefore | pendingHttpRequest = Nothing }
-            , [ ElmFullstack.RespondToHttpRequest
-                    { httpRequestId = pendingHttpRequest.httpRequestId
-                    , response = httpResponse
-                    }
-              ]
-            )
+
+bodyFromString : String -> Maybe String
+bodyFromString =
+    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
