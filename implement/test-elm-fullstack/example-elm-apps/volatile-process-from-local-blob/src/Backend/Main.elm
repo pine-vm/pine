@@ -3,9 +3,9 @@ module Backend.Main exposing
     , backendMain
     )
 
-import Backend.VolatileProcess
 import Base64
 import Bytes.Encode
+import CompilationInterface.SourceFiles
 import ElmFullstack
 
 
@@ -48,7 +48,7 @@ volatileProcessCmdsFromState state =
             case state.volatileProcessId of
                 Nothing ->
                     [ ElmFullstack.CreateVolatileProcess
-                        { programCode = Backend.VolatileProcess.programCode
+                        { programCode = CompilationInterface.SourceFiles.file____src_Backend_VolatileProcess_csx.utf8
                         , update = updateForCreateVolatileProcess pendingHttpRequest
                         }
                     ]
