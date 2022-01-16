@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-01-11";
+    static public string AppVersionId => "2022-01-16";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -762,6 +762,131 @@ public class Program
                     template: "--enable-inspection",
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
+
+            var testCommand =
+                enterInteractiveCmd.Command("test", testCmd =>
+                {
+                    testCmd.Description = "Test the interactive automatically with given scenarios and reports timings.";
+
+                    var scenarioOption =
+                        testCmd
+                        .Option(
+                            template: "--scenario",
+                            description: "Test scenario which specifies the submissions and can also specify expectations.",
+                            optionType: CommandOptionType.MultipleValue);
+
+                    testCmd.OnExecute(() =>
+                    {
+                        var consoleForegroundBefore = Console.ForegroundColor;
+
+                        var scenariosArguments = scenarioOption.Values;
+
+                        if (0 < scenariosArguments?.Count)
+                        {
+                            Console.WriteLine("Got " + scenariosArguments.Count + " scenario(s) to load...");
+
+                            var scenariosLoadResults =
+                                scenariosArguments
+                                .ToImmutableDictionary(
+                                    testArg => testArg!,
+                                    testArg => LoadComposition.LoadFromPathResolvingNetworkDependencies(testArg!).LogToList());
+
+                            var failedLoads = scenariosLoadResults.Where(r => r.Value.result.Ok.tree == null).ToImmutableList();
+
+                            if (failedLoads.Any())
+                            {
+                                var failedLoad = failedLoads.First();
+
+                                Console.WriteLine(
+                                    string.Join(
+                                        "\n",
+                                            "Failed to load scenario from " + failedLoad.Key + ":",
+                                            string.Join("\n", failedLoad.Value.log),
+                                            failedLoad.Value.result.Err!));
+
+                                return;
+                            }
+
+                            var aggregateComposition =
+                                scenariosLoadResults.Count == 1 ?
+                                Composition.FromTreeWithStringPath(scenariosLoadResults.Single().Value.result.Ok.tree) :
+                                Composition.Component.List(
+                                    scenariosLoadResults.Select(r => Composition.FromTreeWithStringPath(r.Value.result.Ok.tree)).ToImmutableList());
+
+                            var aggregateCompositionHash =
+                                CommonConversion.StringBase16FromByteArray(Composition.GetHash(aggregateComposition));
+
+                            Console.WriteLine(
+                                "Succesfully loaded " + scenariosLoadResults.Count +
+                                " scenario(s) with an aggregate hash of " + aggregateCompositionHash + ".");
+
+                            var exceptLoadingStopatch = System.Diagnostics.Stopwatch.StartNew();
+
+                            var scenariosResults =
+                                scenariosLoadResults
+                                .ToImmutableDictionary(
+                                    loadResult => loadResult.Key,
+                                    loadResult =>
+                                    {
+                                        var scenarioStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                                        var scenarioReport =
+                                            ElmInteractive.TestElmInteractive.TestElmInteractiveScenario(loadResult.Value.result.Ok.tree);
+
+                                        return new
+                                        {
+                                            loadResult = loadResult.Value,
+                                            durationMs = scenarioStopwatch.ElapsedMilliseconds,
+                                            scenarioReport
+                                        };
+                                    });
+
+                            var passedScenarios =
+                                scenariosResults
+                                .Where(t => t.Value.scenarioReport.Passed)
+                                .ToImmutableList();
+
+                            var failedScenarios =
+                                scenariosResults
+                                .Where(t => !t.Value.scenarioReport.Passed)
+                                .ToImmutableList();
+
+                            Console.ForegroundColor = failedScenarios.Any() ? ConsoleColor.Red : ConsoleColor.Green;
+
+                            var overallStats = new[]
+                            {
+                                (label : "Failed", value : failedScenarios.Count.ToString()),
+                                (label : "Passed", value : passedScenarios.Count.ToString()),
+                                (label : "Total", value : scenariosLoadResults.Count.ToString()),
+                                (label : "Duration", value : exceptLoadingStopatch.ElapsedMilliseconds.ToString("### ### ###") + " ms"),
+                            };
+
+                            Console.WriteLine(
+                                string.Join(
+                                    " - ",
+                                    (failedScenarios.Any() ? "Failed" : "Passed") + "!",
+                                    string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
+                                    aggregateCompositionHash[..10] + " (elm-fs " + AppVersionId + ")"));
+
+                            foreach (var failedScenario in failedScenarios)
+                            {
+                                var scenarioId =
+                                    CommonConversion.StringBase16FromByteArray(
+                                        Composition.GetHash(
+                                            Composition.FromTreeWithStringPath(failedScenario.Value.loadResult.result.Ok.tree)));
+
+                                Console.WriteLine(
+                                    "Failed scenario " + scenarioId[..10] + " ('" + failedScenario.Key.Split('\\', '/').LastOrDefault() + "'):");
+
+                                Console.WriteLine(failedScenario.Value.scenarioReport.Exception?.ToString());
+                            }
+
+                            Console.ForegroundColor = consoleForegroundBefore;
+
+                            return;
+                        }
+                    });
+                });
 
             enterInteractiveCmd.OnExecute(() =>
             {
@@ -1664,8 +1789,8 @@ public class Program
                     //  https://docs.microsoft.com/en-us/previous-versions//cc723564(v=technet.10)?redirectedfrom=MSDN#XSLTsection127121120120
 
                     Console.WriteLine(
-                        "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
-                        "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
+                    "I added the path '" + executableDirectoryPath + "' to the '" + environmentVariableName +
+                    "' environment variable for the current user account. You will be able to use the '" + commandName + "' command in newer instances of the Command Prompt.");
                 });
 
                 return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
