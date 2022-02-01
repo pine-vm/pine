@@ -60,7 +60,7 @@ public class TestElmInteractive
                         Encoding.UTF8.GetString(testStep.component.GetBlobAtPath(new[] { "submission" })!.ToArray());
 
                     var evalResult =
-                        interactiveSession.SubmitAndGetResultingValue(submission);
+                        interactiveSession.Submit(submission);
 
                     var expectedValueFile =
                         testStep.component.GetBlobAtPath(new[] { "expected-value" });
@@ -73,7 +73,7 @@ public class TestElmInteractive
 
                         Assert.AreEqual(
                             expectedValue,
-                            evalResult.Ok?.valueAsElmExpressionText,
+                            evalResult.Ok?.SubmissionResponseValue?.valueAsElmExpressionText,
                             "Value from evaluation does not match expected value.");
                     }
 

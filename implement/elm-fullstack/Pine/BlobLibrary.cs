@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 
 namespace Pine;
 
@@ -15,6 +16,21 @@ public class BlobLibrary
     static readonly string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
 
     static string ContainerUrl => "https://kalmit.blob.core.windows.net/blob-library";
+
+    static public byte[]? LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
+    {
+        var hashAndRemoteSource =
+            dict.FirstOrDefault(c => RuntimeInformation.IsOSPlatform(c.Key)).Value;
+
+        if (hashAndRemoteSource.hash == null)
+            throw new Exception("Unknown OS: " + RuntimeInformation.OSDescription);
+
+        var hash = CommonConversion.ByteArrayFromStringBase16(hashAndRemoteSource.hash);
+
+        return GetBlobWithSHA256Cached(
+            hash,
+            getIfNotCached: () => DownloadFromUrlAndExtractBlobWithMatchingHash(hashAndRemoteSource.remoteSource, hash));
+    }
 
     static public byte[]? GetBlobWithSHA256(byte[] sha256)
     {
@@ -206,6 +222,19 @@ public class BlobLibrary
 
             if (fromTarArchive != null)
                 yield return fromTarArchive;
+        }
+        else if (sourceUrl.EndsWith(".gz"))
+        {
+            byte[]? fromGzip = null;
+
+            try
+            {
+                fromGzip = CommonConversion.DecompressGzip(responseContent);
+            }
+            catch { }
+
+            if (fromGzip != null)
+                yield return Composition.TreeWithStringPath.Blob(fromGzip);
         }
     }
 }

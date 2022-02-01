@@ -11,7 +11,7 @@ namespace elm_fullstack.ElmInteractive;
 
 public class ElmInteractive
 {
-    static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
+    static public Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
         TreeWithStringPath appCodeTree,
         string submission,
         IReadOnlyList<string>? previousLocalSubmissions = null)
@@ -25,7 +25,7 @@ public class ElmInteractive
             previousLocalSubmissions: previousLocalSubmissions);
     }
 
-    static public Result<string, SubmissionResponseValueStructure> EvaluateSubmissionAndGetResultingValue(
+    static public Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         TreeWithStringPath? appCodeTree,
         string submission,
@@ -58,10 +58,10 @@ public class ElmInteractive
             throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
 
         if (responseStructure.DecodedArguments.Evaluated == null)
-            return Result<string, SubmissionResponseValueStructure>.err(responseStructure.DecodedArguments.FailedToEvaluate!);
+            return Result<string, EvaluatedSctructure>.err(responseStructure.DecodedArguments.FailedToEvaluate!);
 
-        return Result<string, SubmissionResponseValueStructure>.ok(
-            responseStructure.DecodedArguments.Evaluated.SubmissionResponseValue);
+        return Result<string, EvaluatedSctructure>.ok(
+            responseStructure.DecodedArguments.Evaluated);
     }
 
     static TreeWithStringPath? compileTree(TreeWithStringPath? sourceTree)
@@ -136,7 +136,7 @@ public class ElmInteractive
         string? FailedToEvaluate = null,
         EvaluatedSctructure? Evaluated = null);
 
-    record EvaluatedSctructure(
+    public record EvaluatedSctructure(
         object? SubmissionResponseNoValue = null,
         SubmissionResponseValueStructure? SubmissionResponseValue = null);
 

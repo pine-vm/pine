@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -262,23 +262,26 @@ public class ProcessFromElm019Code
     }
 
     static public byte[] GetElmExecutableFile =>
-        CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
+        BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!;
 
-    static public byte[]? GetElmExecutableFileCompressedGzip =>
-        BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
-            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            ?
+    static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmExecutableFileByOs =
+        ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
+        .Add(
             /*
-            Loaded 2019-10-29 from
+            Loaded 2022-02-01 🐯 from
             https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
             */
-            "e44af52bb27f725a973478e589d990a6428e115fe1bb14f03833134d6c0f155c"
-            :
+            OSPlatform.Linux,
+            ("f8f12a61a61f64ac71a85d57284cc4d14fb81f1cbebb8b150839d9731034092e",
+            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz"))
+        .Add(
             /*
-            Loaded 2019-10-29 from
+            Loaded 2022-02-01 🐯 from
             https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
             */
-            "d1bf666298cbe3c5447b9ca0ea608552d750e5d232f9845c2af11907b654903b"));
+            OSPlatform.Windows,
+            ("821e61ee150b660ca173584b66d1784b7be08b7107e7aa4977135686dc9d2fb2",
+            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz"));
 
     public const string appStateJsVarName = "app_state";
 

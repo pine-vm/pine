@@ -92,24 +92,9 @@ public class ElmTestRs
             ("3a1611329306d24b24fd6b98418ddec9ee79c044623e712093db24eba6a573df",
             @"https://github.com/denoland/deno/releases/download/v1.16.2/deno-x86_64-pc-windows-msvc.zip"));
 
-    static public byte[]? ElmTestRsExecutableFileForCurrentOs() => LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
+    static public byte[]? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
-    static public byte[]? DenoExecutableFileForCurrentOs() => LoadFileForCurrentOs(DenoExecutableFileByOs);
-
-    static public byte[]? LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
-    {
-        var hashAndRemoteSource =
-            dict.FirstOrDefault(c => RuntimeInformation.IsOSPlatform(c.Key)).Value;
-
-        if (hashAndRemoteSource.hash == null)
-            throw new System.Exception("Unknown OS: " + RuntimeInformation.OSDescription);
-
-        var hash = CommonConversion.ByteArrayFromStringBase16(hashAndRemoteSource.hash);
-
-        return BlobLibrary.GetBlobWithSHA256Cached(
-            hash,
-            getIfNotCached: () => BlobLibrary.DownloadFromUrlAndExtractBlobWithMatchingHash(hashAndRemoteSource.remoteSource, hash));
-    }
+    static public byte[]? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
 
     static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
         IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmProjectFiles)

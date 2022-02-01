@@ -14,7 +14,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-01-16";
+    static public string AppVersionId => "2022-02-01";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -148,7 +148,7 @@ public class Program
                 commands = group.commands.Select(cmd =>
                 new
                 {
-                    nameColumn = cmd.FullName ?? cmd.Name,
+                    nameColumn = (cmd.FullName ?? cmd.Name)!,
                     descriptionColumn = cmd.Description,
                 }).ToImmutableList(),
             });
@@ -928,7 +928,7 @@ public class Program
                     var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var evalResult =
-                        interactiveSession.SubmitAndGetResultingValue(submission);
+                        interactiveSession.Submit(submission);
 
                     evalStopwatch.Stop();
 
@@ -945,7 +945,7 @@ public class Program
                             evalStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms.");
                     }
 
-                    Console.WriteLine(evalResult.Ok.valueAsElmExpressionText);
+                    Console.WriteLine(evalResult.Ok.SubmissionResponseValue?.valueAsElmExpressionText);
                 }
             });
         });
@@ -1104,13 +1104,13 @@ public class Program
         string engineVersion,
         string beginTime,
         string sourcePath,
-        string sourceCompositionId,
-        SourceSummaryStructure sourceSummary,
-        IReadOnlyList<ElmFullstack.ElmAppCompilation.CompilationIterationReport> compilationIterationsReports,
+        string? sourceCompositionId,
+        SourceSummaryStructure? sourceSummary,
+        IReadOnlyList<ElmFullstack.ElmAppCompilation.CompilationIterationReport>? compilationIterationsReports,
         IReadOnlyList<ElmFullstack.ElmAppCompilation.LocatedCompilationError>? compilationErrors,
         string? compilationException,
         int? compilationTimeSpentMilli,
-        string compiledCompositionId,
+        string? compiledCompositionId,
         int? totalTimeSpentMilli);
 
     public record SourceSummaryStructure(
@@ -1285,7 +1285,7 @@ public class Program
         );
     }
 
-    static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string enteredPassword)>
+    static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string? enteredPassword)>
         AttemptHttpRequest(
         Func<System.Net.Http.HttpRequestMessage> buildRequestBeforeAddingCommonHeaders,
         string? defaultPassword,
@@ -1309,13 +1309,13 @@ public class Program
 
         var httpResponse = await httpClient.SendAsync(buildRequest());
 
-        string enteredPassword = null;
+        string? enteredPassword = null;
 
         if (promptForPasswordOnConsole &&
             httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
              httpResponse.Headers.WwwAuthenticate.Any())
         {
-            Console.WriteLine("The server at '" + httpResponse.RequestMessage.RequestUri.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
+            Console.WriteLine("The server at '" + httpResponse.RequestMessage?.RequestUri?.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
 
             enteredPassword = ReadLine.ReadPassword("> ").Trim();
 
@@ -1391,7 +1391,7 @@ public class Program
     record CopyElmAppStateReport(
         string beginTime,
         string source,
-        string destination,
+        string? destination,
         AppStateSummary? appStateSummary = null,
         ResponseFromServerStruct? destinationResponseFromServer = null,
         string? destinationFileReport = null,
@@ -1405,7 +1405,7 @@ public class Program
     static CopyElmAppStateReport CopyElmAppState(
         string source,
         string? sourceDefaultPassword,
-        string destination,
+        string? destination,
         string? destinationDefaultPassword)
     {
         var report = new CopyElmAppStateReport
@@ -1639,7 +1639,7 @@ public class Program
 
     static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
         string sourceAdminInterface,
-        string sourceAdminPassword)
+        string? sourceAdminPassword)
     {
         using var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) };
 
@@ -1686,7 +1686,7 @@ public class Program
     }
 
     static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
-        string sourcePath, string sourcePassword)
+        string sourcePath, string? sourcePassword)
     {
         if (!LooksLikeLocalSite(sourcePath))
         {
@@ -1763,9 +1763,11 @@ public class Program
         string? getCurrentValueOfEnvironmentVariable() =>
             Environment.GetEnvironmentVariable(environmentVariableName, environmentVariableScope);
 
-        var (executableFilePath, executableDirectoryPath, executableFileName) = GetCurrentProcessExecutableFilePathAndComponents();
+        var executableFilePath = GetCurrentProcessExecutableFilePath()!;
 
-        var commandName = Regex.Match(executableFileName, @"(.+?)(?=\.exe$|$)").Groups[1].Value;
+        var executableDirectoryPath = Path.GetDirectoryName(executableFilePath);
+
+        var commandName = Regex.Match(Path.GetFileName(executableFilePath)!, @"(.+?)(?=\.exe$|$)").Groups[1].Value;
 
         (bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath) checkInstallation()
         {
@@ -1889,13 +1891,6 @@ public class Program
 
     static string? GetCurrentProcessExecutableFilePath() =>
         System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-
-    static (string filePath, string directoryPath, string fileName) GetCurrentProcessExecutableFilePathAndComponents()
-    {
-        var filePath = GetCurrentProcessExecutableFilePath()!;
-
-        return (filePath, Path.GetDirectoryName(filePath), Path.GetFileName(filePath));
-    }
 
     static System.Net.Http.HttpRequestMessage AddUserAgentHeader(
         System.Net.Http.HttpRequestMessage httpRequest)
