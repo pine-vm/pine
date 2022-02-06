@@ -1,6 +1,7 @@
 module Frontend.SilentTeacher exposing (State, main)
 
 import Browser
+import Browser.Events
 import Browser.Navigation
 import Element
 import Element.Background
@@ -17,11 +18,26 @@ import Url
 
 
 type alias State =
-    { expression : String
+    { time : Time.Posix
     , evaluationContext : Result String Pine.ExpressionContext
-    , remainingLessons : List { lesson : Lesson, solution : String }
-    , completedLessons : List { lesson : Lesson, solution : String }
+    , trainingSession : TrainingSessionState
     , navigationKey : Browser.Navigation.Key
+    }
+
+
+type TrainingSessionState
+    = SessionInProgress
+        { remainingLessons : List { lesson : Lesson, solution : String }
+        , currentLesson : LessonWorkspace
+        , completedLessons : List { lesson : Lesson, solution : String }
+        }
+    | SessionCompleted
+
+
+type alias LessonWorkspace =
+    { lesson : { lesson : Lesson, solution : String }
+    , submissionInput : String
+    , wrongSubmissionTime : Maybe Time.Posix
     }
 
 
@@ -30,7 +46,7 @@ type alias Lesson =
 
 
 type Event
-    = UserInputChangeExpression String
+    = UserInputPrepareSubmission String
     | UserInputSubmitSolution String
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
@@ -70,15 +86,34 @@ init url navigationKey =
 
                 Ok evaluationContext ->
                     computeSolutionFromLessonInContext evaluationContext lesson
+
+        trainingSession =
+            case lessonsExpressions |> List.map (\lesson -> { lesson = lesson, solution = solutionFromLesson lesson }) of
+                currentLesson :: remainingLessons ->
+                    SessionInProgress
+                        { remainingLessons = remainingLessons
+                        , currentLesson = initLessonWorkspace currentLesson
+                        , completedLessons = []
+                        }
+
+                [] ->
+                    SessionCompleted
     in
-    ( { expression = ""
+    ( { time = Time.millisToPosix 0
       , evaluationContext = evaluationContextResult
       , navigationKey = navigationKey
-      , remainingLessons = lessonsExpressions |> List.map (\lesson -> { lesson = lesson, solution = solutionFromLesson lesson })
-      , completedLessons = []
+      , trainingSession = trainingSession
       }
     , Cmd.none
     )
+
+
+initLessonWorkspace : { lesson : Lesson, solution : String } -> LessonWorkspace
+initLessonWorkspace lesson =
+    { lesson = lesson
+    , submissionInput = ""
+    , wrongSubmissionTime = Nothing
+    }
 
 
 main : Program () State Event
@@ -94,38 +129,70 @@ main =
 
 
 subscriptions : State -> Sub.Sub Event
-subscriptions _ =
-    Sub.none
+subscriptions state =
+    let
+        lowFrequency =
+            Time.every 200 TimeArrivedEvent
+    in
+    case state.trainingSession of
+        SessionCompleted ->
+            Sub.none
+
+        SessionInProgress sessionInProgress ->
+            if hintAnimationDurationProgressFromLesson state sessionInProgress.currentLesson == Nothing then
+                lowFrequency
+
+            else
+                Browser.Events.onAnimationFrame TimeArrivedEvent
 
 
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
     case event of
-        UserInputChangeExpression expression ->
-            ( { stateBefore | expression = expression }
+        UserInputPrepareSubmission expression ->
+            ( stateBefore
+                |> updateTrainingSessionCurrentLesson (workspaceUserInputPrepareSubmission expression)
             , Cmd.none
             )
 
         UserInputSubmitSolution submission ->
-            let
-                state =
-                    { stateBefore | expression = "" }
-            in
-            case stateBefore.remainingLessons of
-                [] ->
-                    ( state, Cmd.none )
+            case stateBefore.trainingSession of
+                SessionCompleted ->
+                    ( stateBefore, Cmd.none )
 
-                currentLesson :: nextRemainingLessons ->
-                    if submission == currentLesson.solution then
-                        ( { state
-                            | remainingLessons = nextRemainingLessons
-                            , completedLessons = stateBefore.completedLessons ++ [ currentLesson ]
-                          }
-                        , Cmd.none
-                        )
+                SessionInProgress sessionInProgress ->
+                    if submission == sessionInProgress.currentLesson.lesson.solution then
+                        case sessionInProgress.remainingLessons of
+                            [] ->
+                                ( { stateBefore | trainingSession = SessionCompleted }
+                                , Cmd.none
+                                )
+
+                            currentLesson :: remainingLessons ->
+                                ( { stateBefore
+                                    | trainingSession =
+                                        SessionInProgress
+                                            { currentLesson = initLessonWorkspace currentLesson
+                                            , remainingLessons = remainingLessons
+                                            , completedLessons =
+                                                sessionInProgress.completedLessons
+                                                    ++ [ sessionInProgress.currentLesson.lesson ]
+                                            }
+                                  }
+                                , Cmd.none
+                                )
 
                     else
-                        ( state, Cmd.none )
+                        ( stateBefore
+                            |> updateTrainingSessionCurrentLesson
+                                (\currentLesson ->
+                                    { currentLesson
+                                        | wrongSubmissionTime = Just stateBefore.time
+                                        , submissionInput = ""
+                                    }
+                                )
+                        , Cmd.none
+                        )
 
         UrlRequest _ ->
             ( stateBefore, Cmd.none )
@@ -133,25 +200,53 @@ update event stateBefore =
         UrlChange _ ->
             ( stateBefore, Cmd.none )
 
-        TimeArrivedEvent _ ->
-            ( stateBefore, Cmd.none )
+        TimeArrivedEvent time ->
+            ( { stateBefore | time = time }, Cmd.none )
+
+
+workspaceUserInputPrepareSubmission : String -> LessonWorkspace -> LessonWorkspace
+workspaceUserInputPrepareSubmission expression workspace =
+    { workspace | submissionInput = expression }
+
+
+updateTrainingSessionCurrentLesson : (LessonWorkspace -> LessonWorkspace) -> State -> State
+updateTrainingSessionCurrentLesson updateCurrentLesson state =
+    case state.trainingSession of
+        SessionCompleted ->
+            state
+
+        SessionInProgress sessionInProgress ->
+            { state
+                | trainingSession =
+                    SessionInProgress
+                        { sessionInProgress
+                            | currentLesson = updateCurrentLesson sessionInProgress.currentLesson
+                        }
+            }
 
 
 view : State -> Browser.Document Event
 view state =
     let
-        totalLessonCount =
-            List.length (state.completedLessons ++ state.remainingLessons)
+        ( progressPercent, workspaceElement ) =
+            case state.trainingSession of
+                SessionCompleted ->
+                    ( 100
+                    , Element.text "All lessons complete 🎉"
+                        |> Element.el [ Element.padding (defaultFontSize * 2) ]
+                    )
 
-        progressPercent =
-            (List.length state.completedLessons * 100) // totalLessonCount
+                SessionInProgress sessionInProgress ->
+                    let
+                        totalLessonCount =
+                            List.length (sessionInProgress.completedLessons ++ sessionInProgress.remainingLessons) + 1
+                    in
+                    ( (List.length sessionInProgress.completedLessons * 100) // totalLessonCount
+                    , viewLessonWorkspace state sessionInProgress.currentLesson
+                    )
     in
     { body =
-        [ [ viewInputElement state
-                |> Element.el
-                    [ Element.Background.color (Element.rgb255 116 190 254)
-                    , Element.padding defaultFontSize
-                    ]
+        [ [ workspaceElement
           , Element.text "Your progress:"
           , viewProgressBar { progressPercent = progressPercent }
           ]
@@ -164,6 +259,88 @@ view state =
         ]
     , title = "Silent Teacher"
     }
+
+
+viewLessonWorkspace : { a | time : Time.Posix } -> LessonWorkspace -> Element.Element Event
+viewLessonWorkspace stateWithTime workspace =
+    let
+        hintElement =
+            hintAnimationDurationProgressFromLesson stateWithTime workspace
+                |> Maybe.map
+                    (\hintAnimationProgress ->
+                        let
+                            progressFloat =
+                                toFloat hintAnimationProgress.progressMicro * 1.0e-6
+
+                            envelope =
+                                max 0 (1.5 - abs (progressFloat * 2 - 1) * 2)
+                        in
+                        viewInputElement { isHint = True } workspace
+                            |> Element.el
+                                [ Element.moveRight (sin (progressFloat * 100) * progressFloat * 4 * envelope)
+                                , Element.alpha (min 1 (10 - 10 * progressFloat))
+                                ]
+                    )
+                |> Maybe.withDefault Element.none
+    in
+    [ viewInputElement { isHint = False } workspace
+    , hintElement
+    ]
+        |> Element.row [ Element.spacing (defaultFontSize * 3) ]
+
+
+viewInputElement : { isHint : Bool } -> LessonWorkspace -> Element.Element Event
+viewInputElement { isHint } workspace =
+    let
+        inputOrHintRow =
+            [ Element.text "="
+            , if isHint then
+                Element.text workspace.lesson.solution
+                    |> Element.el [ Element.Font.family [ Element.Font.monospace ] ]
+
+              else
+                Element.Input.text
+                    [ onEnter (UserInputSubmitSolution workspace.submissionInput)
+                    , Element.Font.family [ Element.Font.monospace ]
+                    ]
+                    { onChange = UserInputPrepareSubmission
+                    , text = workspace.submissionInput
+                    , placeholder = Just (Element.Input.placeholder [] (Element.text "?"))
+                    , label = Element.Input.labelHidden "Solution"
+                    }
+            ]
+                |> Element.row [ Element.spacing defaultFontSize ]
+    in
+    [ [ workspace.lesson.lesson
+            |> Html.text
+            |> List.singleton
+            |> Html.div
+                [ HA.style "white-space" "pre"
+                , HA.style "font-family" "monospace, monospace"
+                ]
+            |> Element.html
+      ]
+        |> Element.column []
+    , inputOrHintRow
+        |> Element.el [ Element.centerY ]
+        |> Element.el
+            (List.concat
+                [ [ Element.width (Element.fill |> Element.minimum 160)
+                  , Element.height (Element.px (defaultFontSize * 3))
+                  ]
+                , if isHint then
+                    [ Element.Background.color (Element.rgb255 255 106 0) ]
+
+                  else
+                    []
+                ]
+            )
+    ]
+        |> Element.column [ Element.spacing defaultFontSize ]
+        |> Element.el
+            [ Element.Background.color (Element.rgb255 116 190 254)
+            , Element.padding defaultFontSize
+            ]
 
 
 viewProgressBar : { progressPercent : Int } -> Element.Element e
@@ -197,43 +374,6 @@ viewProgressBar { progressPercent } =
                         ]
                 )
             ]
-
-
-viewInputElement : State -> Element.Element Event
-viewInputElement state =
-    let
-        inputSideElement =
-            case state.remainingLessons of
-                currentLesson :: _ ->
-                    [ [ currentLesson.lesson
-                            |> Html.text
-                            |> List.singleton
-                            |> Html.div
-                                [ HA.style "white-space" "pre"
-                                , HA.style "font-family" "monospace, monospace"
-                                ]
-                            |> Element.html
-                      ]
-                        |> Element.column []
-                    , [ Element.text "="
-                      , Element.Input.text
-                            [ onEnter (UserInputSubmitSolution state.expression)
-                            , Element.Font.family [ Element.Font.monospace ]
-                            ]
-                            { onChange = UserInputChangeExpression
-                            , text = state.expression
-                            , placeholder = Just (Element.Input.placeholder [] (Element.text "?"))
-                            , label = Element.Input.labelHidden "Solution"
-                            }
-                      ]
-                        |> Element.row [ Element.spacing defaultFontSize ]
-                    ]
-                        |> Element.column [ Element.spacing defaultFontSize ]
-
-                [] ->
-                    Element.text "All lessons complete 🎉"
-    in
-    inputSideElement
 
 
 computeSolutionFromLessonInContext : Pine.ExpressionContext -> Lesson -> String
@@ -271,3 +411,28 @@ onEnter event =
 defaultFontSize : Int
 defaultFontSize =
     16
+
+
+hintAnimationDurationProgressFromLesson : { a | time : Time.Posix } -> LessonWorkspace -> Maybe { progressMicro : Int }
+hintAnimationDurationProgressFromLesson stateWithTime workspace =
+    workspace.wrongSubmissionTime
+        |> Maybe.andThen
+            (\wrongSubmissionTime ->
+                let
+                    wrongSubmissionAge =
+                        Time.posixToMillis stateWithTime.time - Time.posixToMillis wrongSubmissionTime
+
+                    progressMicro =
+                        wrongSubmissionAge * 1000000 // hintAnimationDurationMs
+                in
+                if progressMicro <= 1000000 then
+                    Just { progressMicro = progressMicro }
+
+                else
+                    Nothing
+            )
+
+
+hintAnimationDurationMs : Int
+hintAnimationDurationMs =
+    2000
