@@ -3,6 +3,7 @@ module Frontend.SilentTeacher exposing (State, main)
 import Browser
 import Browser.Navigation
 import Element
+import Element.Background
 import Element.Font
 import Element.Input
 import ElmInteractive
@@ -139,6 +140,68 @@ update event stateBefore =
 view : State -> Browser.Document Event
 view state =
     let
+        totalLessonCount =
+            List.length (state.completedLessons ++ state.remainingLessons)
+
+        progressPercent =
+            (List.length state.completedLessons * 100) // totalLessonCount
+    in
+    { body =
+        [ [ viewInputElement state
+                |> Element.el
+                    [ Element.Background.color (Element.rgb255 116 190 254)
+                    , Element.padding defaultFontSize
+                    ]
+          , Element.text "Your progress:"
+          , viewProgressBar { progressPercent = progressPercent }
+          ]
+            |> Element.column
+                [ Element.spacing defaultFontSize
+                , Element.padding 10
+                , Element.width Element.fill
+                ]
+            |> Element.layout [ Element.Font.size defaultFontSize ]
+        ]
+    , title = "Silent Teacher"
+    }
+
+
+viewProgressBar : { progressPercent : Int } -> Element.Element e
+viewProgressBar { progressPercent } =
+    [ Html.div [] []
+        |> Element.html
+        |> Element.el
+            [ Element.width (Element.fillPortion progressPercent)
+            , Element.height Element.fill
+            , Element.Background.color (Element.rgb255 0 153 15)
+            ]
+    , Html.div [] []
+        |> Element.html
+        |> Element.el
+            [ Element.width (Element.fillPortion (100 - progressPercent)) ]
+    ]
+        |> Element.row
+            [ Element.width Element.fill
+            , Element.height (Element.px (defaultFontSize * 2))
+            ]
+        |> Element.el
+            [ Element.width Element.fill
+            , Element.padding (defaultFontSize // 2)
+            , Element.Background.color (Element.rgb255 85 85 85)
+            , Element.inFront
+                (Element.text (String.fromInt progressPercent ++ " %")
+                    |> Element.el
+                        [ Element.Font.color (Element.rgb255 250 250 250)
+                        , Element.centerX
+                        , Element.centerY
+                        ]
+                )
+            ]
+
+
+viewInputElement : State -> Element.Element Event
+viewInputElement state =
+    let
         inputSideElement =
             case state.remainingLessons of
                 currentLesson :: _ ->
@@ -153,7 +216,10 @@ view state =
                       ]
                         |> Element.column []
                     , [ Element.text "="
-                      , Element.Input.text [ onEnter (UserInputSubmitSolution state.expression) ]
+                      , Element.Input.text
+                            [ onEnter (UserInputSubmitSolution state.expression)
+                            , Element.Font.family [ Element.Font.monospace ]
+                            ]
                             { onChange = UserInputChangeExpression
                             , text = state.expression
                             , placeholder = Just (Element.Input.placeholder [] (Element.text "?"))
@@ -167,18 +233,7 @@ view state =
                 [] ->
                     Element.text "All lessons complete 🎉"
     in
-    { body =
-        [ [ inputSideElement
-          ]
-            |> Element.column
-                [ Element.spacing defaultFontSize
-                , Element.padding 10
-                , Element.width Element.fill
-                ]
-            |> Element.layout [ Element.Font.size defaultFontSize ]
-        ]
-    , title = "Silent Teacher"
-    }
+    inputSideElement
 
 
 computeSolutionFromLessonInContext : Pine.ExpressionContext -> Lesson -> String
