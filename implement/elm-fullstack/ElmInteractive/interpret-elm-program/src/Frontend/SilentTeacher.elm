@@ -69,6 +69,10 @@ let
     b = "de"
 in
     a ++ b"""
+    , "List.length [ 1, 3 ]"
+    , """List.head []"""
+    , """List.head [ "a", "b" ]"""
+    , """List.drop 1 [ "a", "b", "c" ]"""
     ]
         |> List.map String.trim
 
@@ -161,7 +165,20 @@ update event stateBefore =
                     ( stateBefore, Cmd.none )
 
                 SessionInProgress sessionInProgress ->
-                    if submission == sessionInProgress.currentLesson.lesson.solution then
+                    let
+                        submissionRepresentations =
+                            submission
+                                :: (stateBefore.evaluationContext
+                                        |> Result.toMaybe
+                                        |> Maybe.map
+                                            (\evaluationContext ->
+                                                computeSolutionFromLessonInContext evaluationContext submission
+                                            )
+                                        |> Maybe.map List.singleton
+                                        |> Maybe.withDefault []
+                                   )
+                    in
+                    if List.member sessionInProgress.currentLesson.lesson.solution submissionRepresentations then
                         case sessionInProgress.remainingLessons of
                             [] ->
                                 ( { stateBefore | trainingSession = SessionCompleted }
