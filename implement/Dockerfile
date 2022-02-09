@@ -1,5 +1,5 @@
 # Build dotnet build image
-FROM mcr.microsoft.com/dotnet/sdk:6.0.100 AS build-env
+FROM mcr.microsoft.com/dotnet/sdk:6.0.102 AS build-env
 WORKDIR /app
 
 # Copy everything and build
@@ -8,7 +8,7 @@ WORKDIR /app/elm-fullstack
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:6.0.0 AS binaries
+FROM mcr.microsoft.com/dotnet/aspnet:6.0.2 AS binaries
 
 COPY --from=build-env /app/elm-fullstack/out /elm-fullstack/dotnet/
 
