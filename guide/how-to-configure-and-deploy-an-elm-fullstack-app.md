@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-01-16/elm-fullstack-bin-2128e2d0aa1fd8b0738a7fe4eba54d4a3d1a2b40-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-01-16/elm-fullstack-bin-2128e2d0aa1fd8b0738a7fe4eba54d4a3d1a2b40-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-02-09/elm-fullstack-bin-fa937e59515e89cd99bea06446fba4410f43e396-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-02-09/elm-fullstack-bin-fa937e59515e89cd99bea06446fba4410f43e396-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -272,7 +272,7 @@ On startup, the server restores the state of the process from the given store lo
 Here is a complete command to run a server that maintains the persistence of the Elm Fullstack process:
 
 ```cmd
-elm-fs  run-server  --process-store-path=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
+elm-fs  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
 When running this command, you will get an output like this:
@@ -305,7 +305,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2021-12-07.
+Welcome to the Elm Fullstack admin interface version 2022-02-09.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
