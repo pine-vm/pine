@@ -407,25 +407,15 @@ update event stateBefore =
 
                                 Just generateLink ->
                                     let
-                                        baseToUse =
-                                            if not generateLink.createDiffIfBaseAvailable then
-                                                Nothing
-
-                                            else
-                                                stateBefore.lastBackendLoadFromGitResult
-                                                    |> Maybe.andThen (Tuple.second >> Result.toMaybe)
-                                                    |> Maybe.andThen Result.toMaybe
-
                                         url =
-                                            stateBefore.url
-                                                |> Frontend.ProjectStateInUrl.setProjectStateInUrl
-                                                    workingState.fileTree
-                                                    baseToUse
-                                                    { filePathToOpen = workingState.editing.filePathOpenedInEditor }
+                                            setProjectStateInUrlForBookmark
+                                                { createDiffIfBaseAvailable = generateLink.createDiffIfBaseAvailable }
+                                                workingState
+                                                stateBefore
                                                 |> Url.toString
                                     in
                                     ( { dialogBefore | urlToProject = Just url }
-                                    , Navigation.replaceUrl stateBefore.navigationKey url
+                                    , Navigation.pushUrl stateBefore.navigationKey url
                                     )
                     in
                     ( { stateBefore | popup = Just (ModalDialog (GetLinkToProjectDialog dialog)) }, cmd )
@@ -580,9 +570,32 @@ update event stateBefore =
                         ( workspace, workspaceCmd ) =
                             workspaceBefore
                                 |> updateWorkspace { time = stateBefore.time } workspaceEvent
+
+                        shouldUpdateUrl =
+                            case workspaceEvent of
+                                UserInputCompile ->
+                                    True
+
+                                _ ->
+                                    False
+
+                        setProjectStateInUrlCmd =
+                            if shouldUpdateUrl then
+                                setProjectStateInUrlForBookmark
+                                    { createDiffIfBaseAvailable = True }
+                                    workspaceBefore
+                                    stateBefore
+                                    |> Url.toString
+                                    |> Navigation.pushUrl stateBefore.navigationKey
+
+                            else
+                                Cmd.none
                     in
                     ( { stateBefore | workspace = WorkspaceOk workspace }
-                    , Cmd.map WorkspaceEvent workspaceCmd
+                    , [ Cmd.map WorkspaceEvent workspaceCmd
+                      , setProjectStateInUrlCmd
+                      ]
+                        |> Cmd.batch
                     )
 
                 WorkspaceLoadingFromLink _ ->
@@ -616,6 +629,25 @@ update event stateBefore =
 
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+setProjectStateInUrlForBookmark : { createDiffIfBaseAvailable : Bool } -> WorkingProjectStateStructure -> State -> Url.Url
+setProjectStateInUrlForBookmark { createDiffIfBaseAvailable } workingState state =
+    let
+        baseToUse =
+            if not createDiffIfBaseAvailable then
+                Nothing
+
+            else
+                state.lastBackendLoadFromGitResult
+                    |> Maybe.andThen (Tuple.second >> Result.toMaybe)
+                    |> Maybe.andThen Result.toMaybe
+    in
+    state.url
+        |> Frontend.ProjectStateInUrl.setProjectStateInUrl
+            workingState.fileTree
+            baseToUse
+            { filePathToOpen = workingState.editing.filePathOpenedInEditor }
 
 
 updateForUserInputLoadFromGit : { time : Time.Posix } -> UserInputLoadFromGitEventStructure -> LoadFromGitDialogState -> ( LoadFromGitDialogState, Cmd Event )
@@ -726,7 +758,7 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
 
         ( state, compileCmd ) =
             if triggerCompileForFirstOpenedModule then
-                userInputCompileFileOpenedInEditor stateBeforeConsiderCompile
+                compileFileOpenedInEditor stateBeforeConsiderCompile
 
             else
                 ( stateBeforeConsiderCompile, Cmd.none )
@@ -841,7 +873,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
             ( stateBefore, elmFormatCmd stateBefore |> Maybe.withDefault Cmd.none )
 
         UserInputCompile ->
-            userInputCompileFileOpenedInEditor { stateBefore | viewEnlargedPane = Nothing }
+            compileFileOpenedInEditor { stateBefore | viewEnlargedPane = Nothing }
 
         UserInputCloseEditor ->
             ( let
@@ -1275,8 +1307,8 @@ loadFromGitCmd urlIntoGitRepository =
         (Result.map Tuple.second >> BackendLoadFromGitResultEvent urlIntoGitRepository)
 
 
-userInputCompileFileOpenedInEditor : WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
-userInputCompileFileOpenedInEditor stateBefore =
+compileFileOpenedInEditor : WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+compileFileOpenedInEditor stateBefore =
     case prepareCompileForFileOpenedInEditor stateBefore of
         Nothing ->
             ( stateBefore, Cmd.none )
