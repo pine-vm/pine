@@ -18,6 +18,7 @@ type MessageFromEditor
     | EditorActionCloseEditorEvent
     | EditorActionFormatDocumentEvent
     | EditorActionCompileEvent
+    | EditorActionInspectSyntaxEvent
     | RequestCompletionItemsEvent RequestCompletionItemsStruct
     | RequestHoverEvent RequestHoverStruct
 

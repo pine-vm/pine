@@ -28,6 +28,7 @@ module CompileFullstackApp exposing
     , parseInterfaceRecordTree
     , parseSourceFileFunction
     , parseSourceFileFunctionName
+    , parserDeadEndToString
     , parserDeadEndsToString
     )
 

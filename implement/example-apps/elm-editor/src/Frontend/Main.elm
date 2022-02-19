@@ -15,7 +15,6 @@ import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Navigation
 import Bytes
-import Bytes.Decode
 import Bytes.Encode
 import Common
 import CompilationInterface.GenerateJsonCoders
@@ -28,6 +27,7 @@ import Element.Events
 import Element.Font
 import Element.Input
 import Element.Region
+import Elm.Syntax.File
 import Elm.Syntax.Range
 import ElmMakeExecutableFile
 import File
@@ -54,6 +54,7 @@ import Keyboard.Event
 import Keyboard.Key
 import LanguageService
 import List.Extra
+import Parser
 import ProjectState_2021_01
 import Result.Extra
 import SHA256
@@ -106,6 +107,7 @@ type alias WorkingProjectStateStructure =
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
     , compilation : Maybe CompilationState
+    , syntaxInspection : Maybe SyntaxInspectionState
     , elmFormatResult : Maybe (Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure)
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
@@ -145,6 +147,11 @@ type CompilationPendingRequestOrigin
 type CompilationCompletedState
     = CompilationFailedLowering (List CompileFullstackApp.LocatedCompilationError)
     | ElmMakeRequestCompleted (Result (Http.Detailed.Error String) ElmMakeResultStructure)
+
+
+type alias SyntaxInspectionState =
+    { parseFileResult : Result String ( String, Result (List Parser.DeadEnd) Elm.Syntax.File.File )
+    }
 
 
 type WorkspacePane
@@ -187,6 +194,7 @@ type WorkspaceEventStructure
     | UserInputOpenFileInEditor (List String)
     | UserInputFormat
     | UserInputCompile
+    | UserInputInspectSyntax
     | UserInputCloseEditor
     | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
     | BackendElmFormatResponseEvent { filePath : List String, result : Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure }
@@ -755,6 +763,7 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
                 |> Maybe.withDefault False
             )
                 && (stateBeforeConsiderCompile.compilation == Nothing)
+                && (stateBeforeConsiderCompile.syntaxInspection == Nothing)
 
         ( state, compileCmd ) =
             if triggerCompileForFirstOpenedModule then
@@ -859,6 +868,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                         Frontend.MonacoEditor.EditorActionCompileEvent ->
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile stateBefore
 
+                        Frontend.MonacoEditor.EditorActionInspectSyntaxEvent ->
+                            updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputInspectSyntax stateBefore
+
                         Frontend.MonacoEditor.RequestCompletionItemsEvent requestCompletionItems ->
                             stateBefore
                                 |> provideCompletionItems requestCompletionItems
@@ -874,6 +886,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
         UserInputCompile ->
             compileFileOpenedInEditor { stateBefore | viewEnlargedPane = Nothing }
+
+        UserInputInspectSyntax ->
+            syntaxInspectFileOpenedInEditor { stateBefore | viewEnlargedPane = Nothing }
 
         UserInputCloseEditor ->
             ( let
@@ -1326,8 +1341,37 @@ compileFileOpenedInEditor stateBefore =
                         CompilationCompleted _ _ ->
                             Nothing
             in
-            ( { stateBefore | compilation = Just compilation }
+            ( { stateBefore
+                | compilation = Just compilation
+                , syntaxInspection = Nothing
+              }
             , Maybe.withDefault Cmd.none requestToBackendCmd
+            )
+
+
+syntaxInspectFileOpenedInEditor : WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+syntaxInspectFileOpenedInEditor stateBefore =
+    case fileOpenedInEditorFromWorkspace stateBefore of
+        Nothing ->
+            ( stateBefore, Cmd.none )
+
+        Just ( _, fileOpenedInEditor ) ->
+            let
+                parseFileResult =
+                    fileOpenedInEditor.asBytes
+                        |> stringFromFileContent
+                        |> Maybe.map
+                            (\fileContentString ->
+                                Ok ( fileContentString, CompileFullstackApp.parseElmModuleText fileContentString )
+                            )
+                        |> Maybe.withDefault (Err "Failed to decode file contents as string")
+            in
+            ( { stateBefore
+                | compilation = Nothing
+                , syntaxInspection =
+                    Just { parseFileResult = parseFileResult }
+              }
+            , Cmd.none
             )
 
 
@@ -2513,46 +2557,107 @@ viewOutputPaneContent :
     WorkingProjectStateStructure
     -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element WorkspaceEventStructure }
 viewOutputPaneContent state =
-    case state.compilation of
-        Nothing ->
-            { mainContent =
-                if filePathOpenedInEditorFromWorkspace state == Nothing then
-                    Element.none
-
-                else
-                    [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
-                        |> Element.text
-                    ]
-                        |> Element.paragraph [ Element.padding defaultFontSize ]
-            , header = Element.none
-            }
-
-        Just (CompilationCompleted requestIdentity compilationCompleted) ->
-            viewOutputPaneContentFromCompilationComplete state requestIdentity compilationCompleted
-
-        Just (CompilationInProgress compilationInProgress) ->
+    case state.syntaxInspection of
+        Just syntaxInspection ->
             let
-                elmMakeRequestEntryPointFilePathAbs =
-                    compilationInProgress.origin.requestFromUser.workingDirectoryPath
-                        ++ compilationInProgress.origin.requestFromUser.entryPointFilePathFromWorkingDirectory
-            in
-            { mainContent =
-                [ Element.text
-                    ("Compiling module '"
-                        ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
-                        ++ "' with inspection "
-                        ++ (if compilationInProgress.origin.requestFromUser.makeOptionDebug then
-                                "enabled"
+                errorElement errorText =
+                    [ Element.text "Error"
+                    , monospaceTextWithScrollbarsElement errorText
+                    ]
+                        |> Element.column
+                            [ Element.spacing defaultFontSize
+                            , Element.Font.color (Element.rgb 1 0.64 0)
+                            , Element.padding defaultFontSize
+                            , Element.width Element.fill
+                            , Element.height Element.fill
+                            ]
 
-                            else
-                                "disabled"
-                           )
-                        ++ " ..."
-                    )
-                ]
-                    |> Element.paragraph [ Element.padding defaultFontSize ]
+                monospaceTextWithScrollbarsElement =
+                    Html.text
+                        >> Element.html
+                        >> Element.el
+                            [ Element.htmlAttribute (HA.style "white-space" "pre")
+                            , Element.htmlAttribute attributeMonospaceFont
+                            , Element.htmlAttribute (HA.style "line-height" "normal")
+                            , Element.padding (defaultFontSize // 2)
+                            ]
+                        >> List.singleton
+                        >> Element.column
+                            [ Element.width Element.fill
+                            , Element.height Element.fill
+                            , Element.scrollbarX
+                            , Element.scrollbarY
+                            , Element.Background.color (Element.rgb 0.2 0.2 0.2)
+                            ]
+
+                mainContent =
+                    case syntaxInspection.parseFileResult of
+                        Err error ->
+                            errorElement error
+
+                        Ok ( fileContentString, Err parseErrors ) ->
+                            parseErrors
+                                |> List.map (CompileFullstackApp.parserDeadEndToString fileContentString)
+                                |> String.join "\n\n"
+                                |> errorElement
+
+                        Ok ( _, Ok parsedFile ) ->
+                            parsedFile
+                                |> Elm.Syntax.File.encode
+                                |> Json.Encode.encode 4
+                                |> monospaceTextWithScrollbarsElement
+                                |> List.singleton
+                                |> Element.column
+                                    [ Element.padding defaultFontSize
+                                    , Element.width Element.fill
+                                    , Element.height Element.fill
+                                    ]
+            in
+            { mainContent = mainContent
             , header = Element.none
             }
+
+        Nothing ->
+            case state.compilation of
+                Nothing ->
+                    { mainContent =
+                        if filePathOpenedInEditorFromWorkspace state == Nothing then
+                            Element.none
+
+                        else
+                            [ "No compilation started. You can use the 'Compile' button to check program text for errors and see your app in action."
+                                |> Element.text
+                            ]
+                                |> Element.paragraph [ Element.padding defaultFontSize ]
+                    , header = Element.none
+                    }
+
+                Just (CompilationCompleted requestIdentity compilationCompleted) ->
+                    viewOutputPaneContentFromCompilationComplete state requestIdentity compilationCompleted
+
+                Just (CompilationInProgress compilationInProgress) ->
+                    let
+                        elmMakeRequestEntryPointFilePathAbs =
+                            compilationInProgress.origin.requestFromUser.workingDirectoryPath
+                                ++ compilationInProgress.origin.requestFromUser.entryPointFilePathFromWorkingDirectory
+                    in
+                    { mainContent =
+                        [ Element.text
+                            ("Compiling module '"
+                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                ++ "' with inspection "
+                                ++ (if compilationInProgress.origin.requestFromUser.makeOptionDebug then
+                                        "enabled"
+
+                                    else
+                                        "disabled"
+                                   )
+                                ++ " ..."
+                            )
+                        ]
+                            |> Element.paragraph [ Element.padding defaultFontSize ]
+                    , header = Element.none
+                    }
 
 
 viewOutputPaneContentFromCompilationComplete :
@@ -3290,6 +3395,7 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     , decodeMessageFromMonacoEditorError = Nothing
     , lastTextReceivedFromEditor = Nothing
     , compilation = Nothing
+    , syntaxInspection = Nothing
     , elmFormatResult = Nothing
     , viewEnlargedPane = Nothing
     , enableInspectionOnCompile = False
@@ -3298,8 +3404,8 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
 
 
 stringFromFileContent : Bytes.Bytes -> Maybe String
-stringFromFileContent bytes =
-    Bytes.Decode.decode (Bytes.Decode.string (Bytes.width bytes)) bytes
+stringFromFileContent =
+    Common.decodeBytesToString
 
 
 fileContentFromString : String -> Bytes.Bytes

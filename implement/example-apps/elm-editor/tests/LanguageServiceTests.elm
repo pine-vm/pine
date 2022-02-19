@@ -680,6 +680,100 @@ beta =
                       , kind = Frontend.MonacoEditor.FunctionCompletionItemKind
                       }
                     ]
+        , Test.test "None in multi-line comment before module declaration" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+{- First line in comment
+Second line ✂➕
+-}
+
+module Main exposing (..)
+
+import Alpha exposing (..)
+import Beta
+
+
+beta : Int
+beta = 123
+
+"""
+                    []
+        , Test.test "None in middle of multi-line documentation comment on a function declaration" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+import Alpha exposing (..)
+import Beta
+
+
+{-| First line in comment
+Second line ✂➕
+-}
+beta : Int
+beta = 123
+
+"""
+                    []
+        , Test.test "None at the beginning of multi-line comment" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+import Alpha exposing (..)
+import Beta
+
+
+{-✂➕ First line in comment
+Second line
+-}
+
+
+beta : Int
+beta = 123
+
+"""
+                    []
+        , Test.test "None at the end of multi-line comment" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+import Alpha exposing (..)
+import Beta
+
+
+{- First line in comment
+Second line
+ ✂➕-}
+
+
+beta : Int
+beta = 123
+
+"""
+                    []
+        , Test.test "None in single-line comment in a function declaration" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+import Alpha exposing (..)
+import Beta
+
+
+beta : Int
+beta =
+  -- Beginning of the comment ✂➕
+  123
+
+"""
+                    []
 
         {- TODO: Add test for completion items out of core modules like List, Maybe, Result, etc. -}
         ]

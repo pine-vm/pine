@@ -7,6 +7,7 @@ These functions enable editor features like completion suggestions and hover tip
 import Common
 import CompilationInterface.SourceFiles
 import CompileFullstackApp
+import Elm.Syntax.Comments
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
@@ -322,154 +323,192 @@ provideCompletionItems request languageServiceState =
             []
 
         Just currentFileCacheItem ->
-            case currentFileCacheItem.parsedFileLastSuccess of
-                Nothing ->
-                    []
+            let
+                cursorIsInCommentInCompleteSyntax =
+                    case currentFileCacheItem.parsedFile of
+                        Nothing ->
+                            False
 
-                Just fileOpenedInEditor ->
-                    let
-                        fileOpenedInEditorModuleName =
-                            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value fileOpenedInEditor.syntax.moduleDefinition)
-
-                        lineUntilPosition =
-                            request.textUntilPosition
-                                |> String.lines
-                                |> List.reverse
-                                |> List.head
-                                |> Maybe.withDefault ""
-
-                        lineUntilPositionWords =
-                            stringSplitByChar (\c -> not (charIsAllowedInDeclarationName c || c == '.')) lineUntilPosition
-
-                        completionPrefix =
-                            lineUntilPositionWords
-                                |> List.reverse
-                                |> List.head
-                                |> Maybe.map (String.split "." >> List.reverse >> List.drop 1 >> List.reverse)
-                                |> Maybe.withDefault []
-
-                        completionPrefixIsNamespace =
-                            case completionPrefix of
-                                [] ->
-                                    True
-
-                                prefixFirstElement :: _ ->
-                                    prefixFirstElement
-                                        |> String.toList
+                        Just parsedFile ->
+                            locationIsInComment
+                                { row = request.cursorLineNumber
+                                , column =
+                                    (request.textUntilPosition
+                                        |> String.lines
+                                        |> List.reverse
                                         |> List.head
-                                        |> Maybe.map Char.isUpper
-                                        |> Maybe.withDefault True
-
-                        modulesAvailableForImport =
-                            modulesAvailableForImportFromState languageServiceState
-
-                        moduleNamesToNotSuggestForImport =
-                            [ fileOpenedInEditorModuleName ]
-
-                        modulesToSuggestForImport =
-                            modulesAvailableForImport
-                                |> List.map .syntax
-                                |> List.filter
-                                    (\availableModule ->
-                                        not
-                                            (List.any
-                                                ((==)
-                                                    (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value availableModule.moduleDefinition))
-                                                )
-                                                moduleNamesToNotSuggestForImport
-                                            )
+                                        |> Maybe.withDefault ""
+                                        |> String.length
                                     )
-                                |> List.sortBy
-                                    (.moduleDefinition
-                                        >> Elm.Syntax.Node.value
-                                        >> Elm.Syntax.Module.moduleName
-                                        >> String.join "."
-                                    )
+                                        + 1
+                                }
+                                parsedFile.syntax
+            in
+            if cursorIsInCommentInCompleteSyntax then
+                []
 
-                        importedModules =
-                            importedModulesFromFile fileOpenedInEditor languageServiceState
-
-                        currentModuleDeclarations =
-                            completionItemsFromModule fileOpenedInEditor
-
-                        fromLocals =
-                            currentModuleDeclarations.fromLocals
-                                |> List.filter
-                                    (.scope
-                                        >> rangeIntersectsLocation
-                                            { row = request.cursorLineNumber, column = String.length lineUntilPosition }
-                                    )
-                                |> List.map .completionItem
-
-                        importExposings =
-                            importExposingsFromFile fileOpenedInEditor languageServiceState
-
-                        localDeclarationsAndImportExposings =
-                            List.map .completionItem currentModuleDeclarations.fromTopLevel
-                                ++ importExposings
-                                ++ fromLocals
-
-                        localDeclarationsAfterPrefix =
-                            if completionPrefix == [] then
-                                localDeclarationsAndImportExposings
-
-                            else
-                                case
-                                    importedModules
-                                        |> List.filter (.importedName >> (==) completionPrefix)
-                                        |> List.head
-                                        |> Maybe.andThen .parsedModule
-                                of
-                                    Nothing ->
-                                        []
-
-                                    Just referencedModule ->
-                                        (completionItemsFromModule referencedModule).fromTopLevel
-                                            |> List.filter .isExposed
-                                            |> List.map .completionItem
-
-                        importedModulesAfterPrefix =
-                            importedModules
-                                |> List.filterMap
-                                    (\importedModule ->
-                                        if List.take (List.length completionPrefix) importedModule.importedName == completionPrefix then
-                                            case List.drop (List.length completionPrefix) importedModule.importedName of
-                                                [] ->
-                                                    Nothing
-
-                                                restAfterPrefix ->
-                                                    Just ( restAfterPrefix, importedModule )
-
-                                        else
-                                            Nothing
-                                    )
-
-                        fromImports =
-                            importedModulesAfterPrefix
-                                |> List.filterMap
-                                    (\( importedModuleNameRestAfterPrefix, importedModule ) ->
-                                        importedModule.parsedModule
-                                            |> Maybe.map
-                                                (.syntax
-                                                    >> moduleCompletionItemFromModuleSyntax
-                                                        { importedName = Just importedModule.importedName
-                                                        , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
-                                                        }
-                                                )
-                                    )
-                    in
-                    if List.head lineUntilPositionWords == Just "import" then
-                        modulesToSuggestForImport
-                            |> List.map
-                                (moduleCompletionItemFromModuleSyntax
-                                    { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
-                                )
-
-                    else if completionPrefixIsNamespace then
-                        fromImports ++ List.sortBy .insertText localDeclarationsAfterPrefix
-
-                    else
+            else
+                case currentFileCacheItem.parsedFileLastSuccess of
+                    Nothing ->
                         []
+
+                    Just fileOpenedInEditor ->
+                        provideCompletionItemsInModule
+                            { fileOpenedInEditor = fileOpenedInEditor
+                            , cursorLineNumber = request.cursorLineNumber
+                            , textUntilPosition = request.textUntilPosition
+                            }
+                            languageServiceState
+
+
+provideCompletionItemsInModule :
+    { fileOpenedInEditor : ParsedModuleCache, cursorLineNumber : Int, textUntilPosition : String }
+    -> LanguageServiceState
+    -> List Frontend.MonacoEditor.MonacoCompletionItem
+provideCompletionItemsInModule request languageServiceState =
+    let
+        fileOpenedInEditorModuleName =
+            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value request.fileOpenedInEditor.syntax.moduleDefinition)
+
+        lineUntilPosition =
+            request.textUntilPosition
+                |> String.lines
+                |> List.reverse
+                |> List.head
+                |> Maybe.withDefault ""
+
+        lineUntilPositionWords =
+            stringSplitByChar (\c -> not (charIsAllowedInDeclarationName c || c == '.')) lineUntilPosition
+
+        completionPrefix =
+            lineUntilPositionWords
+                |> List.reverse
+                |> List.head
+                |> Maybe.map (String.split "." >> List.reverse >> List.drop 1 >> List.reverse)
+                |> Maybe.withDefault []
+
+        completionPrefixIsNamespace =
+            case completionPrefix of
+                [] ->
+                    True
+
+                prefixFirstElement :: _ ->
+                    prefixFirstElement
+                        |> String.toList
+                        |> List.head
+                        |> Maybe.map Char.isUpper
+                        |> Maybe.withDefault True
+
+        modulesAvailableForImport =
+            modulesAvailableForImportFromState languageServiceState
+
+        moduleNamesToNotSuggestForImport =
+            [ fileOpenedInEditorModuleName ]
+
+        modulesToSuggestForImport =
+            modulesAvailableForImport
+                |> List.map .syntax
+                |> List.filter
+                    (\availableModule ->
+                        not
+                            (List.any
+                                ((==)
+                                    (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value availableModule.moduleDefinition))
+                                )
+                                moduleNamesToNotSuggestForImport
+                            )
+                    )
+                |> List.sortBy
+                    (.moduleDefinition
+                        >> Elm.Syntax.Node.value
+                        >> Elm.Syntax.Module.moduleName
+                        >> String.join "."
+                    )
+
+        importedModules =
+            importedModulesFromFile request.fileOpenedInEditor languageServiceState
+
+        currentModuleDeclarations =
+            completionItemsFromModule request.fileOpenedInEditor
+
+        fromLocals =
+            currentModuleDeclarations.fromLocals
+                |> List.filter
+                    (.scope
+                        >> rangeIntersectsLocation
+                            { row = request.cursorLineNumber, column = String.length lineUntilPosition }
+                    )
+                |> List.map .completionItem
+
+        importExposings =
+            importExposingsFromFile request.fileOpenedInEditor languageServiceState
+
+        localDeclarationsAndImportExposings =
+            List.map .completionItem currentModuleDeclarations.fromTopLevel
+                ++ importExposings
+                ++ fromLocals
+
+        localDeclarationsAfterPrefix =
+            if completionPrefix == [] then
+                localDeclarationsAndImportExposings
+
+            else
+                case
+                    importedModules
+                        |> List.filter (.importedName >> (==) completionPrefix)
+                        |> List.head
+                        |> Maybe.andThen .parsedModule
+                of
+                    Nothing ->
+                        []
+
+                    Just referencedModule ->
+                        (completionItemsFromModule referencedModule).fromTopLevel
+                            |> List.filter .isExposed
+                            |> List.map .completionItem
+
+        importedModulesAfterPrefix =
+            importedModules
+                |> List.filterMap
+                    (\importedModule ->
+                        if List.take (List.length completionPrefix) importedModule.importedName == completionPrefix then
+                            case List.drop (List.length completionPrefix) importedModule.importedName of
+                                [] ->
+                                    Nothing
+
+                                restAfterPrefix ->
+                                    Just ( restAfterPrefix, importedModule )
+
+                        else
+                            Nothing
+                    )
+
+        fromImports =
+            importedModulesAfterPrefix
+                |> List.filterMap
+                    (\( importedModuleNameRestAfterPrefix, importedModule ) ->
+                        importedModule.parsedModule
+                            |> Maybe.map
+                                (.syntax
+                                    >> moduleCompletionItemFromModuleSyntax
+                                        { importedName = Just importedModule.importedName
+                                        , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
+                                        }
+                                )
+                    )
+    in
+    if List.head lineUntilPositionWords == Just "import" then
+        modulesToSuggestForImport
+            |> List.map
+                (moduleCompletionItemFromModuleSyntax
+                    { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
+                )
+
+    else if completionPrefixIsNamespace then
+        fromImports ++ List.sortBy .insertText localDeclarationsAfterPrefix
+
+    else
+        []
 
 
 importedModulesFromFile :
@@ -1385,6 +1424,63 @@ removeWrappingFromMultilineComment withWrapping =
          else
             lessPrefix
         )
+
+
+locationIsInComment : Elm.Syntax.Range.Location -> Elm.Syntax.File.File -> Bool
+locationIsInComment location parsedModule =
+    parsedModule
+        |> listCommentsInFile
+        |> List.map
+            (\commentNode ->
+                -- Map ranges of single-line comments to cover more of line in `rangeIntersectsLocation`
+                let
+                    originalRange =
+                        Elm.Syntax.Node.range commentNode
+
+                    range =
+                        if String.startsWith "--" (Elm.Syntax.Node.value commentNode) then
+                            { originalRange
+                                | end = { row = originalRange.end.row, column = originalRange.end.column + 9999 }
+                            }
+
+                        else
+                            originalRange
+                in
+                Elm.Syntax.Node.Node range (Elm.Syntax.Node.value commentNode)
+            )
+        |> List.any (Elm.Syntax.Node.range >> rangeIntersectsLocation location)
+
+
+listCommentsInFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
+listCommentsInFile parsedModule =
+    let
+        fromDeclarations =
+            parsedModule.declarations
+                |> List.concatMap (Elm.Syntax.Node.value >> listCommentsFromDeclaration)
+    in
+    parsedModule.comments ++ fromDeclarations
+
+
+listCommentsFromDeclaration : Elm.Syntax.Declaration.Declaration -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
+listCommentsFromDeclaration declaration =
+    case declaration of
+        Elm.Syntax.Declaration.FunctionDeclaration function ->
+            function.documentation |> Maybe.map List.singleton |> Maybe.withDefault []
+
+        Elm.Syntax.Declaration.AliasDeclaration typeAlias ->
+            typeAlias.documentation |> Maybe.map List.singleton |> Maybe.withDefault []
+
+        Elm.Syntax.Declaration.CustomTypeDeclaration typeDeclaration ->
+            typeDeclaration.documentation |> Maybe.map List.singleton |> Maybe.withDefault []
+
+        Elm.Syntax.Declaration.PortDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.InfixDeclaration _ ->
+            []
+
+        Elm.Syntax.Declaration.Destructuring _ _ ->
+            []
 
 
 rangeIntersectsLocation : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Range -> Bool

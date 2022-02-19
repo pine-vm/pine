@@ -173,6 +173,10 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         parent?.messageFromMonacoFrame?.({"EditorActionCompileEvent":[]});
     }
 
+    function editorActionInspectSyntax() {
+        parent?.messageFromMonacoFrame?.({"EditorActionInspectSyntaxEvent":[]});
+    }
+
     function editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition, cursorLineNumber) {
 
         return new Promise(function (resolve, reject) {
@@ -391,6 +395,19 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
             run: function(ed) {
                 editorActionCompile();
+                return null;
+            }
+        });
+
+        editor.addAction({
+            id: 'inspect-syntax-action',
+            label: 'Inspect Syntax',
+            keybindings: [],
+            precondition: null,
+            keybindingContext: null,
+
+            run: function(ed) {
+                editorActionInspectSyntax();
                 return null;
             }
         });
