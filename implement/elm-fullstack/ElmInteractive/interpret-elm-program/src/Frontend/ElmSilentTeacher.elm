@@ -1,4 +1,4 @@
-module Frontend.SilentTeacher exposing (State, main)
+module Frontend.ElmSilentTeacher exposing (State, main)
 
 import Browser
 import Browser.Dom
@@ -430,7 +430,7 @@ view state =
                 ]
             |> Element.layout [ Element.Font.size defaultFontSize ]
         ]
-    , title = "Silent Teacher"
+    , title = "Elm Silent Teacher"
     }
 
 
