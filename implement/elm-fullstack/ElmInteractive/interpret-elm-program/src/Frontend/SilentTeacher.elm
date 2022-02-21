@@ -414,8 +414,14 @@ view state =
     in
     { body =
         [ [ workspaceElement
-          , Element.text "Your progress:"
-          , viewProgressBar { progressPercent = progressPercent }
+          , [ Element.text "Your progress:"
+            , viewProgressBar { progressPercent = progressPercent }
+            ]
+                |> Element.column
+                    [ Element.spacing defaultFontSize
+                    , Element.width Element.fill
+                    , Element.htmlAttribute (HA.style "user-select" "none")
+                    ]
           ]
             |> Element.column
                 [ Element.spacing defaultFontSize
@@ -457,8 +463,8 @@ viewLessonWorkspace stateWithTime workspace =
                     ( { isEditingSubmission = Nothing
                       , challengeCache = failedSubmission.challenge
                       }
-                    , { moveRight = sin (progressFloat * 100) * progressFloat * 4 * envelope
-                      , opacity = min 1 (10 - 10 * progressFloat)
+                    , { moveRight = sin (progressFloat * 80) * progressFloat * 3 * envelope
+                      , opacity = min 1 (7 - 7 * progressFloat)
                       }
                     )
     in
@@ -626,4 +632,4 @@ defaultFontSize =
 
 failedSubmissionAnimationDurationMs : Int
 failedSubmissionAnimationDurationMs =
-    2000
+    2500
