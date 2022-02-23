@@ -3,7 +3,6 @@ module Frontend.ElmSilentTeacher exposing (State, main)
 import Browser
 import Browser.Dom
 import Browser.Events
-import Browser.Navigation
 import Element
 import Element.Background
 import Element.Font
@@ -19,14 +18,12 @@ import Random.Char
 import Random.String
 import Task
 import Time
-import Url
 
 
 type alias State =
     { time : Time.Posix
     , evaluationContextResult : Result String Pine.ExpressionContext
     , trainingSession : TrainingSessionState
-    , navigationKey : Browser.Navigation.Key
     }
 
 
@@ -65,8 +62,6 @@ type alias ChallengeCache =
 type Event
     = UserInputPrepareSubmission String
     | UserInputSubmitSolution String
-    | UrlRequest Browser.UrlRequest
-    | UrlChange Url.Url
     | TimeArrivedEvent Time.Posix
     | DiscardEvent
 
@@ -124,8 +119,8 @@ in
         |> List.map Lesson
 
 
-init : Url.Url -> Browser.Navigation.Key -> ( State, Cmd Event )
-init url navigationKey =
+init : ( State, Cmd Event )
+init =
     let
         time =
             Time.millisToPosix 0
@@ -150,7 +145,6 @@ init url navigationKey =
     in
     ( { time = Time.millisToPosix 0
       , evaluationContextResult = evaluationContextResult
-      , navigationKey = navigationKey
       , trainingSession = trainingSession
       }
     , Cmd.none
@@ -194,13 +188,11 @@ generateChallenge state lesson =
 
 main : Program () State Event
 main =
-    Browser.application
+    Browser.document
         { init = always init
         , update = update
         , subscriptions = subscriptions
         , view = view
-        , onUrlRequest = UrlRequest
-        , onUrlChange = UrlChange
         }
 
 
@@ -321,12 +313,6 @@ updateLessFocusCmd event stateBefore =
                                         )
                                 , Cmd.none
                                 )
-
-        UrlRequest _ ->
-            ( stateBefore, Cmd.none )
-
-        UrlChange _ ->
-            ( stateBefore, Cmd.none )
 
         TimeArrivedEvent time ->
             let
