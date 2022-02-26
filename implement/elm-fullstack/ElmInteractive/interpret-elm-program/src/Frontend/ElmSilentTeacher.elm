@@ -277,8 +277,14 @@ updateLessFocusCmd event stateBefore =
                                                 |> Maybe.map List.singleton
                                                 |> Maybe.withDefault []
                                            )
+
+                                removeWhitespace =
+                                    String.replace " " ""
                             in
-                            if List.member editingSubmission.challenge.solution submissionRepresentations then
+                            if
+                                List.member editingSubmission.challenge.solution submissionRepresentations
+                                    && (removeWhitespace submission == removeWhitespace editingSubmission.challenge.solution)
+                            then
                                 case sessionInProgress.remainingLessons of
                                     [] ->
                                         ( { stateBefore | trainingSession = SessionCompleted }
