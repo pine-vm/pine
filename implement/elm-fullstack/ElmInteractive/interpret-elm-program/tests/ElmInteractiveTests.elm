@@ -396,6 +396,28 @@ named_literal =
                     , submission = """ {   } """
                     , expectedValueElmExpression = """{}"""
                     }
+        , Test.test "Multiply integers with result not fitting into 64 bits" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = "1234567890 * 3456789012 * 5678901234 * 7890123456"
+                    , expectedValueElmExpression = "191221166964169353263730685698459294720"
+                    }
+
+        {-
+            The current representation in the Elm syntax parser causes a precision loss for integer literals: https://github.com/stil4m/elm-syntax/blob/3d4ee78c007ee8987b8cfe6c3ea07e5500632b6b/src/Elm/Syntax/Expression.elm#L115-L116
+            For discussion of this issue, see also https://github.com/stil4m/elm-syntax/issues/108
+
+           , Test.test "Literal integer not fitting into 64 bits" <|
+               \_ ->
+                   expectationForElmInteractiveScenario
+                       { context = DefaultContext
+                       , previousSubmissions = []
+                       , submission = "289589985200426854031398766651426"
+                       , expectedValueElmExpression = "289589985200426854031398766651426"
+                       }
+        -}
         ]
 
 

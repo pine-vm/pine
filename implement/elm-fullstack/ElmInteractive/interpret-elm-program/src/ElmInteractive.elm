@@ -204,9 +204,7 @@ elmValueAsJson elmValue =
         ElmInteger integer ->
             integer
                 |> BigInt.toString
-                |> String.toInt
-                |> Maybe.map Json.Encode.int
-                |> Maybe.withDefault (Json.Encode.string "Failed to map from BigInt to Int")
+                |> Json.Encode.string
 
         ElmChar char ->
             Json.Encode.string (String.fromChar char)
