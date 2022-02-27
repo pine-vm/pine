@@ -21,6 +21,7 @@
             "elm-community/maybe-extra": "5.2.0",
             "elm-community/random-extra": "3.2.0",
             "elm-community/result-extra": "2.4.0",
+            "elm-community/string-extra": "4.0.1",
             "folkertdev/elm-sha2": "1.0.0",
             "mdgriffith/elm-ui": "1.1.8",
             "stil4m/elm-syntax": "7.2.8",

@@ -16,7 +16,9 @@ import Json.Decode
 import Pine
 import Random
 import Random.Char
+import Random.List
 import Random.String
+import String.Extra
 import Task
 import Time
 
@@ -112,8 +114,24 @@ in
     , Random.constant "List.head []"
     , Random.constant """List.head [ "a", "b" ]"""
     , Random.constant """List.drop 1 [ "a", "b", "c" ]"""
+    , lessonPipelineChallenge
     ]
         |> List.map Lesson
+
+
+lessonPipelineChallenge : Random.Generator LessonChallenge
+lessonPipelineChallenge =
+    [ "pizza", "lasagna", "risotto", "focaccia", "arancino", "tiramisu" ]
+        |> Random.List.shuffle
+        |> Random.map (List.take 3 >> List.map (String.Extra.surround "\"") >> String.join ", ")
+        |> Random.andThen
+            (\list ->
+                Random.int 1 2
+                    |> Random.map (\dropCount -> "[ " ++ list ++ """ ]
+|> List.drop """ ++ String.fromInt dropCount ++ """
+|> List.head
+""")
+            )
 
 
 init : ( State, Cmd Event )
@@ -522,6 +540,7 @@ viewChallengeElement { challengeCache, isEditingSubmission } =
             |> Html.div
                 [ HA.style "white-space" "pre"
                 , HA.style "font-family" "monospace, monospace"
+                , HA.style "line-height" "normal"
                 ]
             |> Element.html
       ]
