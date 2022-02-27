@@ -108,15 +108,11 @@ in
         )
         (Random.String.string 2 Random.Char.lowerCaseLatin)
         (Random.String.string 1 Random.Char.lowerCaseLatin)
+    , Random.constant "List.length [ 1, 3 ]"
+    , Random.constant "List.head []"
+    , Random.constant """List.head [ "a", "b" ]"""
+    , Random.constant """List.drop 1 [ "a", "b", "c" ]"""
     ]
-        ++ ([ "List.length [ 1, 3 ]"
-            , """List.head []"""
-            , """List.head [ "a", "b" ]"""
-            , """List.drop 1 [ "a", "b", "c" ]"""
-            ]
-                |> List.map String.trim
-                |> List.map Random.constant
-           )
         |> List.map Lesson
 
 
