@@ -5,6 +5,7 @@ import Browser.Dom
 import Browser.Events
 import Element
 import Element.Background
+import Element.Border
 import Element.Font
 import Element.Input
 import ElmInteractive
@@ -405,7 +406,7 @@ view state =
                     )
     in
     { body =
-        [ [ workspaceElement
+        [ [ workspaceElement |> Element.el [ Element.Font.size (defaultFontSize + 4) ]
           , [ Element.text "Your progress:"
             , viewProgressBar { progressPercent = progressPercent }
             ]
@@ -414,6 +415,10 @@ view state =
                     , Element.width Element.fill
                     , Element.htmlAttribute (HA.style "user-select" "none")
                     ]
+          , [ Element.text "Source code for Elm Silent Teacher: "
+            , linkElementFromHref "https://github.com/elm-fullstack/elm-fullstack/blob/main/implement/elm-fullstack/ElmInteractive/interpret-elm-program/src/Frontend/ElmSilentTeacher.elm"
+            ]
+                |> Element.paragraph [ Element.Font.size (defaultFontSize - 2) ]
           ]
             |> Element.column
                 [ Element.spacing defaultFontSize
@@ -625,3 +630,21 @@ defaultFontSize =
 failedSubmissionAnimationDurationMs : Int
 failedSubmissionAnimationDurationMs =
     2500
+
+
+linkElementFromHref : String -> Element.Element event
+linkElementFromHref href =
+    linkElementFromUrlAndTextLabel { url = href, labelText = href }
+
+
+linkElementFromUrlAndTextLabel : { url : String, labelText : String } -> Element.Element event
+linkElementFromUrlAndTextLabel { url, labelText } =
+    Element.link
+        [ -- https://github.com/mdgriffith/elm-ui/issues/158#issuecomment-624231895
+          Element.Border.widthEach { bottom = 1, left = 0, top = 0, right = 0 }
+        , Element.Border.color <| Element.rgba 0 0 0 0
+        , Element.mouseOver [ Element.Border.color <| Element.rgba 0.5 0.5 0.5 0.7 ]
+        ]
+        { url = url
+        , label = labelText |> Element.text
+        }
