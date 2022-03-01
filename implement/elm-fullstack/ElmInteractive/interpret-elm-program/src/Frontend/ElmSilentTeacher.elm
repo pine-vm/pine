@@ -429,8 +429,8 @@ view state =
                     , Element.width Element.fill
                     , Element.htmlAttribute (HA.style "user-select" "none")
                     ]
-          , [ Element.text "Source code for Elm Silent Teacher: "
-            , linkElementFromHref "https://github.com/elm-fullstack/elm-fullstack/blob/main/implement/elm-fullstack/ElmInteractive/interpret-elm-program/src/Frontend/ElmSilentTeacher.elm"
+          , [ Element.text "To learn about Elm Silent Teacher, see "
+            , linkElementFromHref "https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/elm-silent-teacher.md"
             ]
                 |> Element.paragraph [ Element.Font.size (defaultFontSize - 2) ]
           ]
