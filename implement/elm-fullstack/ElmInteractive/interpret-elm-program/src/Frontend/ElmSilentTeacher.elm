@@ -110,6 +110,7 @@ in
         )
         (Random.String.string 2 Random.Char.lowerCaseLatin)
         (Random.String.string 1 Random.Char.lowerCaseLatin)
+    , lessonSimplestNamedFunctionChallenge
     , Random.constant "List.length [ 1, 3 ]"
     , Random.constant "List.head []"
     , Random.constant """List.head [ "a", "b" ]"""
@@ -117,6 +118,21 @@ in
     , lessonPipelineChallenge
     ]
         |> List.map Lesson
+
+
+lessonSimplestNamedFunctionChallenge : Random.Generator LessonChallenge
+lessonSimplestNamedFunctionChallenge =
+    Random.map2
+        (\x y ->
+            """
+let
+    hello a =
+        a + """ ++ String.fromInt x ++ """
+in
+hello """ ++ String.fromInt y
+        )
+        (Random.int 0 9)
+        (Random.int 0 9)
 
 
 lessonPipelineChallenge : Random.Generator LessonChallenge
