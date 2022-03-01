@@ -439,7 +439,11 @@ view state =
                 , Element.padding 10
                 , Element.width Element.fill
                 ]
-            |> Element.layout [ Element.Font.size defaultFontSize ]
+            |> Element.layout
+                [ Element.Font.size defaultFontSize
+                , Element.Background.color (Element.rgb 1 1 1)
+                , Element.Font.color (Element.rgb 0 0 0)
+                ]
         ]
     , title = "Elm Silent Teacher"
     }
