@@ -111,12 +111,12 @@ in
         (Random.String.string 2 Random.Char.lowerCaseLatin)
         (Random.String.string 1 Random.Char.lowerCaseLatin)
     , lessonSimplestNamedFunctionChallenge
-    , Random.constant "List.length [ 1, 3 ]"
-    , Random.constant "List.head []"
-    , Random.constant """List.head [ "a", "b" ]"""
-    , Random.constant """List.drop 1 [ "a", "b", "c" ]"""
+    , lessonListLength
+    , lessonListHead
+    , lessonListDrop
     , lessonPipelineChallenge
     ]
+        |> List.concatMap (List.repeat 3)
         |> List.map Lesson
 
 
@@ -133,6 +133,36 @@ hello """ ++ String.fromInt y
         )
         (Random.int 0 9)
         (Random.int 0 9)
+
+
+lessonListLength : Random.Generator LessonChallenge
+lessonListLength =
+    Random.map2
+        (\randomList length ->
+            "List.length [ " ++ (String.join ", " (List.take length randomList) ++ " ]")
+        )
+        (List.range 0 9 |> Random.List.shuffle |> Random.map (List.map String.fromInt))
+        (Random.int 0 5)
+
+
+lessonListHead : Random.Generator LessonChallenge
+lessonListHead =
+    Random.map2
+        (\randomList length ->
+            "List.head [ " ++ (String.join ", " (List.take length randomList) ++ " ]")
+        )
+        (List.range 0 9 |> Random.List.shuffle |> Random.map (List.map String.fromInt))
+        (Random.int 0 3)
+
+
+lessonListDrop : Random.Generator LessonChallenge
+lessonListDrop =
+    Random.map2
+        (\randomList dropCount ->
+            "List.drop " ++ String.fromInt dropCount ++ " [ " ++ (String.join ", " randomList ++ " ]")
+        )
+        (List.range 0 9 |> Random.List.shuffle |> Random.map (List.take 3 >> List.map String.fromInt))
+        (Random.int 0 4)
 
 
 lessonPipelineChallenge : Random.Generator LessonChallenge
