@@ -64,12 +64,25 @@ static public class ZipArchive
         return zipArchive;
     }
 
-    static public IEnumerable<(string name, byte[] content)> EntriesFromZipArchive(byte[] zipArchive)
+    static public IEnumerable<(string name, byte[] content)> FileEntriesFromZipArchive(byte[] zipArchive) =>
+        EntriesFromZipArchive(
+            zipArchive: zipArchive,
+            includeEntry: entry => !entry.FullName.Replace('\\', '/').EndsWith('/'));
+
+    static public IEnumerable<(string name, byte[] content)> EntriesFromZipArchive(byte[] zipArchive) =>
+        EntriesFromZipArchive(zipArchive: zipArchive, includeEntry: _ => true);
+
+    static public IEnumerable<(string name, byte[] content)> EntriesFromZipArchive(
+        byte[] zipArchive,
+        Func<System.IO.Compression.ZipArchiveEntry, bool> includeEntry)
     {
         using var fclZipArchive = new System.IO.Compression.ZipArchive(new MemoryStream(zipArchive), System.IO.Compression.ZipArchiveMode.Read);
 
         foreach (var entry in fclZipArchive.Entries)
         {
+            if (!includeEntry(entry))
+                continue;
+
             using var entryStream = entry.Open();
             using var memoryStream = new MemoryStream();
 
