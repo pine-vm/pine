@@ -31,12 +31,16 @@ type alias State =
 
 
 type TrainingSessionState
-    = SessionInProgress
-        { remainingLessons : List Lesson
-        , currentLesson : LessonWorkspace
-        , completedLessons : List Lesson
-        }
+    = SessionInProgress SessionInProgressStructure
     | SessionCompleted
+
+
+type alias SessionInProgressStructure =
+    { remainingLessons : List Lesson
+    , currentLesson : LessonWorkspace
+    , completedLessons : List Lesson
+    , progressBar : AnimatedProgressBar
+    }
 
 
 type alias LessonWorkspace =
@@ -67,6 +71,10 @@ type Event
     | UserInputSubmitSolution String
     | TimeArrivedEvent Time.Posix
     | DiscardEvent
+
+
+type alias AnimatedProgressBar =
+    { animationProgressMicro : Int }
 
 
 lessons : List Lesson
@@ -199,6 +207,7 @@ init =
                                 { evaluationContextResult = evaluationContextResult, time = time }
                                 currentLesson
                         , completedLessons = []
+                        , progressBar = initProgressBar
                         }
 
                 [] ->
@@ -268,12 +277,23 @@ subscriptions state =
             Sub.none
 
         SessionInProgress sessionInProgress ->
-            case sessionInProgress.currentLesson.challenge of
-                EditingSubmission _ ->
-                    lowFrequency
+            let
+                animationForProgressBar =
+                    progressBarAnimationTask sessionInProgress /= Nothing
 
-                FailedSubmission _ ->
-                    Browser.Events.onAnimationFrame TimeArrivedEvent
+                animationForFailedSubmission =
+                    case sessionInProgress.currentLesson.challenge of
+                        EditingSubmission _ ->
+                            False
+
+                        FailedSubmission _ ->
+                            True
+            in
+            if animationForFailedSubmission || animationForProgressBar then
+                Browser.Events.onAnimationFrame TimeArrivedEvent
+
+            else
+                lowFrequency
 
 
 update : Event -> State -> ( State, Cmd Event )
@@ -361,6 +381,7 @@ updateLessFocusCmd event stateBefore =
                                                     , completedLessons =
                                                         sessionInProgress.completedLessons
                                                             ++ [ sessionInProgress.currentLesson.lesson ]
+                                                    , progressBar = sessionInProgress.progressBar
                                                     }
                                           }
                                         , Cmd.none
@@ -384,14 +405,46 @@ updateLessFocusCmd event stateBefore =
         TimeArrivedEvent time ->
             let
                 state =
-                    { stateBefore | time = time }
+                    updateTrainingSessionInProgress
+                        (updateSessionInProgressTimeArrived { time = time } stateBefore)
+                        stateBefore
             in
-            ( state |> updateTrainingSessionCurrentLesson (updateLessonWorkspaceTimeArrived state)
+            ( { state | time = time }
             , Cmd.none
             )
 
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+updateSessionInProgressTimeArrived : { time : Time.Posix } -> State -> SessionInProgressStructure -> SessionInProgressStructure
+updateSessionInProgressTimeArrived { time } stateBefore sessionInProgress =
+    let
+        timeDeltaMilli =
+            Time.posixToMillis time - Time.posixToMillis stateBefore.time
+
+        currentLessonUpdated =
+            { sessionInProgress
+                | currentLesson = sessionInProgress.currentLesson |> updateLessonWorkspaceTimeArrived stateBefore
+            }
+    in
+    currentLessonUpdated
+        |> progressBarAnimationTask
+        |> Maybe.map ((|>) { durationMilli = timeDeltaMilli })
+        |> Maybe.withDefault currentLessonUpdated
+
+
+progressBarAnimationTask : SessionInProgressStructure -> Maybe ({ durationMilli : Int } -> SessionInProgressStructure)
+progressBarAnimationTask sessionInProgress =
+    let
+        totalLessonCount =
+            List.length (sessionInProgress.completedLessons ++ sessionInProgress.remainingLessons) + 1
+
+        progressMicro =
+            (List.length sessionInProgress.completedLessons * 1000000) // totalLessonCount
+    in
+    animateProgressBar { destMicro = progressMicro } sessionInProgress.progressBar
+        |> Maybe.map (\anim -> \time -> { sessionInProgress | progressBar = anim time })
 
 
 updateLessonWorkspaceTimeArrived : State -> LessonWorkspace -> LessonWorkspace
@@ -430,25 +483,29 @@ workspaceUserInputPrepareSubmission expression workspace =
 
 
 updateTrainingSessionCurrentLesson : (LessonWorkspace -> LessonWorkspace) -> State -> State
-updateTrainingSessionCurrentLesson updateCurrentLesson state =
+updateTrainingSessionCurrentLesson updateCurrentLesson =
+    updateTrainingSessionInProgress
+        (\sessionInProgress ->
+            { sessionInProgress | currentLesson = updateCurrentLesson sessionInProgress.currentLesson }
+        )
+
+
+updateTrainingSessionInProgress : (SessionInProgressStructure -> SessionInProgressStructure) -> State -> State
+updateTrainingSessionInProgress updateSessionInProgress state =
     case state.trainingSession of
         SessionCompleted ->
             state
 
         SessionInProgress sessionInProgress ->
             { state
-                | trainingSession =
-                    SessionInProgress
-                        { sessionInProgress
-                            | currentLesson = updateCurrentLesson sessionInProgress.currentLesson
-                        }
+                | trainingSession = SessionInProgress (updateSessionInProgress sessionInProgress)
             }
 
 
 view : State -> Browser.Document Event
 view state =
     let
-        ( progressPercent, workspaceElement ) =
+        ( progressMicro, workspaceElement ) =
             case state.trainingSession of
                 SessionCompleted ->
                     ( 100
@@ -457,18 +514,14 @@ view state =
                     )
 
                 SessionInProgress sessionInProgress ->
-                    let
-                        totalLessonCount =
-                            List.length (sessionInProgress.completedLessons ++ sessionInProgress.remainingLessons) + 1
-                    in
-                    ( (List.length sessionInProgress.completedLessons * 100) // totalLessonCount
+                    ( sessionInProgress.progressBar.animationProgressMicro
                     , viewLessonWorkspace state sessionInProgress.currentLesson
                     )
     in
     { body =
         [ [ workspaceElement |> Element.el [ Element.Font.size (defaultFontSize + 4) ]
           , [ Element.text "Your progress:"
-            , viewProgressBar { progressPercent = progressPercent }
+            , viewProgressBar { progressMicro = progressMicro }
             ]
                 |> Element.column
                     [ Element.spacing defaultFontSize
@@ -617,19 +670,19 @@ viewChallengeElement { challengeCache, isEditingSubmission } =
             ]
 
 
-viewProgressBar : { progressPercent : Int } -> Element.Element e
-viewProgressBar { progressPercent } =
+viewProgressBar : { progressMicro : Int } -> Element.Element e
+viewProgressBar { progressMicro } =
     [ Html.div [] []
         |> Element.html
         |> Element.el
-            [ Element.width (Element.fillPortion progressPercent)
+            [ Element.width (Element.fillPortion progressMicro)
             , Element.height Element.fill
             , Element.Background.color (Element.rgb255 0 153 15)
             ]
     , Html.div [] []
         |> Element.html
         |> Element.el
-            [ Element.width (Element.fillPortion (100 - progressPercent)) ]
+            [ Element.width (Element.fillPortion (1000000 - progressMicro)) ]
     ]
         |> Element.row
             [ Element.width Element.fill
@@ -640,7 +693,7 @@ viewProgressBar { progressPercent } =
             , Element.padding (defaultFontSize // 2)
             , Element.Background.color (Element.rgb255 85 85 85)
             , Element.inFront
-                (Element.text (String.fromInt progressPercent ++ " %")
+                (Element.text (String.fromInt (progressMicro // 10000) ++ " %")
                     |> Element.el
                         [ Element.Font.color (Element.rgb255 250 250 250)
                         , Element.centerX
@@ -713,3 +766,54 @@ linkElementFromUrlAndTextLabel { url, labelText } =
         { url = url
         , label = labelText |> Element.text
         }
+
+
+initProgressBar : AnimatedProgressBar
+initProgressBar =
+    { animationProgressMicro = 0 }
+
+
+animateProgressBar :
+    { destMicro : Int }
+    -> AnimatedProgressBar
+    -> Maybe ({ durationMilli : Int } -> AnimatedProgressBar)
+animateProgressBar { destMicro } progressBar =
+    let
+        maxDeltaMicro =
+            destMicro - progressBar.animationProgressMicro
+    in
+    if maxDeltaMicro == 0 then
+        Nothing
+
+    else
+        Just
+            (\{ durationMilli } ->
+                let
+                    speedupByDelta =
+                        (maxDeltaMicro // 300)
+                            |> abs
+                            |> toFloat
+                            |> sqrt
+                            |> (*) 7
+                            |> round
+
+                    deltaMicroAbs =
+                        maxDeltaMicro
+                            |> abs
+                            |> min durationMilli
+                            |> (*) speedupByDelta
+                            |> min (abs maxDeltaMicro)
+
+                    animationProgressMicro =
+                        progressBar.animationProgressMicro
+                            + (deltaMicroAbs
+                                * (if maxDeltaMicro < 0 then
+                                    -1
+
+                                   else
+                                    1
+                                  )
+                              )
+                in
+                { progressBar | animationProgressMicro = animationProgressMicro }
+            )
