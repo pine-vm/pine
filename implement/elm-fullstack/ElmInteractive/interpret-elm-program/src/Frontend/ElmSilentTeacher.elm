@@ -57,18 +57,22 @@ type alias LessonChallenge =
     String
 
 
-type LessonWorkspaceChallenge
-    = EditingSubmission { challenge : ChallengeCache, submissionInput : String }
-    | FailedSubmission { time : Time.Posix, challenge : ChallengeCache }
+type alias LessonWorkspaceChallenge =
+    { challenge : LessonChallenge
+    , cachedCorrectAnswer : String
+    , usersAnswer : WorkspaceAnswer
+    }
 
 
-type alias ChallengeCache =
-    { challenge : LessonChallenge, solution : String }
+type WorkspaceAnswer
+    = WritingAnswer String
+    | CheckedAnswer { answer : String, cachedCorrect : Bool }
 
 
 type Event
-    = UserInputPrepareSubmission String
-    | UserInputSubmitSolution String
+    = UserInputWriteAnswer String
+    | UserInputCheckAnswer String
+    | UserInputContinue
     | TimeArrivedEvent Time.Posix
     | DiscardEvent
 
@@ -226,16 +230,6 @@ initLessonWorkspace :
     -> Lesson
     -> LessonWorkspace
 initLessonWorkspace state lesson =
-    { lesson = lesson
-    , challenge = EditingSubmission { challenge = generateChallenge state lesson, submissionInput = "" }
-    }
-
-
-generateChallenge :
-    { a | evaluationContextResult : Result String Pine.ExpressionContext, time : Time.Posix }
-    -> Lesson
-    -> ChallengeCache
-generateChallenge state lesson =
     let
         challenge =
             Random.initialSeed (Time.posixToMillis state.time)
@@ -243,7 +237,7 @@ generateChallenge state lesson =
                 |> Tuple.first
                 |> String.trim
 
-        solution =
+        correctAnswer =
             case state.evaluationContextResult of
                 Err error ->
                     "Failed to initialize the evaluation context: " ++ error
@@ -251,8 +245,12 @@ generateChallenge state lesson =
                 Ok evaluationContext ->
                     computeSolutionFromLessonInContext evaluationContext challenge
     in
-    { challenge = challenge
-    , solution = solution
+    { lesson = lesson
+    , challenge =
+        { challenge = challenge
+        , cachedCorrectAnswer = correctAnswer
+        , usersAnswer = WritingAnswer ""
+        }
     }
 
 
@@ -262,12 +260,31 @@ main =
         { init = always init
         , update = update
         , subscriptions = subscriptions
-        , view = view
+        , view = view >> .document
         }
 
 
 subscriptions : State -> Sub.Sub Event
 subscriptions state =
+    let
+        maybeOnKeyDownEnter =
+            (view state).onKeyDownEnter
+
+        keyDownSubscriptions =
+            case maybeOnKeyDownEnter of
+                Nothing ->
+                    []
+
+                Just onKeyDownEnter ->
+                    [ Browser.Events.onKeyDown (keyEventDecoderIsEnter onKeyDownEnter) ]
+    in
+    timeSubscriptions state
+        :: keyDownSubscriptions
+        |> Sub.batch
+
+
+timeSubscriptions : State -> Sub.Sub Event
+timeSubscriptions state =
     let
         lowFrequency =
             Time.every 200 TimeArrivedEvent
@@ -280,16 +297,8 @@ subscriptions state =
             let
                 animationForProgressBar =
                     progressBarAnimationTask sessionInProgress /= Nothing
-
-                animationForFailedSubmission =
-                    case sessionInProgress.currentLesson.challenge of
-                        EditingSubmission _ ->
-                            False
-
-                        FailedSubmission _ ->
-                            True
             in
-            if animationForFailedSubmission || animationForProgressBar then
+            if animationForProgressBar then
                 Browser.Events.onAnimationFrame TimeArrivedEvent
 
             else
@@ -305,11 +314,11 @@ update event stateBefore =
         sessionShowsInputElement stateWithSession =
             case stateWithSession.trainingSession of
                 SessionInProgress sessionInProgress ->
-                    case sessionInProgress.currentLesson.challenge of
-                        EditingSubmission _ ->
+                    case sessionInProgress.currentLesson.challenge.usersAnswer of
+                        WritingAnswer _ ->
                             True
 
-                        _ ->
+                        CheckedAnswer _ ->
                             False
 
                 _ ->
@@ -317,7 +326,7 @@ update event stateBefore =
 
         focusCmd =
             if sessionShowsInputElement state && not (sessionShowsInputElement stateBefore) then
-                Browser.Dom.focus challengeSubmissionInputElementId
+                Browser.Dom.focus challengeAnswerInputElementId
                     |> Task.attempt (always DiscardEvent)
 
             else
@@ -329,43 +338,34 @@ update event stateBefore =
 updateLessFocusCmd : Event -> State -> ( State, Cmd Event )
 updateLessFocusCmd event stateBefore =
     case event of
-        UserInputPrepareSubmission expression ->
-            ( stateBefore
-                |> updateTrainingSessionCurrentLesson (workspaceUserInputPrepareSubmission expression)
+        UserInputWriteAnswer answer ->
+            ( updateTrainingSessionCurrentLesson (workspaceUserInputWriteAnswer answer) stateBefore
             , Cmd.none
             )
 
-        UserInputSubmitSolution submission ->
+        UserInputCheckAnswer answer ->
+            ( stateBefore
+                |> updateTrainingSessionCurrentLesson
+                    (\workspace ->
+                        workspaceUserInputCheckAnswer workspace
+                            |> Maybe.map ((|>) stateBefore >> (|>) answer)
+                            |> Maybe.withDefault workspace
+                    )
+            , Cmd.none
+            )
+
+        UserInputContinue ->
             case stateBefore.trainingSession of
                 SessionCompleted ->
                     ( stateBefore, Cmd.none )
 
                 SessionInProgress sessionInProgress ->
-                    case sessionInProgress.currentLesson.challenge of
-                        FailedSubmission _ ->
+                    case sessionInProgress.currentLesson.challenge.usersAnswer of
+                        WritingAnswer _ ->
                             ( stateBefore, Cmd.none )
 
-                        EditingSubmission editingSubmission ->
-                            let
-                                submissionRepresentations =
-                                    submission
-                                        :: (stateBefore.evaluationContextResult
-                                                |> Result.toMaybe
-                                                |> Maybe.map
-                                                    (\evaluationContext ->
-                                                        computeSolutionFromLessonInContext evaluationContext submission
-                                                    )
-                                                |> Maybe.map List.singleton
-                                                |> Maybe.withDefault []
-                                           )
-
-                                removeWhitespace =
-                                    String.replace " " ""
-                            in
-                            if
-                                List.member editingSubmission.challenge.solution submissionRepresentations
-                                    && (removeWhitespace submission == removeWhitespace editingSubmission.challenge.solution)
-                            then
+                        CheckedAnswer checkedAnswer ->
+                            if checkedAnswer.cachedCorrect then
                                 case sessionInProgress.remainingLessons of
                                     [] ->
                                         ( { stateBefore | trainingSession = SessionCompleted }
@@ -390,15 +390,7 @@ updateLessFocusCmd event stateBefore =
                             else
                                 ( stateBefore
                                     |> updateTrainingSessionCurrentLesson
-                                        (\currentLesson ->
-                                            { currentLesson
-                                                | challenge =
-                                                    FailedSubmission
-                                                        { time = stateBefore.time
-                                                        , challenge = editingSubmission.challenge
-                                                        }
-                                            }
-                                        )
+                                        (\currentLesson -> initLessonWorkspace stateBefore currentLesson.lesson)
                                 , Cmd.none
                                 )
 
@@ -417,21 +409,40 @@ updateLessFocusCmd event stateBefore =
             ( stateBefore, Cmd.none )
 
 
+checkIfAnswerCorrect : State -> LessonWorkspaceChallenge -> String -> Bool
+checkIfAnswerCorrect state lessonWorkspace answer =
+    let
+        answerRepresentations =
+            answer
+                :: (state.evaluationContextResult
+                        |> Result.toMaybe
+                        |> Maybe.map
+                            (\evaluationContext ->
+                                computeSolutionFromLessonInContext
+                                    evaluationContext
+                                    answer
+                            )
+                        |> Maybe.map List.singleton
+                        |> Maybe.withDefault []
+                   )
+
+        removeWhitespace =
+            String.replace " " ""
+    in
+    List.member lessonWorkspace.cachedCorrectAnswer answerRepresentations
+        && (removeWhitespace answer == removeWhitespace lessonWorkspace.cachedCorrectAnswer)
+
+
 updateSessionInProgressTimeArrived : { time : Time.Posix } -> State -> SessionInProgressStructure -> SessionInProgressStructure
 updateSessionInProgressTimeArrived { time } stateBefore sessionInProgress =
     let
         timeDeltaMilli =
             Time.posixToMillis time - Time.posixToMillis stateBefore.time
-
-        currentLessonUpdated =
-            { sessionInProgress
-                | currentLesson = sessionInProgress.currentLesson |> updateLessonWorkspaceTimeArrived stateBefore
-            }
     in
-    currentLessonUpdated
+    sessionInProgress
         |> progressBarAnimationTask
         |> Maybe.map ((|>) { durationMilli = timeDeltaMilli })
-        |> Maybe.withDefault currentLessonUpdated
+        |> Maybe.withDefault sessionInProgress
 
 
 progressBarAnimationTask : SessionInProgressStructure -> Maybe ({ durationMilli : Int } -> SessionInProgressStructure)
@@ -440,46 +451,72 @@ progressBarAnimationTask sessionInProgress =
         totalLessonCount =
             List.length (sessionInProgress.completedLessons ++ sessionInProgress.remainingLessons) + 1
 
+        currentLessonCheckedCorrect =
+            case sessionInProgress.currentLesson.challenge.usersAnswer of
+                WritingAnswer _ ->
+                    False
+
+                CheckedAnswer checkedAnswer ->
+                    checkedAnswer.cachedCorrect
+
+        completedLessonsCount =
+            List.length sessionInProgress.completedLessons
+                + (if currentLessonCheckedCorrect then
+                    1
+
+                   else
+                    0
+                  )
+
         progressMicro =
-            (List.length sessionInProgress.completedLessons * 1000000) // totalLessonCount
+            (completedLessonsCount * 1000000) // totalLessonCount
     in
     animateProgressBar { destMicro = progressMicro } sessionInProgress.progressBar
         |> Maybe.map (\anim -> \time -> { sessionInProgress | progressBar = anim time })
 
 
-updateLessonWorkspaceTimeArrived : State -> LessonWorkspace -> LessonWorkspace
-updateLessonWorkspaceTimeArrived state lessonWorkspace =
-    let
-        challenge =
-            case lessonWorkspace.challenge of
-                EditingSubmission _ ->
-                    lessonWorkspace.challenge
-
-                FailedSubmission failedSubmission ->
-                    let
-                        failedSubmissionAge =
-                            Time.posixToMillis state.time - Time.posixToMillis failedSubmission.time
-                    in
-                    if failedSubmissionAge < failedSubmissionAnimationDurationMs then
-                        lessonWorkspace.challenge
-
-                    else
-                        EditingSubmission
-                            { challenge = generateChallenge state lessonWorkspace.lesson
-                            , submissionInput = ""
-                            }
-    in
-    { lessonWorkspace | challenge = challenge }
-
-
-workspaceUserInputPrepareSubmission : String -> LessonWorkspace -> LessonWorkspace
-workspaceUserInputPrepareSubmission expression workspace =
-    case workspace.challenge of
-        FailedSubmission _ ->
+workspaceUserInputWriteAnswer : String -> LessonWorkspace -> LessonWorkspace
+workspaceUserInputWriteAnswer expression workspace =
+    case workspace.challenge.usersAnswer of
+        CheckedAnswer _ ->
             workspace
 
-        EditingSubmission editingSubmission ->
-            { workspace | challenge = EditingSubmission { editingSubmission | submissionInput = expression } }
+        WritingAnswer _ ->
+            let
+                challengeBefore =
+                    workspace.challenge
+            in
+            { workspace | challenge = { challengeBefore | usersAnswer = WritingAnswer expression } }
+
+
+workspaceUserInputCheckAnswer : LessonWorkspace -> Maybe (State -> String -> LessonWorkspace)
+workspaceUserInputCheckAnswer workspace =
+    case workspace.challenge.usersAnswer of
+        CheckedAnswer _ ->
+            Nothing
+
+        WritingAnswer answer ->
+            if String.isEmpty answer then
+                Nothing
+
+            else
+                let
+                    challengeBefore =
+                        workspace.challenge
+                in
+                Just
+                    (\state expression ->
+                        { workspace
+                            | challenge =
+                                { challengeBefore
+                                    | usersAnswer =
+                                        CheckedAnswer
+                                            { answer = expression
+                                            , cachedCorrect = checkIfAnswerCorrect state challengeBefore expression
+                                            }
+                                }
+                        }
+                    )
 
 
 updateTrainingSessionCurrentLesson : (LessonWorkspace -> LessonWorkspace) -> State -> State
@@ -502,141 +539,237 @@ updateTrainingSessionInProgress updateSessionInProgress state =
             }
 
 
-view : State -> Browser.Document Event
+view : State -> { document : Browser.Document Event, onKeyDownEnter : Maybe Event }
 view state =
     let
         ( progressMicro, workspaceElement ) =
             case state.trainingSession of
                 SessionCompleted ->
-                    ( 100
-                    , Element.text "All lessons complete 🎉"
-                        |> Element.el [ Element.padding (defaultFontSize * 2) ]
+                    ( 1000000
+                    , { visualTree =
+                            Element.text "All lessons complete 🎉"
+                                |> Element.el [ Element.padding (defaultFontSize * 2) ]
+                      , onKeyDownEnter = Nothing
+                      }
                     )
 
                 SessionInProgress sessionInProgress ->
                     ( sessionInProgress.progressBar.animationProgressMicro
-                    , viewLessonWorkspace state sessionInProgress.currentLesson
+                    , viewLessonWorkspace sessionInProgress.currentLesson
                     )
     in
-    { body =
-        [ [ [ viewProgressBar { progressMicro = progressMicro }
-            ]
+    { document =
+        { body =
+            [ [ [ viewProgressBar { progressMicro = progressMicro }
+                ]
+                    |> Element.column
+                        [ Element.spacing defaultFontSize
+                        , Element.width Element.fill
+                        , Element.htmlAttribute (HA.style "user-select" "none")
+                        ]
+              , workspaceElement.visualTree
+                    |> Element.el
+                        [ Element.Font.size (defaultFontSize + 4)
+                        , Element.width Element.fill
+                        , Element.height Element.fill
+                        ]
+              , [ Element.text "To learn about Elm Silent Teacher, see "
+                , linkElementFromHref "https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/elm-silent-teacher.md"
+                ]
+                    |> Element.paragraph [ Element.Font.size (defaultFontSize - 2) ]
+              ]
                 |> Element.column
-                    [ Element.spacing defaultFontSize
+                    [ Element.spacing (defaultFontSize * 2)
+                    , Element.padding 10
                     , Element.width Element.fill
-                    , Element.htmlAttribute (HA.style "user-select" "none")
+                    , Element.height Element.fill
                     ]
-          , workspaceElement |> Element.el [ Element.Font.size (defaultFontSize + 4) ]
-          , [ Element.text "To learn about Elm Silent Teacher, see "
-            , linkElementFromHref "https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/elm-silent-teacher.md"
+                |> Element.layout
+                    [ Element.Font.size defaultFontSize
+                    , Element.Background.color (Element.rgb 1 1 1)
+                    , Element.Font.color (Element.rgb 0 0 0)
+                    ]
             ]
-                |> Element.paragraph [ Element.Font.size (defaultFontSize - 2) ]
-          ]
-            |> Element.column
-                [ Element.spacing (defaultFontSize * 2)
-                , Element.padding 10
-                , Element.width Element.fill
-                ]
-            |> Element.layout
-                [ Element.Font.size defaultFontSize
-                , Element.Background.color (Element.rgb 1 1 1)
-                , Element.Font.color (Element.rgb 0 0 0)
-                ]
-        ]
-    , title = "Elm Silent Teacher"
+        , title = "Elm Silent Teacher"
+        }
+    , onKeyDownEnter = workspaceElement.onKeyDownEnter
     }
 
 
-viewLessonWorkspace : { a | time : Time.Posix } -> LessonWorkspace -> Element.Element Event
-viewLessonWorkspace stateWithTime workspace =
+viewLessonWorkspace : LessonWorkspace -> { visualTree : Element.Element Event, onKeyDownEnter : Maybe Event }
+viewLessonWorkspace workspace =
     let
-        ( challengeElementConfig, animation ) =
-            case workspace.challenge of
-                EditingSubmission editingSubmission ->
-                    ( { isEditingSubmission = Just editingSubmission.submissionInput
-                      , challengeCache = editingSubmission.challenge
-                      }
-                    , { moveRight = 0, opacity = 1 }
-                    )
+        ( answerText, answerIsReadOnly ) =
+            case workspace.challenge.usersAnswer of
+                WritingAnswer writingAnswer ->
+                    ( writingAnswer, False )
 
-                FailedSubmission failedSubmission ->
-                    let
-                        failedSubmissionAge =
-                            Time.posixToMillis stateWithTime.time - Time.posixToMillis failedSubmission.time
+                CheckedAnswer checkedAnswer ->
+                    ( checkedAnswer.answer, True )
 
-                        animationProgressMicro =
-                            failedSubmissionAge * 1000000 // failedSubmissionAnimationDurationMs
+        buttonColorGreen =
+            Element.rgb255 88 204 2
 
-                        progressFloat =
-                            toFloat animationProgressMicro * 1.0e-6
+        buttonColorRed =
+            Element.rgb255 255 75 75
 
-                        envelope =
-                            max 0 (1.5 - abs (progressFloat * 2 - 1) * 2)
-                    in
-                    ( { isEditingSubmission = Nothing
-                      , challengeCache = failedSubmission.challenge
-                      }
-                    , { moveRight = sin (progressFloat * 80) * progressFloat * 3 * envelope
-                      , opacity = min 1 (7 - 7 * progressFloat)
-                      }
-                    )
-    in
-    viewChallengeElement challengeElementConfig
-        |> Element.el
-            [ Element.moveRight animation.moveRight
-            , Element.alpha animation.opacity
+        buttonLabelCheck =
+            "Check"
+
+        buildFeedbackTextElement title correctSolution color =
+            [ Element.text title
+                |> Element.el
+                    [ Element.Font.size (defaultFontSize * 3 // 2)
+                    , Element.Font.bold
+                    ]
+            , Element.text correctSolution
+                |> Element.el [ Element.Font.family [ Element.Font.monospace ] ]
             ]
+                |> Element.column
+                    [ Element.Font.color color
+                    , Element.htmlAttribute (HA.style "cursor" "default")
+                    , Element.spacing (defaultFontSize // 2)
+                    ]
+
+        ( ( ( buttonEnabledBackgroundColor, feedbackBackgroundColor, feedbackTextElement ), buttonText ), buttonOnPress ) =
+            case workspace.challenge.usersAnswer of
+                WritingAnswer answer ->
+                    ( ( ( buttonColorGreen
+                        , Element.rgba 0 0 0 0
+                        , buildFeedbackTextElement "-" "-" (Element.rgb255 0 0 0)
+                            |> Element.el [ Element.transparent True ]
+                        )
+                      , buttonLabelCheck
+                      )
+                    , if workspaceUserInputCheckAnswer workspace /= Nothing then
+                        Just (UserInputCheckAnswer answer)
+
+                      else
+                        Nothing
+                    )
+
+                CheckedAnswer checkedAnswer ->
+                    ( ( if checkedAnswer.cachedCorrect then
+                            ( buttonColorGreen
+                            , Element.rgb255 215 255 184
+                            , buildFeedbackTextElement "Great!" " " (Element.rgb255 88 167 0)
+                            )
+
+                        else
+                            ( buttonColorRed
+                            , Element.rgb255 255 223 223
+                            , buildFeedbackTextElement "Correct solution:"
+                                workspace.challenge.cachedCorrectAnswer
+                                (Element.rgb255 234 43 43)
+                            )
+                      , "Continue"
+                      )
+                    , Just UserInputContinue
+                    )
+
+        feedbackElement =
+            [ feedbackTextElement
+                |> Element.el
+                    [ Element.alignLeft
+                    , Element.padding defaultFontSize
+                    ]
+            , feedbackButton
+                { labelText = String.toUpper buttonText
+                , onPress = buttonOnPress
+                , enabledBackgroundColor = buttonEnabledBackgroundColor
+                }
+                |> Element.el [ Element.alignRight ]
+            ]
+                |> Element.row
+                    [ Element.width Element.fill
+                    , Element.paddingXY (defaultFontSize * 2) defaultFontSize
+                    ]
+                |> Element.el
+                    [ Element.width Element.fill
+                    , Element.alignBottom
+                    , Element.Background.color feedbackBackgroundColor
+                    ]
+    in
+    { visualTree =
+        [ viewChallengeElement
+            { challenge = workspace.challenge.challenge
+            , answerText = answerText
+            , answerIsReadOnly = answerIsReadOnly
+            }
+            |> Element.el [ Element.centerX ]
+        , feedbackElement
+        ]
+            |> Element.column
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Element.spacing defaultFontSize
+                ]
+    , onKeyDownEnter = buttonOnPress
+    }
+
+
+feedbackButton : { labelText : String, onPress : Maybe e, enabledBackgroundColor : Element.Color } -> Element.Element e
+feedbackButton { labelText, onPress, enabledBackgroundColor } =
+    let
+        isEnabled =
+            onPress /= Nothing
+
+        ( fontColor, backgroundColor ) =
+            if isEnabled then
+                ( Element.rgb 1 1 1, enabledBackgroundColor )
+
+            else
+                ( Element.rgb 0.6 0.6 0.6, Element.rgb 0.8 0.8 0.8 )
+    in
+    Element.Input.button
+        [ Element.Font.letterSpacing (toFloat defaultFontSize / 10)
+
+        -- , Element.Font.family [ Element.Font.typeface "din-round", Element.Font.typeface "sans-serif" ]
+        , Element.Font.bold
+        , Element.Font.color fontColor
+        , Element.Background.color backgroundColor
+        , Element.htmlAttribute (HA.style "border-radius" "1em")
+        ]
+        { label =
+            Element.text labelText
+                |> Element.el [ Element.paddingXY (defaultFontSize * 3) defaultFontSize ]
+        , onPress = onPress
+        }
 
 
 viewChallengeElement :
-    { challengeCache : ChallengeCache, isEditingSubmission : Maybe String }
+    { challenge : LessonChallenge, answerText : String, answerIsReadOnly : Bool }
     -> Element.Element Event
-viewChallengeElement { challengeCache, isEditingSubmission } =
+viewChallengeElement { challenge, answerText, answerIsReadOnly } =
     let
-        ( isHint, submissionInput ) =
-            case isEditingSubmission of
-                Nothing ->
-                    ( True, "" )
-
-                Just text ->
-                    ( False, text )
-
-        hintElement =
-            Element.text challengeCache.solution
-                |> Element.el
-                    [ Element.Font.family [ Element.Font.monospace ]
-                    , Element.centerY
-                    ]
-
-        submissionInputElement =
+        answerInputElement =
             Element.Input.text
-                [ onEnter (UserInputSubmitSolution submissionInput)
+                [ onEnter (UserInputCheckAnswer answerText)
                 , Element.Font.family [ Element.Font.monospace ]
                 , Element.Input.focusedOnLoad
-                , Element.htmlAttribute (HA.id challengeSubmissionInputElementId)
-                , Element.transparent isHint
+                , Element.htmlAttribute (HA.id challengeAnswerInputElementId)
+                , Element.htmlAttribute (HA.readonly answerIsReadOnly)
+                , Element.alpha
+                    (if answerIsReadOnly then
+                        0.4
+
+                     else
+                        0.9
+                    )
                 ]
-                { onChange = UserInputPrepareSubmission
-                , text = submissionInput
+                { onChange = UserInputWriteAnswer
+                , text = answerText
                 , placeholder = Just (Element.Input.placeholder [] (Element.text "?"))
                 , label = Element.Input.labelHidden "Solution"
                 }
 
-        inputPartAfterEquals =
-            if isHint then
-                submissionInputElement
-                    |> Element.el [ Element.inFront hintElement ]
-
-            else
-                submissionInputElement
-
         inputOrHintRow =
             [ Element.text "="
-            , inputPartAfterEquals
+            , answerInputElement
             ]
                 |> Element.row [ Element.spacing defaultFontSize ]
     in
-    [ [ challengeCache.challenge
+    [ [ challenge
             |> Html.text
             |> List.singleton
             |> Html.div
@@ -650,17 +783,9 @@ viewChallengeElement { challengeCache, isEditingSubmission } =
     , inputOrHintRow
         |> Element.el [ Element.centerY ]
         |> Element.el
-            (List.concat
-                [ [ Element.width (Element.fill |> Element.minimum 160)
-                  , Element.height (Element.px (defaultFontSize * 3))
-                  ]
-                , if isHint then
-                    [ Element.Background.color (Element.rgb255 255 106 0) ]
-
-                  else
-                    []
-                ]
-            )
+            [ Element.width (Element.fill |> Element.minimum 160)
+            , Element.height (Element.px (defaultFontSize * 3))
+            ]
     ]
         |> Element.column [ Element.spacing defaultFontSize ]
         |> Element.el
@@ -736,19 +861,14 @@ onEnter event =
         )
 
 
-challengeSubmissionInputElementId : String
-challengeSubmissionInputElementId =
-    "challenge-submission-input"
+challengeAnswerInputElementId : String
+challengeAnswerInputElementId =
+    "challenge-answer-input"
 
 
 defaultFontSize : Int
 defaultFontSize =
     16
-
-
-failedSubmissionAnimationDurationMs : Int
-failedSubmissionAnimationDurationMs =
-    2500
 
 
 linkElementFromHref : String -> Element.Element event
@@ -797,6 +917,7 @@ animateProgressBar { destMicro } progressBar =
                             |> sqrt
                             |> (*) 7
                             |> round
+                            |> max 1
 
                     deltaMicroAbs =
                         maxDeltaMicro
@@ -817,4 +938,17 @@ animateProgressBar { destMicro } progressBar =
                               )
                 in
                 { progressBar | animationProgressMicro = animationProgressMicro }
+            )
+
+
+keyEventDecoderIsEnter : e -> Json.Decode.Decoder e
+keyEventDecoderIsEnter event =
+    Json.Decode.field "key" Json.Decode.string
+        |> Json.Decode.andThen
+            (\key ->
+                if key == "Enter" then
+                    Json.Decode.succeed event
+
+                else
+                    Json.Decode.fail "Not the enter key"
             )
