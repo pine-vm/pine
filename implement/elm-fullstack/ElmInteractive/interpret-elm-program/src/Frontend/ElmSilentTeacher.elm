@@ -519,22 +519,21 @@ view state =
                     )
     in
     { body =
-        [ [ workspaceElement |> Element.el [ Element.Font.size (defaultFontSize + 4) ]
-          , [ Element.text "Your progress:"
-            , viewProgressBar { progressMicro = progressMicro }
+        [ [ [ viewProgressBar { progressMicro = progressMicro }
             ]
                 |> Element.column
                     [ Element.spacing defaultFontSize
                     , Element.width Element.fill
                     , Element.htmlAttribute (HA.style "user-select" "none")
                     ]
+          , workspaceElement |> Element.el [ Element.Font.size (defaultFontSize + 4) ]
           , [ Element.text "To learn about Elm Silent Teacher, see "
             , linkElementFromHref "https://github.com/elm-fullstack/elm-fullstack/blob/main/guide/elm-silent-teacher.md"
             ]
                 |> Element.paragraph [ Element.Font.size (defaultFontSize - 2) ]
           ]
             |> Element.column
-                [ Element.spacing defaultFontSize
+                [ Element.spacing (defaultFontSize * 2)
                 , Element.padding 10
                 , Element.width Element.fill
                 ]
@@ -677,7 +676,8 @@ viewProgressBar { progressMicro } =
         |> Element.el
             [ Element.width (Element.fillPortion progressMicro)
             , Element.height Element.fill
-            , Element.Background.color (Element.rgb255 0 153 15)
+            , Element.Background.color (Element.rgb255 88 204 2)
+            , Element.htmlAttribute (HA.style "border-radius" "1em")
             ]
     , Html.div [] []
         |> Element.html
@@ -690,12 +690,13 @@ viewProgressBar { progressMicro } =
             ]
         |> Element.el
             [ Element.width Element.fill
-            , Element.padding (defaultFontSize // 2)
-            , Element.Background.color (Element.rgb255 85 85 85)
+            , Element.Background.color (Element.rgb255 229 229 229)
+            , Element.htmlAttribute (HA.style "border-radius" "1em")
             , Element.inFront
                 (Element.text (String.fromInt (progressMicro // 10000) ++ " %")
                     |> Element.el
-                        [ Element.Font.color (Element.rgb255 250 250 250)
+                        [ Element.Font.color (Element.rgba 0 0 0 0.8)
+                        , Element.Font.bold
                         , Element.centerX
                         , Element.centerY
                         ]
