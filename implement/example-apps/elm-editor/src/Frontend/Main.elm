@@ -176,7 +176,7 @@ type Event
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
-    | UserInputGetLinkToProject (Maybe { createDiffIfBaseAvailable : Bool })
+    | UserInputGetLinkToProject { createDiffIfBaseAvailable : Bool }
     | UserInputLoadedZipArchiveFile File.File
     | UserInputLoadedZipArchiveBytes Bytes.Bytes
     | UserInputImportProjectFromZipArchive UserInputImportFromZipArchiveEventStructure
@@ -230,7 +230,7 @@ type TitlebarMenuEntry
 
 
 type alias GetLinkToProjectDialogState =
-    { urlToProject : Maybe String }
+    { urlToProject : String }
 
 
 type alias LoadFromGitDialogState =
@@ -394,37 +394,22 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputGetLinkToProject maybeGenerateLink ->
+        UserInputGetLinkToProject generateLink ->
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
                     let
-                        dialogBefore =
-                            (case stateBefore.popup of
-                                Just (ModalDialog (GetLinkToProjectDialog getLinkDialog)) ->
-                                    Just getLinkDialog
+                        urlToProject =
+                            setProjectStateInUrlForBookmark
+                                { createDiffIfBaseAvailable = generateLink.createDiffIfBaseAvailable }
+                                workingState
+                                stateBefore
+                                |> Url.toString
 
-                                _ ->
-                                    Nothing
-                            )
-                                |> Maybe.withDefault { urlToProject = Nothing }
+                        dialog =
+                            { urlToProject = urlToProject }
 
-                        ( dialog, cmd ) =
-                            case maybeGenerateLink of
-                                Nothing ->
-                                    ( dialogBefore, Cmd.none )
-
-                                Just generateLink ->
-                                    let
-                                        url =
-                                            setProjectStateInUrlForBookmark
-                                                { createDiffIfBaseAvailable = generateLink.createDiffIfBaseAvailable }
-                                                workingState
-                                                stateBefore
-                                                |> Url.toString
-                                    in
-                                    ( { dialogBefore | urlToProject = Just url }
-                                    , Navigation.pushUrl stateBefore.navigationKey url
-                                    )
+                        cmd =
+                            Navigation.pushUrl stateBefore.navigationKey urlToProject
                     in
                     ( { stateBefore | popup = Just (ModalDialog (GetLinkToProjectDialog dialog)) }, cmd )
 
@@ -2116,7 +2101,7 @@ viewGetLinkToProjectDialog dialogState projectState =
                     maybeDependencyUrl
                         |> Maybe.map
                             (\dependencyUrl ->
-                                [ [ Element.text "The project state model in this link depends on loading related data from the following URL: "
+                                [ [ Element.text "The project state in this link depends on loading related data from the following URL: "
                                   , linkElementFromUrlAndTextLabel { url = dependencyUrl, labelText = dependencyUrl }
                                   ]
                                     |> Element.paragraph []
@@ -2144,21 +2129,18 @@ viewGetLinkToProjectDialog dialogState projectState =
                     ]
 
         buttonGenerateLinkOrResultElement =
-            case dialogState.urlToProject of
-                Nothing ->
-                    buttonElement
-                        { label = "Generate link to project"
-                        , onPress = Just (UserInputGetLinkToProject (Just { createDiffIfBaseAvailable = True }))
-                        }
-                        |> Element.el [ Element.centerX ]
-
-                Just urlToProject ->
-                    linkElementFromUrl urlToProject
+            [ [ "Use the link below to load the project's current state again later. This link is a fast way to share your project state with other people."
+                    |> Element.text
+              ]
+                |> Element.paragraph []
+            , linkElementFromUrl dialogState.urlToProject
+            ]
+                |> Element.column [ Element.spacing defaultFontSize ]
     in
     { title = "Get Link to Project for Bookmarking or Sharing"
     , titleIcon = Just FontAwesome.Solid.bookmark
     , guideParagraphItems =
-        [ Element.text "Get a link that you can later use to load the project's current state into the editor again. This link is a fast way to share your project state with other people." ]
+        [ Element.text "Get a link to save or share your project's current state." ]
     , contentElement =
         [ projectSummaryElementForDialog projectState
         , buttonGenerateLinkOrResultElement |> Element.el [ Element.width Element.fill ]
@@ -2383,16 +2365,21 @@ projectSummaryElementForDialog projectState =
     let
         projectFiles =
             FileTree.flatListOfBlobsFromFileTreeNode projectState
+
+        projectStateHashBase16 =
+            projectState
+                |> FileTreeInWorkspace.mapBlobsToBytes
+                |> Frontend.ProjectStateInUrl.projectStateCompositionHash
     in
-    [ ("This project contains "
+    [ "The current project state has the hash code " ++ projectStateHashBase16
+    , "It contains "
         ++ (projectFiles |> List.length |> String.fromInt)
         ++ " files with an aggregate size of "
         ++ (projectFiles |> List.map (Tuple.second >> .asBytes >> Bytes.width) |> List.sum |> String.fromInt)
         ++ " bytes."
-      )
-        |> Element.text
     ]
-        |> Element.paragraph []
+        |> List.map (Element.text >> List.singleton >> Element.paragraph [])
+        |> Element.textColumn []
 
 
 viewLoadOrImportDialogResultElement :
@@ -3256,7 +3243,7 @@ titlebarMenuEntryDropdownContent state menuEntry =
                         "Import From Zip Archive"
                         True
                     , titlebarMenuEntry
-                        (UserInputGetLinkToProject Nothing)
+                        (UserInputGetLinkToProject { createDiffIfBaseAvailable = True })
                         (Just FontAwesome.Solid.bookmark)
                         "Get Link for Bookmarking or Sharing"
                         canSaveProject
