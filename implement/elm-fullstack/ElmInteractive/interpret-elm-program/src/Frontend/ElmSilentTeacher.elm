@@ -18,7 +18,10 @@ import Random
 import Random.Char
 import Random.List
 import Random.String
+import Result.Extra
 import String.Extra
+import Svg
+import Svg.Attributes
 import Task
 import Time
 
@@ -616,27 +619,44 @@ viewLessonWorkspace workspace =
         buttonLabelCheck =
             "Check"
 
-        buildFeedbackTextElement title correctSolution color =
-            [ Element.text title
-                |> Element.el
-                    [ Element.Font.size (defaultFontSize * 3 // 2)
-                    , Element.Font.bold
-                    ]
-            , Element.text correctSolution
-                |> Element.el [ Element.Font.family [ Element.Font.monospace ] ]
-            ]
+        buildFeedbackElement : Result { correctSolution : String } () -> Element.Element e
+        buildFeedbackElement result =
+            let
+                icon =
+                    answerClassificationIcon { isCorrect = Result.Extra.isOk result }
+                        |> Element.el [ Element.width (Element.px 70) ]
+
+                ( title, correctSolution, color ) =
+                    case result of
+                        Ok _ ->
+                            ( "Great!", " ", Element.rgb255 88 167 0 )
+
+                        Err error ->
+                            ( "Correct solution:", error.correctSolution, Element.rgb255 234 43 43 )
+            in
+            [ icon
+            , [ Element.text title
+                    |> Element.el
+                        [ Element.Font.size (defaultFontSize * 3 // 2)
+                        , Element.Font.bold
+                        ]
+              , Element.text correctSolution
+                    |> Element.el [ Element.Font.family [ Element.Font.monospace ] ]
+              ]
                 |> Element.column
                     [ Element.Font.color color
                     , Element.htmlAttribute (HA.style "cursor" "default")
                     , Element.spacing (defaultFontSize // 2)
                     ]
+            ]
+                |> Element.row [ Element.spacing defaultFontSize ]
 
         ( ( ( buttonEnabledBackgroundColor, feedbackBackgroundColor, feedbackTextElement ), buttonText ), buttonOnPress ) =
             case workspace.challenge.usersAnswer of
                 WritingAnswer answer ->
                     ( ( ( buttonColorGreen
                         , Element.rgba 0 0 0 0
-                        , buildFeedbackTextElement "-" "-" (Element.rgb255 0 0 0)
+                        , buildFeedbackElement (Ok ())
                             |> Element.el [ Element.transparent True ]
                         )
                       , buttonLabelCheck
@@ -652,15 +672,13 @@ viewLessonWorkspace workspace =
                     ( ( if checkedAnswer.cachedCorrect then
                             ( buttonColorGreen
                             , Element.rgb255 215 255 184
-                            , buildFeedbackTextElement "Great!" " " (Element.rgb255 88 167 0)
+                            , buildFeedbackElement (Ok ())
                             )
 
                         else
                             ( buttonColorRed
                             , Element.rgb255 255 223 223
-                            , buildFeedbackTextElement "Correct solution:"
-                                workspace.challenge.cachedCorrectAnswer
-                                (Element.rgb255 234 43 43)
+                            , buildFeedbackElement (Err { correctSolution = workspace.challenge.cachedCorrectAnswer })
                             )
                       , "Continue"
                       )
@@ -939,6 +957,35 @@ animateProgressBar { destMicro } progressBar =
                 in
                 { progressBar | animationProgressMicro = animationProgressMicro }
             )
+
+
+answerClassificationIcon : { isCorrect : Bool } -> Element.Element e
+answerClassificationIcon { isCorrect } =
+    let
+        ( classElementPathData, classElementColor ) =
+            if isCorrect then
+                ( "M -19,3 L -7,15 M -7,15 L 19,-11", "#8DBC00" )
+
+            else
+                ( "M -15,-15 L 15,15 M 15,-15 L -15,15", "#EC0B1B" )
+    in
+    [ Svg.circle
+        [ Svg.Attributes.r "50"
+        , Svg.Attributes.cx "0"
+        , Svg.Attributes.cy "0"
+        , Svg.Attributes.fill "white"
+        ]
+        []
+    , Svg.path
+        [ Svg.Attributes.d classElementPathData
+        , Svg.Attributes.stroke classElementColor
+        , Svg.Attributes.strokeWidth "14"
+        , Svg.Attributes.strokeLinecap "round"
+        ]
+        []
+    ]
+        |> Svg.svg [ Svg.Attributes.viewBox "-50 -50 100 100" ]
+        |> Element.html
 
 
 keyEventDecoderIsEnter : e -> Json.Decode.Decoder e
