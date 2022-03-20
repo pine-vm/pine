@@ -11,14 +11,19 @@ import Json.Decode
 
 
 type alias State =
-    { volatileProcessId : Maybe String
+    { createVolatileProcessResult : Maybe (Result String { processId : String })
     , httpRequestToForward : Maybe ElmFullstack.HttpRequestEventStruct
     }
 
 
 backendMain : ElmFullstack.BackendConfig State
 backendMain =
-    { init = ( { volatileProcessId = Nothing, httpRequestToForward = Nothing }, [] )
+    { init =
+        ( { createVolatileProcessResult = Nothing
+          , httpRequestToForward = Nothing
+          }
+        , []
+        )
     , subscriptions = subscriptions
     }
 
@@ -46,7 +51,7 @@ httpRequestForwardRequestsFromState state =
             []
 
         Just httpRequestToForward ->
-            case state.volatileProcessId of
+            case state.createVolatileProcessResult of
                 Nothing ->
                     [ ElmFullstack.CreateVolatileProcess
                         { programCode = HttpViaVolatileProcess.programCode
@@ -54,7 +59,20 @@ httpRequestForwardRequestsFromState state =
                         }
                     ]
 
-                Just volatileProcessId ->
+                Just (Err createVolatileProcessErr) ->
+                    [ ElmFullstack.RespondToHttpRequest
+                        { httpRequestId = httpRequestToForward.httpRequestId
+                        , response =
+                            { statusCode = 500
+                            , bodyAsBase64 =
+                                bodyBase64FromString
+                                    ("Failed to create volatile process: " ++ createVolatileProcessErr)
+                            , headersToAdd = []
+                            }
+                        }
+                    ]
+
+                Just (Ok createVolatileProcessOk) ->
                     let
                         maybeForwardTo : Maybe String
                         maybeForwardTo =
@@ -90,7 +108,7 @@ httpRequestForwardRequestsFromState state =
                                     }
                             in
                             [ ElmFullstack.RequestToVolatileProcess
-                                { processId = volatileProcessId
+                                { processId = createVolatileProcessOk.processId
                                 , request = HttpViaVolatileProcess.requestToVolatileProcess httpRequest
                                 , update = updateForRequestToVolatileProcess
                                 }
@@ -99,16 +117,15 @@ httpRequestForwardRequestsFromState state =
 
 updateForCreateVolatileProcess : ElmFullstack.CreateVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
 updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
-    case createVolatileProcessResponse of
-        Err _ ->
-            ( stateBefore, [] )
+    let
+        createVolatileProcessResult =
+            createVolatileProcessResponse
+                |> Result.mapError .exceptionToString
 
-        Ok { processId } ->
-            let
-                state =
-                    { stateBefore | volatileProcessId = Just processId }
-            in
-            ( state, state |> httpRequestForwardRequestsFromState )
+        state =
+            { stateBefore | createVolatileProcessResult = Just createVolatileProcessResult }
+    in
+    ( state, state |> httpRequestForwardRequestsFromState )
 
 
 updateForRequestToVolatileProcess : ElmFullstack.RequestToVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
@@ -119,14 +136,11 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
 
         Just httpRequestToForward ->
             let
-                bodyFromString =
-                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
                 httpResponse =
                     case requestToVolatileProcessResponse of
-                        Err _ ->
+                        Err ElmFullstack.ProcessNotFound ->
                             { statusCode = 500
-                            , bodyAsBase64 = bodyFromString "Error running in volatile process."
+                            , bodyAsBase64 = bodyBase64FromString "Error running in volatile process: ProcessNotFound"
                             , headersToAdd = []
                             }
 
@@ -134,7 +148,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                             case requestToVolatileProcessComplete.exceptionToString of
                                 Just exceptionToString ->
                                     { statusCode = 500
-                                    , bodyAsBase64 = bodyFromString ("Exception in volatile process: " ++ exceptionToString)
+                                    , bodyAsBase64 = bodyBase64FromString ("Exception in volatile process: " ++ exceptionToString)
                                     , headersToAdd = []
                                     }
 
@@ -149,7 +163,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                         Err decodeError ->
                                             { statusCode = 500
                                             , bodyAsBase64 =
-                                                bodyFromString ("Error decoding response from volatile process: " ++ (decodeError |> Json.Decode.errorToString))
+                                                bodyBase64FromString ("Error decoding response from volatile process: " ++ (decodeError |> Json.Decode.errorToString))
                                             , headersToAdd = []
                                             }
 
@@ -171,3 +185,8 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                     }
               ]
             )
+
+
+bodyBase64FromString : String -> Maybe String
+bodyBase64FromString =
+    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
