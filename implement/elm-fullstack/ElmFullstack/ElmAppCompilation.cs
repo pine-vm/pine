@@ -51,7 +51,7 @@ namespace ElmFullstack
 
             var compilationHash =
                 CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
-                    Newtonsoft.Json.JsonConvert.SerializeObject(new
+                    System.Text.Json.JsonSerializer.Serialize(new
                     {
                         sourceFilesHash,
                         interfaceConfig,
@@ -307,7 +307,7 @@ namespace ElmFullstack
                 })
                 .ToImmutableList();
 
-            var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+            var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
                 new
                 {
                     sourceFiles = sourceFilesJson,
@@ -346,12 +346,12 @@ namespace ElmFullstack
                 deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 var compilationResponse =
-                    Newtonsoft.Json.JsonConvert.DeserializeObject<
+                    System.Text.Json.JsonSerializer.Deserialize<
                         ElmValueCommonJson.Result<
                             string,
                             ElmValueCommonJson.Result<
                                 IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
-                                IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>>(responseJson);
+                                IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>>(responseJson)!;
 
                 var compilationResponseOk = compilationResponse.Ok?.FirstOrDefault();
 
@@ -520,13 +520,12 @@ namespace ElmFullstack
                 return "Dependency Error: " + compilationError.DependencyError;
 
             throw new Exception("Unexpected shape of value " +
-                Newtonsoft.Json.JsonConvert.SerializeObject(
+                System.Text.Json.JsonSerializer.Serialize(
                     compilationError,
-                    Newtonsoft.Json.Formatting.Indented,
-                    new Newtonsoft.Json.JsonSerializerSettings
+                    new System.Text.Json.JsonSerializerOptions
                     {
-                        NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
-                        DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Include
+                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                        WriteIndented = true
                     }));
         }
 
@@ -539,13 +538,12 @@ namespace ElmFullstack
                 return otherCompilationError;
 
             return
-                Newtonsoft.Json.JsonConvert.SerializeObject(
+                System.Text.Json.JsonSerializer.Serialize(
                     compilationError,
-                    Newtonsoft.Json.Formatting.Indented,
-                    new Newtonsoft.Json.JsonSerializerSettings
+                    new System.Text.Json.JsonSerializerOptions
                     {
-                        NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
-                        DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Include
+                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                        WriteIndented = true
                     });
         }
 

@@ -6,9 +6,8 @@
 #r "System.Net.Primitives"
 #r "System.Private.Uri"
 #r "System.Linq"
+#r "System.Text.Json"
 
-//  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
-#r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
 
 using System;
 using System.Collections.Generic;
@@ -16,32 +15,20 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
 
-public class HttpRequest
-{
-    public string method;
+public record HttpRequest(
+    string method,
+    string uri,
+    string bodyAsBase64,
+    HttpHeader[] headers);
 
-    public string uri;
+public record HttpResponse(
+    int statusCode,
+    string bodyAsBase64,
+    HttpHeader[] headers);
 
-    public string bodyAsBase64;
-
-    public HttpHeader[] headers;
-}
-
-public class HttpResponse
-{
-    public int statusCode;
-
-    public string bodyAsBase64;
-
-    public HttpHeader[] headers;
-}
-
-public class HttpHeader
-{
-    public string name;
-
-    public string[] values;
-}
+public record HttpHeader(
+    string name,
+    string[] values);
 
 HttpResponse GetResponseFromHttpRequest(HttpRequest request)
 {
@@ -79,24 +66,24 @@ HttpResponse GetResponseFromHttpRequest(HttpRequest request)
 
     var responseHeaders =
         response.Headers
-        .Select(responseHeader => new HttpHeader { name = responseHeader.Key, values = responseHeader.Value.ToArray() })
+        .Select(responseHeader => new HttpHeader(name: responseHeader.Key, values: responseHeader.Value.ToArray()))
         .ToArray();
 
     return new HttpResponse
-    {
-        statusCode = (int)response.StatusCode,
-        headers = responseHeaders,
-        bodyAsBase64 = responseBodyAsBase64,
-    };
+    (
+        statusCode: (int)response.StatusCode,
+        headers: responseHeaders,
+        bodyAsBase64: responseBodyAsBase64
+    );
 }
 
 string GetResponseFromHttpRequestSerial(string serializedRequest)
 {
-    var request = Newtonsoft.Json.JsonConvert.DeserializeObject<HttpRequest>(serializedRequest);
+    var request = System.Text.Json.JsonSerializer.Deserialize<HttpRequest>(serializedRequest);
 
     var response = GetResponseFromHttpRequest(request);
 
-    return Newtonsoft.Json.JsonConvert.SerializeObject(response);
+    return System.Text.Json.JsonSerializer.Serialize(response);
 }
 
 string InterfaceToHost_Request(string request)

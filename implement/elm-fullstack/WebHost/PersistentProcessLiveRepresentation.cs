@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using ElmFullstack.WebHost.ProcessStoreSupportingMigrations;
-using Newtonsoft.Json;
 using Pine;
 
 namespace ElmFullstack.WebHost.PersistentProcess;
@@ -129,8 +129,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 var compositionRecordHashBase16 =
                     CompositionLogRecordInFile.HashBase16FromCompositionRecord(serializedCompositionLogRecord);
 
-                var compositionRecord = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(
-                    Encoding.UTF8.GetString(serializedCompositionLogRecord));
+                var compositionRecord =
+                JsonSerializer.Deserialize<CompositionLogRecordInFile>(
+                    Encoding.UTF8.GetString(serializedCompositionLogRecord))!;
 
                 var reductionRecord = storeReader.LoadProvisionalReduction(compositionRecordHashBase16);
 
@@ -421,7 +422,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
 
         return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
-            "Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
+            "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
 
     static Result<string, InterfaceToHost.AppEventResponseStructure> AttemptProcessEvent(
@@ -429,14 +430,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         InterfaceToHost.AppEventStructure appEvent)
     {
         var serializedInterfaceEvent =
-            JsonConvert.SerializeObject(appEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
+            JsonSerializer.Serialize(appEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
 
         var eventResponseSerial = process.ProcessEvent(serializedInterfaceEvent);
 
         try
         {
             var eventResponse =
-                JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(eventResponseSerial);
+                JsonSerializer.Deserialize<InterfaceToHost.ResponseOverSerialInterface>(eventResponseSerial)!;
 
             if (eventResponse.DecodeEventSuccess == null)
             {
@@ -534,7 +535,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         if (compositionEvent.RevertProcessTo != null)
             return null;
 
-        throw new Exception("Unexpected shape of composition event: " + JsonConvert.SerializeObject(compositionEvent));
+        throw new Exception("Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
 
     static public Result<string, FileStoreReaderProjectionResult>

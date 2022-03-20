@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using Pine;
 
 namespace ElmFullstack.ProcessStore;
@@ -65,12 +65,12 @@ public class EmptyProcessStoreReader : IProcessStoreReader
 
 public class ProcessStoreInFileStore
 {
-    static public JsonSerializerSettings RecordSerializationSettings => new()
+    static public JsonSerializerOptions RecordSerializationSettings => new()
     {
-        NullValueHandling = NullValueHandling.Ignore
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
-    static readonly protected JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
+    static readonly protected JsonSerializerOptions recordSerializationSettings = RecordSerializationSettings;
 
     protected record ReductionRecordInFile(
         string ReducedCompositionHashBase16,
@@ -142,8 +142,8 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 0;
 
             var reductionRecordFromFile =
-                JsonConvert.DeserializeObject<ReductionRecordInFile>(
-                    Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)));
+                JsonSerializer.Deserialize<ReductionRecordInFile>(
+                    Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)))!;
 
             if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
                 throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
@@ -225,6 +225,6 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         var filePath = ImmutableList.Create(fileName);
 
         reductionFileStoreWriter.SetFileContent(
-            filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(recordInFile, recordSerializationSettings)));
+            filePath, Encoding.UTF8.GetBytes(JsonSerializer.Serialize(recordInFile, recordSerializationSettings)));
     }
 }

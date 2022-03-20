@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using JavaScriptEngineSwitcher.Core;
 using JavaScriptEngineSwitcher.V8;
-using Newtonsoft.Json;
 using Pine;
 
 namespace ElmFullstack;
@@ -312,7 +312,7 @@ public class ProcessFromElm019Code
         "(" + serializedStateParamName + ");";
 
     static public string AsJavascriptExpression(string originalString) =>
-        JsonConvert.SerializeObject(originalString);
+        JsonSerializer.Serialize(originalString);
 
     /*
     Takes the javascript as emitted from Elm make 0.19 and inserts additional statements to

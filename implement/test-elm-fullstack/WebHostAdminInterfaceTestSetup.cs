@@ -4,9 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using ElmFullstack.WebHost;
 using Microsoft.AspNetCore.Hosting;
-using Newtonsoft.Json;
 using Pine;
 
 namespace test_elm_fullstack;
@@ -200,16 +200,16 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             if (component.BlobContent == null)
                 throw new Exception("component is not a blob");
 
-            var eventString = Encoding.UTF8.GetString(component.BlobContent.ToArray());
+            var eventString = Encoding.UTF8.GetString(component.BlobContent);
 
-            return JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString);
+            return JsonSerializer.Deserialize<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString)!;
         }
 
         return
             BuildProcessStoreReaderInFileDirectory()
             .EnumerateSerializedCompositionLogRecordsReverse()
             .Select(Encoding.UTF8.GetString)
-            .Select(JsonConvert.DeserializeObject<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>)
+            .Select(r => JsonSerializer.Deserialize<ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>(r)!)
             .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
             .WhereNotNull()
             .Select(eventLogEntry);

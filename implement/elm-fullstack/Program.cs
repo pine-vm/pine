@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
@@ -14,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-03-05";
+    static public string AppVersionId => "2022-03-19";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -434,7 +435,12 @@ public class Program
                         promptForPasswordOnConsole: true);
 
                 WriteReportToFileInReportDirectory(
-                    reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(deployReport, Newtonsoft.Json.Formatting.Indented),
+                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                        deployReport,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        }),
                     reportKind: "deploy.json");
             });
         });
@@ -472,7 +478,12 @@ public class Program
                 };
 
                 WriteReportToFileInReportDirectory(
-                    reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
+                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                        report,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        }),
                     reportKind: "copy-app-state.json");
             });
         });
@@ -536,7 +547,12 @@ public class Program
                         promptForPasswordOnConsole: true);
 
                 WriteReportToFileInReportDirectory(
-                    reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(report, Newtonsoft.Json.Formatting.Indented),
+                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                        report,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        }),
                     reportKind: "truncate-process-history.json");
             });
         });
@@ -554,7 +570,12 @@ public class Program
                 var compileReport = CompileAppAndSaveCompositionToZipArchive(sourceArgument.Value!).report;
 
                 WriteReportToFileInReportDirectory(
-                    reportContent: Newtonsoft.Json.JsonConvert.SerializeObject(compileReport, Newtonsoft.Json.Formatting.Indented),
+                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                        compileReport,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        }),
                     reportKind: "compile.json");
             });
         });
@@ -1212,7 +1233,7 @@ public class Program
                 try
                 {
                     responseBodyReport =
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>((string)responseBodyReport);
+                        System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(responseContentString)!;
                 }
                 catch { }
 
@@ -1387,15 +1408,26 @@ public class Program
         return builder.Uri;
     }
 
-    [Newtonsoft.Json.JsonObject(ItemNullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     record CopyElmAppStateReport(
         string beginTime,
         string source,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         string? destination,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         AppStateSummary? appStateSummary = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         ResponseFromServerStruct? destinationResponseFromServer = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         string? destinationFileReport = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         int? totalTimeSpentMilli = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         object? error = null);
 
     public record ResponseFromServerStruct(int? statusCode, object body);
@@ -1535,7 +1567,7 @@ public class Program
         try
         {
             responseBodyReport =
-                Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>((string)responseBodyReport);
+                System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>((string)responseBodyReport)!;
         }
         catch { }
 
@@ -1618,7 +1650,7 @@ public class Program
         try
         {
             responseBodyReport =
-                Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(responseContentString);
+                System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(responseContentString)!;
         }
         catch { }
 

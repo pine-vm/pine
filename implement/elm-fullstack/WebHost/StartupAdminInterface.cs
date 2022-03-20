@@ -190,7 +190,7 @@ public class StartupAdminInterface
                         ?
                         null
                         :
-                        Newtonsoft.Json.JsonConvert.DeserializeObject<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.ToArray()));
+                        System.Text.Json.JsonSerializer.Deserialize<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.ToArray()));
 
                     return
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
@@ -664,7 +664,7 @@ public class StartupAdminInterface
 
                     context.Response.StatusCode = 200;
                     context.Response.ContentType = "application/json";
-                    await context.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(truncateResult));
+                    await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(truncateResult));
                     return;
                 }
 
@@ -760,11 +760,11 @@ public class StartupAdminInterface
                 {
                     logger?.LogInformation(
                         "Begin attempt to continue with composition event: " +
-                        Newtonsoft.Json.JsonConvert.SerializeObject(compositionLogEvent));
+                        System.Text.Json.JsonSerializer.Serialize(compositionLogEvent));
 
                     var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
 
-                    var responseBodyString = Newtonsoft.Json.JsonConvert.SerializeObject(attemptReport);
+                    var responseBodyString = System.Text.Json.JsonSerializer.Serialize(attemptReport);
 
                     context.Response.StatusCode = statusCode;
                     await context.Response.WriteAsync(responseBodyString);

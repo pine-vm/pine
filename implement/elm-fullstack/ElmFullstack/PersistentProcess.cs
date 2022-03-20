@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using ElmFullstack.ProcessStore;
-using Newtonsoft.Json;
 using Pine;
 
 namespace ElmFullstack.PersistentProcess;
@@ -22,7 +22,7 @@ public interface IPersistentProcess
 //  A provisional special case for a process from an elm app. Migrations give an example of why the elm code should be modeled on the history as well.
 public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProcess, IDisposable
 {
-    static readonly JsonSerializerSettings recordSerializationSettings = ProcessStoreInFileStore.RecordSerializationSettings;
+    static readonly JsonSerializerOptions recordSerializationSettings = ProcessStoreInFileStore.RecordSerializationSettings;
 
     byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
 
@@ -45,7 +45,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
 
         logger?.Invoke("Begin to restore the process state using the storeReader.");
 
-        var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(new byte[0]);
+        var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
 
         static string dictKeyForHash(byte[] hash) => Convert.ToBase64String(hash);
 
@@ -56,8 +56,8 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         foreach (var serializedCompositionRecord in storeReader.EnumerateSerializedCompositionsRecordsReverse())
         {
             {
-                var compositionRecordFromFile = JsonConvert.DeserializeObject<CompositionRecordInFile>(
-                    Encoding.UTF8.GetString(serializedCompositionRecord));
+                var compositionRecordFromFile = JsonSerializer.Deserialize<CompositionRecordInFile>(
+                    Encoding.UTF8.GetString(serializedCompositionRecord))!;
 
                 var compositionRecordHash = CompositionRecordInFile.HashFromSerialRepresentation(serializedCompositionRecord);
 
@@ -131,7 +131,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
     }
 
     static string Serialize(CompositionRecordInFile composition) =>
-        JsonConvert.SerializeObject(composition, recordSerializationSettings);
+        JsonSerializer.Serialize(composition, recordSerializationSettings);
 
     public (IReadOnlyList<string> responses, (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash))
         ProcessEvents(IReadOnlyList<string> serializedEvents)

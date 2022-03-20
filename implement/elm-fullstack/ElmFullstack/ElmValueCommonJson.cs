@@ -1,15 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 
 namespace ElmFullstack.ElmValueCommonJson;
 
 public record Maybe<JustT>
 {
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<object>? Nothing { init; get; }
 
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<JustT>? Just { init; get; }
 
     static public Maybe<JustT> just(JustT j) =>
@@ -28,10 +29,10 @@ public record Maybe<JustT>
 
 public record Result<ErrT, OkT>
 {
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ErrT>? Err { init; get; }
 
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<OkT>? Ok { init; get; }
 
     static public Result<ErrT, OkT> ok(OkT ok) =>

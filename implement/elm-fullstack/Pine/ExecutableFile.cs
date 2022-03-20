@@ -190,7 +190,7 @@ public class ExecutableFile
 
         Console.WriteLine(
             "Executed command with bash: " +
-            Newtonsoft.Json.JsonConvert.SerializeObject(
+            System.Text.Json.JsonSerializer.Serialize(
                 new
                 {
                     cmd = cmd,

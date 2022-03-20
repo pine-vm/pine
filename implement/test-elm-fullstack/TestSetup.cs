@@ -21,7 +21,7 @@ public class TestSetup
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
         additionsAndExpectedResponses
         .Select(additionAndExpectedResponse =>
-            (Newtonsoft.Json.JsonConvert.SerializeObject(new { addition = additionAndExpectedResponse.addition }),
+            (System.Text.Json.JsonSerializer.Serialize(new { addition = additionAndExpectedResponse.addition }),
             additionAndExpectedResponse.expectedResponse.ToString()));
 
     static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
@@ -68,7 +68,7 @@ public class TestSetup
             originalWebAppConfig.Remove(filePath)
             :
             originalWebAppConfig
-            .SetItem(filePath, System.Text.Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(jsonStructure)));
+            .SetItem(filePath, System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 
     static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetElmAppFromExampleName(

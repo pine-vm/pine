@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Pine;
 
 namespace ElmFullstack.WebHost.ProcessStoreSupportingMigrations;
@@ -146,11 +147,20 @@ public record CompositionLogRecordInFile(
         Composition.GetHash(Composition.Component.Blob(compositionRecord));
 
     public record CompositionEvent(
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? UpdateElmAppStateForEvent = null,
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? SetElmAppState = null,
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? DeployAppConfigAndInitElmAppState = null,
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? DeployAppConfigAndMigrateElmAppState = null,
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] ValueInFileStructure? RevertProcessTo = null)
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ValueInFileStructure? UpdateElmAppStateForEvent = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ValueInFileStructure? SetElmAppState = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ValueInFileStructure? DeployAppConfigAndInitElmAppState = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ValueInFileStructure? DeployAppConfigAndMigrateElmAppState = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ValueInFileStructure? RevertProcessTo = null)
     {
         static public CompositionEvent EventForDeployAppConfig(
             ValueInFileStructure appConfigValueInFile,
@@ -178,9 +188,9 @@ public class ProcessStoreInFileStore
 {
     static readonly protected IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
 
-    static public JsonSerializerSettings RecordSerializationSettings => new()
+    static public JsonSerializerOptions RecordSerializationSettings => new()
     {
-        NullValueHandling = NullValueHandling.Ignore
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     static protected IImmutableList<string> CompositionHeadHashFilePath =>
@@ -202,7 +212,7 @@ public class ProcessStoreInFileStore
     static protected string ProvisionalReductionSubdirectory => "provisional-reduction";
 
 
-    static readonly protected JsonSerializerSettings recordSerializationSettings = RecordSerializationSettings;
+    static readonly protected JsonSerializerOptions recordSerializationSettings = RecordSerializationSettings;
 
     static public IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
         ImmutableList.Create(componentHash.Substring(0, 2), componentHash);
@@ -213,7 +223,7 @@ public class ProcessStoreInFileStore
         logFilesPaths.OrderBy(filePath => filePath, CompositionLogFileOrderPathComparer);
 
     static public byte[] Serialize(CompositionLogRecordInFile record) =>
-        Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(record, recordSerializationSettings));
+        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, recordSerializationSettings));
 
     public ProcessStoreInFileStore()
     {
@@ -301,8 +311,8 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 0;
 
             var reductionRecordFromFile =
-                JsonConvert.DeserializeObject<ProvisionalReductionRecordInFile>(
-                    Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)));
+                JsonSerializer.Deserialize<ProvisionalReductionRecordInFile>(
+                    Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)))!;
 
             if (reducedCompositionHash != reductionRecordFromFile.reducedCompositionHashBase16)
                 throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
@@ -365,7 +375,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
             var recordAsString = Encoding.UTF8.GetString(recordAsArray);
 
-            var recordStruct = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(recordAsString);
+            var recordStruct = JsonSerializer.Deserialize<CompositionLogRecordInFile>(recordAsString)!;
 
             if (recordStruct.compositionEvent.RevertProcessTo != null)
             {
@@ -423,8 +433,8 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
             var compositionRecordArray = compositionRecordComponent.BlobContent;
 
-            var recordStructure = JsonConvert.DeserializeObject<CompositionLogRecordInFile>(
-                Encoding.UTF8.GetString(compositionRecordArray));
+            var recordStructure = JsonSerializer.Deserialize<CompositionLogRecordInFile>(
+                Encoding.UTF8.GetString(compositionRecordArray))!;
 
             yield return compositionRecordArray;
 
@@ -535,7 +545,8 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         var filePath = ImmutableList.Create(fileName);
 
         ProvisionalReductionFileStore.SetFileContent(
-            filePath, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(reductionRecord, recordSerializationSettings)));
+            filePath,
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(reductionRecord, recordSerializationSettings)));
     }
 
     public void StoreComponent(Composition.Component component)

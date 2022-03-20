@@ -267,7 +267,7 @@ public class StartupPublicApp
             InterfaceToHost.AppEventStructure interfaceEvent)
         {
             var serializedInterfaceEvent =
-                Newtonsoft.Json.JsonConvert.SerializeObject(
+                System.Text.Json.JsonSerializer.Serialize(
                     interfaceEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
 
             var processEvent = new Action(() =>
@@ -282,8 +282,8 @@ public class StartupPublicApp
                     try
                     {
                         var structuredResponse =
-                            Newtonsoft.Json.JsonConvert.DeserializeObject<InterfaceToHost.ResponseOverSerialInterface>(
-                                serializedResponse);
+                            System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.ResponseOverSerialInterface>(
+                                serializedResponse)!;
 
                         if (structuredResponse.DecodeEventSuccess == null)
                         {

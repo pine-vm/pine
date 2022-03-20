@@ -7,9 +7,7 @@
 #r "System.Private.Uri"
 #r "System.Linq"
 #r "System.Runtime.InteropServices.RuntimeInformation"
-
-//  https://www.nuget.org/api/v2/package/Newtonsoft.Json/12.0.2
-#r "sha256:b9b4e633ea6c728bad5f7cbbef7f8b842f7e10181731dbe5ec3cd995a6f60287"
+#r "System.Text.Json"
 
 // from elm-fullstack-separate-assemblies-4505d5fa0951dbb5d83383b17058704c58ebc674-linux-x64.zip
 #r "sha256:67d1550a5b06e9b361fdc9220062dd960e036e7daaa063e92380d186f93089cf"
@@ -27,96 +25,96 @@ int loadCompositionLimitMaximumPathLength = 200;
 
 public class RequestStructure
 {
-    public IReadOnlyList<ElmMakeRequestStructure> ElmMakeRequest;
+    public IReadOnlyList<ElmMakeRequestStructure> ElmMakeRequest { set; get; }
 
-    public IReadOnlyList<string> FormatElmModuleTextRequest;
+    public IReadOnlyList<string> FormatElmModuleTextRequest { set; get; }
 
-    public IReadOnlyList<string> LoadCompositionRequest;
+    public IReadOnlyList<string> LoadCompositionRequest { set; get; }
 }
 
 public class ResponseStructure
 {
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<ElmMakeResponseStructure> ElmMakeResponse;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ElmMakeResponseStructure> ElmMakeResponse { set; get; }
 
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<FormatElmModuleTextResponseStructure> FormatElmModuleTextResponse;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<FormatElmModuleTextResponseStructure> FormatElmModuleTextResponse { set; get; }
 
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<LoadCompositionResponseStructure> LoadCompositionResponse;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<LoadCompositionResponseStructure> LoadCompositionResponse { set; get; }
 
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<string> ErrorResponse;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string> ErrorResponse { set; get; }
 }
 
 public class ElmMakeRequestStructure
 {
-    public IReadOnlyList<FileWithPath> files;
+    public IReadOnlyList<FileWithPath> files { set; get; }
 
-    public IReadOnlyList<string> entryPointFilePathFromWorkingDirectory;
+    public IReadOnlyList<string> entryPointFilePathFromWorkingDirectory { set; get; }
 
-    public IReadOnlyList<string> workingDirectoryPath;
+    public IReadOnlyList<string> workingDirectoryPath { set; get; }
 
-    public bool makeOptionDebug;
+    public bool makeOptionDebug { set; get; }
 
-    public ElmMakeOutputType outputType;
+    public ElmMakeOutputType outputType { set; get; }
 }
 
 public class ElmMakeOutputType
 {
-    public object ElmMakeOutputTypeHtml;
-    public object ElmMakeOutputTypeJs;
+    public object ElmMakeOutputTypeHtml { set; get; }
+    public object ElmMakeOutputTypeJs { set; get; }
 }
 
 public class FormatElmModuleTextResponseStructure
 {
-    public Maybe<string> formattedText;
+    public Maybe<string> formattedText { set; get; }
 
-    public ProcessOutput processOutput;
+    public ProcessOutput processOutput { set; get; }
 }
 
 public class FileWithPath
 {
-    public IReadOnlyList<string> path;
+    public IReadOnlyList<string> path { set; get; }
 
-    public string contentBase64;
+    public string contentBase64 { set; get; }
 }
 
 public class ElmMakeResponseStructure
 {
-    public ProcessOutput processOutput;
+    public ProcessOutput processOutput { set; get; }
 
-    public Maybe<string> outputFileContentBase64;
+    public Maybe<string> outputFileContentBase64 { set; get; }
 
-    public ProcessOutput reportJsonProcessOutput;
+    public ProcessOutput reportJsonProcessOutput { set; get; }
 }
 
 public struct ProcessOutput
 {
-    public string standardError;
+    public string standardError { set; get; }
 
-    public string standardOutput;
+    public string standardOutput { set; get; }
 
-    public int exitCode;
+    public int exitCode { set; get; }
 }
 
 public class LoadCompositionResponseStructure
 {
-    public string compositionId;
+    public string compositionId { set; get; }
 
-    public IReadOnlyList<FileWithPath> filesAsFlatList;
+    public IReadOnlyList<FileWithPath> filesAsFlatList { set; get; }
 
-    public string urlInCommit;
+    public string urlInCommit { set; get; }
 }
 
 
 string GetSerialResponseFromSerialRequest(string serializedRequest)
 {
-    var request = Newtonsoft.Json.JsonConvert.DeserializeObject<RequestStructure>(serializedRequest);
+    var request = System.Text.Json.JsonSerializer.Deserialize<RequestStructure>(serializedRequest);
 
     var response = GetResponseFromRequest(request);
 
-    return Newtonsoft.Json.JsonConvert.SerializeObject(response);
+    return System.Text.Json.JsonSerializer.Serialize(response);
 }
 
 ResponseStructure GetResponseFromRequest(RequestStructure request)
@@ -460,11 +458,11 @@ static public class ElmFormat
 
 public class Maybe<JustT>
 {
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<object> Nothing;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<object> Nothing { set; get; }
 
-    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-    public IReadOnlyList<JustT> Just;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<JustT> Just { set; get; }
 
     static public Maybe<JustT> just(JustT j) =>
         new Maybe<JustT> { Just = ImmutableList.Create(j) };

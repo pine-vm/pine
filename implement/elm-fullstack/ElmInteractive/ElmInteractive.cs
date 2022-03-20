@@ -39,7 +39,7 @@ public class ElmInteractive
             .WhereNotNull()
             .ToImmutableList();
 
-        var argumentsJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+        var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
             new
             {
                 modulesTexts = modulesTexts ?? ImmutableList<string>.Empty,
@@ -52,7 +52,7 @@ public class ElmInteractive
             evalElmPreparedJsEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson).ToString()!;
 
         var responseStructure =
-            Newtonsoft.Json.JsonConvert.DeserializeObject<EvaluateSubmissionResponseStructure>(responseJson);
+            System.Text.Json.JsonSerializer.Deserialize<EvaluateSubmissionResponseStructure>(responseJson)!;
 
         if (responseStructure.DecodedArguments == null)
             throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);

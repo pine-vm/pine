@@ -10,9 +10,9 @@ public record AppEventStructure(
     string? SetStateEvent = null,
     string? MigrateStateEvent = null)
 {
-    static public readonly Newtonsoft.Json.JsonSerializerSettings JsonSerializerSettings = new()
+    static public readonly System.Text.Json.JsonSerializerOptions JsonSerializerSettings = new()
     {
-        DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
     };
 }
 

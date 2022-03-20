@@ -429,8 +429,8 @@ public class TestWebHost
         var responseContentString = response.Content.ReadAsStringAsync().Result;
 
         var collectionFromResponseContent =
-            Newtonsoft.Json.JsonConvert.DeserializeObject<Web_host_propagates_HTTP_headers_Response_Entry[]>(
-                responseContentString);
+            System.Text.Json.JsonSerializer.Deserialize<Web_host_propagates_HTTP_headers_Response_Entry[]>(
+                responseContentString)!;
 
         var matchingEntryFromResponseContent =
             collectionFromResponseContent
@@ -464,7 +464,7 @@ public class TestWebHost
 
                     context.Response.StatusCode = 200;
 
-                    await context.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(requestRecord));
+                    await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(requestRecord));
                 });
             })
             .UseUrls(echoServerUrl);
@@ -482,7 +482,7 @@ public class TestWebHost
             var customHeaderName = "My-custom-header";
             var customHeaderValue = "Hello!";
             var requestContentBytes =
-                Enumerable.Range(0, 777).Select(i => (UInt16)i).SelectMany(BitConverter.GetBytes).ToArray();
+                Enumerable.Range(0, 777).Select(i => (ushort)i).SelectMany(BitConverter.GetBytes).ToArray();
 
             var httpRequestMessage = new HttpRequestMessage(new HttpMethod("post"), "")
             {
@@ -498,7 +498,7 @@ public class TestWebHost
             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
             var echoRequestStructure =
-                Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.HttpRequest>(responseContentString);
+                System.Text.Json.JsonSerializer.Deserialize<ElmFullstack.WebHost.InterfaceToHost.HttpRequest>(responseContentString)!;
 
             Assert.AreEqual(
                 Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
@@ -540,7 +540,7 @@ public class TestWebHost
             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
             var echoRequestStructure =
-                Newtonsoft.Json.JsonConvert.DeserializeObject<ElmFullstack.WebHost.InterfaceToHost.HttpRequest>(responseContentString);
+                System.Text.Json.JsonSerializer.Deserialize<ElmFullstack.WebHost.InterfaceToHost.HttpRequest>(responseContentString)!;
 
             var observedContentType =
                 echoRequestStructure.headers
@@ -1259,7 +1259,7 @@ public class TestWebHost
         static string getCurrentCounterValueFromHttpClient(HttpClient httpClient)
         {
             var httpResponse = httpClient.PostAsync("",
-                new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(new { addition = 0 }), System.Text.Encoding.UTF8)).Result;
+                new StringContent(System.Text.Json.JsonSerializer.Serialize(new { addition = 0 }), System.Text.Encoding.UTF8)).Result;
 
             return httpResponse.Content.ReadAsStringAsync().Result;
         }

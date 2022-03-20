@@ -3,8 +3,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Newtonsoft.Json;
 using Pine;
 
 namespace test_elm_fullstack
@@ -62,7 +62,7 @@ a =
 
             var httpResponse =
                 publicAppClient
-                .PostAsync("/api", new StringContent(JsonConvert.SerializeObject(formatRequest))).Result;
+                .PostAsync("/api", new StringContent(JsonSerializer.Serialize(formatRequest))).Result;
 
             var responseContentAsString =
                 httpResponse.Content.ReadAsStringAsync().Result;
@@ -73,7 +73,7 @@ a =
                 "Response status code should be OK.\nresponseContentAsString:\n" + responseContentAsString);
 
             var responseStructure =
-                JsonConvert.DeserializeObject<ElmEditorApi.ElmEditorApiResponseStructure>(responseContentAsString);
+                JsonSerializer.Deserialize<ElmEditorApi.ElmEditorApiResponseStructure>(responseContentAsString)!;
 
             Assert.IsNull(
                 responseStructure.ErrorResponse,
