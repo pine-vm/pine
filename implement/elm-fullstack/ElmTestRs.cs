@@ -74,23 +74,23 @@ public class ElmTestRs
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("889e609c85906335ea52cd01519814d528b06d8028e7695a2c8fcaf0d71e7408",
-            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v1.2.2/elm-test-rs_linux.tar.gz"))
+            ("470e7fcf96cafe569455df522c03f577ab317a6fd758968feb208e751627fbf5",
+            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v2.0.1/elm-test-rs_linux.tar.gz"))
         .Add(
             OSPlatform.Windows,
-            ("98708c4ecd1a34b61545f0faca7ac3c46b5bb3d0bf6b4719b16eb4cffe0a82ac",
-            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v1.2.2/elm-test-rs_windows.zip"));
+            ("a8ef939a9a7b91361745c2ce188c23ef246031693d4770ee3b0f82775b71f242",
+            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v2.0.1/elm-test-rs_windows.zip"));
 
     static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("34374d77515b093028df6605b6e74985aa6cd7a022c5e8310a14d65daecbd91d",
-            @"https://github.com/denoland/deno/releases/download/v1.16.2/deno-x86_64-unknown-linux-gnu.zip"))
+            ("227d743e45ebac69c3dccb406929ac671ad41d9e6dc22621c6111ab88c6c287f",
+            @"https://github.com/denoland/deno/releases/download/v1.20.6/deno-x86_64-unknown-linux-gnu.zip"))
         .Add(
             OSPlatform.Windows,
-            ("3a1611329306d24b24fd6b98418ddec9ee79c044623e712093db24eba6a573df",
-            @"https://github.com/denoland/deno/releases/download/v1.16.2/deno-x86_64-pc-windows-msvc.zip"));
+            ("c531a3fb716175599033a5b71b150c14cc260c79a5c2f180927c840ac5d470c4",
+            @"https://github.com/denoland/deno/releases/download/v1.20.6/deno-x86_64-pc-windows-msvc.zip"));
 
     static public byte[]? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
