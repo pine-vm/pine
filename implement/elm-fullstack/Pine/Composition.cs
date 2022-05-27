@@ -118,25 +118,25 @@ public class Composition
             .AddRange(integerValue.ToByteArray(isUnsigned: true, isBigEndian: true));
     }
 
-    static public Result<string, System.Numerics.BigInteger> SignedIntegerFromComponent(Component component)
+    static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromComponent(Component component)
     {
         if (component.BlobContent == null)
-            return Result<string, System.Numerics.BigInteger>.err(
+            return Result<string, System.Numerics.BigInteger?>.err(
                 "Only a BlobValue can represent an integer.");
 
         return SignedIntegerFromBlobValue(component.BlobContent);
     }
 
-    static public Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(byte[] blobValue)
+    static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromBlobValue(byte[] blobValue)
     {
         if (blobValue.Length < 1)
-            return Result<string, System.Numerics.BigInteger>.err(
+            return Result<string, System.Numerics.BigInteger?>.err(
                 "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?");
 
         var signByte = blobValue[0];
 
         if (signByte != 0 && signByte != 0x80)
-            return Result<string, System.Numerics.BigInteger>.err(
+            return Result<string, System.Numerics.BigInteger?>.err(
                 "Unexpected value for sign byte of integer: " + signByte);
 
         var isNegative = signByte != 0;
@@ -145,7 +145,7 @@ public class Composition
             UnsignedIntegerFromBlobValue(blobValue.AsSpan(1));
 
         return
-            Result<string, System.Numerics.BigInteger>.ok(
+            Result<string, System.Numerics.BigInteger?>.ok(
                 integerValue * new System.Numerics.BigInteger(isNegative ? -1 : 1));
     }
 
@@ -322,10 +322,7 @@ public class Composition
     {
         if (composition.BlobContent != null)
         {
-            return new ParseAsTreeWithStringPathResult
-            {
-                Ok = new TreeWithStringPath(blobContent: composition.BlobContent)
-            };
+            return ParseAsTreeWithStringPathResult.ok(new TreeWithStringPath(blobContent: composition.BlobContent));
         }
 
         if (composition.ListContent != null)
@@ -336,7 +333,7 @@ public class Composition
             {
                 if (!(component.ListContent?.Count == 2))
                 {
-                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.err(
+                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
                         ImmutableList<(int index, string name)>.Empty);
                 }
 
@@ -344,7 +341,7 @@ public class Composition
 
                 if (nameResult.Ok == null)
                 {
-                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.err(
+                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
                         ImmutableList<(int index, string name)>.Empty);
                 }
 
@@ -355,11 +352,11 @@ public class Composition
 
                 if (parseResult.Ok == null)
                 {
-                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.err(
+                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
                         ImmutableList.Create(currentIndexAndName).AddRange(parseResult.Err!));
                 }
 
-                return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)>.ok(
+                return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.ok(
                     (name: currentIndexAndName.name, parseResult.Ok));
             })
             .ToImmutableList();
@@ -371,13 +368,12 @@ public class Composition
                 .FirstOrDefault();
 
             if (firstError != null)
-                return new ParseAsTreeWithStringPathResult { Err = firstError };
+                return ParseAsTreeWithStringPathResult.err(firstError);
 
             return
-                new ParseAsTreeWithStringPathResult
-                {
-                    Ok = TreeWithStringPath.Tree(treeContent: compositionResults.Select(compositionResult => compositionResult.Ok).ToImmutableList())
-                };
+                ParseAsTreeWithStringPathResult.ok(
+                    TreeWithStringPath.Tree(
+                        treeContent: compositionResults.Select(compositionResult => compositionResult.Ok!.Value).ToImmutableList()));
         }
 
         throw new Exception("Incomplete match on sum type.");
@@ -646,6 +642,17 @@ public class Composition
 
     public record ParseAsTreeWithStringPathResult : Result<IImmutableList<(int index, string name)>, TreeWithStringPath>
     {
+        protected ParseAsTreeWithStringPathResult(IImmutableList<(int index, string name)>? Err = null, TreeWithStringPath? Ok = null)
+            :
+            base(Err: Err, Ok: Ok)
+        {
+        }
+
+        static public new ParseAsTreeWithStringPathResult err(IImmutableList<(int index, string name)> err) =>
+            new(Err: err);
+
+        static public new ParseAsTreeWithStringPathResult ok(TreeWithStringPath ok) =>
+            new(Ok: ok);
     }
 
     public class ByteListComparer : IComparer<IReadOnlyList<byte>>, IEqualityComparer<IReadOnlyList<byte>>

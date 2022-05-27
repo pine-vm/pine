@@ -33,30 +33,30 @@ public record ProcessWithLog<LogEntryT, ResultT>(
 
 static public class ProcessWithLogExtension
 {
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenMap<LogEntryT, ErrT, OkT, NewOkT>(
-        this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
-        Func<OkT, Result<ErrT, NewOkT>> andThen) =>
+    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT?>> ResultAndThenMap<LogEntryT, ErrT, OkT, NewOkT>(
+        this ProcessWithLog<LogEntryT, Result<ErrT, OkT?>> orig,
+        Func<OkT, Result<ErrT, NewOkT?>> andThen) =>
         orig.MapResult(previousResult =>
         previousResult.Ok == null ?
-        new Result<ErrT, NewOkT>(Err: previousResult.Err) :
+        Result<ErrT, NewOkT?>.err(previousResult.Err) :
         andThen(previousResult.Ok));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
-        this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
+    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT?>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
+        this ProcessWithLog<LogEntryT, Result<ErrT, OkT?>> orig,
         Func<OkT, NewOkT> map) =>
-        orig.ResultAndThenMap(previousResult => new Result<ErrT, NewOkT>(Ok: map(previousResult)));
+        orig.ResultAndThenMap(previousResult => Result<ErrT, NewOkT?>.ok(map(previousResult)));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMapContinue<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, ProcessWithLog<LogEntryT, NewOkT>> map) =>
-        orig.ResultAndThenContinue(previousOk => map(previousOk).MapResult(newOk => new Result<ErrT, NewOkT>(Ok: newOk)));
+        orig.ResultAndThenContinue(previousOk => map(previousOk).MapResult(newOk => Result<ErrT, NewOkT>.ok(newOk)));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenContinue<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>> andThen) =>
         orig.Continue(previousResult =>
         previousResult.Ok == null ?
-        new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: new Result<ErrT, NewOkT>(Err: previousResult.Err)) :
+        new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: Result<ErrT, NewOkT>.err(previousResult.Err)) :
         andThen(previousResult.Ok));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(
@@ -65,7 +65,7 @@ static public class ProcessWithLogExtension
         ResultAndThenContinue(
             orig,
             ok => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(
-                LogEntry: (addLogEntry(ok), () => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(Result: new Result<ErrT, OkT>(Ok: ok)))));
+                LogEntry: (addLogEntry(ok), () => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(Result: Result<ErrT, OkT>.ok(ok)))));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntriesIfOk<LogEntryT, ErrT, OkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
@@ -75,7 +75,7 @@ static public class ProcessWithLogExtension
             ok => addLogEntries(ok)
             .Reverse()
             .Aggregate(
-                seed: new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(Result: new Result<ErrT, OkT>(Ok: ok)),
+                seed: new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(Result: Result<ErrT, OkT>.ok(ok)),
                 (prev, logEntry) => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(LogEntry: (logEntry, () => prev))));
 
     static public ResultT LogToActions<LogEntryT, ResultT>(

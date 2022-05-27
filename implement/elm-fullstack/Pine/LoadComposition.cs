@@ -11,7 +11,7 @@ public record LoadCompositionOrigin(
 
 static public class LoadComposition
 {
-    static public ProcessWithLog<string, Result<string, (TreeWithStringPath tree, LoadCompositionOrigin origin)>> LoadFromPathResolvingNetworkDependencies(string sourcePath)
+    static public ProcessWithLog<string, Result<string, (TreeWithStringPath tree, LoadCompositionOrigin origin)?>> LoadFromPathResolvingNetworkDependencies(string sourcePath)
     {
         var asProcess = AsProcessWithStringLog(sourcePath);
 
@@ -22,7 +22,9 @@ static public class LoadComposition
                 .WithLogEntryAdded("This path looks like a URL into a remote git repository. Trying to load from there...")
                 .MapResult(LoadFromGitHubOrGitLab.LoadFromUrl)
                 .ResultAddLogEntriesIfOk(LogEntriesForLoadFromGitSuccess)
-                .ResultMap(loadFromGitOk => (loadFromGitOk.tree, new LoadCompositionOrigin(FromGit: loadFromGitOk)));
+                .ResultMap(loadFromGitOk =>
+                ((TreeWithStringPath tree, LoadCompositionOrigin origin)?)
+                (loadFromGitOk.tree, new LoadCompositionOrigin(FromGit: loadFromGitOk)));
         }
 
         if (LoadFromElmEditor.ParseUrl(sourcePath) != null)
@@ -31,7 +33,9 @@ static public class LoadComposition
                 asProcess
                 .WithLogEntryAdded("This path looks like a URL into a code editor. Trying to load from there...")
                 .MapResult(LoadFromElmEditor.LoadFromUrl)
-                .ResultMap(loadFromEditorOk => (loadFromEditorOk.tree, new LoadCompositionOrigin(FromEditor: loadFromEditorOk.parsedUrl)));
+                .ResultMap(loadFromEditorOk =>
+                ((TreeWithStringPath tree, LoadCompositionOrigin origin)?)
+                (loadFromEditorOk.tree, new LoadCompositionOrigin(FromEditor: loadFromEditorOk.parsedUrl)));
         }
 
         return
@@ -44,20 +48,17 @@ static public class LoadComposition
                     var treeComponentFromSource = LoadFromLocalFilesystem.LoadSortedTreeFromPath(sourcePath);
 
                     if (treeComponentFromSource == null)
-                        return new Result<string, TreeWithStringPath>
-                        {
-                            Err = "I did not find a file or directory at '" + sourcePath + "'.",
-                        };
+                        return Result<string, TreeWithStringPath>.err("I did not find a file or directory at '" + sourcePath + "'.");
 
-                    return
-                        new Result<string, TreeWithStringPath>(Ok: treeComponentFromSource);
+                    return Result<string, TreeWithStringPath>.ok(treeComponentFromSource);
                 }
                 catch (Exception e)
                 {
                     return Result<string, TreeWithStringPath>.err("Failed to load from local file system: " + e?.ToString());
                 }
             })
-            .ResultMap(tree => (tree, new LoadCompositionOrigin(FromLocalFileSystem: new object())));
+            .ResultMap(tree =>
+            ((TreeWithStringPath tree, LoadCompositionOrigin origin)?)(tree, new LoadCompositionOrigin(FromLocalFileSystem: new object())));
     }
 
     static public IEnumerable<string> LogEntriesForLoadFromGitSuccess(LoadFromGitHubOrGitLab.LoadFromUrlSuccess loadFromGitSuccess)

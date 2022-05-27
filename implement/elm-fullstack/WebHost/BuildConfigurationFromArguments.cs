@@ -22,13 +22,13 @@ static public class BuildConfigurationFromArguments
             throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
         }
 
-        var sourceTree = loadCompositionResult.Ok.tree;
+        var sourceTree = loadCompositionResult.Ok.Value.tree;
 
         /*
         TODO: Provide a better way to avoid unnecessary files ending up in the config: Get the source files from git.
         */
         var filteredSourceTree =
-            loadCompositionResult.Ok.origin?.FromLocalFileSystem != null
+            loadCompositionResult.Ok.Value.origin?.FromLocalFileSystem != null
             ?
             RemoveNoiseFromTreeComingFromLocalFileSystem(sourceTree)
             :

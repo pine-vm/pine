@@ -198,7 +198,7 @@ namespace Pine
                     .map(returnValueFromTree);
             }
 
-            return new Result<string, LoadFromUrlSuccess>(Err: "Project state has an unexpected shape: " + parsedUrl.projectStateString);
+            return Result<string, LoadFromUrlSuccess>.err("Project state has an unexpected shape: " + parsedUrl.projectStateString);
         }
 
         static public Result<string, Composition.TreeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)

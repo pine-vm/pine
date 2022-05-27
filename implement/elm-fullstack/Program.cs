@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-05-12";
+    static public string AppVersionId => "2022-05-27";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -706,7 +706,7 @@ public class Program
             throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
         }
 
-        var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadCompositionResult.Ok.tree);
+        var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadCompositionResult.Ok.Value.tree);
 
         report = report with { sourceCompositionId = sourceCompositionId, sourceSummary = sourceSummary };
 
@@ -717,7 +717,7 @@ public class Program
         try
         {
             var sourceFiles =
-                Composition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.Ok.tree);
+                Composition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.Ok.Value.tree);
 
             var compilationResult = ElmFullstack.ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
@@ -812,7 +812,7 @@ public class Program
                                     testArg => testArg!,
                                     testArg => LoadComposition.LoadFromPathResolvingNetworkDependencies(testArg!).LogToList());
 
-                            var failedLoads = scenariosLoadResults.Where(r => r.Value.result.Ok.tree == null).ToImmutableList();
+                            var failedLoads = scenariosLoadResults.Where(r => r.Value.result.Ok?.tree == null).ToImmutableList();
 
                             if (failedLoads.Any())
                             {
@@ -830,9 +830,9 @@ public class Program
 
                             var aggregateComposition =
                                 scenariosLoadResults.Count == 1 ?
-                                Composition.FromTreeWithStringPath(scenariosLoadResults.Single().Value.result.Ok.tree) :
+                                Composition.FromTreeWithStringPath(scenariosLoadResults.Single().Value.result.Ok?.tree) :
                                 Composition.Component.List(
-                                    scenariosLoadResults.Select(r => Composition.FromTreeWithStringPath(r.Value.result.Ok.tree)).ToImmutableList());
+                                    scenariosLoadResults.Select(r => Composition.FromTreeWithStringPath(r.Value.result.Ok.Value.tree)).ToImmutableList());
 
                             var aggregateCompositionHash =
                                 CommonConversion.StringBase16FromByteArray(Composition.GetHash(aggregateComposition));
@@ -852,7 +852,7 @@ public class Program
                                         var scenarioStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                                         var scenarioReport =
-                                            ElmInteractive.TestElmInteractive.TestElmInteractiveScenario(loadResult.Value.result.Ok.tree);
+                                            ElmInteractive.TestElmInteractive.TestElmInteractiveScenario(loadResult.Value.result.Ok.Value.tree);
 
                                         return new
                                         {
@@ -894,7 +894,7 @@ public class Program
                                 var scenarioId =
                                     CommonConversion.StringBase16FromByteArray(
                                         Composition.GetHash(
-                                            Composition.FromTreeWithStringPath(failedScenario.Value.loadResult.result.Ok.tree)));
+                                            Composition.FromTreeWithStringPath(failedScenario.Value.loadResult.result.Ok.Value.tree)));
 
                                 Console.WriteLine(
                                     "Failed scenario " + scenarioId[..10] + " ('" + failedScenario.Key.Split('\\', '/').LastOrDefault() + "'):");
@@ -931,7 +931,7 @@ public class Program
                         throw new Exception("Failed to load from path '" + contextAppPath + "': " + loadContextAppResult?.Err);
                     }
 
-                    contextAppCodeTree = loadContextAppResult.Ok.tree;
+                    contextAppCodeTree = loadContextAppResult.Ok.Value.tree;
 
                     if (!(0 < contextAppCodeTree?.EnumerateBlobsTransitive().Take(1).Count()))
                         throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
@@ -993,12 +993,12 @@ public class Program
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
                     .LogToActions(Console.WriteLine);
 
-                if (loadCompositionResult?.Ok.tree == null)
+                if (loadCompositionResult?.Ok?.tree == null)
                 {
                     throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
                 }
 
-                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.Ok.tree);
+                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.Ok.Value.tree);
 
                 var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
 
@@ -1007,7 +1007,7 @@ public class Program
                 var compositionDescription =
                     string.Join(
                         "\n",
-                        DescribeCompositionForHumans(loadCompositionResult.Ok.tree, listBlobs: listBlobsOption.HasValue()));
+                        DescribeCompositionForHumans(loadCompositionResult.Ok.Value.tree, listBlobs: listBlobsOption.HasValue()));
 
                 Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
 

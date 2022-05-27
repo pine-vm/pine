@@ -68,10 +68,8 @@ public class TestComposition
                 new
                 {
                     input = Composition.Component.Blob(new byte[]{0,1,2}),
-                    expectedOutput = new Composition.ParseAsTreeWithStringPathResult
-                    {
-                        Ok = Composition.TreeWithStringPath.Blob(new byte[]{0,1,2})
-                    }
+                    expectedOutput = Composition.ParseAsTreeWithStringPathResult.ok(
+                        Composition.TreeWithStringPath.Blob(new byte[]{0,1,2}))
                 },
                 new
                 {
@@ -96,16 +94,15 @@ public class TestComposition
                                     Composition.Component.Blob(new byte[]{0,1,2,3}),
                                 }.ToImmutableList())
                         }.ToImmutableList()),
-                    expectedOutput = new Composition.ParseAsTreeWithStringPathResult
-                    {
-                        Ok = Composition.TreeWithStringPath.Tree(
+                    expectedOutput = Composition.ParseAsTreeWithStringPathResult.ok(
+                        Composition.TreeWithStringPath.Tree(
                             treeContent:
                             new []
                             {
                                 (name: "DEF 🌲",
                                 component: Composition.TreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
                             }.ToImmutableList())
-                    }
+                    )
                 },
             };
 
@@ -256,8 +253,8 @@ public class TestComposition
     {
         var testCases = new[]
         {
-                0,-1,1,-1234,2345,123456789
-            };
+            0,-1,1,-1234,2345,123456789
+        };
 
         foreach (var testCase in testCases)
         {

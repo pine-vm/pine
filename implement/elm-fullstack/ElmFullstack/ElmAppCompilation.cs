@@ -134,8 +134,9 @@ namespace ElmFullstack
 
             if (compilationSuccess != null)
             {
-                return new Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
-                    Ok: new CompilationSuccess(compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport)));
+                return
+                    Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.ok(
+                        new CompilationSuccess(compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport)));
             }
 
             var compilationErrors =
@@ -163,8 +164,8 @@ namespace ElmFullstack
 
             if (0 < otherErrors.Count)
             {
-                return new Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>(
-                    Err: otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
+                return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
+                    otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
             }
 
             byte[] ElmMake(

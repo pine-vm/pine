@@ -519,6 +519,9 @@ static public class LoadFromGitHubOrGitLab
                 treeEntry.Target;
         }
 
+        if (currentObject == null)
+            return Result<object, GitObject>.err(new object());
+
         return Result<object, GitObject>.ok(currentObject);
     }
 

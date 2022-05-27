@@ -322,19 +322,19 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         if (compositionEvent.UpdateElmAppStateForEvent != null)
         {
             if (processBefore.lastElmAppVolatileProcess == null)
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok: processBefore);
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
 
             processBefore.lastElmAppVolatileProcess.ProcessEvent(
                 Encoding.UTF8.GetString(compositionEvent.UpdateElmAppStateForEvent));
 
-            return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok: processBefore);
+            return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
         }
 
         if (compositionEvent.SetElmAppState != null)
         {
             if (processBefore.lastElmAppVolatileProcess == null)
             {
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Failed to load the serialized state with the elm app: Looks like no app was deployed so far.");
             }
 
@@ -346,11 +346,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             if (processEventResult?.Ok == null)
             {
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Set state function in the hosted app returned an error: " + processEventResult?.Err);
             }
 
-            return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok: processBefore);
+            return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
         }
 
         if (compositionEvent.DeployAppConfigAndMigrateElmAppState != null)
@@ -368,25 +368,25 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             if (migrateEventResult?.Ok == null)
             {
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Failed to process the event in the hosted app: " + migrateEventResult?.Err);
             }
 
             if (migrateEventResult?.Ok?.migrateResult?.Just == null)
             {
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Unexpected shape of response: migrateResult is Nothing");
             }
 
             if (migrateEventResult?.Ok?.migrateResult?.Just?.Ok == null)
             {
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Migration function in the hosted app returned an error: " + migrateEventResult?.Ok?.migrateResult?.Just?.Err);
             }
 
             processBefore.lastElmAppVolatileProcess?.Dispose();
 
-            return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok:
+            return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(
                 new PersistentProcessLiveRepresentationDuringRestore(
                     lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
                     lastElmAppVolatileProcess: newElmAppProcess,
@@ -408,20 +408,20 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             if (initEventResult?.Ok == null)
             {
-                return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Failed to process the event in the hosted app: " + initEventResult?.Err);
             }
 
             processBefore.lastElmAppVolatileProcess?.Dispose();
 
-            return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Ok:
+            return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(
                 new PersistentProcessLiveRepresentationDuringRestore(
                     lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
                     lastElmAppVolatileProcess: newElmAppProcess,
                     initEventResult?.Ok));
         }
 
-        return new Result<string, PersistentProcessLiveRepresentationDuringRestore>(Err:
+        return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
             "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
 
@@ -441,18 +441,17 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             if (eventResponse.DecodeEventSuccess == null)
             {
-                return new Result<string, InterfaceToHost.AppEventResponseStructure>(Err:
+                return Result<string, InterfaceToHost.AppEventResponseStructure>.err(
                     "Hosted app failed to decode the event: " + eventResponse.DecodeEventError);
             }
 
-            return new Result<string, InterfaceToHost.AppEventResponseStructure> { Ok = eventResponse.DecodeEventSuccess };
+            return Result<string, InterfaceToHost.AppEventResponseStructure>.ok(eventResponse.DecodeEventSuccess);
         }
         catch (Exception parseException)
         {
-            return new Result<string, InterfaceToHost.AppEventResponseStructure>
-            {
-                Err = "Failed to parse event response from the app. Looks like the loaded elm app is not compatible with the interface.\nI got following response from the app:\n" + eventResponseSerial + "\nException: " + parseException.ToString()
-            };
+            return Result<string, InterfaceToHost.AppEventResponseStructure>.err(
+                "Failed to parse event response from the app. Looks like the loaded elm app is not compatible with the interface.\nI got following response from the app:\n" +
+                eventResponseSerial + "\nException: " + parseException.ToString());
         }
     }
 
