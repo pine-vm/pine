@@ -7,7 +7,6 @@ module Backend.Route exposing
     , routeFromUrl
     )
 
-import Common
 import Url
 import Url.Parser
 

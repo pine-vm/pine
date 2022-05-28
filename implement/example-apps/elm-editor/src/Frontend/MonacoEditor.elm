@@ -15,6 +15,7 @@ type MessageToEditor
 type MessageFromEditor
     = CompletedSetupEvent
     | DidChangeContentEvent String
+    | DidFocusEditorWidgetEvent
     | EditorActionCloseEditorEvent
     | EditorActionFormatDocumentEvent
     | EditorActionCompileEvent

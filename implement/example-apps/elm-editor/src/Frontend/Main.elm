@@ -184,7 +184,7 @@ type Event
     | UserInputToggleTitleBarMenu TitlebarMenuEntry
     | UserInputMouseOverTitleBarMenu (Maybe TitlebarMenuEntry)
     | UserInputKeyDownEvent Keyboard.Event.KeyboardEvent
-    | UserInputMouseDownOutsideTitlebarMenu
+    | UserInputFocusOutsideTitlebarMenu
     | DiscardEvent
 
 
@@ -284,7 +284,8 @@ subscriptions _ =
     [ receiveMessageFromMonacoFrame (MonacoEditorEvent >> WorkspaceEvent)
     , Time.every 500 TimeHasArrived
     , Browser.Events.onKeyDown (Keyboard.Event.decodeKeyboardEvent |> Json.Decode.map UserInputKeyDownEvent)
-    , Browser.Events.onMouseDown (isTargetOutsideParentWithId titleBarMenubarElementId UserInputMouseDownOutsideTitlebarMenu)
+    , Browser.Events.onMouseDown
+        (isTargetOutsideParentWithId titleBarMenubarElementId UserInputFocusOutsideTitlebarMenu)
     ]
         |> Sub.batch
 
@@ -560,6 +561,23 @@ update event stateBefore =
             case stateBefore.workspace of
                 WorkspaceOk workspaceBefore ->
                     let
+                        workspaceEventIsEditorGotFocus =
+                            case workspaceEvent of
+                                MonacoEditorEvent monacoEditorEventJson ->
+                                    monacoEditorEventJson
+                                        |> Json.Decode.decodeValue CompilationInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
+                                        |> (==) (Ok Frontend.MonacoEditor.DidFocusEditorWidgetEvent)
+
+                                _ ->
+                                    False
+
+                        mapForFocusOutsideTitlebarMenu =
+                            if workspaceEventIsEditorGotFocus then
+                                userInputFocusOutsideTitlebarMenu
+
+                            else
+                                identity
+
                         ( workspace, workspaceCmd ) =
                             workspaceBefore
                                 |> updateWorkspace { time = stateBefore.time } workspaceEvent
@@ -585,6 +603,7 @@ update event stateBefore =
                                 Cmd.none
                     in
                     ( { stateBefore | workspace = WorkspaceOk workspace }
+                        |> mapForFocusOutsideTitlebarMenu
                     , [ Cmd.map WorkspaceEvent workspaceCmd
                       , setProjectStateInUrlCmd
                       ]
@@ -604,24 +623,29 @@ update event stateBefore =
             else
                 ( stateBefore, Cmd.none )
 
-        UserInputMouseDownOutsideTitlebarMenu ->
-            let
-                popupIsOpenForTitlebarMenu =
-                    case stateBefore.popup of
-                        Just (TitlebarMenu _ _) ->
-                            True
-
-                        _ ->
-                            False
-            in
-            if popupIsOpenForTitlebarMenu then
-                update UserInputClosePopup stateBefore
-
-            else
-                ( stateBefore, Cmd.none )
+        UserInputFocusOutsideTitlebarMenu ->
+            ( userInputFocusOutsideTitlebarMenu stateBefore, Cmd.none )
 
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+userInputFocusOutsideTitlebarMenu : State -> State
+userInputFocusOutsideTitlebarMenu stateBefore =
+    let
+        popupIsOpenForTitlebarMenu =
+            case stateBefore.popup of
+                Just (TitlebarMenu _ _) ->
+                    True
+
+                _ ->
+                    False
+    in
+    if popupIsOpenForTitlebarMenu then
+        { stateBefore | popup = Nothing }
+
+    else
+        stateBefore
 
 
 setProjectStateInUrlForBookmark : { createDiffIfBaseAvailable : Bool } -> WorkingProjectStateStructure -> State -> Url.Url
@@ -865,6 +889,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                             stateBefore
                                 |> provideHover requestHoverEvent
                                 |> Tuple.mapSecond provideHoverInMonacoEditorCmd
+
+                        Frontend.MonacoEditor.DidFocusEditorWidgetEvent ->
+                            ( stateBefore, Cmd.none )
 
         UserInputFormat ->
             ( stateBefore, elmFormatCmd stateBefore |> Maybe.withDefault Cmd.none )
@@ -1883,7 +1910,16 @@ view state =
             [ Element.html FontAwesome.Styles.css
             , titlebar
             , [ activityBar, mainContent ]
-                |> Element.row [ Element.width Element.fill, Element.height Element.fill ]
+                |> Element.row
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+
+                    {-
+                       2022-05-28 Observation: This "focusin" handler is not invoked when user clicks in one of the iframes (Monaco editor or output live test)
+                    -}
+                    , Element.htmlAttribute
+                        (Html.Events.on "focusin" (Json.Decode.succeed UserInputFocusOutsideTitlebarMenu))
+                    ]
             ]
                 |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
                 |> Element.layout
@@ -3198,13 +3234,13 @@ titlebarMenuEntryButton state menuEntry =
                 greyFromLightness 0.2
 
         dropdownAttributes =
-            if not isOpen then
-                []
-
-            else
+            if isOpen then
                 [ titlebarMenuEntryDropdownContent state menuEntry
                     |> Element.below
                 ]
+
+            else
+                []
     in
     Element.Input.button
         [ Element.Background.color entryBackgroundColor

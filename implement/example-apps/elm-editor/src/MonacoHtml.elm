@@ -161,6 +161,10 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         }
     }
 
+    function editorEventOnDidFocusEditorWidget() {
+        parent?.messageFromMonacoFrame?.({"DidFocusEditorWidgetEvent":[]});
+    }
+
     function editorActionCloseEditor() {
         parent?.messageFromMonacoFrame?.({"EditorActionCloseEditorEvent":[]});
     }
@@ -351,6 +355,11 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 onWillSaveState() { },
                 onDidChangeStorage() { }
             }
+        });
+
+        editor.onDidFocusEditorWidget(() => {
+
+            editorEventOnDidFocusEditorWidget();
         });
 
         editor.addAction({
