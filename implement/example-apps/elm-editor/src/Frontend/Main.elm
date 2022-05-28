@@ -3370,7 +3370,7 @@ monacoEditorElement _ =
 
 defaultProjectLink : String
 defaultProjectLink =
-    "https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/default-app"
+    "https://github.com/onlinegamemaker/making-online-games/tree/04f68edb04d9bc366f17f6123b189a6f577abb67/games-program-codes/simple-snake"
 
 
 initWorkspaceFromFileTreeAndFileSelection :
