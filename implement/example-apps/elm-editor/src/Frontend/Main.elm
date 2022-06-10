@@ -108,10 +108,25 @@ type alias WorkingProjectStateStructure =
     , lastTextReceivedFromEditor : Maybe String
     , compilation : Maybe CompilationState
     , syntaxInspection : Maybe SyntaxInspectionState
-    , elmFormatResult : Maybe (Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure)
+    , elmFormat : Maybe ElmFormatState
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
     , languageServiceState : LanguageService.LanguageServiceState
+    }
+
+
+type ElmFormatState
+    = ElmFormatInProgress ElmFormatStartStruct
+    | ElmFormatResult ElmFormatStartStruct ElmFormatResultStruct
+
+
+type alias ElmFormatResultStruct =
+    Result (Http.Detailed.Error String) (Result FrontendBackendInterface.FormatElmModuleTextResponseStructure String)
+
+
+type alias ElmFormatStartStruct =
+    { startTime : Time.Posix
+    , inputModuleText : String
     }
 
 
@@ -193,6 +208,7 @@ type WorkspaceEventStructure
     | UserInputChangeTextInEditor String
     | UserInputOpenFileInEditor (List String)
     | UserInputFormat
+    | UserInputCancelFormatting
     | UserInputCompile
     | UserInputInspectSyntax
     | UserInputCloseEditor
@@ -838,6 +854,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                             stateBefore.fileTree
                                 |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes ( filePath, fileContentFromString inputText )
                         , lastTextReceivedFromEditor = Just inputText
+                        , elmFormat = Nothing
                     }
             , Cmd.none
             )
@@ -894,7 +911,21 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                             ( stateBefore, Cmd.none )
 
         UserInputFormat ->
-            ( stateBefore, elmFormatCmd stateBefore |> Maybe.withDefault Cmd.none )
+            case elmFormatCmdFromState stateBefore of
+                Nothing ->
+                    ( stateBefore
+                    , Cmd.none
+                    )
+
+                Just ( moduleText, elmFormatCmd ) ->
+                    ( { stateBefore
+                        | elmFormat = Just (ElmFormatInProgress { startTime = updateConfig.time, inputModuleText = moduleText })
+                      }
+                    , elmFormatCmd
+                    )
+
+        UserInputCancelFormatting ->
+            ( { stateBefore | elmFormat = Nothing }, Cmd.none )
 
         UserInputCompile ->
             compileFileOpenedInEditor { stateBefore | viewEnlargedPane = Nothing }
@@ -907,31 +938,44 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                 editing =
                     stateBefore.editing
               in
-              { stateBefore | editing = { editing | filePathOpenedInEditor = Nothing } }
+              { stateBefore
+                | editing = { editing | filePathOpenedInEditor = Nothing }
+                , elmFormat = Nothing
+              }
             , Cmd.none
             )
 
         BackendElmFormatResponseEvent formatResponseEvent ->
-            ( if Just formatResponseEvent.filePath /= stateBefore.editing.filePathOpenedInEditor then
-                stateBefore
-
-              else
-                case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
-                    Nothing ->
+            case stateBefore.elmFormat of
+                Just (ElmFormatInProgress formatStart) ->
+                    ( if Just formatResponseEvent.filePath /= stateBefore.editing.filePathOpenedInEditor then
                         stateBefore
 
-                    Just formattedText ->
-                        { stateBefore
-                            | fileTree =
-                                stateBefore.fileTree
-                                    |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes
-                                        ( formatResponseEvent.filePath
-                                        , fileContentFromString formattedText
-                                        )
-                            , elmFormatResult = Just formatResponseEvent.result
-                        }
-            , Cmd.none
-            )
+                      else
+                        case formatResponseEvent.result |> Result.toMaybe |> Maybe.andThen .formattedText of
+                            Nothing ->
+                                stateBefore
+
+                            Just formattedText ->
+                                let
+                                    formatResult =
+                                        formatResponseEvent.result
+                                            |> Result.map parseElmFormatResponse
+                                in
+                                { stateBefore
+                                    | fileTree =
+                                        stateBefore.fileTree
+                                            |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes
+                                                ( formatResponseEvent.filePath
+                                                , fileContentFromString formattedText
+                                                )
+                                    , elmFormat = Just (ElmFormatResult formatStart formatResult)
+                                }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( stateBefore, Cmd.none )
 
         BackendElmMakeResponseEvent requestIdentity httpResponse ->
             case stateBefore.compilation of
@@ -1007,7 +1051,10 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                                                         , Just (requestToBackendCmdFromCompilationInProgress compilationInProgress)
                                                         )
                         in
-                        ( { stateBefore | compilation = Just compilation }
+                        ( { stateBefore
+                            | compilation = Just compilation
+                            , elmFormat = Nothing
+                          }
                         , Maybe.withDefault Cmd.none cmd
                         )
 
@@ -1027,6 +1074,20 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
             else
                 updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile state
+
+
+parseElmFormatResponse : FrontendBackendInterface.FormatElmModuleTextResponseStructure -> Result FrontendBackendInterface.FormatElmModuleTextResponseStructure String
+parseElmFormatResponse response =
+    case response.formattedText of
+        Nothing ->
+            Err response
+
+        Just formattedText ->
+            if response.processOutput.exitCode == 0 then
+                Ok formattedText
+
+            else
+                Err response
 
 
 provideCompletionItems :
@@ -1284,8 +1345,8 @@ fileTreeNodeFromListFileWithPath =
         >> FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
 
 
-elmFormatCmd : WorkingProjectStateStructure -> Maybe (Cmd WorkspaceEventStructure)
-elmFormatCmd state =
+elmFormatCmdFromState : WorkingProjectStateStructure -> Maybe ( String, Cmd WorkspaceEventStructure )
+elmFormatCmdFromState state =
     case fileOpenedInEditorFromWorkspace state of
         Nothing ->
             Nothing
@@ -1308,9 +1369,11 @@ elmFormatCmd state =
                                 _ ->
                                     Json.Decode.fail "Unexpected response"
                     in
-                    requestToApiCmd request
+                    ( fileContentString
+                    , requestToApiCmd request
                         jsonDecoder
                         (Result.map Tuple.second >> (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result }))
+                    )
                         |> Just
 
 
@@ -1787,7 +1850,7 @@ view state =
                                                     , Element.htmlAttribute (HA.style "user-select" "none")
                                                     ]
                                             , [ buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
-                                              , buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
+                                              , buttonCompile
                                               ]
                                                 |> Element.row
                                                     [ Element.spacing defaultFontSize
@@ -1799,9 +1862,112 @@ view state =
                                                     , Element.paddingXY defaultFontSize 0
                                                     , Element.width Element.fill
                                                     ]
+
+                                        editorModalOverlay =
+                                            case workingState.elmFormat of
+                                                Nothing ->
+                                                    Nothing
+
+                                                Just elmFormat ->
+                                                    let
+                                                        buttonCancelFormat =
+                                                            buttonElement
+                                                                { label = "Cancel formatting"
+                                                                , onPress = Just UserInputCancelFormatting
+                                                                }
+
+                                                        continueWithHeadingAndContent config =
+                                                            [ config.headingText
+                                                                |> Element.text
+                                                                |> Element.el (headingAttributes 3)
+                                                            , config.mainContent
+                                                                |> Element.el
+                                                                    [ Element.padding defaultFontSize
+                                                                    , Element.scrollbarY
+                                                                    , Element.width Element.fill
+                                                                    , Element.height Element.fill
+                                                                    ]
+                                                            , buttonCancelFormat |> Element.el [ Element.alignBottom, Element.alignLeft ]
+                                                            ]
+                                                                |> Element.column
+                                                                    [ Element.spacing defaultFontSize
+                                                                    , Element.width Element.fill
+                                                                    , Element.height Element.fill
+                                                                    ]
+
+                                                        continueWithErrorText errorText =
+                                                            continueWithHeadingAndContent
+                                                                { headingText = "Formatting failed"
+                                                                , mainContent =
+                                                                    [ errorText |> dialogErrorElementFromDescription
+                                                                    , [ "To see syntax errors in the code editor, use 'Compile'" |> Element.text
+                                                                      , buttonCompile
+                                                                      ]
+                                                                        |> Element.wrappedRow [ Element.spacing defaultFontSize ]
+                                                                    ]
+                                                                        |> Element.column
+                                                                            [ Element.spacing defaultFontSize
+                                                                            , Element.width Element.fill
+                                                                            , Element.height Element.fill
+                                                                            ]
+                                                                }
+                                                    in
+                                                    case elmFormat of
+                                                        ElmFormatInProgress _ ->
+                                                            continueWithHeadingAndContent
+                                                                { headingText = "Formatting ..."
+                                                                , mainContent = Element.none
+                                                                }
+                                                                |> Just
+
+                                                        ElmFormatResult _ formatResult ->
+                                                            case formatResult of
+                                                                Err httpError ->
+                                                                    [ "HTTP Error:"
+                                                                    , describeHttpError httpError
+                                                                    ]
+                                                                        |> String.join "\n"
+                                                                        |> continueWithErrorText
+                                                                        |> Just
+
+                                                                Ok (Err errorResponse) ->
+                                                                    [ "elm-format reported an error:"
+                                                                    , errorResponse.processOutput.standardError
+                                                                    ]
+                                                                        |> String.join "\n"
+                                                                        |> continueWithErrorText
+                                                                        |> Just
+
+                                                                Ok (Ok _) ->
+                                                                    Nothing
+
+                                        editorPaneContent =
+                                            monacoEditorElement state
+                                                |> Element.el
+                                                    [ Element.transparent (editorModalOverlay /= Nothing)
+                                                    , Element.width Element.fill
+                                                    , Element.height Element.fill
+                                                    ]
+                                                |> Element.el
+                                                    ((editorModalOverlay
+                                                        |> Maybe.map
+                                                            (Element.el
+                                                                [ Element.padding defaultFontSize
+                                                                , Element.width Element.fill
+                                                                , Element.height Element.fill
+                                                                ]
+                                                                >> Element.inFront
+                                                                >> List.singleton
+                                                            )
+                                                        |> Maybe.withDefault []
+                                                     )
+                                                        ++ [ Element.width Element.fill
+                                                           , Element.height Element.fill
+                                                           ]
+                                                    )
                                     in
                                     { editorPaneHeader = headerElement
-                                    , editorPaneContent = monacoEditorElement state
+                                    , editorPaneContent = editorPaneContent
                                     }
 
                         outputPaneElements =
@@ -1837,7 +2003,7 @@ view state =
                             |> Element.text
                       ]
                         |> Element.paragraph
-                            [ Element.Font.color (Element.rgb 1 0.64 0)
+                            [ Element.Font.color errorTextColor
                             , Element.padding defaultFontSize
                             , Element.width Element.fill
                             ]
@@ -2393,7 +2559,7 @@ dialogErrorElementFromDescription =
         >> Element.html
         >> Element.el [ Element.htmlAttribute (HA.style "white-space" "pre-wrap") ]
         >> List.singleton
-        >> Element.paragraph [ Element.Font.color (Element.rgb 1 0.64 0) ]
+        >> Element.paragraph [ Element.Font.color errorTextColor ]
 
 
 projectSummaryElementForDialog : FileTreeInWorkspace.FileTreeNode -> Element.Element e
@@ -2589,7 +2755,7 @@ viewOutputPaneContent state =
                     ]
                         |> Element.column
                             [ Element.spacing defaultFontSize
-                            , Element.Font.color (Element.rgb 1 0.64 0)
+                            , Element.Font.color errorTextColor
                             , Element.padding defaultFontSize
                             , Element.width Element.fill
                             , Element.height Element.fill
@@ -3195,6 +3361,11 @@ styledTextFromElmMakeReportMessageListItem elmMakeReportMessageListItem =
             styled
 
 
+buttonCompile : Element.Element WorkspaceEventStructure
+buttonCompile =
+    buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
+
+
 buttonElement : { label : String, onPress : Maybe event } -> Element.Element event
 buttonElement buttonConfig =
     Element.Input.button
@@ -3419,7 +3590,7 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     , lastTextReceivedFromEditor = Nothing
     , compilation = Nothing
     , syntaxInspection = Nothing
-    , elmFormatResult = Nothing
+    , elmFormat = Nothing
     , viewEnlargedPane = Nothing
     , enableInspectionOnCompile = False
     , languageServiceState = LanguageService.initLanguageServiceState
@@ -3621,3 +3792,8 @@ onKeyDownEnter msg =
                     )
             )
         )
+
+
+errorTextColor : Element.Color
+errorTextColor =
+    Element.rgb 1 0.64 0
