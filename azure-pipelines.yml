@@ -11,7 +11,7 @@ steps:
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk' # Options: runtime, sdk
-    version: '6.0.300' 
+    version: '6.0.301' 
 
 - script: dotnet --version
 
