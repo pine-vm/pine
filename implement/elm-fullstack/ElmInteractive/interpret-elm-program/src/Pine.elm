@@ -16,7 +16,7 @@ type Expression
          Maybe we can even consolidate this into an `ApplicationExpression` (Apply kernel 'cons' to add a value to the context)?
       -}
     | ContextExpansionWithNameExpression ContextExpansionWithNameExpressionStructure
-    | IfBlockExpression IfBlockExpressionStructure
+    | ConditionalExpression ConditionalExpressionStructure
     | FunctionExpression FunctionExpressionStructure
 
 
@@ -36,7 +36,7 @@ type alias ApplicationExpressionStructure =
     }
 
 
-type alias IfBlockExpressionStructure =
+type alias ConditionalExpressionStructure =
     { condition : Expression
     , ifTrue : Expression
     , ifFalse : Expression
@@ -151,18 +151,18 @@ evaluateExpressionExceptClosure context expression =
                 |> Maybe.withDefault (ListValue [])
                 |> Ok
 
-        IfBlockExpression ifBlock ->
-            case evaluateExpression context ifBlock.condition of
+        ConditionalExpression conditional ->
+            case evaluateExpression context conditional.condition of
                 Err error ->
                     Err (DescribePathNode "Failed to evaluate condition" error)
 
                 Ok conditionValue ->
                     evaluateExpression context
                         (if conditionValue == trueValue then
-                            ifBlock.ifTrue
+                            conditional.ifTrue
 
                          else
-                            ifBlock.ifFalse
+                            conditional.ifFalse
                         )
 
         ContextExpansionWithNameExpression expansion ->
@@ -547,8 +547,8 @@ describeExpression expression =
         FunctionExpression functionExpression ->
             "function(" ++ functionExpression.argumentName ++ ", " ++ describeExpression functionExpression.body ++ ")"
 
-        IfBlockExpression _ ->
-            "if-block"
+        ConditionalExpression _ ->
+            "conditional"
 
         ContextExpansionWithNameExpression expansion ->
             "context-expansion(" ++ expansion.name ++ ")"
@@ -790,11 +790,11 @@ pineEncodeExpression expression =
                 |> pineEncodeRecord
             )
 
-        IfBlockExpression ifBlock ->
-            ( "IfBlock"
-            , [ ( "condition", ifBlock.condition )
-              , ( "ifTrue", ifBlock.ifTrue )
-              , ( "ifFalse", ifBlock.ifFalse )
+        ConditionalExpression conditional ->
+            ( "Conditional"
+            , [ ( "condition", conditional.condition )
+              , ( "ifTrue", conditional.ifTrue )
+              , ( "ifFalse", conditional.ifFalse )
               ]
                 |> List.map (Tuple.mapSecond pineEncodeExpression)
                 |> Dict.fromList
@@ -837,8 +837,8 @@ pineDecodeExpression value =
              , ( "ContextExpansionWithName"
                , pineDecodeContextExpansionWithNameExpression >> Result.map ContextExpansionWithNameExpression
                )
-             , ( "IfBlock"
-               , pineDecodeIfBlockExpression >> Result.map IfBlockExpression
+             , ( "Conditional"
+               , pineDecodeConditionalExpression >> Result.map ConditionalExpression
                )
              , ( "Function"
                , pineDecodeFunctionExpression >> Result.map FunctionExpression
@@ -879,11 +879,11 @@ pineDecodeContextExpansionWithNameExpression =
             )
 
 
-pineDecodeIfBlockExpression : Value -> Result String IfBlockExpressionStructure
-pineDecodeIfBlockExpression =
+pineDecodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
+pineDecodeConditionalExpression =
     pineDecodeRecord
         >> Result.andThen
-            (always (Ok IfBlockExpressionStructure)
+            (always (Ok ConditionalExpressionStructure)
                 |> pineDecodeRecordField "condition" pineDecodeExpression
                 |> pineDecodeRecordField "ifTrue" pineDecodeExpression
                 |> pineDecodeRecordField "ifFalse" pineDecodeExpression

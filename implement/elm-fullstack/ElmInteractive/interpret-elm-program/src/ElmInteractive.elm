@@ -1439,7 +1439,7 @@ pineExpressionFromElm elmExpression =
 
                                 Ok expressionIfFalse ->
                                     Ok
-                                        (Pine.IfBlockExpression
+                                        (Pine.ConditionalExpression
                                             { condition = condition, ifTrue = expressionIfTrue, ifFalse = expressionIfFalse }
                                         )
 
@@ -1723,8 +1723,8 @@ pineExpressionFromElmCaseBlock caseBlock =
 
                 Ok cases ->
                     let
-                        ifBlockFromCase deconstructedCase nextBlockExpression =
-                            Pine.IfBlockExpression
+                        conditionalFromCase deconstructedCase nextBlockExpression =
+                            Pine.ConditionalExpression
                                 { condition = deconstructedCase.conditionExpression
                                 , ifTrue =
                                     pineExpressionFromLetBlockDeclarationsAndExpression
@@ -1735,7 +1735,7 @@ pineExpressionFromElmCaseBlock caseBlock =
                     in
                     Ok
                         (List.foldr
-                            ifBlockFromCase
+                            conditionalFromCase
                             (Pine.LiteralExpression (Pine.valueFromString "Error in mapping of case-of block: No matching branch."))
                             cases
                         )
@@ -1983,7 +1983,7 @@ countListElementsExpression listExpr =
         [ ( "getLength"
           , functionExpressionFromArgumentsNamesAndExpression
                 [ "remaining" ]
-                (Pine.IfBlockExpression
+                (Pine.ConditionalExpression
                     { condition =
                         functionApplicationExpressionFromListOfArguments
                             (expressionForPineKernelFunction "equals")
@@ -2088,7 +2088,7 @@ pineExpressionForRecordAccess fieldName recordExpression =
         recordFieldsExpression =
             listItemFromIndexExpression 0 (listItemFromIndexExpression 1 recordExpression)
     in
-    Pine.IfBlockExpression
+    Pine.ConditionalExpression
         { condition =
             functionApplicationExpressionFromListOfArguments
                 (expressionForPineKernelFunction "equals")
@@ -2143,7 +2143,7 @@ expressionToLookupNameInValue : { ifNotFound : Pine.Expression, ifFoundPostproce
 expressionToLookupNameInValue { ifNotFound, ifFoundPostprocess } name scopeExpression =
     pineExpressionFromLetBlockDeclarationsAndExpression
         [ ( "lookupResult", Pine.LookupNameExpression { scopeExpression = scopeExpression, name = name } ) ]
-        (Pine.IfBlockExpression
+        (Pine.ConditionalExpression
             { condition =
                 functionApplicationExpressionFromListOfArguments
                     (expressionForPineKernelFunction "equals")

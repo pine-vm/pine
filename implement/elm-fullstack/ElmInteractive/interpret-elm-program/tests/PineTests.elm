@@ -18,7 +18,7 @@ pineExpressionEncodeDecodeRoundtrip =
             }
       )
     , ( "if block"
-      , Pine.IfBlockExpression
+      , Pine.ConditionalExpression
             { condition = Pine.LookupNameExpression { scopeExpression = Nothing, name = "condition" }
             , ifTrue = Pine.LookupNameExpression { scopeExpression = Nothing, name = "trueExpression" }
             , ifFalse = Pine.LookupNameExpression { scopeExpression = Nothing, name = "falseExpression" }
