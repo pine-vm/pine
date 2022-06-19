@@ -90,7 +90,7 @@ submissionInInteractive context previousSubmissions submission =
             submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
 
-submissionWithHistoryInInteractive : Pine.ExpressionContext -> List String -> String -> Result String SubmissionResponse
+submissionWithHistoryInInteractive : Pine.EvalContext -> List String -> String -> Result String SubmissionResponse
 submissionWithHistoryInInteractive initialContext previousSubmissions submission =
     case previousSubmissions of
         [] ->
@@ -106,7 +106,7 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
                     submissionWithHistoryInInteractive expressionContext remainingPreviousSubmissions submission
 
 
-submissionInInteractiveInPineContext : Pine.ExpressionContext -> String -> Result String ( Pine.ExpressionContext, SubmissionResponse )
+submissionInInteractiveInPineContext : Pine.EvalContext -> String -> Result String ( Pine.EvalContext, SubmissionResponse )
 submissionInInteractiveInPineContext expressionContext submission =
     case parseInteractiveSubmissionFromString submission of
         Err error ->
@@ -149,7 +149,7 @@ displayStringFromPineError error =
             nodeDescription ++ "\n" ++ prependAllLines "  " (displayStringFromPineError node)
 
 
-expandContextWithElmDeclaration : Elm.Syntax.Declaration.Declaration -> Pine.ExpressionContext -> Result String Pine.ExpressionContext
+expandContextWithElmDeclaration : Elm.Syntax.Declaration.Declaration -> Pine.EvalContext -> Result String Pine.EvalContext
 expandContextWithElmDeclaration elmDeclaration contextBefore =
     case elmDeclaration of
         Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
@@ -341,7 +341,7 @@ pineValueAsElmValue pineValue =
             in
             Ok (ElmInternal ("closure<" ++ detail ++ ">"))
 
-        Pine.KernelFunction _ ->
+        Pine.KernelFunctionValue _ ->
             Ok (ElmInternal "PineKernelFunction")
 
 
@@ -381,7 +381,7 @@ elmValueAsElmRecord elmValue =
             Err "Value is not a list."
 
 
-pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.ExpressionContext
+pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
 pineExpressionContextForElmInteractive context =
     let
         contextModulesTexts =
@@ -438,7 +438,7 @@ parsedElmFileFromOnlyFileText fileText =
                 }
 
 
-exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.ExpressionContext -> Pine.ExpressionContext
+exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.EvalContext -> Pine.EvalContext
 exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
     let
         redirectValue =
@@ -1366,10 +1366,7 @@ pineExpressionFromElm elmExpression =
                     Err ("Failed to map negated expression: " ++ error)
 
                 Ok negatedExpression ->
-                    Ok
-                        (Pine.ApplicationExpression
-                            { function = expressionForPineKernelFunction "negate", argument = negatedExpression }
-                        )
+                    Ok (applyKernelFunctionWithOneArgument "negate" negatedExpression)
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             Ok
@@ -1773,11 +1770,6 @@ pineExpressionFromElmPattern :
     -> Result String { conditionExpression : Pine.Expression, declarations : List ( String, Pine.Expression ) }
 pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
     let
-        equalsCondition exprA exprB =
-            functionApplicationExpressionFromListOfArguments
-                (expressionForPineKernelFunction "equals")
-                [ exprA, exprB ]
-
         continueWithOnlyEqualsCondition valueToCompare =
             Ok
                 { conditionExpression = equalsCondition caseBlockValueExpression valueToCompare
@@ -1810,11 +1802,9 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                     (\elementsResults ->
                         let
                             matchesLengthCondition =
-                                functionApplicationExpressionFromListOfArguments
-                                    (expressionForPineKernelFunction "equals")
-                                    [ Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt (List.length listElements)))
-                                    , countListElementsExpression caseBlockValueExpression
-                                    ]
+                                equalsCondition
+                                    (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt (List.length listElements))))
+                                    (countListElementsExpression caseBlockValueExpression)
 
                             condition =
                                 (matchesLengthCondition
@@ -1837,32 +1827,19 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                     let
                         declarations =
                             [ ( unconsLeftName
-                              , Pine.ApplicationExpression
-                                    { function = expressionForPineKernelFunction "listHead"
-                                    , argument = caseBlockValueExpression
-                                    }
+                              , applyKernelFunctionWithOneArgument "listHead" caseBlockValueExpression
                               )
                             , ( unconsRightName
-                              , Pine.ApplicationExpression
-                                    { function = expressionForPineKernelFunction "listTail"
-                                    , argument = caseBlockValueExpression
-                                    }
+                              , applyKernelFunctionWithOneArgument "listTail" caseBlockValueExpression
                               )
                             ]
 
                         conditionExpression =
-                            Pine.ApplicationExpression
-                                { function = expressionForPineKernelFunction "notBool"
-                                , argument =
-                                    functionApplicationExpressionFromListOfArguments
-                                        (expressionForPineKernelFunction "equals")
-                                        [ caseBlockValueExpression
-                                        , Pine.ApplicationExpression
-                                            { function = expressionForPineKernelFunction "listTail"
-                                            , argument = caseBlockValueExpression
-                                            }
-                                        ]
-                                }
+                            applyKernelFunctionWithOneArgument "notBool"
+                                (equalsCondition
+                                    caseBlockValueExpression
+                                    (applyKernelFunctionWithOneArgument "listTail" caseBlockValueExpression)
+                                )
                     in
                     Ok
                         { conditionExpression = conditionExpression
@@ -1891,13 +1868,9 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                             )
 
                 conditionExpression =
-                    functionApplicationExpressionFromListOfArguments
-                        (expressionForPineKernelFunction "equals")
-                        [ Pine.LiteralExpression (Pine.valueFromString qualifiedName.name)
-                        , functionApplicationExpressionFromListOfArguments
-                            (expressionForPineKernelFunction "listHead")
-                            [ caseBlockValueExpression ]
-                        ]
+                    equalsCondition
+                        (Pine.LiteralExpression (Pine.valueFromString qualifiedName.name))
+                        (applyKernelFunctionWithOneArgument "listHead" caseBlockValueExpression)
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
                 Err error ->
@@ -1915,10 +1888,8 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                                 |> List.indexedMap
                                     (\argumentIndex declarationName ->
                                         ( declarationName
-                                        , Pine.ApplicationExpression
-                                            { function = expressionForPineKernelFunction "listHead"
-                                            , argument = argumentFromIndexExpression argumentIndex
-                                            }
+                                        , applyKernelFunctionWithOneArgument "listHead"
+                                            (argumentFromIndexExpression argumentIndex)
                                         )
                                     )
                     in
@@ -1959,22 +1930,13 @@ booleanConjunctionExpressionFromList defaultIfEmpty operands =
         firstOperator :: otherOperators ->
             otherOperators
                 |> List.foldl
-                    (\single aggregate ->
-                        functionApplicationExpressionFromListOfArguments
-                            (expressionForPineKernelFunction "and")
-                            [ aggregate
-                            , single
-                            ]
-                    )
+                    (\single aggregate -> applyKernelFunctionWithTwoArguments "and" aggregate single)
                     firstOperator
 
 
 listItemFromIndexExpression : Int -> Pine.Expression -> Pine.Expression
 listItemFromIndexExpression itemIndex listExpression =
-    Pine.ApplicationExpression
-        { function = expressionForPineKernelFunction "listHead"
-        , argument = listDropExpression itemIndex listExpression
-        }
+    applyKernelFunctionWithOneArgument "listHead" (listDropExpression itemIndex listExpression)
 
 
 countListElementsExpression : Pine.Expression -> Pine.Expression
@@ -1985,24 +1947,20 @@ countListElementsExpression listExpr =
                 [ "remaining" ]
                 (Pine.ConditionalExpression
                     { condition =
-                        functionApplicationExpressionFromListOfArguments
-                            (expressionForPineKernelFunction "equals")
-                            [ Pine.ListExpression []
-                            , expressionToLookupNameInEnvironment "remaining"
-                            ]
+                        equalsCondition
+                            (Pine.ListExpression [])
+                            (expressionToLookupNameInEnvironment "remaining")
                     , ifTrue =
                         Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
                     , ifFalse =
-                        functionApplicationExpressionFromListOfArguments
-                            (expressionForPineKernelFunction "addInt")
-                            [ Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
-                            , functionApplicationExpressionFromListOfArguments
+                        applyKernelFunctionWithTwoArguments "addInt"
+                            (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1)))
+                            (functionApplicationExpressionFromListOfArguments
                                 (expressionToLookupNameInEnvironment "getLength")
-                                [ functionApplicationExpressionFromListOfArguments
-                                    (expressionForPineKernelFunction "listTail")
-                                    [ expressionToLookupNameInEnvironment "remaining" ]
+                                [ applyKernelFunctionWithOneArgument "listTail"
+                                    (expressionToLookupNameInEnvironment "remaining")
                                 ]
-                            ]
+                            )
                     }
                 )
           )
@@ -2037,11 +1995,7 @@ listDropExpression numberToDrop listExpression =
     else
         listDropExpression
             (numberToDrop - 1)
-            (Pine.ApplicationExpression
-                { function = expressionForPineKernelFunction "listTail"
-                , argument = listExpression
-                }
-            )
+            (applyKernelFunctionWithOneArgument "listTail" listExpression)
 
 
 pineExpressionFromElmLambda : Elm.Syntax.Expression.Lambda -> Result String Pine.Expression
@@ -2090,11 +2044,9 @@ pineExpressionForRecordAccess fieldName recordExpression =
     in
     Pine.ConditionalExpression
         { condition =
-            functionApplicationExpressionFromListOfArguments
-                (expressionForPineKernelFunction "equals")
-                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
-                , listItemFromIndexExpression 0 recordExpression
-                ]
+            equalsCondition
+                (Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName))
+                (listItemFromIndexExpression 0 recordExpression)
         , ifTrue =
             expressionToLookupNameInValue
                 { ifNotFound =
@@ -2145,11 +2097,9 @@ expressionToLookupNameInValue { ifNotFound, ifFoundPostprocess } name scopeExpre
         [ ( "lookupResult", Pine.LookupNameExpression { scopeExpression = scopeExpression, name = name } ) ]
         (Pine.ConditionalExpression
             { condition =
-                functionApplicationExpressionFromListOfArguments
-                    (expressionForPineKernelFunction "equals")
-                    [ Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" }
-                    , Pine.LiteralExpression (Pine.ListValue [])
-                    ]
+                equalsCondition
+                    (Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" })
+                    (Pine.LiteralExpression (Pine.ListValue []))
             , ifTrue = ifNotFound
             , ifFalse =
                 ifFoundPostprocess
@@ -2158,6 +2108,25 @@ expressionToLookupNameInValue { ifNotFound, ifFoundPostprocess } name scopeExpre
                     )
             }
         )
+
+
+equalsCondition : Pine.Expression -> Pine.Expression -> Pine.Expression
+equalsCondition =
+    applyKernelFunctionWithTwoArguments "equals"
+
+
+applyKernelFunctionWithTwoArguments : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
+applyKernelFunctionWithTwoArguments kernelFunctionName exprA exprB =
+    functionApplicationExpressionFromListOfArguments
+        (expressionForPineKernelFunction kernelFunctionName)
+        [ exprA, exprB ]
+
+
+applyKernelFunctionWithOneArgument : String -> Pine.Expression -> Pine.Expression
+applyKernelFunctionWithOneArgument kernelFunctionName argExpr =
+    functionApplicationExpressionFromListOfArguments
+        (expressionForPineKernelFunction kernelFunctionName)
+        [ argExpr ]
 
 
 moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)

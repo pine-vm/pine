@@ -14,7 +14,7 @@ import Url
 
 type alias State =
     { expression : String
-    , evaluationContext : Result String Pine.ExpressionContext
+    , evaluationContext : Result String Pine.EvalContext
     , lastUserInputExpressionTime : Maybe Time.Posix
     , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
     }

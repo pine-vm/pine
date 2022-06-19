@@ -28,7 +28,7 @@ import Time
 
 type alias State =
     { time : Time.Posix
-    , evaluationContextResult : Result String Pine.ExpressionContext
+    , evaluationContextResult : Result String Pine.EvalContext
     , trainingSession : TrainingSessionState
     }
 
@@ -229,7 +229,7 @@ init =
 
 
 initLessonWorkspace :
-    { a | evaluationContextResult : Result String Pine.ExpressionContext, time : Time.Posix }
+    { a | evaluationContextResult : Result String Pine.EvalContext, time : Time.Posix }
     -> Lesson
     -> LessonWorkspace
 initLessonWorkspace state lesson =
@@ -847,7 +847,7 @@ viewProgressBar { progressMicro } =
             ]
 
 
-computeSolutionFromLessonInContext : Pine.ExpressionContext -> LessonChallenge -> String
+computeSolutionFromLessonInContext : Pine.EvalContext -> LessonChallenge -> String
 computeSolutionFromLessonInContext evaluationContext lessonChallenge =
     case ElmInteractive.submissionInInteractiveInPineContext evaluationContext lessonChallenge of
         Err error ->

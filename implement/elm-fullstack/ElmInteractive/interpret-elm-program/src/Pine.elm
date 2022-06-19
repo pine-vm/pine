@@ -59,11 +59,11 @@ type alias ContextExpansionWithNameExpressionStructure =
 type Value
     = BlobValue (List Int)
     | ListValue (List Value)
-    | ClosureValue ExpressionContext Expression
-    | KernelFunction (Value -> Result (PathDescription String) Value)
+    | ClosureValue EvalContext Expression
+    | KernelFunctionValue (Value -> Result (PathDescription String) Value)
 
 
-type alias ExpressionContext =
+type alias EvalContext =
     -- TODO: Test consolidate into simple Value
     { commonModel : List Value
     }
@@ -74,12 +74,12 @@ type PathDescription a
     | DescribePathEnd a
 
 
-addToContext : List Value -> ExpressionContext -> ExpressionContext
+addToContext : List Value -> EvalContext -> EvalContext
 addToContext names context =
     { context | commonModel = names ++ context.commonModel }
 
 
-evaluateExpression : ExpressionContext -> Expression -> Result (PathDescription String) Value
+evaluateExpression : EvalContext -> Expression -> Result (PathDescription String) Value
 evaluateExpression context expression =
     evaluateExpressionExceptClosure context expression
         |> Result.andThen
@@ -98,7 +98,7 @@ evaluateExpression context expression =
             )
 
 
-evaluateExpressionExceptClosure : ExpressionContext -> Expression -> Result (PathDescription String) Value
+evaluateExpressionExceptClosure : EvalContext -> Expression -> Result (PathDescription String) Value
 evaluateExpressionExceptClosure context expression =
     case expression of
         LiteralExpression value ->
@@ -196,7 +196,7 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameAsStringInContext : String -> ExpressionContext -> Result (PathDescription String) Value
+lookUpNameAsStringInContext : String -> EvalContext -> Result (PathDescription String) Value
 lookUpNameAsStringInContext name context =
     let
         nameAsValue =
@@ -328,7 +328,7 @@ kernelModuleName =
     "PineKernel"
 
 
-evaluateFunctionApplication : ExpressionContext -> { function : Expression, argument : Expression } -> Result (PathDescription String) Value
+evaluateFunctionApplication : EvalContext -> { function : Expression, argument : Expression } -> Result (PathDescription String) Value
 evaluateFunctionApplication context application =
     evaluateExpression context application.function
         |> Result.mapError (DescribePathNode ("Failed to evaluate function expression '" ++ describeExpression application.function ++ "'"))
@@ -344,7 +344,7 @@ evaluateFunctionApplication context application =
             )
 
 
-evaluateFunctionApplicationWithValues : ExpressionContext -> { function : Value, argument : Value } -> Result (PathDescription String) Value
+evaluateFunctionApplicationWithValues : EvalContext -> { function : Value, argument : Value } -> Result (PathDescription String) Value
 evaluateFunctionApplicationWithValues context application =
     case application.function of
         ClosureValue nextClosureContext closureExpression ->
@@ -368,7 +368,7 @@ evaluateFunctionApplicationWithValues context application =
                             )
                         )
 
-        KernelFunction kernelFunction ->
+        KernelFunctionValue kernelFunction ->
             kernelFunction application.argument
                 |> Result.mapError (DescribePathNode "Failed to apply kernel function")
 
@@ -443,12 +443,12 @@ kernelFunctionExpectingExactlyTwoArguments :
     }
     -> Value
 kernelFunctionExpectingExactlyTwoArguments configuration =
-    KernelFunction
+    KernelFunctionValue
         (configuration.mapArg0
             >> Result.mapError (DescribePathNode "Failed to map argument 0")
             >> Result.map
                 (\mappedArg0 ->
-                    KernelFunction
+                    KernelFunctionValue
                         (configuration.mapArg1
                             >> Result.mapError (DescribePathNode "Failed to map argument 1")
                             >> Result.andThen (configuration.apply mappedArg0)
@@ -478,7 +478,7 @@ kernelFunctionExpectingExactlyOneArgument :
     }
     -> Value
 kernelFunctionExpectingExactlyOneArgument configuration =
-    KernelFunction
+    KernelFunctionValue
         (configuration.mapArg0
             >> Result.mapError (DescribePathNode "Failed to map argument 0")
             >> Result.andThen configuration.apply
@@ -566,7 +566,7 @@ describeValueSuperficial value =
         ClosureValue _ _ ->
             "ClosureValue"
 
-        KernelFunction _ ->
+        KernelFunctionValue _ ->
             "KernelFunction"
 
 
@@ -582,7 +582,7 @@ describeValue value =
         ClosureValue _ expression ->
             "closure(" ++ describeExpression expression ++ ")"
 
-        KernelFunction _ ->
+        KernelFunctionValue _ ->
             "KernelFunction"
 
 
@@ -1030,5 +1030,5 @@ pineDecodeList value =
         ClosureValue _ _ ->
             Err "Is not list but closure"
 
-        KernelFunction _ ->
+        KernelFunctionValue _ ->
             Err "Is not list but kernel function"
