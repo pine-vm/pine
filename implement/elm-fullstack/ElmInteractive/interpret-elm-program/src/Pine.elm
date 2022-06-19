@@ -2,8 +2,6 @@ module Pine exposing (..)
 
 import BigInt
 import Dict
-import Json.Decode
-import Json.Encode
 import Maybe.Extra
 import Result.Extra
 
@@ -14,6 +12,9 @@ type Expression
     | ApplicationExpression ApplicationExpressionStructure
     | LookupNameExpression LookupNameExpressionStruct
     | LookupNameInKernelExpression String
+      {- Review name 'ContextExpansionWithName': Use 'bind'?
+         Maybe we can even consolidate this into an `ApplicationExpression` (Apply kernel 'cons' to add a value to the context)?
+      -}
     | ContextExpansionWithNameExpression ContextExpansionWithNameExpressionStructure
     | IfBlockExpression IfBlockExpressionStructure
     | FunctionExpression FunctionExpressionStructure
@@ -733,216 +734,301 @@ hexadecimalRepresentationFromBlobValue =
 
 
 encodeExpressionAsValue : Expression -> Value
-encodeExpressionAsValue expression =
-    [ ( "pine_expression", jsonEncodeExpression expression ) ]
-        |> Json.Encode.object
-        |> Json.Encode.encode 0
-        |> valueFromAsciiString
+encodeExpressionAsValue =
+    pineEncodeExpression
 
 
 decodeExpressionFromValue : Value -> Result String Expression
-decodeExpressionFromValue value =
-    case asciiStringFromValue value of
-        Err error ->
-            Err ("Failed to decode as string: " ++ error)
-
-        Ok string ->
-            Json.Decode.decodeString (Json.Decode.field "pine_expression" jsonDecodeExpression) string
-                |> Result.mapError Json.Decode.errorToString
+decodeExpressionFromValue =
+    pineDecodeExpression
 
 
-jsonEncodeExpression : Expression -> Json.Encode.Value
-jsonEncodeExpression expression =
-    case expression of
+pineEncodeExpression : Expression -> Value
+pineEncodeExpression expression =
+    (case expression of
         LiteralExpression literal ->
-            Json.Encode.object [ ( "LiteralExpression", jsonEncodeValue literal ) ]
+            ( "Literal"
+            , literal
+            )
 
-        ListExpression list ->
-            Json.Encode.object [ ( "ListExpression", Json.Encode.list jsonEncodeExpression list ) ]
+        ListExpression listExpr ->
+            ( "List"
+            , listExpr |> List.map pineEncodeExpression |> ListValue
+            )
 
-        ApplicationExpression applicationExpression ->
-            Json.Encode.object
-                [ ( "ApplicationExpression"
-                  , Json.Encode.object
-                        [ ( "function", jsonEncodeExpression applicationExpression.function )
-                        , ( "argument", jsonEncodeExpression applicationExpression.argument )
-                        ]
-                  )
-                ]
+        ApplicationExpression app ->
+            ( "Application"
+            , [ ( "function", app.function )
+              , ( "argument", app.argument )
+              ]
+                |> List.map (Tuple.mapSecond pineEncodeExpression)
+                |> Dict.fromList
+                |> pineEncodeRecord
+            )
 
-        LookupNameExpression lookupNameExpression ->
-            Json.Encode.object
-                [ ( "LookupNameExpression"
-                  , Json.Encode.object
-                        [ ( "name", Json.Encode.string lookupNameExpression.name )
-                        , ( "scopeExpression", jsonEncode__generic_Maybe jsonEncodeExpression lookupNameExpression.scopeExpression )
-                        ]
-                  )
-                ]
+        LookupNameExpression lookup ->
+            ( "LookupName"
+            , [ ( "scopeExpression", pineEncodeMaybe pineEncodeExpression lookup.scopeExpression )
+              , ( "name", valueFromString lookup.name )
+              ]
+                |> Dict.fromList
+                |> pineEncodeRecord
+            )
 
-        LookupNameInKernelExpression name ->
-            Json.Encode.object
-                [ ( "LookupNameInKernelExpression"
-                  , Json.Encode.object [ ( "name", Json.Encode.string name ) ]
-                  )
-                ]
+        LookupNameInKernelExpression lookup ->
+            ( "LookupNameInKernel"
+            , valueFromString lookup
+            )
 
-        ContextExpansionWithNameExpression contextExpansionWithNameExpression ->
-            Json.Encode.object
-                [ ( "ContextExpansionWithNameExpression"
-                  , jsonEncodeContextExpansionWithNameExpression contextExpansionWithNameExpression
-                  )
-                ]
+        ContextExpansionWithNameExpression contextExpansionWithName ->
+            ( "ContextExpansionWithName"
+            , [ ( "name", valueFromString contextExpansionWithName.name )
+              , ( "namedValue", contextExpansionWithName.namedValue )
+              , ( "expression", pineEncodeExpression contextExpansionWithName.expression )
+              ]
+                |> Dict.fromList
+                |> pineEncodeRecord
+            )
 
         IfBlockExpression ifBlock ->
-            Json.Encode.object
-                [ ( "IfBlockExpression"
-                  , Json.Encode.object
-                        [ ( "condition", jsonEncodeExpression ifBlock.condition )
-                        , ( "ifTrue", jsonEncodeExpression ifBlock.ifTrue )
-                        , ( "ifFalse", jsonEncodeExpression ifBlock.ifFalse )
-                        ]
-                  )
-                ]
-
-        FunctionExpression functionExpression ->
-            Json.Encode.object
-                [ ( "FunctionExpression"
-                  , Json.Encode.object
-                        [ ( "argumentName", Json.Encode.string functionExpression.argumentName )
-                        , ( "body", jsonEncodeExpression functionExpression.body )
-                        ]
-                  )
-                ]
-
-
-jsonDecodeExpression : Json.Decode.Decoder Expression
-jsonDecodeExpression =
-    Json.Decode.oneOf
-        [ Json.Decode.field "LiteralExpression"
-            (Json.Decode.map LiteralExpression jsonDecodeValue)
-        , Json.Decode.field "ListExpression"
-            (Json.Decode.map ListExpression (Json.Decode.list (Json.Decode.lazy (\() -> jsonDecodeExpression))))
-        , Json.Decode.field "ApplicationExpression"
-            (Json.Decode.map ApplicationExpression
-                (Json.Decode.map2 ApplicationExpressionStructure
-                    (Json.Decode.field "function" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                    (Json.Decode.field "argument" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                )
+            ( "IfBlock"
+            , [ ( "condition", ifBlock.condition )
+              , ( "ifTrue", ifBlock.ifTrue )
+              , ( "ifFalse", ifBlock.ifFalse )
+              ]
+                |> List.map (Tuple.mapSecond pineEncodeExpression)
+                |> Dict.fromList
+                |> pineEncodeRecord
             )
-        , Json.Decode.field "LookupNameExpression"
-            (Json.Decode.map LookupNameExpression
-                (Json.Decode.map2 LookupNameExpressionStruct
-                    (Json.Decode.field "scopeExpression" (Json.Decode.lazy (\() -> jsonDecode__generic_Maybe jsonDecodeExpression)))
-                    (Json.Decode.field "name" Json.Decode.string)
-                )
+
+        FunctionExpression function ->
+            ( "Function"
+            , [ ( "argumentName", valueFromString function.argumentName )
+              , ( "body", pineEncodeExpression function.body )
+              ]
+                |> Dict.fromList
+                |> pineEncodeRecord
             )
-        , Json.Decode.field "LookupNameInKernelExpression"
-            (Json.Decode.map LookupNameInKernelExpression
-                (Json.Decode.field "name" Json.Decode.string)
+    )
+        |> (\( tagName, unionTagValue ) -> pineEncodeUnion tagName unionTagValue)
+
+
+pineDecodeExpression : Value -> Result String Expression
+pineDecodeExpression value =
+    value
+        |> pineDecodeUnion
+            ([ ( "Literal"
+               , LiteralExpression >> Ok
+               )
+             , ( "List"
+               , pineDecodeList
+                    >> Result.andThen (List.map pineDecodeExpression >> Result.Extra.combine)
+                    >> Result.map ListExpression
+               )
+             , ( "Application"
+               , pineDecodeApplicationExpression >> Result.map ApplicationExpression
+               )
+             , ( "LookupName"
+               , pineDecodeLookupNameExpression >> Result.map LookupNameExpression
+               )
+             , ( "LookupNameInKernel"
+               , stringFromValue >> Result.map LookupNameInKernelExpression
+               )
+             , ( "ContextExpansionWithName"
+               , pineDecodeContextExpansionWithNameExpression >> Result.map ContextExpansionWithNameExpression
+               )
+             , ( "IfBlock"
+               , pineDecodeIfBlockExpression >> Result.map IfBlockExpression
+               )
+             , ( "Function"
+               , pineDecodeFunctionExpression >> Result.map FunctionExpression
+               )
+             ]
+                |> Dict.fromList
             )
-        , Json.Decode.field "ContextExpansionWithNameExpression"
-            (Json.Decode.map ContextExpansionWithNameExpression jsonDecodeContextExpansionWithNameExpression)
-        , Json.Decode.field "IfBlockExpression"
-            (Json.Decode.lazy
-                (\() ->
-                    Json.Decode.map IfBlockExpression
-                        (Json.Decode.map3 IfBlockExpressionStructure
-                            (Json.Decode.field "condition" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                            (Json.Decode.field "ifTrue" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                            (Json.Decode.field "ifFalse" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                        )
-                )
+
+
+pineDecodeApplicationExpression : Value -> Result String ApplicationExpressionStructure
+pineDecodeApplicationExpression =
+    pineDecodeRecord
+        >> Result.andThen
+            (always (Ok ApplicationExpressionStructure)
+                |> pineDecodeRecordField "function" pineDecodeExpression
+                |> pineDecodeRecordField "argument" pineDecodeExpression
             )
-        , Json.Decode.field "FunctionExpression"
-            (Json.Decode.lazy
-                (\() ->
-                    Json.Decode.map FunctionExpression
-                        (Json.Decode.map2 FunctionExpressionStructure
-                            (Json.Decode.field "argumentName" Json.Decode.string)
-                            (Json.Decode.field "body" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
-                        )
-                )
+
+
+pineDecodeLookupNameExpression : Value -> Result String LookupNameExpressionStruct
+pineDecodeLookupNameExpression =
+    pineDecodeRecord
+        >> Result.andThen
+            (always (Ok LookupNameExpressionStruct)
+                |> pineDecodeRecordField "scopeExpression" (pineDecodeMaybe pineDecodeExpression)
+                |> pineDecodeRecordField "name" stringFromValue
             )
-        ]
 
 
-jsonEncodeContextExpansionWithNameExpression : ContextExpansionWithNameExpressionStructure -> Json.Encode.Value
-jsonEncodeContextExpansionWithNameExpression contextExpansionWithNameExpression =
-    Json.Encode.object
-        [ ( "name", Json.Encode.string contextExpansionWithNameExpression.name )
-        , ( "namedValue", jsonEncodeValue contextExpansionWithNameExpression.namedValue )
-        , ( "expression", jsonEncodeExpression contextExpansionWithNameExpression.expression )
-        ]
+pineDecodeContextExpansionWithNameExpression : Value -> Result String ContextExpansionWithNameExpressionStructure
+pineDecodeContextExpansionWithNameExpression =
+    pineDecodeRecord
+        >> Result.andThen
+            (always (Ok ContextExpansionWithNameExpressionStructure)
+                |> pineDecodeRecordField "name" stringFromValue
+                |> pineDecodeRecordField "namedValue" Ok
+                |> pineDecodeRecordField "expression" pineDecodeExpression
+            )
 
 
-jsonDecodeContextExpansionWithNameExpression : Json.Decode.Decoder ContextExpansionWithNameExpressionStructure
-jsonDecodeContextExpansionWithNameExpression =
-    Json.Decode.map3 ContextExpansionWithNameExpressionStructure
-        (Json.Decode.field "name" Json.Decode.string)
-        (Json.Decode.field "namedValue" jsonDecodeValue)
-        (Json.Decode.field "expression" (Json.Decode.lazy (\() -> jsonDecodeExpression)))
+pineDecodeIfBlockExpression : Value -> Result String IfBlockExpressionStructure
+pineDecodeIfBlockExpression =
+    pineDecodeRecord
+        >> Result.andThen
+            (always (Ok IfBlockExpressionStructure)
+                |> pineDecodeRecordField "condition" pineDecodeExpression
+                |> pineDecodeRecordField "ifTrue" pineDecodeExpression
+                |> pineDecodeRecordField "ifFalse" pineDecodeExpression
+            )
 
 
-jsonEncodeValue : Value -> Json.Encode.Value
-jsonEncodeValue value =
-    case value of
-        BlobValue blob ->
-            Json.Encode.object [ ( "BlobValue", Json.Encode.list Json.Encode.int blob ) ]
-
-        ListValue list ->
-            Json.Encode.object [ ( "ListValue", Json.Encode.list jsonEncodeValue list ) ]
-
-        ClosureValue _ _ ->
-            Json.Encode.object [ ( "ClosureValue", Json.Encode.string "not_implemented" ) ]
-
-        KernelFunction _ ->
-            Json.Encode.object [ ( "KernelFunction", Json.Encode.string "not_implemented" ) ]
+pineDecodeFunctionExpression : Value -> Result String FunctionExpressionStructure
+pineDecodeFunctionExpression =
+    pineDecodeRecord
+        >> Result.andThen
+            (always (Ok FunctionExpressionStructure)
+                |> pineDecodeRecordField "argumentName" stringFromValue
+                |> pineDecodeRecordField "body" pineDecodeExpression
+            )
 
 
-jsonDecodeValue : Json.Decode.Decoder Value
-jsonDecodeValue =
-    Json.Decode.oneOf
-        [ Json.Decode.field "BlobValue"
-            (Json.Decode.map BlobValue (Json.Decode.list Json.Decode.int))
-        , Json.Decode.field "ListValue"
-            (Json.Decode.map ListValue (Json.Decode.list (Json.Decode.lazy (\() -> jsonDecodeValue))))
-        , Json.Decode.field "ClosureValue"
-            (Json.Decode.fail "Decoding of ClosureValue not implemented")
-        ]
-
-
-jsonEncode__generic_Maybe : (a -> Json.Encode.Value) -> Maybe a -> Json.Encode.Value
-jsonEncode__generic_Maybe encodeJust valueToEncode =
-    case valueToEncode of
+pineEncodeMaybe : (a -> Value) -> Maybe a -> Value
+pineEncodeMaybe justEncoder maybe =
+    case maybe of
         Nothing ->
-            [ ( "Nothing", [] |> Json.Encode.list identity ) ] |> Json.Encode.object
+            pineEncodeUnion "Nothing" (ListValue [])
 
         Just just ->
-            [ ( "Just", [ just ] |> Json.Encode.list encodeJust ) ] |> Json.Encode.object
+            pineEncodeUnion "Just" (justEncoder just)
 
 
-jsonDecode__generic_Maybe : Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
-jsonDecode__generic_Maybe decoder =
-    Json.Decode.oneOf
-        [ Json.Decode.field "Nothing" (Json.Decode.succeed Nothing)
-        , Json.Decode.field "Just" (Json.Decode.index 0 decoder |> Json.Decode.map Just)
-        ]
+pineDecodeMaybe : (Value -> Result String a) -> Value -> Result String (Maybe a)
+pineDecodeMaybe justDecoder =
+    pineDecodeUnion
+        ([ ( "Nothing"
+           , always (Ok Nothing)
+           )
+         , ( "Just"
+           , justDecoder >> Result.map Just
+           )
+         ]
+            |> Dict.fromList
+        )
 
 
-asciiStringFromValue : Value -> Result String String
-asciiStringFromValue value =
+pineDecodeRecordField :
+    String
+    -> (Value -> Result String field)
+    -> (Dict.Dict String Value -> Result String (field -> record))
+    -> (Dict.Dict String Value -> Result String record)
+pineDecodeRecordField fieldName fieldDecoder finalDecoder =
+    \recordDict ->
+        case Dict.get fieldName recordDict of
+            Nothing ->
+                Err ("Did not find field with name " ++ fieldName)
+
+            Just fieldValue ->
+                fieldValue
+                    |> fieldDecoder
+                    |> Result.mapError ((++) ("Failed to decode field '" ++ fieldName ++ "': "))
+                    |> Result.andThen
+                        (\fieldValueDecoded ->
+                            recordDict
+                                |> finalDecoder
+                                |> Result.map (\dec -> dec fieldValueDecoded)
+                        )
+
+
+pineDecodeRecord : Value -> Result String (Dict.Dict String Value)
+pineDecodeRecord =
+    pineDecodeList
+        >> Result.andThen
+            (List.foldl
+                (\fieldAsValue ->
+                    Result.andThen
+                        (\fields ->
+                            fieldAsValue
+                                |> pineDecodeList
+                                |> Result.andThen
+                                    (\fieldList ->
+                                        case fieldList of
+                                            [ fieldNameValue, fieldValue ] ->
+                                                stringFromValue fieldNameValue
+                                                    |> Result.mapError ((++) "Failed to decode field name string: ")
+                                                    |> Result.map (\fieldName -> ( fieldName, fieldValue ) :: fields)
+
+                                            _ ->
+                                                Err ("Unexpected number of list elements for field: " ++ String.fromInt (List.length fieldList))
+                                    )
+                        )
+                )
+                (Ok [])
+            )
+        >> Result.map Dict.fromList
+
+
+pineEncodeRecord : Dict.Dict String Value -> Value
+pineEncodeRecord fields =
+    fields
+        |> Dict.toList
+        |> List.map
+            (\( fieldName, fieldValue ) ->
+                ListValue [ valueFromString fieldName, fieldValue ]
+            )
+        |> ListValue
+
+
+pineEncodeUnion : String -> Value -> Value
+pineEncodeUnion tagName unionTagValue =
+    ListValue [ valueFromString tagName, unionTagValue ]
+
+
+pineDecodeUnion : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
+pineDecodeUnion tags =
+    pineDecodeList
+        >> Result.andThen
+            (\list ->
+                case list of
+                    [ tagNameValue, unionTagValue ] ->
+                        stringFromValue tagNameValue
+                            |> Result.mapError ((++) "Failed to decode union tag name: ")
+                            |> Result.andThen
+                                (\tagName ->
+                                    case tags |> Dict.get tagName of
+                                        Nothing ->
+                                            Err ("Unexpected tag name: " ++ tagName)
+
+                                        Just tagDecode ->
+                                            unionTagValue
+                                                |> tagDecode
+                                                |> Result.mapError ((++) "Failed to decode tag value: ")
+                                )
+
+                    _ ->
+                        Err ("Unexpected number of elements in list: " ++ String.fromInt (List.length list))
+            )
+        >> Result.mapError ((++) "Failed to decode union: ")
+
+
+pineDecodeList : Value -> Result String (List Value)
+pineDecodeList value =
     case value of
-        BlobValue charsValues ->
-            charsValues
-                |> List.map Char.fromCode
-                |> String.fromList
-                |> Ok
+        ListValue list ->
+            Ok list
 
-        _ ->
-            Err "Only a BlobValue can represent an ASCII string."
+        BlobValue _ ->
+            Err "Is not list but blob"
 
+        ClosureValue _ _ ->
+            Err "Is not list but closure"
 
-valueFromAsciiString : String -> Value
-valueFromAsciiString =
-    String.toList >> List.map Char.toCode >> BlobValue
+        KernelFunction _ ->
+            Err "Is not list but kernel function"
