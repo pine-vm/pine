@@ -341,9 +341,6 @@ pineValueAsElmValue pineValue =
             in
             Ok (ElmInternal ("closure<" ++ detail ++ ">"))
 
-        Pine.KernelFunctionValue _ ->
-            Ok (ElmInternal "PineKernelFunction")
-
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
 elmValueAsElmRecord elmValue =
@@ -653,43 +650,43 @@ type String
 
 
 eq : a -> a -> Bool
-eq =
-    PineKernel.equals
+eq a b =
+    PineKernel.equals [ a, b ]
 
 
 neq : a -> a -> Bool
-neq =
-    PineKernel.equalsNot
+neq a b =
+    PineKernel.equalsNot [ a, b ]
 
 
 add : number -> number -> number
-add =
-    PineKernel.addInt
+add a b =
+    PineKernel.addInt [ a, b ]
 
 
 sub : number -> number -> number
-sub =
-    PineKernel.subInt
+sub a b =
+    PineKernel.subInt [ a, b ]
 
 
 mul : number -> number -> number
-mul =
-    PineKernel.mulInt
+mul a b =
+    PineKernel.mulInt [ a, b ]
 
 
 idiv : number -> number -> number
-idiv =
-    PineKernel.divInt
+idiv a b =
+    PineKernel.divInt [ a, b ]
 
 
 and : Bool -> Bool -> Bool
-and =
-    PineKernel.and
+and a b =
+    PineKernel.and [ a, b ]
 
 
 or : Bool -> Bool -> Bool
-or =
-    PineKernel.or
+or a b =
+    PineKernel.or [ a, b ]
 
 
 append : appendable -> appendable -> appendable
@@ -698,29 +695,29 @@ append a b =
     String stringA ->
         case b of
         String stringB ->
-            String (PineKernel.append stringA stringB)
-        _ -> PineKernel.append a b
-    _ -> PineKernel.append a b
+            String (PineKernel.append [stringA, stringB])
+        _ -> PineKernel.append [a, b]
+    _ -> PineKernel.append [a, b]
 
 
 lt : comparable -> comparable -> Bool
-lt =
-    PineKernel.lessThanInt
+lt a b =
+    PineKernel.lessThanInt [ a, b ]
 
 
 gt : comparable -> comparable -> Bool
-gt =
-    PineKernel.greaterThanInt
+gt a b =
+    PineKernel.greaterThanInt [ a, b ]
 
 
 le : comparable -> comparable -> Bool
 le a b =
-    or (PineKernel.equals a b) (lt a b)
+    or (PineKernel.equals [a, b]) (lt a b)
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    or (PineKernel.equals a b) (gt a b)
+    or (PineKernel.equals [a, b]) (gt a b)
 
 
 apR : a -> (a -> b) -> b
@@ -844,7 +841,7 @@ rangeHelp lo hi list =
 
 cons : a -> List a -> List a
 cons element list =
-    PineKernel.listCons element list
+    PineKernel.listCons [ element, list ]
 
 
 map : (a -> b) -> List a -> List b
@@ -987,7 +984,7 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    PineKernel.append PineKernel.blobValueOneByteZero char
+    PineKernel.append [ PineKernel.blobValueOneByteZero, char ]
 
 """
     , """
@@ -1083,7 +1080,7 @@ replace before after string =
 
 append : String -> String -> String
 append a b =
-    PineKernel.append (toList a) (toList b)
+    PineKernel.append [ toList a, toList b ]
 
 
 concat : List String -> String
@@ -1380,17 +1377,49 @@ pineExpressionFromElm elmExpression =
                 )
 
         Elm.Syntax.Expression.Application application ->
-            case application |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm) |> Result.Extra.combine of
-                Err error ->
-                    Err ("Failed to map application elements: " ++ error)
+            case application of
+                [] ->
+                    Err "Invalid shape of application: Zero elements in the application list"
 
-                Ok applicationElements ->
-                    case applicationElements of
-                        appliedFunctionSyntax :: arguments ->
-                            Ok (functionApplicationExpressionFromListOfArguments appliedFunctionSyntax arguments)
+                appliedFunctionElmSyntax :: elmArguments ->
+                    case
+                        elmArguments
+                            |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm)
+                            |> Result.Extra.combine
+                    of
+                        Err error ->
+                            Err ("Failed to map Elm arguments: " ++ error)
 
-                        [] ->
-                            Err "Invalid shape of application: Zero elements in the application list"
+                        Ok arguments ->
+                            let
+                                continueWithNonKernelApplication =
+                                    case appliedFunctionElmSyntax |> Elm.Syntax.Node.value |> pineExpressionFromElm of
+                                        Err error ->
+                                            Err ("Failed to map Elm function syntax: " ++ error)
+
+                                        Ok appliedFunctionSyntax ->
+                                            Ok (functionApplicationExpressionFromListOfArguments appliedFunctionSyntax arguments)
+                            in
+                            case Elm.Syntax.Node.value appliedFunctionElmSyntax of
+                                Elm.Syntax.Expression.FunctionOrValue functionModuleName functionLocalName ->
+                                    if functionModuleName == [ Pine.kernelModuleName ] then
+                                        case arguments of
+                                            [ singleArgument ] ->
+                                                Ok
+                                                    (Pine.KernelApplicationExpression
+                                                        { function = functionLocalName
+                                                        , argument = singleArgument
+                                                        }
+                                                    )
+
+                                            _ ->
+                                                Err "Invalid argument list for kernel application: Wrap arguments into a single list expression"
+
+                                    else
+                                        continueWithNonKernelApplication
+
+                                _ ->
+                                    continueWithNonKernelApplication
 
         Elm.Syntax.Expression.OperatorApplication operator _ leftExpr rightExpr ->
             let
@@ -2062,27 +2091,18 @@ pineExpressionForRecordAccess fieldName recordExpression =
         }
 
 
-expressionForPineKernelFunction : String -> Pine.Expression
-expressionForPineKernelFunction kernelFunctionName =
-    Pine.LookupNameInKernelExpression kernelFunctionName
-
-
 pineFunctionOrValueExpressionFromElmFunctionOrValue : List String -> String -> Pine.Expression
 pineFunctionOrValueExpressionFromElmFunctionOrValue moduleName nameInModule =
-    if moduleName == [ Pine.kernelModuleName ] then
-        Pine.LookupNameInKernelExpression nameInModule
+    let
+        scopeExpression =
+            if moduleName == [] then
+                Nothing
 
-    else
-        let
-            scopeExpression =
-                if moduleName == [] then
-                    Nothing
-
-                else
-                    Just (expressionToLookupNameInEnvironment (String.join "." moduleName))
-        in
-        listItemFromIndexExpression 0
-            (Pine.LookupNameExpression { scopeExpression = scopeExpression, name = nameInModule })
+            else
+                Just (expressionToLookupNameInEnvironment (String.join "." moduleName))
+    in
+    listItemFromIndexExpression 0
+        (Pine.LookupNameExpression { scopeExpression = scopeExpression, name = nameInModule })
 
 
 expressionToLookupNameInEnvironment : String -> Pine.Expression
@@ -2116,17 +2136,19 @@ equalsCondition =
 
 
 applyKernelFunctionWithTwoArguments : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
-applyKernelFunctionWithTwoArguments kernelFunctionName exprA exprB =
-    functionApplicationExpressionFromListOfArguments
-        (expressionForPineKernelFunction kernelFunctionName)
-        [ exprA, exprB ]
+applyKernelFunctionWithTwoArguments kernelFunctionName argA argB =
+    Pine.KernelApplicationExpression
+        { function = kernelFunctionName
+        , argument = Pine.ListExpression [ argA, argB ]
+        }
 
 
 applyKernelFunctionWithOneArgument : String -> Pine.Expression -> Pine.Expression
 applyKernelFunctionWithOneArgument kernelFunctionName argExpr =
-    functionApplicationExpressionFromListOfArguments
-        (expressionForPineKernelFunction kernelFunctionName)
-        [ argExpr ]
+    Pine.KernelApplicationExpression
+        { function = kernelFunctionName
+        , argument = Pine.ListExpression [ argExpr ]
+        }
 
 
 moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)

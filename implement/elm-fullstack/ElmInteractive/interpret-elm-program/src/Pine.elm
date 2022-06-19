@@ -10,8 +10,8 @@ type Expression
     = LiteralExpression Value
     | ListExpression ListExpressionStructure
     | ApplicationExpression ApplicationExpressionStructure
+    | KernelApplicationExpression KernelApplicationExpressionStructure
     | LookupNameExpression LookupNameExpressionStruct
-    | LookupNameInKernelExpression String
       {- Review name 'ContextExpansionWithName': Use 'bind'?
          Maybe we can even consolidate this into an `ApplicationExpression` (Apply kernel 'cons' to add a value to the context)?
       -}
@@ -27,6 +27,12 @@ type alias ListExpressionStructure =
 type alias LookupNameExpressionStruct =
     { scopeExpression : Maybe Expression
     , name : String
+    }
+
+
+type alias KernelApplicationExpressionStructure =
+    { function : String
+    , argument : Expression
     }
 
 
@@ -60,7 +66,10 @@ type Value
     = BlobValue (List Int)
     | ListValue (List Value)
     | ClosureValue EvalContext Expression
-    | KernelFunctionValue (Value -> Result (PathDescription String) Value)
+
+
+type alias KernelFunction =
+    Value -> Result (PathDescription String) Value
 
 
 type alias EvalContext =
@@ -115,6 +124,20 @@ evaluateExpressionExceptClosure context expression =
             evaluateFunctionApplication context application
                 |> Result.mapError (DescribePathNode ("Failed application of '" ++ describeExpression application.function ++ "'"))
 
+        KernelApplicationExpression application ->
+            case Dict.get application.function pineKernelFunctions of
+                Nothing ->
+                    Err (DescribePathEnd ("Did not find kernel function '" ++ application.function ++ "'"))
+
+                Just kernelFunction ->
+                    evaluateExpression context application.argument
+                        |> Result.andThen
+                            (\arg ->
+                                kernelFunction arg
+                                    |> Result.mapError (DescribePathNode ("Failed to apply kernel function '" ++ application.function ++ "': "))
+                                    |> Result.mapError (DescribePathNode ("Argument: " ++ describeValue arg))
+                            )
+
         LookupNameExpression lookupNameExpression ->
             lookupNameExpression.scopeExpression
                 |> Maybe.map
@@ -145,11 +168,6 @@ evaluateExpressionExceptClosure context expression =
                                 beforeCheckForExpression
                     )
                 |> Result.map (List.singleton >> ListValue)
-
-        LookupNameInKernelExpression name ->
-            Dict.get name pineKernelFunctions
-                |> Maybe.withDefault (ListValue [])
-                |> Ok
 
         ConditionalExpression conditional ->
             case evaluateExpression context conditional.condition of
@@ -240,7 +258,7 @@ lookUpNameAsStringInContext name context =
             Ok firstNameValue
 
 
-pineKernelFunctions : Dict.Dict String Value
+pineKernelFunctions : Dict.Dict String KernelFunction
 pineKernelFunctions =
     [ ( "equals"
       , kernelFunctionExpectingExactlyTwoArguments
@@ -368,10 +386,6 @@ evaluateFunctionApplicationWithValues context application =
                             )
                         )
 
-        KernelFunctionValue kernelFunction ->
-            kernelFunction application.argument
-                |> Result.mapError (DescribePathNode "Failed to apply kernel function")
-
         _ ->
             decodeExpressionFromValue application.function
                 |> Result.mapError
@@ -400,25 +414,25 @@ intFromBigInt bigInt =
                 Ok int
 
 
-kernelFunctionOnTwoBigIntWithBooleanResult : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> Value
+kernelFunctionOnTwoBigIntWithBooleanResult : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> KernelFunction
 kernelFunctionOnTwoBigIntWithBooleanResult apply =
     kernelFunctionExpectingExactlyTwoBigInt
         (\leftInt rightInt -> Ok (valueFromBool (apply leftInt rightInt)))
 
 
-kernelFunctionExpectingExactlyTwoBigIntAndProducingBool : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> Value
+kernelFunctionExpectingExactlyTwoBigIntAndProducingBool : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> KernelFunction
 kernelFunctionExpectingExactlyTwoBigIntAndProducingBool apply =
     kernelFunctionExpectingExactlyTwoBigInt
         (\a0 a1 -> Ok (valueFromBool (apply a0 a1)))
 
 
-kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt : (BigInt.BigInt -> BigInt.BigInt -> BigInt.BigInt) -> Value
+kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt : (BigInt.BigInt -> BigInt.BigInt -> BigInt.BigInt) -> KernelFunction
 kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt apply =
     kernelFunctionExpectingExactlyTwoBigInt
         (\a0 a1 -> Ok (valueFromBigInt (apply a0 a1)))
 
 
-kernelFunctionExpectingExactlyTwoBigInt : (BigInt.BigInt -> BigInt.BigInt -> Result (PathDescription String) Value) -> Value
+kernelFunctionExpectingExactlyTwoBigInt : (BigInt.BigInt -> BigInt.BigInt -> Result (PathDescription String) Value) -> KernelFunction
 kernelFunctionExpectingExactlyTwoBigInt apply =
     kernelFunctionExpectingExactlyTwoArguments
         { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
@@ -427,7 +441,7 @@ kernelFunctionExpectingExactlyTwoBigInt apply =
         }
 
 
-kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool : (Bool -> Bool -> Bool) -> Value
+kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool : (Bool -> Bool -> Bool) -> KernelFunction
 kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool apply =
     kernelFunctionExpectingExactlyTwoArguments
         { mapArg0 = boolFromValue >> Result.fromMaybe (DescribePathEnd "Is not trueValue or falseValue")
@@ -441,23 +455,28 @@ kernelFunctionExpectingExactlyTwoArguments :
     , mapArg1 : Value -> Result (PathDescription String) arg1
     , apply : arg0 -> arg1 -> Result (PathDescription String) Value
     }
-    -> Value
+    -> KernelFunction
 kernelFunctionExpectingExactlyTwoArguments configuration =
-    KernelFunctionValue
-        (configuration.mapArg0
-            >> Result.mapError (DescribePathNode "Failed to map argument 0")
-            >> Result.map
-                (\mappedArg0 ->
-                    KernelFunctionValue
-                        (configuration.mapArg1
-                            >> Result.mapError (DescribePathNode "Failed to map argument 1")
-                            >> Result.andThen (configuration.apply mappedArg0)
+    pineDecodeListWithExactlyTwoElements
+        >> Result.mapError DescribePathEnd
+        >> Result.andThen
+            (\( arg0Value, arg1Value ) ->
+                arg0Value
+                    |> configuration.mapArg0
+                    |> Result.mapError (DescribePathNode "Failed to map argument 0")
+                    |> Result.andThen
+                        (\arg0 ->
+                            arg1Value
+                                |> configuration.mapArg1
+                                |> Result.mapError (DescribePathNode "Failed to map argument 1")
+                                |> Result.map (Tuple.pair arg0)
                         )
-                )
-        )
+            )
+        >> Result.andThen
+            (\( arg0, arg1 ) -> configuration.apply arg0 arg1)
 
 
-kernelFunctionExpectingExactlyOneArgumentOfTypeList : (List Value -> Result (PathDescription String) Value) -> Value
+kernelFunctionExpectingExactlyOneArgumentOfTypeList : (List Value -> Result (PathDescription String) Value) -> KernelFunction
 kernelFunctionExpectingExactlyOneArgumentOfTypeList apply =
     kernelFunctionExpectingExactlyOneArgument
         { mapArg0 =
@@ -476,13 +495,13 @@ kernelFunctionExpectingExactlyOneArgument :
     { mapArg0 : Value -> Result (PathDescription String) arg0
     , apply : arg0 -> Result (PathDescription String) Value
     }
-    -> Value
+    -> KernelFunction
 kernelFunctionExpectingExactlyOneArgument configuration =
-    KernelFunctionValue
-        (configuration.mapArg0
-            >> Result.mapError (DescribePathNode "Failed to map argument 0")
-            >> Result.andThen configuration.apply
-        )
+    pineDecodeListWithExactlyOneElement
+        >> Result.mapError DescribePathEnd
+        >> Result.andThen configuration.mapArg0
+        >> Result.mapError (DescribePathNode "Failed to map argument 0")
+        >> Result.andThen configuration.apply
 
 
 boolFromValue : Value -> Maybe Bool
@@ -532,9 +551,6 @@ describeExpression expression =
         LookupNameExpression lookupNameExpression ->
             "lookup-name(" ++ (lookupNameExpression.scopeExpression |> Maybe.map describeExpression |> Maybe.withDefault "Nothing") ++ ", " ++ lookupNameExpression.name ++ ")"
 
-        LookupNameInKernelExpression name ->
-            "lookup-name-in-kernel(" ++ name ++ ")"
-
         ListExpression list ->
             "[" ++ String.join "," (list |> List.map describeExpression) ++ ")"
 
@@ -543,6 +559,9 @@ describeExpression expression =
 
         ApplicationExpression application ->
             "application(" ++ describeExpression application.function ++ ")"
+
+        KernelApplicationExpression application ->
+            "kernel-application(" ++ application.function ++ ")"
 
         FunctionExpression functionExpression ->
             "function(" ++ functionExpression.argumentName ++ ", " ++ describeExpression functionExpression.body ++ ")"
@@ -566,9 +585,6 @@ describeValueSuperficial value =
         ClosureValue _ _ ->
             "ClosureValue"
 
-        KernelFunctionValue _ ->
-            "KernelFunction"
-
 
 describeValue : Value -> String
 describeValue value =
@@ -581,9 +597,6 @@ describeValue value =
 
         ClosureValue _ expression ->
             "closure(" ++ describeExpression expression ++ ")"
-
-        KernelFunctionValue _ ->
-            "KernelFunction"
 
 
 valueFromString : String -> Value
@@ -766,6 +779,15 @@ pineEncodeExpression expression =
                 |> pineEncodeRecord
             )
 
+        KernelApplicationExpression app ->
+            ( "KernelApplication"
+            , [ ( "function", valueFromString app.function )
+              , ( "argument", pineEncodeExpression app.argument )
+              ]
+                |> Dict.fromList
+                |> pineEncodeRecord
+            )
+
         LookupNameExpression lookup ->
             ( "LookupName"
             , [ ( "scopeExpression", pineEncodeMaybe pineEncodeExpression lookup.scopeExpression )
@@ -773,11 +795,6 @@ pineEncodeExpression expression =
               ]
                 |> Dict.fromList
                 |> pineEncodeRecord
-            )
-
-        LookupNameInKernelExpression lookup ->
-            ( "LookupNameInKernel"
-            , valueFromString lookup
             )
 
         ContextExpansionWithNameExpression contextExpansionWithName ->
@@ -828,11 +845,11 @@ pineDecodeExpression value =
              , ( "Application"
                , pineDecodeApplicationExpression >> Result.map ApplicationExpression
                )
+             , ( "KernelApplication"
+               , pineDecodeKernelApplicationExpression >> Result.map KernelApplicationExpression
+               )
              , ( "LookupName"
                , pineDecodeLookupNameExpression >> Result.map LookupNameExpression
-               )
-             , ( "LookupNameInKernel"
-               , stringFromValue >> Result.map LookupNameInKernelExpression
                )
              , ( "ContextExpansionWithName"
                , pineDecodeContextExpansionWithNameExpression >> Result.map ContextExpansionWithNameExpression
@@ -854,6 +871,16 @@ pineDecodeApplicationExpression =
         >> Result.andThen
             (always (Ok ApplicationExpressionStructure)
                 |> pineDecodeRecordField "function" pineDecodeExpression
+                |> pineDecodeRecordField "argument" pineDecodeExpression
+            )
+
+
+pineDecodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
+pineDecodeKernelApplicationExpression =
+    pineDecodeRecord
+        >> Result.andThen
+            (always (Ok KernelApplicationExpressionStructure)
+                |> pineDecodeRecordField "function" stringFromValue
                 |> pineDecodeRecordField "argument" pineDecodeExpression
             )
 
@@ -993,29 +1020,52 @@ pineEncodeUnion tagName unionTagValue =
 
 pineDecodeUnion : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
 pineDecodeUnion tags =
+    pineDecodeListWithExactlyTwoElements
+        >> Result.andThen
+            (\( tagNameValue, unionTagValue ) ->
+                stringFromValue tagNameValue
+                    |> Result.mapError ((++) "Failed to decode union tag name: ")
+                    |> Result.andThen
+                        (\tagName ->
+                            case tags |> Dict.get tagName of
+                                Nothing ->
+                                    Err ("Unexpected tag name: " ++ tagName)
+
+                                Just tagDecode ->
+                                    unionTagValue
+                                        |> tagDecode
+                                        |> Result.mapError ((++) "Failed to decode tag value: ")
+                        )
+            )
+        >> Result.mapError ((++) "Failed to decode union: ")
+
+
+pineDecodeListWithExactlyOneElement : Value -> Result String Value
+pineDecodeListWithExactlyOneElement =
     pineDecodeList
         >> Result.andThen
             (\list ->
                 case list of
-                    [ tagNameValue, unionTagValue ] ->
-                        stringFromValue tagNameValue
-                            |> Result.mapError ((++) "Failed to decode union tag name: ")
-                            |> Result.andThen
-                                (\tagName ->
-                                    case tags |> Dict.get tagName of
-                                        Nothing ->
-                                            Err ("Unexpected tag name: " ++ tagName)
-
-                                        Just tagDecode ->
-                                            unionTagValue
-                                                |> tagDecode
-                                                |> Result.mapError ((++) "Failed to decode tag value: ")
-                                )
+                    [ singleElement ] ->
+                        Ok singleElement
 
                     _ ->
-                        Err ("Unexpected number of elements in list: " ++ String.fromInt (List.length list))
+                        Err ("Unexpected number of elements in list: Not 1 but " ++ String.fromInt (List.length list))
             )
-        >> Result.mapError ((++) "Failed to decode union: ")
+
+
+pineDecodeListWithExactlyTwoElements : Value -> Result String ( Value, Value )
+pineDecodeListWithExactlyTwoElements =
+    pineDecodeList
+        >> Result.andThen
+            (\list ->
+                case list of
+                    [ a, b ] ->
+                        Ok ( a, b )
+
+                    _ ->
+                        Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
+            )
 
 
 pineDecodeList : Value -> Result String (List Value)
@@ -1029,6 +1079,3 @@ pineDecodeList value =
 
         ClosureValue _ _ ->
             Err "Is not list but closure"
-
-        KernelFunctionValue _ ->
-            Err "Is not list but kernel function"

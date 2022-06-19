@@ -10,11 +10,16 @@ pineExpressionEncodeDecodeRoundtrip =
     [ ( "literal empty list", Pine.LiteralExpression (Pine.ListValue []) )
     , ( "literal blob", Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ]) )
     , ( "list empty", Pine.ListExpression [] )
-    , ( "lookup name in kernel", Pine.LookupNameInKernelExpression "kernel_func_name" )
     , ( "application one arg"
       , Pine.ApplicationExpression
             { function = Pine.LiteralExpression (Pine.ListValue [])
             , argument = Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ])
+            }
+      )
+    , ( "kernel application one arg"
+      , Pine.KernelApplicationExpression
+            { function = "kernel_function_name"
+            , argument = Pine.LiteralExpression (Pine.BlobValue [ 6, 7, 8 ])
             }
       )
     , ( "if block"
