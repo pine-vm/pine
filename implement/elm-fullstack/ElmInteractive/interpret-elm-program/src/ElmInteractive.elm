@@ -681,12 +681,12 @@ idiv a b =
 
 and : Bool -> Bool -> Bool
 and a b =
-    PineKernel.and [ a, b ]
+    PineKernel.andBool [ a, b ]
 
 
 or : Bool -> Bool -> Bool
 or a b =
-    PineKernel.or [ a, b ]
+    PineKernel.orBool [ a, b ]
 
 
 append : appendable -> appendable -> appendable
@@ -695,9 +695,9 @@ append a b =
     String stringA ->
         case b of
         String stringB ->
-            String (PineKernel.append [stringA, stringB])
-        _ -> PineKernel.append [a, b]
-    _ -> PineKernel.append [a, b]
+            String (PineKernel.listConcat [stringA, stringB])
+        _ -> PineKernel.listConcat [a, b]
+    _ -> PineKernel.listConcat [a, b]
 
 
 lt : comparable -> comparable -> Bool
@@ -841,7 +841,7 @@ rangeHelp lo hi list =
 
 cons : a -> List a -> List a
 cons element list =
-    PineKernel.listCons [ element, list ]
+    PineKernel.listConcat [ [ element ], list ]
 
 
 map : (a -> b) -> List a -> List b
@@ -876,7 +876,7 @@ length xs =
 
 reverse : List a -> List a
 reverse list =
-    foldl cons [] list
+    PineKernel.listReverse list
 
 
 member : a -> List a -> Bool
@@ -900,17 +900,12 @@ any isOkay list =
 
 append : List a -> List a -> List a
 append xs ys =
-    case ys of
-        [] ->
-            xs
-
-        _ ->
-            foldr cons ys xs
+    concat [ xs, ys ]
 
 
 concat : List (List a) -> List a
 concat lists =
-    foldr append [] lists
+    PineKernel.listConcat lists
 
 
 isEmpty : List a -> Bool
@@ -984,7 +979,7 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    PineKernel.append [ PineKernel.blobValueOneByteZero, char ]
+    PineKernel.blobConcat [ PineKernel.blobValueOneByteZero, char ]
 
 """
     , """
@@ -1080,7 +1075,7 @@ replace before after string =
 
 append : String -> String -> String
 append a b =
-    PineKernel.append [ toList a, toList b ]
+    PineKernel.listConcat [ toList a, toList b ]
 
 
 concat : List String -> String
@@ -1363,7 +1358,7 @@ pineExpressionFromElm elmExpression =
                     Err ("Failed to map negated expression: " ++ error)
 
                 Ok negatedExpression ->
-                    Ok (applyKernelFunctionWithOneArgument "negate" negatedExpression)
+                    Ok (applyKernelFunctionWithOneArgument "negateInt" negatedExpression)
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             Ok
@@ -1402,7 +1397,7 @@ pineExpressionFromElm elmExpression =
                             in
                             case Elm.Syntax.Node.value appliedFunctionElmSyntax of
                                 Elm.Syntax.Expression.FunctionOrValue functionModuleName functionLocalName ->
-                                    if functionModuleName == [ Pine.kernelModuleName ] then
+                                    if functionModuleName == [ pineKernelModuleName ] then
                                         case arguments of
                                             [ singleArgument ] ->
                                                 Ok
@@ -1508,7 +1503,7 @@ pineExpressionFromElm elmExpression =
 
 pineValueFromFunctionOrValue : List String -> String -> Maybe Pine.Value
 pineValueFromFunctionOrValue moduleName nameInModule =
-    if moduleName == [ Pine.kernelModuleName ] then
+    if moduleName == [ pineKernelModuleName ] then
         case nameInModule of
             "blobValueOneByteZero" ->
                 Just (Pine.BlobValue [ 0 ])
@@ -1859,7 +1854,7 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                               , applyKernelFunctionWithOneArgument "listHead" caseBlockValueExpression
                               )
                             , ( unconsRightName
-                              , applyKernelFunctionWithOneArgument "listTail" caseBlockValueExpression
+                              , listDropExpression 1 caseBlockValueExpression
                               )
                             ]
 
@@ -1867,7 +1862,7 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                             applyKernelFunctionWithOneArgument "notBool"
                                 (equalsCondition
                                     caseBlockValueExpression
-                                    (applyKernelFunctionWithOneArgument "listTail" caseBlockValueExpression)
+                                    (listDropExpression 1 caseBlockValueExpression)
                                 )
                     in
                     Ok
@@ -1959,7 +1954,7 @@ booleanConjunctionExpressionFromList defaultIfEmpty operands =
         firstOperator :: otherOperators ->
             otherOperators
                 |> List.foldl
-                    (\single aggregate -> applyKernelFunctionWithTwoArguments "and" aggregate single)
+                    (\single aggregate -> applyKernelFunctionWithTwoArguments "andBool" aggregate single)
                     firstOperator
 
 
@@ -1986,7 +1981,7 @@ countListElementsExpression listExpr =
                             (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1)))
                             (functionApplicationExpressionFromListOfArguments
                                 (expressionToLookupNameInEnvironment "getLength")
-                                [ applyKernelFunctionWithOneArgument "listTail"
+                                [ listDropExpression 1
                                     (expressionToLookupNameInEnvironment "remaining")
                                 ]
                             )
@@ -2022,9 +2017,10 @@ listDropExpression numberToDrop listExpression =
         listExpression
 
     else
-        listDropExpression
-            (numberToDrop - 1)
-            (applyKernelFunctionWithOneArgument "listTail" listExpression)
+        applyKernelFunctionWithTwoArguments
+            "listSkip"
+            (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt numberToDrop)))
+            listExpression
 
 
 pineExpressionFromElmLambda : Elm.Syntax.Expression.Lambda -> Result String Pine.Expression
@@ -2268,6 +2264,11 @@ compareLocations left right =
 valueFromString : String -> Pine.Value
 valueFromString =
     Pine.valueFromString >> List.singleton >> Pine.tagValue elmStringTypeTagName
+
+
+pineKernelModuleName : String
+pineKernelModuleName =
+    "PineKernel"
 
 
 elmStringTypeTagName : String

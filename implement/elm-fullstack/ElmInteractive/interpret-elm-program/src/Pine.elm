@@ -280,11 +280,52 @@ pineKernelFunctions =
             , apply = \argument -> Ok (valueFromBool (argument /= trueValue))
             }
       )
-    , ( "and", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&) )
-    , ( "or", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||) )
+    , ( "andBool", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&) )
+    , ( "orBool", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||) )
     , ( "listHead", kernelFunctionExpectingExactlyOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []) >> Ok) )
-    , ( "listTail", kernelFunctionExpectingExactlyOneArgumentOfTypeList ((List.tail >> Maybe.withDefault [] >> ListValue) >> Ok) )
-    , ( "negate"
+    , ( "listSkip"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+            , mapArg1 = Ok
+            , apply =
+                \countBigInt listValue ->
+                    (case countBigInt |> BigInt.toString |> String.toInt of
+                        Nothing ->
+                            Err "Failed to map from BigInt"
+
+                        Just count ->
+                            case listValue of
+                                ListValue list ->
+                                    Ok (ListValue (List.drop count list))
+
+                                _ ->
+                                    Err "Not a list value"
+                    )
+                        |> Result.mapError DescribePathEnd
+            }
+      )
+    , ( "listTake"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
+            , mapArg1 = Ok
+            , apply =
+                \countBigInt listValue ->
+                    (case countBigInt |> BigInt.toString |> String.toInt of
+                        Nothing ->
+                            Err "Failed to map from BigInt"
+
+                        Just count ->
+                            case listValue of
+                                ListValue list ->
+                                    Ok (ListValue (List.take count list))
+
+                                _ ->
+                                    Err "Not a list value"
+                    )
+                        |> Result.mapError DescribePathEnd
+            }
+      )
+    , ( "negateInt"
       , kernelFunctionExpectingExactlyOneArgument
             { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
             , apply = BigInt.negate >> valueFromBigInt >> Ok
@@ -296,54 +337,36 @@ pineKernelFunctions =
     , ( "divInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.div )
     , ( "lessThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.lt )
     , ( "greaterThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.gt )
-    , ( "append"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = Ok
-            , mapArg1 = Ok
-            , apply =
-                \leftValue rightValue ->
-                    case leftValue of
-                        ListValue leftList ->
-                            case rightValue of
-                                ListValue rightList ->
-                                    Ok (ListValue (leftList ++ rightList))
-
-                                _ ->
-                                    Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a list.")
-
-                        BlobValue leftBlob ->
-                            case rightValue of
-                                BlobValue rightBlob ->
-                                    Ok (BlobValue (leftBlob ++ rightBlob))
-
-                                _ ->
-                                    Err (DescribePathEnd "Mismatched operand types for 'append': Right operand not a blob.")
-
-                        _ ->
-                            Err (DescribePathEnd "Left operand for append is not a list and not a blob.")
-            }
+    , ( "listConcat"
+      , pineDecodeList
+            >> Result.andThen (List.map pineDecodeList >> Result.Extra.combine)
+            >> Result.mapError DescribePathEnd
+            >> Result.map (List.concat >> ListValue)
       )
-    , ( "listCons"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = Ok
-            , mapArg1 = Ok
-            , apply =
-                \leftValue rightValue ->
-                    case rightValue of
-                        ListValue rightList ->
-                            Ok (ListValue (leftValue :: rightList))
+    , ( "listReverse"
+      , pineDecodeList
+            >> Result.mapError DescribePathEnd
+            >> Result.map (List.reverse >> ListValue)
+      )
+    , ( "blobConcat"
+      , pineDecodeList
+            >> Result.andThen
+                (List.map
+                    (\blobValue ->
+                        case blobValue of
+                            BlobValue blob ->
+                                Ok blob
 
-                        _ ->
-                            Err (DescribePathEnd "Right operand for listCons is not a list.")
-            }
+                            _ ->
+                                Err "Not a blob"
+                    )
+                    >> Result.Extra.combine
+                )
+            >> Result.mapError DescribePathEnd
+            >> Result.map (List.concat >> BlobValue)
       )
     ]
         |> Dict.fromList
-
-
-kernelModuleName : String
-kernelModuleName =
-    "PineKernel"
 
 
 evaluateFunctionApplication : EvalContext -> { function : Expression, argument : Expression } -> Result (PathDescription String) Value
