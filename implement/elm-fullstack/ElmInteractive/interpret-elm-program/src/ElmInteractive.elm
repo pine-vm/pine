@@ -159,7 +159,7 @@ expandContextWithElmDeclaration elmDeclaration contextBefore =
 
                 Ok ( declaredName, declaredFunctionExpression ) ->
                     contextBefore
-                        |> Pine.addToContext
+                        |> Pine.addToContextAppArgument
                             [ Pine.valueFromContextExpansionWithName
                                 ( declaredName, Pine.encodeExpressionAsValue declaredFunctionExpression )
                             ]
@@ -417,7 +417,9 @@ pineExpressionContextForElmInteractive context =
                             |> List.map Pine.valueFromContextExpansionWithName
                 in
                 elmValuesToExposeToGlobal
-                    |> List.foldl exposeFromElmModuleToGlobal { commonModel = modulesValues }
+                    |> List.foldl
+                        exposeFromElmModuleToGlobal
+                        (Pine.emptyEvalContext |> Pine.addToContextAppArgument modulesValues)
             )
 
 
@@ -436,7 +438,7 @@ parsedElmFileFromOnlyFileText fileText =
 
 
 exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.EvalContext -> Pine.EvalContext
-exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
+exposeFromElmModuleToGlobal ( moduleName, nameInModule ) =
     let
         redirectValue =
             Pine.encodeExpressionAsValue
@@ -445,7 +447,8 @@ exposeFromElmModuleToGlobal ( moduleName, nameInModule ) context =
                     nameInModule
                 )
     in
-    { context | commonModel = Pine.valueFromContextExpansionWithName ( nameInModule, redirectValue ) :: context.commonModel }
+    Pine.addToContextAppArgument
+        [ Pine.valueFromContextExpansionWithName ( nameInModule, redirectValue ) ]
 
 
 parseElmModuleTextIntoPineValue : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
@@ -605,10 +608,11 @@ parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
                                     declarations |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
 
                                 declarationsContext =
-                                    { commonModel =
-                                        (declarationsValues ++ importsValues ++ globalExposingValues)
-                                            |> List.map Pine.valueFromContextExpansionWithName
-                                    }
+                                    Pine.emptyEvalContext
+                                        |> Pine.addToContextAppArgument
+                                            ((declarationsValues ++ importsValues ++ globalExposingValues)
+                                                |> List.map Pine.valueFromContextExpansionWithName
+                                            )
 
                                 declarationsValuesInContext =
                                     declarations

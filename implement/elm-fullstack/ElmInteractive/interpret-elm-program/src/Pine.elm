@@ -73,8 +73,7 @@ type alias KernelFunction =
 
 
 type alias EvalContext =
-    -- TODO: Test consolidate into simple Value
-    { commonModel : List Value
+    { applicationArgument : Value
     }
 
 
@@ -83,9 +82,23 @@ type PathDescription a
     | DescribePathEnd a
 
 
-addToContext : List Value -> EvalContext -> EvalContext
-addToContext names context =
-    { context | commonModel = names ++ context.commonModel }
+addToContextAppArgument : List Value -> EvalContext -> EvalContext
+addToContextAppArgument names context =
+    let
+        applicationArgument =
+            case context.applicationArgument of
+                ListValue applicationArgumentList ->
+                    ListValue (names ++ applicationArgumentList)
+
+                _ ->
+                    context.applicationArgument
+    in
+    { context | applicationArgument = applicationArgument }
+
+
+emptyEvalContext : EvalContext
+emptyEvalContext =
+    { applicationArgument = ListValue [] }
 
 
 evaluateExpression : EvalContext -> Expression -> Result (PathDescription String) Value
@@ -142,15 +155,7 @@ evaluateExpressionExceptClosure context expression =
             lookupNameExpression.scopeExpression
                 |> Maybe.map
                     (evaluateExpression context
-                        >> Result.map
-                            (\contextValue ->
-                                case contextValue of
-                                    ListValue list ->
-                                        { commonModel = list }
-
-                                    _ ->
-                                        { commonModel = [] }
-                            )
+                        >> Result.map (\contextValue -> { applicationArgument = contextValue })
                     )
                 |> Maybe.withDefault (Ok context)
                 |> Result.map
@@ -185,9 +190,10 @@ evaluateExpressionExceptClosure context expression =
 
         ContextExpansionWithNameExpression expansion ->
             evaluateExpression
-                { context
-                    | commonModel = valueFromContextExpansionWithName ( expansion.name, expansion.namedValue ) :: context.commonModel
-                }
+                (addToContextAppArgument
+                    [ valueFromContextExpansionWithName ( expansion.name, expansion.namedValue ) ]
+                    context
+                )
                 expansion.expression
 
         FunctionExpression _ ->
@@ -237,25 +243,30 @@ lookUpNameAsStringInContext name context =
                         _ ->
                             getMatchFromList remainingElements
     in
-    case getMatchFromList context.commonModel of
-        Nothing ->
-            let
-                availableNames =
-                    context.commonModel |> List.filterMap namedValueFromValue
-            in
-            Err
-                (DescribePathEnd
-                    ("Did not find '"
-                        ++ name
-                        ++ "'. There are "
-                        ++ (availableNames |> List.length |> String.fromInt)
-                        ++ " names available in that scope: "
-                        ++ (availableNames |> List.map Tuple.first |> String.join ", ")
-                    )
-                )
+    case context.applicationArgument of
+        ListValue applicationArgumentList ->
+            case getMatchFromList applicationArgumentList of
+                Nothing ->
+                    let
+                        availableNames =
+                            applicationArgumentList |> List.filterMap namedValueFromValue
+                    in
+                    Err
+                        (DescribePathEnd
+                            ("Did not find '"
+                                ++ name
+                                ++ "'. There are "
+                                ++ (availableNames |> List.length |> String.fromInt)
+                                ++ " names available in that scope: "
+                                ++ (availableNames |> List.map Tuple.first |> String.join ", ")
+                            )
+                        )
 
-        Just firstNameValue ->
-            Ok firstNameValue
+                Just firstNameValue ->
+                    Ok firstNameValue
+
+        _ ->
+            Err (DescribePathEnd "applicationArgument is not a list")
 
 
 pineKernelFunctions : Dict.Dict String KernelFunction
@@ -398,7 +409,7 @@ evaluateFunctionApplicationWithValues context application =
                 FunctionExpression functionExpression ->
                     Ok
                         (ClosureValue
-                            (addToContext
+                            (addToContextAppArgument
                                 [ valueFromContextExpansionWithName ( functionExpression.argumentName, application.argument ) ]
                                 nextClosureContext
                             )
@@ -421,7 +432,7 @@ evaluateFunctionApplicationWithValues context application =
                 |> Result.andThen
                     (\expressionFromValue ->
                         evaluateFunctionApplicationWithValues
-                            { commonModel = [] }
+                            { applicationArgument = ListValue [] }
                             { function = ClosureValue context expressionFromValue
                             , argument = application.argument
                             }
