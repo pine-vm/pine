@@ -348,6 +348,11 @@ pineKernelFunctions =
             >> Result.mapError DescribePathEnd
             >> Result.map (List.reverse >> ListValue)
       )
+    , ( "listLength"
+      , pineDecodeList
+            >> Result.mapError DescribePathEnd
+            >> Result.map (List.length >> BigInt.fromInt >> valueFromBigInt)
+      )
     , ( "blobConcat"
       , pineDecodeList
             >> Result.andThen

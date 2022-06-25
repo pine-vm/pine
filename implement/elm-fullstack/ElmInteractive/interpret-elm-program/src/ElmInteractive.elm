@@ -870,8 +870,8 @@ filter isGood list =
 
 
 length : List a -> Int
-length xs =
-    foldl (\\_ i -> i + 1) 0 xs
+length list =
+    PineKernel.listLength list
 
 
 reverse : List a -> List a
@@ -940,30 +940,13 @@ tail list =
 
 take : Int -> List a -> List a
 take n list =
-    if n < 1 then
-        []
-
-    else
-        case list of
-        [] ->
-            []
-
-        nextElement :: remainingElements ->
-            [ nextElement ] ++ (take (n - 1) remainingElements)
+    PineKernel.listTake [ n, list ]
 
 
 drop : Int -> List a -> List a
 drop n list =
-    if n <= 0 then
-        list
+    PineKernel.listSkip [ n, list ]
 
-    else
-        case list of
-        [] ->
-            list
-
-        x :: xs ->
-            drop (n - 1) xs
 
 """
     , """
