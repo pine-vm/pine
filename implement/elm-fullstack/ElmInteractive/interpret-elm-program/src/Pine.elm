@@ -11,23 +11,13 @@ type Expression
     | ListExpression ListExpressionStructure
     | ApplicationExpression ApplicationExpressionStructure
     | KernelApplicationExpression KernelApplicationExpressionStructure
-    | LookupNameExpression LookupNameExpressionStruct
-      {- Review name 'ContextExpansionWithName': Use 'bind'?
-         Maybe we can even consolidate this into an `ApplicationExpression` (Apply kernel 'cons' to add a value to the context)?
-      -}
-    | ContextExpansionWithNameExpression ContextExpansionWithNameExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
-    | FunctionExpression FunctionExpressionStructure
+    | ApplicationArgumentExpression
+    | StringTagExpression StringTagExpressionStructure
 
 
 type alias ListExpressionStructure =
     List Expression
-
-
-type alias LookupNameExpressionStruct =
-    { scopeExpression : Maybe Expression
-    , name : String
-    }
 
 
 type alias KernelApplicationExpressionStructure =
@@ -49,23 +39,15 @@ type alias ConditionalExpressionStructure =
     }
 
 
-type alias FunctionExpressionStructure =
-    { argumentName : String
-    , body : Expression
-    }
-
-
-type alias ContextExpansionWithNameExpressionStructure =
-    { name : String
-    , namedValue : Value
-    , expression : Expression
+type alias StringTagExpressionStructure =
+    { tag : String
+    , tagged : Expression
     }
 
 
 type Value
     = BlobValue (List Int)
     | ListValue (List Value)
-    | ClosureValue EvalContext Expression
 
 
 type alias KernelFunction =
@@ -103,25 +85,6 @@ emptyEvalContext =
 
 evaluateExpression : EvalContext -> Expression -> Result (PathDescription String) Value
 evaluateExpression context expression =
-    evaluateExpressionExceptClosure context expression
-        |> Result.andThen
-            (\value ->
-                case value of
-                    ClosureValue closureContext closureExpression ->
-                        case closureExpression of
-                            FunctionExpression _ ->
-                                Ok value
-
-                            _ ->
-                                evaluateExpression closureContext closureExpression
-
-                    _ ->
-                        Ok value
-            )
-
-
-evaluateExpressionExceptClosure : EvalContext -> Expression -> Result (PathDescription String) Value
-evaluateExpressionExceptClosure context expression =
     case expression of
         LiteralExpression value ->
             Ok value
@@ -135,7 +98,10 @@ evaluateExpressionExceptClosure context expression =
 
         ApplicationExpression application ->
             evaluateFunctionApplication context application
-                |> Result.mapError (DescribePathNode ("Failed application of '" ++ describeExpression application.function ++ "'"))
+                |> Result.mapError
+                    (\e ->
+                        e |> DescribePathNode ("Failed application of '" ++ describeExpression 1 application.function ++ "'")
+                    )
 
         KernelApplicationExpression application ->
             case Dict.get application.function pineKernelFunctions of
@@ -148,31 +114,8 @@ evaluateExpressionExceptClosure context expression =
                             (\arg ->
                                 kernelFunction arg
                                     |> Result.mapError (DescribePathNode ("Failed to apply kernel function '" ++ application.function ++ "': "))
-                                    |> Result.mapError (DescribePathNode ("Argument: " ++ describeValue arg))
+                                    |> Result.mapError (\e -> DescribePathNode ("Argument: " ++ describeValue 2 arg) e)
                             )
-
-        LookupNameExpression lookupNameExpression ->
-            lookupNameExpression.scopeExpression
-                |> Maybe.map
-                    (evaluateExpression context
-                        >> Result.map (\contextValue -> { applicationArgument = contextValue })
-                    )
-                |> Maybe.withDefault (Ok context)
-                |> Result.map
-                    (\contextValue ->
-                        let
-                            beforeCheckForExpression =
-                                lookUpNameAsStringInContext lookupNameExpression.name contextValue
-                                    |> Result.withDefault (ListValue [])
-                        in
-                        case decodeExpressionFromValue beforeCheckForExpression of
-                            Ok expressionFromLookup ->
-                                ClosureValue contextValue expressionFromLookup
-
-                            _ ->
-                                beforeCheckForExpression
-                    )
-                |> Result.map (List.singleton >> ListValue)
 
         ConditionalExpression conditional ->
             case evaluateExpression context conditional.condition of
@@ -188,16 +131,16 @@ evaluateExpressionExceptClosure context expression =
                             conditional.ifFalse
                         )
 
-        ContextExpansionWithNameExpression expansion ->
-            evaluateExpression
-                (addToContextAppArgument
-                    [ valueFromContextExpansionWithName ( expansion.name, expansion.namedValue ) ]
-                    context
-                )
-                expansion.expression
+        ApplicationArgumentExpression ->
+            Ok context.applicationArgument
 
-        FunctionExpression _ ->
-            Ok (ClosureValue context expression)
+        StringTagExpression { tag, tagged } ->
+            let
+                log =
+                    Debug.log "eval expression with tag"
+                        tag
+            in
+            evaluateExpression context tagged
 
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
@@ -220,11 +163,11 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameAsStringInContext : String -> EvalContext -> Result (PathDescription String) Value
-lookUpNameAsStringInContext name context =
+lookUpNameInListValue : Value -> Value -> Result (PathDescription String) Value
+lookUpNameInListValue nameAsValue context =
     let
-        nameAsValue =
-            valueFromString name
+        nameAsString =
+            nameAsValue |> stringFromValue |> Result.withDefault "name_is_not_a_string"
 
         getMatchFromList contextList =
             case contextList of
@@ -243,7 +186,7 @@ lookUpNameAsStringInContext name context =
                         _ ->
                             getMatchFromList remainingElements
     in
-    case context.applicationArgument of
+    case context of
         ListValue applicationArgumentList ->
             case getMatchFromList applicationArgumentList of
                 Nothing ->
@@ -254,8 +197,10 @@ lookUpNameAsStringInContext name context =
                     Err
                         (DescribePathEnd
                             ("Did not find '"
-                                ++ name
+                                ++ nameAsString
                                 ++ "'. There are "
+                                ++ (applicationArgumentList |> List.length |> String.fromInt)
+                                ++ " entries and "
                                 ++ (availableNames |> List.length |> String.fromInt)
                                 ++ " names available in that scope: "
                                 ++ (availableNames |> List.map Tuple.first |> String.join ", ")
@@ -286,14 +231,15 @@ pineKernelFunctions =
             }
       )
     , ( "notBool"
-      , kernelFunctionExpectingExactlyOneArgument
-            { mapArg0 = Ok
-            , apply = \argument -> Ok (valueFromBool (argument /= trueValue))
-            }
+      , (/=) trueValue >> valueFromBool >> Ok
       )
     , ( "andBool", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&) )
     , ( "orBool", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||) )
-    , ( "listHead", kernelFunctionExpectingExactlyOneArgumentOfTypeList (List.head >> Maybe.withDefault (ListValue []) >> Ok) )
+    , ( "listHead"
+      , pineDecodeList
+            >> Result.map (List.head >> Maybe.withDefault (ListValue []))
+            >> Result.mapError DescribePathEnd
+      )
     , ( "listSkip"
       , kernelFunctionExpectingExactlyTwoArguments
             { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
@@ -337,10 +283,9 @@ pineKernelFunctions =
             }
       )
     , ( "negateInt"
-      , kernelFunctionExpectingExactlyOneArgument
-            { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-            , apply = BigInt.negate >> valueFromBigInt >> Ok
-            }
+      , bigIntFromValue
+            >> Result.mapError DescribePathEnd
+            >> Result.map (BigInt.negate >> valueFromBigInt)
       )
     , ( "addInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.add )
     , ( "subInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.sub )
@@ -381,62 +326,107 @@ pineKernelFunctions =
             >> Result.mapError DescribePathEnd
             >> Result.map (List.concat >> BlobValue)
       )
+    , ( "look_up_name_in_ListValue"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = Ok
+            , mapArg1 = Ok
+            , apply =
+                \name contextValue ->
+                    lookUpNameInListValue name contextValue
+                        |> Result.map (List.singleton >> ListValue)
+            }
+      )
+    , ( "make_elm_func"
+      , kernelFunctionExpectingExactlyTwoArguments
+            { mapArg0 = Ok
+            , mapArg1 = Ok
+            , apply =
+                \contextValue argumentNameAndFunctionExpr ->
+                    case contextValue of
+                        ListValue contextElements ->
+                            case argumentNameAndFunctionExpr of
+                                ListValue [ argumentNameValue, functionExpressionValue ] ->
+                                    stringFromValue argumentNameValue
+                                        |> Result.mapError DescribePathEnd
+                                        |> Result.andThen
+                                            (\argumentName ->
+                                                decodeExpressionFromValue functionExpressionValue
+                                                    |> Result.mapError DescribePathEnd
+                                                    |> Result.map
+                                                        (\funcExpr ->
+                                                            ApplicationExpression
+                                                                { function =
+                                                                    ApplicationExpression
+                                                                        { function =
+                                                                            funcExpr
+                                                                                |> encodeExpressionAsValue
+                                                                                |> LiteralExpression
+                                                                        , argument = ApplicationArgumentExpression
+                                                                        }
+                                                                        |> encodeExpressionAsValue
+                                                                        |> LiteralExpression
+                                                                , argument =
+                                                                    KernelApplicationExpression
+                                                                        { function = "listConcat"
+                                                                        , argument =
+                                                                            ListExpression
+                                                                                [ ListExpression
+                                                                                    [ ListExpression
+                                                                                        [ argumentName
+                                                                                            |> valueFromString
+                                                                                            |> LiteralExpression
+                                                                                        , ApplicationArgumentExpression
+                                                                                        ]
+                                                                                    ]
+                                                                                , LiteralExpression (ListValue contextElements)
+                                                                                ]
+                                                                        }
+                                                                }
+                                                                |> encodeExpressionAsValue
+                                                        )
+                                            )
+
+                                _ ->
+                                    Err (DescribePathEnd "Unexpected shape in argumentNameAndFunctionExpr")
+
+                        _ ->
+                            Err (DescribePathEnd "Unexpected shape in contextValue")
+            }
+      )
     ]
         |> Dict.fromList
 
 
-evaluateFunctionApplication : EvalContext -> { function : Expression, argument : Expression } -> Result (PathDescription String) Value
+evaluateFunctionApplication : EvalContext -> ApplicationExpressionStructure -> Result (PathDescription String) Value
 evaluateFunctionApplication context application =
-    evaluateExpression context application.function
-        |> Result.mapError (DescribePathNode ("Failed to evaluate function expression '" ++ describeExpression application.function ++ "'"))
+    evaluateExpression context application.argument
+        |> Result.mapError
+            (\e ->
+                e |> DescribePathNode ("Failed to evaluate argument '" ++ describeExpression 1 application.argument ++ "'")
+            )
         |> Result.andThen
-            (\functionValue ->
-                evaluateExpression context application.argument
-                    |> Result.mapError (DescribePathNode ("Failed to evaluate argument '" ++ describeExpression application.argument ++ "'"))
+            (\argumentValue ->
+                evaluateExpression context application.function
+                    |> Result.mapError
+                        (\e ->
+                            e |> DescribePathNode ("Failed to evaluate function '" ++ describeExpression 1 application.function ++ "'")
+                        )
                     |> Result.andThen
-                        (\argumentValue ->
-                            evaluateFunctionApplicationWithValues context
-                                { function = functionValue, argument = argumentValue }
+                        (\functionValue ->
+                            functionValue
+                                |> decodeExpressionFromValue
+                                |> Result.mapError
+                                    (\e ->
+                                        e
+                                            |> DescribePathEnd
+                                            |> DescribePathNode ("Failed to decode expression from function value '" ++ describeValue 3 functionValue ++ "'")
+                                    )
+                                |> Result.andThen
+                                    (\functionExpression ->
+                                        evaluateExpression { applicationArgument = argumentValue } functionExpression
+                                    )
                         )
             )
-
-
-evaluateFunctionApplicationWithValues : EvalContext -> { function : Value, argument : Value } -> Result (PathDescription String) Value
-evaluateFunctionApplicationWithValues context application =
-    case application.function of
-        ClosureValue nextClosureContext closureExpression ->
-            case closureExpression of
-                FunctionExpression functionExpression ->
-                    Ok
-                        (ClosureValue
-                            (addToContextAppArgument
-                                [ valueFromContextExpansionWithName ( functionExpression.argumentName, application.argument ) ]
-                                nextClosureContext
-                            )
-                            functionExpression.body
-                        )
-
-                _ ->
-                    Err
-                        (DescribePathEnd
-                            ("Failed to apply: Expression "
-                                ++ describeExpression closureExpression
-                                ++ " is not a function (Too many arguments)."
-                            )
-                        )
-
-        _ ->
-            decodeExpressionFromValue application.function
-                |> Result.mapError
-                    (DescribePathEnd >> DescribePathNode ("Too many arguments: Failed to decode expression from value (" ++ describeValue application.function ++ ")"))
-                |> Result.andThen
-                    (\expressionFromValue ->
-                        evaluateFunctionApplicationWithValues
-                            { applicationArgument = ListValue [] }
-                            { function = ClosureValue context expressionFromValue
-                            , argument = application.argument
-                            }
-                    )
 
 
 intFromBigInt : BigInt.BigInt -> Result String Int
@@ -515,34 +505,6 @@ kernelFunctionExpectingExactlyTwoArguments configuration =
             (\( arg0, arg1 ) -> configuration.apply arg0 arg1)
 
 
-kernelFunctionExpectingExactlyOneArgumentOfTypeList : (List Value -> Result (PathDescription String) Value) -> KernelFunction
-kernelFunctionExpectingExactlyOneArgumentOfTypeList apply =
-    kernelFunctionExpectingExactlyOneArgument
-        { mapArg0 =
-            \argument ->
-                case argument of
-                    ListValue list ->
-                        Ok list
-
-                    _ ->
-                        Err (DescribePathEnd ("Argument is not a list ('" ++ describeValue argument ++ "')"))
-        , apply = apply
-        }
-
-
-kernelFunctionExpectingExactlyOneArgument :
-    { mapArg0 : Value -> Result (PathDescription String) arg0
-    , apply : arg0 -> Result (PathDescription String) Value
-    }
-    -> KernelFunction
-kernelFunctionExpectingExactlyOneArgument configuration =
-    pineDecodeListWithExactlyOneElement
-        >> Result.mapError DescribePathEnd
-        >> Result.andThen configuration.mapArg0
-        >> Result.mapError (DescribePathNode "Failed to map argument 0")
-        >> Result.andThen configuration.apply
-
-
 boolFromValue : Value -> Maybe Bool
 boolFromValue value =
     if value == trueValue then
@@ -584,58 +546,91 @@ tagValueExpression tagName tagArgumentsExpressions =
     ListExpression [ LiteralExpression (valueFromString tagName), ListExpression tagArgumentsExpressions ]
 
 
-describeExpression : Expression -> String
-describeExpression expression =
+describeExpression : Int -> Expression -> String
+describeExpression depthLimit expression =
     case expression of
-        LookupNameExpression lookupNameExpression ->
-            "lookup-name(" ++ (lookupNameExpression.scopeExpression |> Maybe.map describeExpression |> Maybe.withDefault "Nothing") ++ ", " ++ lookupNameExpression.name ++ ")"
-
         ListExpression list ->
-            "[" ++ String.join "," (list |> List.map describeExpression) ++ ")"
+            "list["
+                ++ (if depthLimit < 1 then
+                        "..."
+
+                    else
+                        String.join "," (list |> List.map (describeExpression (depthLimit - 1)))
+                   )
+                ++ "]"
 
         LiteralExpression literal ->
-            "literal(" ++ describeValue literal ++ ")"
+            "literal(" ++ describeValue (depthLimit - 1) literal ++ ")"
 
         ApplicationExpression application ->
-            "application(" ++ describeExpression application.function ++ ")"
+            "application("
+                ++ (if depthLimit < 1 then
+                        "..."
+
+                    else
+                        describeExpression (depthLimit - 1) application.function
+                   )
+                ++ ")"
 
         KernelApplicationExpression application ->
             "kernel-application(" ++ application.function ++ ")"
 
-        FunctionExpression functionExpression ->
-            "function(" ++ functionExpression.argumentName ++ ", " ++ describeExpression functionExpression.body ++ ")"
-
         ConditionalExpression _ ->
             "conditional"
 
-        ContextExpansionWithNameExpression expansion ->
-            "context-expansion(" ++ expansion.name ++ ")"
+        ApplicationArgumentExpression ->
+            "application-argument"
+
+        StringTagExpression { tag, tagged } ->
+            "string-tag-" ++ tag ++ "(" ++ describeExpression (depthLimit - 1) tagged ++ ")"
 
 
-describeValueSuperficial : Value -> String
-describeValueSuperficial value =
-    case value of
-        BlobValue _ ->
-            "BlobValue"
-
-        ListValue _ ->
-            "ListValue"
-
-        ClosureValue _ _ ->
-            "ClosureValue"
-
-
-describeValue : Value -> String
-describeValue value =
+describeValue : Int -> Value -> String
+describeValue maxDepth value =
     case value of
         BlobValue blob ->
             "BlobValue 0x" ++ hexadecimalRepresentationFromBlobValue blob
 
         ListValue list ->
-            "[" ++ String.join ", " (List.map describeValue list) ++ "]"
+            let
+                standard =
+                    "["
+                        ++ (if maxDepth < 0 then
+                                "..."
 
-        ClosureValue _ expression ->
-            "closure(" ++ describeExpression expression ++ ")"
+                            else
+                                String.join ", " (List.map (describeValue (maxDepth - 1)) list)
+                           )
+                        ++ "]"
+            in
+            String.join " "
+                [ "ListValue"
+                , case stringFromValue value of
+                    Err _ ->
+                        ""
+
+                    Ok string ->
+                        "\"" ++ string ++ "\""
+                , standard
+                ]
+
+
+displayStringFromPineError : PathDescription String -> String
+displayStringFromPineError error =
+    case error of
+        DescribePathEnd end ->
+            end
+
+        DescribePathNode nodeDescription node ->
+            nodeDescription ++ "\n" ++ prependAllLines "  " (displayStringFromPineError node)
+
+
+prependAllLines : String -> String -> String
+prependAllLines prefix text =
+    text
+        |> String.lines
+        |> List.map ((++) prefix)
+        |> String.join "\n"
 
 
 valueFromString : String -> Value
@@ -810,10 +805,9 @@ pineEncodeExpression expression =
 
         ApplicationExpression app ->
             ( "Application"
-            , [ ( "function", app.function )
-              , ( "argument", app.argument )
+            , [ ( "function", pineEncodeExpression app.function )
+              , ( "argument", pineEncodeExpression app.argument )
               ]
-                |> List.map (Tuple.mapSecond pineEncodeExpression)
                 |> Dict.fromList
                 |> pineEncodeRecord
             )
@@ -822,25 +816,6 @@ pineEncodeExpression expression =
             ( "KernelApplication"
             , [ ( "function", valueFromString app.function )
               , ( "argument", pineEncodeExpression app.argument )
-              ]
-                |> Dict.fromList
-                |> pineEncodeRecord
-            )
-
-        LookupNameExpression lookup ->
-            ( "LookupName"
-            , [ ( "scopeExpression", pineEncodeMaybe pineEncodeExpression lookup.scopeExpression )
-              , ( "name", valueFromString lookup.name )
-              ]
-                |> Dict.fromList
-                |> pineEncodeRecord
-            )
-
-        ContextExpansionWithNameExpression contextExpansionWithName ->
-            ( "ContextExpansionWithName"
-            , [ ( "name", valueFromString contextExpansionWithName.name )
-              , ( "namedValue", contextExpansionWithName.namedValue )
-              , ( "expression", pineEncodeExpression contextExpansionWithName.expression )
               ]
                 |> Dict.fromList
                 |> pineEncodeRecord
@@ -857,10 +832,15 @@ pineEncodeExpression expression =
                 |> pineEncodeRecord
             )
 
-        FunctionExpression function ->
-            ( "Function"
-            , [ ( "argumentName", valueFromString function.argumentName )
-              , ( "body", pineEncodeExpression function.body )
+        ApplicationArgumentExpression ->
+            ( "ApplicationArgument"
+            , ListValue []
+            )
+
+        StringTagExpression { tag, tagged } ->
+            ( "StringTag"
+            , [ ( "tag", valueFromString tag )
+              , ( "tagged", encodeExpressionAsValue tagged )
               ]
                 |> Dict.fromList
                 |> pineEncodeRecord
@@ -887,17 +867,14 @@ pineDecodeExpression value =
              , ( "KernelApplication"
                , pineDecodeKernelApplicationExpression >> Result.map KernelApplicationExpression
                )
-             , ( "LookupName"
-               , pineDecodeLookupNameExpression >> Result.map LookupNameExpression
-               )
-             , ( "ContextExpansionWithName"
-               , pineDecodeContextExpansionWithNameExpression >> Result.map ContextExpansionWithNameExpression
-               )
              , ( "Conditional"
                , pineDecodeConditionalExpression >> Result.map ConditionalExpression
                )
-             , ( "Function"
-               , pineDecodeFunctionExpression >> Result.map FunctionExpression
+             , ( "ApplicationArgument"
+               , always (Ok ApplicationArgumentExpression)
+               )
+             , ( "StringTag"
+               , pineDecodeStringTagExpression >> Result.map StringTagExpression
                )
              ]
                 |> Dict.fromList
@@ -924,27 +901,6 @@ pineDecodeKernelApplicationExpression =
             )
 
 
-pineDecodeLookupNameExpression : Value -> Result String LookupNameExpressionStruct
-pineDecodeLookupNameExpression =
-    pineDecodeRecord
-        >> Result.andThen
-            (always (Ok LookupNameExpressionStruct)
-                |> pineDecodeRecordField "scopeExpression" (pineDecodeMaybe pineDecodeExpression)
-                |> pineDecodeRecordField "name" stringFromValue
-            )
-
-
-pineDecodeContextExpansionWithNameExpression : Value -> Result String ContextExpansionWithNameExpressionStructure
-pineDecodeContextExpansionWithNameExpression =
-    pineDecodeRecord
-        >> Result.andThen
-            (always (Ok ContextExpansionWithNameExpressionStructure)
-                |> pineDecodeRecordField "name" stringFromValue
-                |> pineDecodeRecordField "namedValue" Ok
-                |> pineDecodeRecordField "expression" pineDecodeExpression
-            )
-
-
 pineDecodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
 pineDecodeConditionalExpression =
     pineDecodeRecord
@@ -956,13 +912,13 @@ pineDecodeConditionalExpression =
             )
 
 
-pineDecodeFunctionExpression : Value -> Result String FunctionExpressionStructure
-pineDecodeFunctionExpression =
+pineDecodeStringTagExpression : Value -> Result String StringTagExpressionStructure
+pineDecodeStringTagExpression =
     pineDecodeRecord
         >> Result.andThen
-            (always (Ok FunctionExpressionStructure)
-                |> pineDecodeRecordField "argumentName" stringFromValue
-                |> pineDecodeRecordField "body" pineDecodeExpression
+            (always (Ok StringTagExpressionStructure)
+                |> pineDecodeRecordField "tag" stringFromValue
+                |> pineDecodeRecordField "tagged" pineDecodeExpression
             )
 
 
@@ -1079,20 +1035,6 @@ pineDecodeUnion tags =
         >> Result.mapError ((++) "Failed to decode union: ")
 
 
-pineDecodeListWithExactlyOneElement : Value -> Result String Value
-pineDecodeListWithExactlyOneElement =
-    pineDecodeList
-        >> Result.andThen
-            (\list ->
-                case list of
-                    [ singleElement ] ->
-                        Ok singleElement
-
-                    _ ->
-                        Err ("Unexpected number of elements in list: Not 1 but " ++ String.fromInt (List.length list))
-            )
-
-
 pineDecodeListWithExactlyTwoElements : Value -> Result String ( Value, Value )
 pineDecodeListWithExactlyTwoElements =
     pineDecodeList
@@ -1115,6 +1057,3 @@ pineDecodeList value =
 
         BlobValue _ ->
             Err "Is not list but blob"
-
-        ClosureValue _ _ ->
-            Err "Is not list but closure"

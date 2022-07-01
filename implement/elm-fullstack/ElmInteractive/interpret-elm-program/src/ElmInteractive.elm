@@ -1,16 +1,4 @@
-module ElmInteractive exposing
-    ( InteractiveContext(..)
-    , SubmissionResponse(..)
-    , countListElementsExpression
-    , elmValueAsExpression
-    , elmValueAsJson
-    , evaluateExpressionText
-    , parseElmModuleText
-    , parseElmModuleTextToJson
-    , pineExpressionContextForElmInteractive
-    , submissionInInteractive
-    , submissionInInteractiveInPineContext
-    )
+module ElmInteractive exposing (..)
 
 import BigInt
 import Dict
@@ -26,6 +14,7 @@ import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.Type
 import Json.Encode
+import List.Extra
 import Maybe.Extra
 import Parser
 import Pine
@@ -62,7 +51,7 @@ type ElmValue
 type alias ProjectParsedElmFile =
     { projectedModuleName : List String
     , fileText : String
-    , parseResult : Result (List Parser.DeadEnd) Elm.Syntax.File.File
+    , parsedModule : Elm.Syntax.File.File
     }
 
 
@@ -128,7 +117,7 @@ submissionInInteractiveInPineContext expressionContext submission =
                 Ok pineExpression ->
                     case Pine.evaluateExpression expressionContext pineExpression of
                         Err error ->
-                            Err ("Failed to evaluate expression:\n" ++ displayStringFromPineError error)
+                            Err ("Failed to evaluate expression:\n" ++ Pine.displayStringFromPineError error)
 
                         Ok pineValue ->
                             case pineValueAsElmValue pineValue of
@@ -137,16 +126,6 @@ submissionInInteractiveInPineContext expressionContext submission =
 
                                 Ok valueAsElmValue ->
                                     Ok ( expressionContext, SubmissionResponseValue { value = valueAsElmValue } )
-
-
-displayStringFromPineError : Pine.PathDescription String -> String
-displayStringFromPineError error =
-    case error of
-        Pine.DescribePathEnd end ->
-            end
-
-        Pine.DescribePathNode nodeDescription node ->
-            nodeDescription ++ "\n" ++ prependAllLines "  " (displayStringFromPineError node)
 
 
 expandContextWithElmDeclaration : Elm.Syntax.Declaration.Declaration -> Pine.EvalContext -> Result String Pine.EvalContext
@@ -241,13 +220,8 @@ pineValueAsElmValue pineValue =
 
                     else if 10 < List.length blobValue then
                         case Pine.decodeExpressionFromValue pineValue of
-                            Ok expression ->
-                                case expression of
-                                    Pine.FunctionExpression _ ->
-                                        Ok (ElmInternal "function")
-
-                                    _ ->
-                                        Ok (ElmInternal "expression")
+                            Ok _ ->
+                                Ok (ElmInternal "expression")
 
                             Err _ ->
                                 Ok (ElmInternal "___error_skipped_large_blob___")
@@ -329,18 +303,6 @@ pineValueAsElmValue pineValue =
                                     Nothing ->
                                         resultAsList
 
-        Pine.ClosureValue _ expression ->
-            let
-                detail =
-                    case expression of
-                        Pine.FunctionExpression _ ->
-                            "function"
-
-                        _ ->
-                            "expression"
-            in
-            Ok (ElmInternal ("closure<" ++ detail ++ ">"))
-
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
 elmValueAsElmRecord elmValue =
@@ -394,33 +356,161 @@ pineExpressionContextForElmInteractive context =
         |> Result.Extra.combine
         |> Result.andThen
             (\parsedElmFiles ->
+                let
+                    modulesNamesWithDependencies =
+                        parsedElmFiles
+                            |> List.map
+                                (\file ->
+                                    file.parsedModule
+                                        |> listModuleTransitiveDependencies (List.map .parsedModule parsedElmFiles)
+                                        |> Result.mapError (Tuple.pair file)
+                                        |> Result.map (Tuple.pair file)
+                                )
+                in
+                case modulesNamesWithDependencies |> Result.Extra.combine of
+                    Err ( file, error ) ->
+                        Err
+                            ("Failed to resolve dependencies for module "
+                                ++ String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
+                                ++ ": "
+                                ++ error
+                            )
+
+                    Ok modulesWithDependencies ->
+                        let
+                            moduleNamesOrderedByDeps =
+                                modulesWithDependencies
+                                    |> List.concatMap Tuple.second
+                                    |> List.Extra.unique
+                        in
+                        moduleNamesOrderedByDeps
+                            |> List.filterMap
+                                (\moduleName ->
+                                    modulesWithDependencies
+                                        |> List.Extra.find
+                                            (Tuple.first
+                                                >> .parsedModule
+                                                >> .moduleDefinition
+                                                >> Elm.Syntax.Node.value
+                                                >> Elm.Syntax.Module.moduleName
+                                                >> (==) moduleName
+                                            )
+                                )
+                            |> List.map Tuple.first
+                            |> Ok
+            )
+        |> Result.andThen
+            (\parsedElmFiles ->
                 parsedElmFiles
-                    |> List.map
+                    |> List.foldl
                         (\moduleToTranslate ->
-                            parseElmModuleTextIntoPineValue parsedElmFiles moduleToTranslate
-                                |> Result.mapError
-                                    ((++)
-                                        ("Failed to translate elm module '"
-                                            ++ String.join "." moduleToTranslate.projectedModuleName
-                                            ++ "': "
-                                        )
-                                    )
+                            Result.andThen
+                                (\aggregate ->
+                                    parseElmModuleTextIntoPineValue aggregate moduleToTranslate
+                                        |> Result.mapError
+                                            ((++)
+                                                ("Failed to translate elm module '"
+                                                    ++ String.join "." (Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule))
+                                                    ++ "': "
+                                                )
+                                            )
+                                        |> Result.map
+                                            (\( moduleName, moduleValue ) -> Dict.insert moduleName moduleValue aggregate)
+                                )
                         )
-                    |> Result.Extra.combine
+                        (Ok Dict.empty)
             )
         |> Result.map
             (\contextModules ->
                 let
                     modulesValues =
                         contextModules
+                            |> Dict.toList
                             |> List.map (Tuple.mapFirst (String.join "."))
                             |> List.map Pine.valueFromContextExpansionWithName
                 in
-                elmValuesToExposeToGlobal
-                    |> List.foldl
-                        exposeFromElmModuleToGlobal
-                        (Pine.emptyEvalContext |> Pine.addToContextAppArgument modulesValues)
+                Pine.emptyEvalContext |> Pine.addToContextAppArgument modulesValues
             )
+
+
+listModuleTransitiveDependencies : List Elm.Syntax.File.File -> Elm.Syntax.File.File -> Result String (List (List String))
+listModuleTransitiveDependencies allFiles file =
+    listModuleTransitiveDependenciesExcludingModules Set.empty allFiles file
+        |> Result.mapError
+            (\( modulePath, error ) -> error ++ ": " ++ String.join " -> " (List.map (String.join ".") modulePath))
+
+
+listModuleTransitiveDependenciesExcludingModules :
+    Set.Set (List String)
+    -> List Elm.Syntax.File.File
+    -> Elm.Syntax.File.File
+    -> Result ( List (List String), String ) (List (List String))
+listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
+    let
+        currentName =
+            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.moduleDefinition)
+
+        currentDependencies =
+            getDirectDependenciesFromModule file
+    in
+    if Set.member currentName excluded then
+        Err ( [ currentName ], "Cyclic dependency" )
+
+    else if Set.isEmpty currentDependencies then
+        Ok [ currentName ]
+
+    else
+        currentDependencies
+            |> Set.toList
+            |> List.map
+                (\currentDependency ->
+                    case
+                        allFiles
+                            |> List.Extra.find
+                                (.moduleDefinition
+                                    >> Elm.Syntax.Node.value
+                                    >> Elm.Syntax.Module.moduleName
+                                    >> (==) currentDependency
+                                )
+                    of
+                        Nothing ->
+                            Ok []
+
+                        Just currentDependencyFile ->
+                            listModuleTransitiveDependenciesExcludingModules
+                                (Set.insert currentName excluded)
+                                allFiles
+                                currentDependencyFile
+                )
+            |> Result.Extra.combine
+            |> Result.mapError (Tuple.mapFirst ((::) currentName))
+            |> Result.map (List.concat >> (++) >> (|>) [ currentName ] >> List.Extra.unique)
+
+
+getDirectDependenciesFromModule : Elm.Syntax.File.File -> Set.Set (List String)
+getDirectDependenciesFromModule file =
+    let
+        explicit =
+            file.imports
+                |> List.map
+                    (Elm.Syntax.Node.value
+                        >> (\imp ->
+                                imp.moduleAlias
+                                    |> Maybe.withDefault imp.moduleName
+                                    |> Elm.Syntax.Node.value
+                           )
+                    )
+
+        implicit =
+            if List.member (Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)) moduleNamesWithoutImplicitImport then
+                []
+
+            else
+                autoImportedModulesNames
+    in
+    explicit
+        ++ implicit
+        |> Set.fromList
 
 
 parsedElmFileFromOnlyFileText : String -> Result String ProjectParsedElmFile
@@ -432,193 +522,300 @@ parsedElmFileFromOnlyFileText fileText =
         Ok parsedModule ->
             Ok
                 { fileText = fileText
-                , parseResult = Ok parsedModule
+                , parsedModule = parsedModule
                 , projectedModuleName = Elm.Syntax.Node.value (moduleNameFromSyntaxFile parsedModule)
                 }
 
 
-exposeFromElmModuleToGlobal : ( List String, String ) -> Pine.EvalContext -> Pine.EvalContext
-exposeFromElmModuleToGlobal ( moduleName, nameInModule ) =
-    let
-        redirectValue =
-            Pine.encodeExpressionAsValue
-                (pineFunctionOrValueExpressionFromElmFunctionOrValue
-                    moduleName
-                    nameInModule
-                )
-    in
-    Pine.addToContextAppArgument
-        [ Pine.valueFromContextExpansionWithName ( nameInModule, redirectValue ) ]
-
-
-parseElmModuleTextIntoPineValue : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
-parseElmModuleTextIntoPineValue allModules moduleToTranslate =
-    parseElmModuleTextIntoNamedExports allModules moduleToTranslate
+parseElmModuleTextIntoPineValue : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
+parseElmModuleTextIntoPineValue availableForDependency moduleToTranslate =
+    parseElmModuleTextIntoNamedExports availableForDependency moduleToTranslate
         |> Result.map (Tuple.mapSecond (List.map Pine.valueFromContextExpansionWithName >> Pine.ListValue))
 
 
-parseElmModuleTextIntoNamedExports : List ProjectParsedElmFile -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
-parseElmModuleTextIntoNamedExports allModules moduleToTranslate =
-    case moduleToTranslate.parseResult of
-        Err _ ->
-            Err ("Failed to parse module '" ++ String.join "." moduleToTranslate.projectedModuleName ++ "'")
+parseElmModuleTextIntoNamedExports : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
+parseElmModuleTextIntoNamedExports availableForDependency moduleToTranslate =
+    let
+        moduleName =
+            Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule)
 
-        Ok file ->
-            let
-                otherModules =
-                    allModules |> List.filter ((/=) moduleToTranslate)
+        declarationsOfOtherModules : List (Result String ( String, DeclarationInTranslation ))
+        declarationsOfOtherModules =
+            availableForDependency
+                |> Dict.toList
+                |> List.map
+                    (Tuple.mapSecond
+                        (\moduleValue ->
+                            { expression = Pine.LiteralExpression moduleValue
+                            , referencedLocalNames = Set.empty
+                            }
+                        )
+                        >> Tuple.mapFirst (String.join ".")
+                        >> Ok
+                    )
+    in
+    let
+        redirectsForInfix : Dict.Dict String String
+        redirectsForInfix =
+            moduleToTranslate.parsedModule.declarations
+                |> List.map Elm.Syntax.Node.value
+                |> List.concatMap
+                    (\declaration ->
+                        case declaration of
+                            Elm.Syntax.Declaration.FunctionDeclaration _ ->
+                                []
 
-                moduleName =
-                    Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)
+                            Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+                                []
 
-                coreModulesToStub =
-                    [ [ "Bytes" ]
-                    , [ "Bytes", "Decode" ]
-                    , [ "Bytes", "Encode" ]
-                    , [ "Bitwise" ]
-                    ]
-                        |> Set.fromList
+                            Elm.Syntax.Declaration.InfixDeclaration infixDeclaration ->
+                                [ ( "(" ++ Elm.Syntax.Node.value infixDeclaration.operator ++ ")"
+                                  , Elm.Syntax.Node.value infixDeclaration.function
+                                  )
+                                ]
 
-                valueForImportedModule : Elm.Syntax.ModuleName.ModuleName -> Result String Pine.Value
-                valueForImportedModule importedModuleName =
-                    if Set.member importedModuleName coreModulesToStub then
-                        Ok (Pine.ListValue [])
+                            _ ->
+                                []
+                    )
+                |> Dict.fromList
 
-                    else
-                        valueForImportedModuleExceptFromCore importedModuleName
-
-                valueForImportedModuleExceptFromCore : Elm.Syntax.ModuleName.ModuleName -> Result String Pine.Value
-                valueForImportedModuleExceptFromCore importedModuleName =
-                    otherModules
-                        |> List.filter (.projectedModuleName >> (==) importedModuleName)
-                        |> List.head
-                        |> Maybe.map
-                            (\matchingModule ->
-                                case parseElmModuleTextIntoPineValue allModules matchingModule of
-                                    Err parseOtherModuleError ->
-                                        Err
-                                            ("Failed to parse imported module "
-                                                ++ String.join "." importedModuleName
-                                                ++ ": "
-                                                ++ parseOtherModuleError
-                                            )
-
-                                    Ok ( _, importedModuleExports ) ->
-                                        Ok importedModuleExports
-                            )
-                        |> Maybe.withDefault (Err ("Did not find the module with name " ++ String.join "." importedModuleName))
-
-                explicitImports =
-                    file.imports
-                        |> List.map
-                            (\importSyntax ->
-                                { moduleName = Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).moduleName
-                                , moduleAlias = Maybe.map Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).moduleAlias
-                                , exposingList = Maybe.map Elm.Syntax.Node.value (Elm.Syntax.Node.value importSyntax).exposingList
-                                }
-                            )
-
-                implicitImports =
-                    if autoImportedModules |> List.map .moduleName >> List.member moduleName then
-                        []
-
-                    else
-                        autoImportedModules
-                            |> List.concatMap
-                                (\autoImportedModule ->
-                                    if List.any (.moduleName >> (==) autoImportedModule.moduleName) explicitImports then
-                                        []
-
-                                    else
-                                        [ { moduleName = autoImportedModule.moduleName
-                                          , moduleAlias = Nothing
-                                          , exposingList = Nothing
-                                          }
-                                        ]
-                                )
-
-                allModuleImports =
-                    explicitImports ++ implicitImports
-
-                valuesFromImportsResults : List (Result String ( String, Pine.Value ))
-                valuesFromImportsResults =
-                    allModuleImports
-                        |> List.map
-                            (\moduleImport ->
-                                let
-                                    importedModuleName =
-                                        moduleImport.moduleName
-                                in
-                                valueForImportedModule importedModuleName
-                                    |> Result.map (\importValue -> ( String.join "." importedModuleName, importValue ))
-                            )
-            in
-            case valuesFromImportsResults |> Result.Extra.combine of
-                Err error ->
-                    Err ("Failed to translate imports: " ++ error)
-
-                Ok importsValues ->
-                    let
-                        globalExposingValues =
-                            elmValuesToExposeToGlobal
-                                |> List.map
-                                    (\( sourceModuleName, exposedNameInModule ) ->
-                                        ( exposedNameInModule
-                                        , Pine.encodeExpressionAsValue
-                                            (pineFunctionOrValueExpressionFromElmFunctionOrValue
-                                                sourceModuleName
-                                                exposedNameInModule
+        declarationsResults : List (Result String ( String, DeclarationInTranslation ))
+        declarationsResults =
+            moduleToTranslate.parsedModule.declarations
+                |> List.map Elm.Syntax.Node.value
+                |> List.concatMap
+                    (\declaration ->
+                        case declaration of
+                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                [ pineExpressionFromElmFunction functionDeclaration
+                                    |> Result.map
+                                        (Tuple.mapSecond
+                                            (\expression ->
+                                                { expression = expression
+                                                , referencedLocalNames =
+                                                    functionDeclaration
+                                                        |> .declaration
+                                                        |> Elm.Syntax.Node.value
+                                                        |> .expression
+                                                        |> Elm.Syntax.Node.value
+                                                        |> listNamesReferencedInElmExpression
+                                                        |> List.filter (Tuple.first >> (==) [])
+                                                        |> List.map Tuple.second
+                                                        |> Set.fromList
+                                                }
                                             )
                                         )
-                                    )
+                                ]
 
-                        declarationsResults =
-                            file.declarations
-                                |> List.map Elm.Syntax.Node.value
-                                |> List.filterMap
-                                    (\declaration ->
-                                        case declaration of
-                                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                                Just [ pineExpressionFromElmFunction functionDeclaration ]
+                            Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
+                                customTypeDeclaration.constructors
+                                    |> List.map
+                                        (Elm.Syntax.Node.value
+                                            >> pineExpressionFromElmValueConstructor
+                                            >> Result.map
+                                                (Tuple.mapSecond
+                                                    (\expression ->
+                                                        { expression = expression
+                                                        , referencedLocalNames = Set.empty
+                                                        }
+                                                    )
+                                                )
+                                        )
 
-                                            Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                                Just
-                                                    (customTypeDeclaration.constructors |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmValueConstructor))
+                            Elm.Syntax.Declaration.InfixDeclaration _ ->
+                                []
 
-                                            Elm.Syntax.Declaration.InfixDeclaration infixDeclaration ->
-                                                Just
-                                                    [ Ok
-                                                        ( "(" ++ Elm.Syntax.Node.value infixDeclaration.operator ++ ")"
-                                                        , expressionToLookupNameInEnvironment (Elm.Syntax.Node.value infixDeclaration.function)
-                                                        )
-                                                    ]
+                            _ ->
+                                []
+                    )
+    in
+    case (declarationsResults ++ declarationsOfOtherModules) |> Result.Extra.combine of
+        Err error ->
+            Err ("Failed to translate declaration: " ++ error)
 
-                                            _ ->
-                                                Nothing
-                                    )
-                                |> List.concat
-                    in
-                    case declarationsResults |> Result.Extra.combine of
-                        Err error ->
-                            Err ("Failed to translate declaration: " ++ error)
+        Ok declarations ->
+            let
+                declarationsDict =
+                    Dict.fromList declarations
 
-                        Ok declarations ->
-                            let
-                                declarationsValues =
-                                    declarations |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
+                declarationsValues =
+                    declarations
+                        |> List.map
+                            (\( name, expression ) ->
+                                ( name, buildDeclarationValue declarationsDict ( name, expression ) )
+                            )
 
-                                declarationsContext =
-                                    Pine.emptyEvalContext
-                                        |> Pine.addToContextAppArgument
-                                            ((declarationsValues ++ importsValues ++ globalExposingValues)
-                                                |> List.map Pine.valueFromContextExpansionWithName
-                                            )
+                declarationsValuesForInfix =
+                    redirectsForInfix
+                        |> Dict.toList
+                        |> List.filterMap
+                            (\( name, function ) ->
+                                declarationsValues
+                                    |> List.Extra.find (Tuple.first >> (==) function)
+                                    |> Maybe.map (Tuple.second >> Tuple.pair name)
+                            )
+            in
+            Ok ( moduleName, declarationsValues ++ declarationsValuesForInfix )
 
-                                declarationsValuesInContext =
-                                    declarations
-                                        |> List.map (Tuple.mapSecond (Pine.ClosureValue declarationsContext))
-                            in
-                            Ok ( moduleName, declarationsValuesInContext )
+
+type alias DeclarationInTranslation =
+    { referencedLocalNames : Set.Set String
+    , expression : Pine.Expression
+    }
+
+
+buildDeclarationValue : Dict.Dict String DeclarationInTranslation -> ( String, DeclarationInTranslation ) -> Pine.Value
+buildDeclarationValue availableDeclarations ( declarationName, declaration ) =
+    let
+        referencedNames =
+            listReferencedLocalNamesTransitive
+                availableDeclarations
+                declaration.referencedLocalNames
+    in
+    buildClosureExpression
+        (availableDeclarations
+            |> Dict.toList
+            |> List.filter (Tuple.first >> Set.member >> (|>) referencedNames)
+            |> List.map (Tuple.mapSecond .expression)
+        )
+        declaration.expression
+        |> Pine.encodeExpressionAsValue
+
+
+listReferencedLocalNamesTransitive : Dict.Dict String DeclarationInTranslation -> Set.Set String -> Set.Set String
+listReferencedLocalNamesTransitive availableDeclarations roots =
+    let
+        step =
+            roots
+                |> Set.toList
+                |> List.concatMap
+                    (\root ->
+                        root
+                            :: (availableDeclarations
+                                    |> Dict.get root
+                                    |> Maybe.map (.referencedLocalNames >> Set.toList)
+                                    |> Maybe.withDefault []
+                               )
+                    )
+                |> Set.fromList
+    in
+    if step == roots then
+        roots
+
+    else
+        listReferencedLocalNamesTransitive availableDeclarations step
+
+
+listNamesReferencedInElmExpression : Elm.Syntax.Expression.Expression -> List ( List String, String )
+listNamesReferencedInElmExpression expression =
+    case expression of
+        Elm.Syntax.Expression.UnitExpr ->
+            []
+
+        Elm.Syntax.Expression.Application application ->
+            application
+                |> List.concatMap (Elm.Syntax.Node.value >> listNamesReferencedInElmExpression)
+
+        Elm.Syntax.Expression.OperatorApplication operator _ (Elm.Syntax.Node.Node _ left) (Elm.Syntax.Node.Node _ right) ->
+            ([ left, right ]
+                |> List.concatMap listNamesReferencedInElmExpression
+            )
+                ++ [ ( [], "(" ++ operator ++ ")" ) ]
+
+        Elm.Syntax.Expression.FunctionOrValue moduleName nameInModule ->
+            [ ( moduleName, nameInModule ) ]
+
+        Elm.Syntax.Expression.IfBlock (Elm.Syntax.Node.Node _ condition) (Elm.Syntax.Node.Node _ ifTrue) (Elm.Syntax.Node.Node _ ifFalse) ->
+            [ condition, ifTrue, ifFalse ]
+                |> List.concatMap listNamesReferencedInElmExpression
+
+        Elm.Syntax.Expression.PrefixOperator prefixOperator ->
+            [ ( [], prefixOperator ) ]
+
+        Elm.Syntax.Expression.Operator operator ->
+            [ ( [], operator ) ]
+
+        Elm.Syntax.Expression.Integer _ ->
+            []
+
+        Elm.Syntax.Expression.Hex _ ->
+            []
+
+        Elm.Syntax.Expression.Floatable _ ->
+            []
+
+        Elm.Syntax.Expression.Negation (Elm.Syntax.Node.Node _ negated) ->
+            listNamesReferencedInElmExpression negated
+
+        Elm.Syntax.Expression.Literal _ ->
+            []
+
+        Elm.Syntax.Expression.CharLiteral _ ->
+            []
+
+        Elm.Syntax.Expression.TupledExpression tupled ->
+            tupled |> List.concatMap (Elm.Syntax.Node.value >> listNamesReferencedInElmExpression)
+
+        Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
+            listNamesReferencedInElmExpression parenthesized
+
+        Elm.Syntax.Expression.LetExpression letBlock ->
+            listNamesReferencedInElmLetBlock letBlock
+
+        Elm.Syntax.Expression.CaseExpression caseBlock ->
+            (caseBlock.expression :: List.map Tuple.second caseBlock.cases)
+                |> List.concatMap (Elm.Syntax.Node.value >> listNamesReferencedInElmExpression)
+
+        Elm.Syntax.Expression.LambdaExpression lambda ->
+            listNamesReferencedInElmExpression (Elm.Syntax.Node.value lambda.expression)
+
+        Elm.Syntax.Expression.RecordExpr recordSetters ->
+            recordSetters
+                |> List.concatMap
+                    (Elm.Syntax.Node.value
+                        >> Tuple.second
+                        >> Elm.Syntax.Node.value
+                        >> listNamesReferencedInElmExpression
+                    )
+
+        Elm.Syntax.Expression.ListExpr list ->
+            list |> List.concatMap (Elm.Syntax.Node.value >> listNamesReferencedInElmExpression)
+
+        Elm.Syntax.Expression.RecordAccess (Elm.Syntax.Node.Node _ recordAccess) _ ->
+            listNamesReferencedInElmExpression recordAccess
+
+        Elm.Syntax.Expression.RecordAccessFunction _ ->
+            []
+
+        Elm.Syntax.Expression.RecordUpdateExpression _ recordSetters ->
+            recordSetters
+                |> List.concatMap
+                    (Elm.Syntax.Node.value
+                        >> Tuple.second
+                        >> Elm.Syntax.Node.value
+                        >> listNamesReferencedInElmExpression
+                    )
+
+        Elm.Syntax.Expression.GLSLExpression _ ->
+            []
+
+
+listNamesReferencedInElmLetBlock : Elm.Syntax.Expression.LetBlock -> List ( List String, String )
+listNamesReferencedInElmLetBlock letBlock =
+    letBlock.expression
+        :: (letBlock.declarations
+                |> List.map Elm.Syntax.Node.value
+                |> List.map
+                    (\letDecl ->
+                        case letDecl of
+                            Elm.Syntax.Expression.LetFunction letFunction ->
+                                (Elm.Syntax.Node.value letFunction.declaration).expression
+
+                            Elm.Syntax.Expression.LetDestructuring _ expression ->
+                                expression
+                    )
+           )
+        |> List.concatMap (Elm.Syntax.Node.value >> listNamesReferencedInElmExpression)
 
 
 elmCoreModulesTexts : List String
@@ -1286,11 +1483,20 @@ fromIntFromDigitsChars digitsCharacters int =
     ]
 
 
-autoImportedModules : List { moduleName : List String }
-autoImportedModules =
-    [ { moduleName = [ "Basics" ] }
-    , { moduleName = [ "Maybe" ] }
-    , { moduleName = [ "List" ] }
+moduleNamesWithoutImplicitImport : List (List String)
+moduleNamesWithoutImplicitImport =
+    autoImportedModulesNames
+        ++ [ [ "Char" ]
+           , [ "Tuple" ]
+           ]
+
+
+autoImportedModulesNames : List (List String)
+autoImportedModulesNames =
+    [ [ "Basics" ]
+    , [ "Maybe" ]
+    , [ "List" ]
+    , [ "String" ]
     ]
 
 
@@ -1345,7 +1551,12 @@ pineExpressionFromElm elmExpression =
                     Err ("Failed to map negated expression: " ++ error)
 
                 Ok negatedExpression ->
-                    Ok (applyKernelFunctionWithOneArgument "negateInt" negatedExpression)
+                    Ok
+                        (Pine.KernelApplicationExpression
+                            { function = "negateInt"
+                            , argument = negatedExpression
+                            }
+                        )
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             Ok
@@ -1380,7 +1591,11 @@ pineExpressionFromElm elmExpression =
                                             Err ("Failed to map Elm function syntax: " ++ error)
 
                                         Ok appliedFunctionSyntax ->
-                                            Ok (functionApplicationExpressionFromListOfArguments appliedFunctionSyntax arguments)
+                                            Ok
+                                                (positionalApplicationExpressionFromListOfArguments
+                                                    appliedFunctionSyntax
+                                                    arguments
+                                                )
                             in
                             case Elm.Syntax.Node.value appliedFunctionElmSyntax of
                                 Elm.Syntax.Expression.FunctionOrValue functionModuleName functionLocalName ->
@@ -1420,15 +1635,31 @@ pineExpressionFromElm elmExpression =
                                 |> Result.mapError ((++) "Failed to map right expression: ")
                                 |> Result.map
                                     (\right ->
-                                        functionApplicationExpressionFromListOfArguments
-                                            (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
-                                            [ left, right ]
+                                        Pine.ApplicationExpression
+                                            { function =
+                                                Pine.ApplicationExpression
+                                                    { function =
+                                                        Pine.ApplicationExpression
+                                                            { function =
+                                                                expressionToLookupNameInEnvironmentOrRelayToGlobalExpose
+                                                                    ("(" ++ operator ++ ")")
+                                                            , argument = Pine.ApplicationArgumentExpression
+                                                            }
+                                                    , argument = left
+                                                    }
+                                            , argument = right
+                                            }
                                     )
                         )
                     |> Result.mapError ((++) "Failed to map OperatorApplication: ")
 
         Elm.Syntax.Expression.PrefixOperator operator ->
-            Ok (expressionToLookupNameInEnvironment ("(" ++ operator ++ ")"))
+            Ok
+                (Pine.ApplicationExpression
+                    { function = expressionToLookupNameInEnvironmentOrRelayToGlobalExpose ("(" ++ operator ++ ")")
+                    , argument = Pine.ApplicationArgumentExpression
+                    }
+                )
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case pineExpressionFromElm (Elm.Syntax.Node.value elmCondition) of
@@ -1519,21 +1750,11 @@ pineExpressionFromElmLetBlock letBlock =
                     Err ("Failed to translate expression in let block: " ++ error)
 
                 Ok expressionInExpandedContext ->
-                    Ok (pineExpressionFromLetBlockDeclarationsAndExpression (List.concat declarations) expressionInExpandedContext)
-
-
-pineExpressionFromLetBlockDeclarationsAndExpression : List ( String, Pine.Expression ) -> Pine.Expression -> Pine.Expression
-pineExpressionFromLetBlockDeclarationsAndExpression declarations expression =
-    declarations
-        |> List.foldl
-            (\( declarationName, declarationExpression ) combinedExpr ->
-                Pine.ContextExpansionWithNameExpression
-                    { name = declarationName
-                    , namedValue = Pine.encodeExpressionAsValue declarationExpression
-                    , expression = combinedExpr
-                    }
-            )
-            expression
+                    Ok
+                        (buildClosureExpression
+                            (List.concat declarations)
+                            expressionInExpandedContext
+                        )
 
 
 pineExpressionFromElmLetDeclaration : Elm.Syntax.Expression.LetDeclaration -> Result String (List ( String, Pine.Expression ))
@@ -1618,7 +1839,7 @@ pineExpressionFromElmFunctionWithoutName function =
                                     )
 
                         letBlockExpression =
-                            pineExpressionFromLetBlockDeclarationsAndExpression
+                            buildClosureExpression
                                 (List.concatMap Tuple.second argumentsDeconstructionDeclarations)
                                 functionBodyExpression
                     in
@@ -1691,11 +1912,54 @@ declarationsFromPattern pattern =
 functionExpressionFromArgumentsNamesAndExpression : List String -> Pine.Expression -> Pine.Expression
 functionExpressionFromArgumentsNamesAndExpression argumentsNames expression =
     argumentsNames
-        |> List.foldr
-            (\argumentName prevExpression ->
-                Pine.FunctionExpression { argumentName = argumentName, body = prevExpression }
-            )
+        |> List.foldr (\argumentName prevExpression -> buildFunctionBindingArgumentToName argumentName prevExpression)
             expression
+
+
+buildFunctionBindingArgumentToName : String -> Pine.Expression -> Pine.Expression
+buildFunctionBindingArgumentToName argumentName function =
+    -- TODO: Use 'function' tag analog to record tag
+    applyKernelFunctionWithTwoArguments
+        "make_elm_func"
+        Pine.ApplicationArgumentExpression
+        (Pine.ListExpression
+            [ Pine.LiteralExpression (Pine.valueFromString argumentName)
+            , function
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            ]
+        )
+
+
+buildPositionalApplicationExpression : { function : Pine.Expression, argument : Pine.Expression } -> Pine.Expression
+buildPositionalApplicationExpression { function, argument } =
+    Pine.ApplicationExpression
+        { function = function
+        , argument = argument
+        }
+
+
+buildClosureExpression : List ( String, Pine.Expression ) -> Pine.Expression -> Pine.Expression
+buildClosureExpression environment expression =
+    let
+        declarationsValues =
+            environment
+                |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
+                |> List.map Pine.valueFromContextExpansionWithName
+    in
+    Pine.ApplicationExpression
+        { function =
+            expression
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+        , argument =
+            pineKernel_ListConcat
+                (Pine.ListExpression
+                    [ declarationsValues |> Pine.ListValue |> Pine.LiteralExpression
+                    , Pine.ApplicationArgumentExpression
+                    ]
+                )
+        }
 
 
 pineExpressionFromElmValueConstructor : Elm.Syntax.Type.ValueConstructor -> Result String ( String, Pine.Expression )
@@ -1705,14 +1969,16 @@ pineExpressionFromElmValueConstructor valueConstructor =
             Elm.Syntax.Node.value valueConstructor.name
 
         argumentsNames =
-            valueConstructor.arguments |> List.indexedMap (\i _ -> "value_constructor_argument_" ++ String.fromInt i)
+            valueConstructor.arguments
+                |> List.indexedMap
+                    (\i _ -> String.join "_" [ "const_tag", constructorName, "arg", String.fromInt i ])
     in
     Ok
         ( constructorName
         , argumentsNames
             |> List.foldl
                 (\argumentName prevExpression ->
-                    Pine.FunctionExpression { argumentName = argumentName, body = prevExpression }
+                    buildFunctionBindingArgumentToName argumentName prevExpression
                 )
                 (Pine.tagValueExpression constructorName (argumentsNames |> List.map expressionToLookupNameInEnvironment))
         )
@@ -1735,7 +2001,7 @@ pineExpressionFromElmCaseBlock caseBlock =
                             Pine.ConditionalExpression
                                 { condition = deconstructedCase.conditionExpression
                                 , ifTrue =
-                                    pineExpressionFromLetBlockDeclarationsAndExpression
+                                    buildClosureExpression
                                         deconstructedCase.declarations
                                         deconstructedCase.thenExpression
                                 , ifFalse = nextBlockExpression
@@ -1838,19 +2104,21 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                     let
                         declarations =
                             [ ( unconsLeftName
-                              , applyKernelFunctionWithOneArgument "listHead" caseBlockValueExpression
+                              , pineKernel_ListHead caseBlockValueExpression
                               )
                             , ( unconsRightName
-                              , listDropExpression 1 caseBlockValueExpression
+                              , listSkipExpression 1 caseBlockValueExpression
                               )
                             ]
 
                         conditionExpression =
-                            applyKernelFunctionWithOneArgument "notBool"
-                                (equalsCondition
-                                    caseBlockValueExpression
-                                    (listDropExpression 1 caseBlockValueExpression)
-                                )
+                            Pine.KernelApplicationExpression
+                                { function = "notBool"
+                                , argument =
+                                    equalsCondition
+                                        caseBlockValueExpression
+                                        (listSkipExpression 1 caseBlockValueExpression)
+                                }
                     in
                     Ok
                         { conditionExpression = conditionExpression
@@ -1881,7 +2149,7 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                 conditionExpression =
                     equalsCondition
                         (Pine.LiteralExpression (Pine.valueFromString qualifiedName.name))
-                        (applyKernelFunctionWithOneArgument "listHead" caseBlockValueExpression)
+                        (pineKernel_ListHead caseBlockValueExpression)
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
                 Err error ->
@@ -1890,7 +2158,7 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                 Ok declarationsNames ->
                     let
                         argumentFromIndexExpression argumentIndex =
-                            listDropExpression
+                            listSkipExpression
                                 argumentIndex
                                 (listItemFromIndexExpression 1 caseBlockValueExpression)
 
@@ -1899,8 +2167,7 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                                 |> List.indexedMap
                                     (\argumentIndex declarationName ->
                                         ( declarationName
-                                        , applyKernelFunctionWithOneArgument "listHead"
-                                            (argumentFromIndexExpression argumentIndex)
+                                        , pineKernel_ListHead (argumentFromIndexExpression argumentIndex)
                                         )
                                     )
                     in
@@ -1947,50 +2214,47 @@ booleanConjunctionExpressionFromList defaultIfEmpty operands =
 
 listItemFromIndexExpression : Int -> Pine.Expression -> Pine.Expression
 listItemFromIndexExpression itemIndex listExpression =
-    applyKernelFunctionWithOneArgument "listHead" (listDropExpression itemIndex listExpression)
+    pineKernel_ListHead (listSkipExpression itemIndex listExpression)
 
 
 countListElementsExpression : Pine.Expression -> Pine.Expression
-countListElementsExpression listExpr =
-    pineExpressionFromLetBlockDeclarationsAndExpression
-        [ ( "getLength"
-          , functionExpressionFromArgumentsNamesAndExpression
-                [ "remaining" ]
-                (Pine.ConditionalExpression
-                    { condition =
-                        equalsCondition
-                            (Pine.ListExpression [])
-                            (expressionToLookupNameInEnvironment "remaining")
-                    , ifTrue =
-                        Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
-                    , ifFalse =
-                        applyKernelFunctionWithTwoArguments "addInt"
-                            (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1)))
-                            (functionApplicationExpressionFromListOfArguments
-                                (expressionToLookupNameInEnvironment "getLength")
-                                [ listDropExpression 1
-                                    (expressionToLookupNameInEnvironment "remaining")
-                                ]
-                            )
-                    }
-                )
-          )
-        ]
-        (functionApplicationExpressionFromListOfArguments
-            (expressionToLookupNameInEnvironment "getLength")
-            [ listExpr ]
-        )
+countListElementsExpression =
+    pineKernel_ListLength
 
 
-functionApplicationExpressionFromListOfArguments : Pine.Expression -> List Pine.Expression -> Pine.Expression
-functionApplicationExpressionFromListOfArguments function arguments =
+pineKernel_ListHead : Pine.Expression -> Pine.Expression
+pineKernel_ListHead listExpression =
+    Pine.KernelApplicationExpression
+        { function = "listHead"
+        , argument = listExpression
+        }
+
+
+pineKernel_ListLength : Pine.Expression -> Pine.Expression
+pineKernel_ListLength listExpression =
+    Pine.KernelApplicationExpression
+        { function = "listLength"
+        , argument = listExpression
+        }
+
+
+pineKernel_ListConcat : Pine.Expression -> Pine.Expression
+pineKernel_ListConcat argument =
+    Pine.KernelApplicationExpression
+        { function = "listConcat"
+        , argument = argument
+        }
+
+
+positionalApplicationExpressionFromListOfArguments : Pine.Expression -> List Pine.Expression -> Pine.Expression
+positionalApplicationExpressionFromListOfArguments function arguments =
     case arguments of
         [] ->
             function
 
         nextArgument :: followingArguments ->
-            functionApplicationExpressionFromListOfArguments
-                (Pine.ApplicationExpression
+            positionalApplicationExpressionFromListOfArguments
+                (buildPositionalApplicationExpression
                     { function = function
                     , argument = nextArgument
                     }
@@ -1998,8 +2262,8 @@ functionApplicationExpressionFromListOfArguments function arguments =
                 followingArguments
 
 
-listDropExpression : Int -> Pine.Expression -> Pine.Expression
-listDropExpression numberToDrop listExpression =
+listSkipExpression : Int -> Pine.Expression -> Pine.Expression
+listSkipExpression numberToDrop listExpression =
     if numberToDrop < 1 then
         listExpression
 
@@ -2052,64 +2316,67 @@ pineExpressionForRecordAccess : String -> Pine.Expression -> Pine.Expression
 pineExpressionForRecordAccess fieldName recordExpression =
     let
         recordFieldsExpression =
-            listItemFromIndexExpression 0 (listItemFromIndexExpression 1 recordExpression)
+            pineKernel_ListHead (listItemFromIndexExpression 1 recordExpression)
     in
     Pine.ConditionalExpression
         { condition =
             equalsCondition
                 (Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName))
-                (listItemFromIndexExpression 0 recordExpression)
+                (pineKernel_ListHead recordExpression)
         , ifTrue =
-            expressionToLookupNameInValue
-                { ifNotFound =
-                    Pine.LiteralExpression
-                        (Pine.valueFromString ("Record access failed: Did not find field '" ++ fieldName ++ "'"))
-                , ifFoundPostprocess = listItemFromIndexExpression 0
+            Pine.StringTagExpression
+                { tag = "Completed record access: " ++ fieldName
+                , tagged = expressionToLookupNameInGivenScope fieldName recordFieldsExpression
                 }
-                fieldName
-                (Just recordFieldsExpression)
         , ifFalse =
-            Pine.LiteralExpression
-                (Pine.valueFromString "Error: Used record access on value which is not a record")
+            Pine.StringTagExpression
+                { tag = "Failed record access: " ++ fieldName
+                , tagged =
+                    Pine.LiteralExpression
+                        (Pine.valueFromString "Error: Used record access on value which is not a record")
+                }
         }
 
 
 pineFunctionOrValueExpressionFromElmFunctionOrValue : List String -> String -> Pine.Expression
 pineFunctionOrValueExpressionFromElmFunctionOrValue moduleName nameInModule =
     let
-        scopeExpression =
+        plainLookup =
             if moduleName == [] then
-                Nothing
+                expressionToLookupNameInEnvironmentOrRelayToGlobalExpose nameInModule
 
             else
-                Just (expressionToLookupNameInEnvironment (String.join "." moduleName))
+                expressionToLookupNameInGivenScope nameInModule
+                    (expressionToLookupNameInEnvironment (String.join "." moduleName))
     in
-    listItemFromIndexExpression 0
-        (Pine.LookupNameExpression { scopeExpression = scopeExpression, name = nameInModule })
+    Pine.ApplicationExpression
+        { function = plainLookup
+        , argument = Pine.ApplicationArgumentExpression
+        }
+
+
+expressionToLookupNameInEnvironmentOrRelayToGlobalExpose : String -> Pine.Expression
+expressionToLookupNameInEnvironmentOrRelayToGlobalExpose name =
+    case elmValuesToExposeToGlobal |> List.filter (Tuple.second >> (==) name) |> List.map Tuple.first |> List.head of
+        Nothing ->
+            expressionToLookupNameInEnvironment name
+
+        Just moduleName ->
+            expressionToLookupNameInGivenScope name (expressionToLookupNameInEnvironment (String.join "." moduleName))
 
 
 expressionToLookupNameInEnvironment : String -> Pine.Expression
 expressionToLookupNameInEnvironment name =
-    listItemFromIndexExpression 0
-        (Pine.LookupNameExpression { scopeExpression = Nothing, name = name })
+    expressionToLookupNameInGivenScope name Pine.ApplicationArgumentExpression
 
 
-expressionToLookupNameInValue : { ifNotFound : Pine.Expression, ifFoundPostprocess : Pine.Expression -> Pine.Expression } -> String -> Maybe Pine.Expression -> Pine.Expression
-expressionToLookupNameInValue { ifNotFound, ifFoundPostprocess } name scopeExpression =
-    pineExpressionFromLetBlockDeclarationsAndExpression
-        [ ( "lookupResult", Pine.LookupNameExpression { scopeExpression = scopeExpression, name = name } ) ]
-        (Pine.ConditionalExpression
-            { condition =
-                equalsCondition
-                    (Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" })
-                    (Pine.LiteralExpression (Pine.ListValue []))
-            , ifTrue = ifNotFound
-            , ifFalse =
-                ifFoundPostprocess
-                    (listItemFromIndexExpression 0
-                        (Pine.LookupNameExpression { scopeExpression = Nothing, name = "lookupResult" })
-                    )
-            }
+expressionToLookupNameInGivenScope : String -> Pine.Expression -> Pine.Expression
+expressionToLookupNameInGivenScope name scopeExpression =
+    pineKernel_ListHead
+        (applyKernelFunctionWithTwoArguments
+            "look_up_name_in_ListValue"
+            (Pine.LiteralExpression (Pine.valueFromString name))
+            scopeExpression
         )
 
 
@@ -2123,14 +2390,6 @@ applyKernelFunctionWithTwoArguments kernelFunctionName argA argB =
     Pine.KernelApplicationExpression
         { function = kernelFunctionName
         , argument = Pine.ListExpression [ argA, argB ]
-        }
-
-
-applyKernelFunctionWithOneArgument : String -> Pine.Expression -> Pine.Expression
-applyKernelFunctionWithOneArgument kernelFunctionName argExpr =
-    Pine.KernelApplicationExpression
-        { function = kernelFunctionName
-        , argument = Pine.ListExpression [ argExpr ]
         }
 
 
@@ -2462,11 +2721,3 @@ parserProblemToString p =
 stringStartsWithUpper : String -> Bool
 stringStartsWithUpper =
     String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False
-
-
-prependAllLines : String -> String -> String
-prependAllLines prefix text =
-    text
-        |> String.lines
-        |> List.map ((++) prefix)
-        |> String.join "\n"

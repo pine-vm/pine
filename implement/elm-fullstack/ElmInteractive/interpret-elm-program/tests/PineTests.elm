@@ -24,32 +24,15 @@ pineExpressionEncodeDecodeRoundtrip =
       )
     , ( "if block"
       , Pine.ConditionalExpression
-            { condition = Pine.LookupNameExpression { scopeExpression = Nothing, name = "condition" }
-            , ifTrue = Pine.LookupNameExpression { scopeExpression = Nothing, name = "trueExpression" }
-            , ifFalse = Pine.LookupNameExpression { scopeExpression = Nothing, name = "falseExpression" }
+            { condition = Pine.LiteralExpression (Pine.ListValue [])
+            , ifTrue = Pine.LiteralExpression (Pine.ListValue [])
+            , ifFalse = Pine.LiteralExpression (Pine.ListValue [])
             }
       )
-    , ( "context expansion with name"
-      , Pine.ContextExpansionWithNameExpression
-            { name = "newName"
-            , namedValue = Pine.valueFromString "named value"
-            , expression = Pine.LookupNameExpression { scopeExpression = Nothing, name = "expression_using_new_name" }
-            }
-      )
-    , ( "simple function expression"
-      , Pine.FunctionExpression
-            { argumentName = "argument_a"
-            , body = Pine.LiteralExpression (Pine.ListValue [])
-            }
-      )
-    , ( "nested function expression"
-      , Pine.FunctionExpression
-            { argumentName = "argument_a"
-            , body =
-                Pine.FunctionExpression
-                    { argumentName = "argument_b"
-                    , body = Pine.LiteralExpression (Pine.ListValue [])
-                    }
+    , ( "string tag"
+      , Pine.StringTagExpression
+            { tag = "the tag string"
+            , tagged = Pine.ListExpression []
             }
       )
     ]
