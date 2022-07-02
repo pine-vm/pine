@@ -1,11 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
-using static elm_fullstack.ElmInteractive.TestElmInteractive;
 
 namespace test_elm_fullstack;
 
@@ -17,20 +15,26 @@ public class TestElmInteractive
     [TestMethod]
     public void TestElmInteractiveScenarios()
     {
-        var scenariosResults = new Dictionary<string, InteractiveScenarioTestResult>();
-
-        foreach (var scenarioDirectory in Directory.EnumerateDirectories(pathToScenariosDirectory))
-        {
-            var scenarioName = Path.GetFileName(scenarioDirectory);
-
-            if (!Directory.EnumerateFiles(scenarioDirectory, "*", searchOption: SearchOption.AllDirectories).Any())
+        var scenarios =
+            Directory.EnumerateDirectories(pathToScenariosDirectory)
+            .SelectMany(scenarioDirectory =>
             {
-                // Do not stumble over empty directory here. It could be a leftover after git checkout.
-                continue;
-            }
+                var scenarioName = Path.GetFileName(scenarioDirectory);
 
-            scenariosResults[scenarioName] = TestElmInteractiveScenario(scenarioDirectory);
-        }
+                if (!Directory.EnumerateFiles(scenarioDirectory, "*", searchOption: SearchOption.AllDirectories).Any())
+                {
+                    // Do not stumble over empty directory here. It could be a leftover after git checkout.
+                    return ImmutableList<(string scenarioName, string scenarioDirectory)>.Empty;
+                }
+
+                return ImmutableList.Create((scenarioName, scenarioDirectory));
+            })
+            .ToImmutableList();
+
+        var scenariosResults =
+            elm_fullstack.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
+                scenarios,
+                scenario => LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!);
 
         Console.WriteLine("Total scenarios: " + scenariosResults.Count);
         Console.WriteLine("Passed: " + scenariosResults.Values.Count(scenarioResult => scenarioResult.Passed));
@@ -48,18 +52,14 @@ public class TestElmInteractive
                 :
                 "unknown cause";
 
-            Console.WriteLine("Scenario '" + scenarioNameAndResult.Key + "' failed with " + causeText);
+            Console.WriteLine("Scenario '" + scenarioNameAndResult.Key.scenarioName + "' failed with " + causeText);
         }
 
         if (failedScenarios.Any())
         {
             throw new Exception(
                 "Failed for " + failedScenarios.Count + " scenarios:\n" +
-                string.Join("\n", failedScenarios.Select(scenarioNameAndResult => scenarioNameAndResult.Key)));
+                string.Join("\n", failedScenarios.Select(scenarioNameAndResult => scenarioNameAndResult.Key.scenarioName)));
         }
     }
-
-    InteractiveScenarioTestResult TestElmInteractiveScenario(string scenarioDirectory) =>
-        elm_fullstack.ElmInteractive.TestElmInteractive.TestElmInteractiveScenario(
-            LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenarioDirectory)!);
 }

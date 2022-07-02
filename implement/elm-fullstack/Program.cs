@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-06-30";
+    static public string AppVersionId => "2022-07-02";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -805,13 +805,13 @@ public class Program
 
                     testCmd.OnExecute(() =>
                     {
-                        var consoleForegroundBefore = Console.ForegroundColor;
+                        var console = (Pine.IConsole)StaticConsole.Instance;
 
                         var scenarioSources = scenarioOption.Values;
                         var scenariosSources = scenariosOption.Values;
 
-                        Console.WriteLine("Got " + scenarioSources.Count + " source(s) for an individual scenario to load...");
-                        Console.WriteLine("Got " + scenariosSources.Count + " source(s) for a directory of scenarios to load...");
+                        console.WriteLine("Got " + scenarioSources.Count + " source(s) for an individual scenario to load...");
+                        console.WriteLine("Got " + scenariosSources.Count + " source(s) for a directory of scenarios to load...");
 
                         var scenarioLoadResults =
                             scenarioSources
@@ -832,12 +832,13 @@ public class Program
                         {
                             var failedLoad = failedLoads.First();
 
-                            Console.WriteLine(
+                            console.WriteLine(
                                 string.Join(
                                     "\n",
                                         "Failed to load from " + failedLoad.Key + ":",
                                         string.Join("\n", failedLoad.Value.log),
-                                        failedLoad.Value.result.Err!));
+                                        failedLoad.Value.result.Err!),
+                                color: Pine.IConsole.TextColor.Red);
 
                             return;
                         }
@@ -845,10 +846,10 @@ public class Program
                         var namedDistinctScenarios =
                             scenarioLoadResults
                             .Select(scenarioLoadResult =>
-                            (name: scenarioLoadResult.Key.Split('/', '\\').Last(), component: scenarioLoadResult.Value.result.Ok.Value.tree))
+                            (name: scenarioLoadResult.Key.Split('/', '\\').Last(), component: scenarioLoadResult.Value.result.Ok!.Value.tree))
                             .Concat(scenariosLoadResults.SelectMany(scenariosComposition =>
                             {
-                                var asTree = scenariosComposition.Value.result.Ok.Value.tree.TreeContent;
+                                var asTree = scenariosComposition.Value.result.Ok!.Value.tree.TreeContent;
 
                                 if (asTree == null)
                                     return ImmutableList<(string, Composition.TreeWithStringPath)>.Empty;
@@ -887,69 +888,52 @@ public class Program
                         var aggregateCompositionHash =
                             CommonConversion.StringBase16FromByteArray(Composition.GetHash(aggregateComposition));
 
-                        Console.WriteLine(
+                        console.WriteLine(
                             "Succesfully loaded " + namedDistinctScenarios.Count +
                             " distinct scenario(s) with an aggregate hash of " + aggregateCompositionHash + ".");
 
-                        var exceptLoadingStopatch = System.Diagnostics.Stopwatch.StartNew();
+                        var exceptLoadingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                         var scenariosResults =
-                            namedDistinctScenarios
-                            .ToImmutableDictionary(
-                                scenario => scenario.Key,
-                                scenario =>
-                                {
-                                    var scenarioStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                                    var scenarioReport =
-                                        ElmInteractive.TestElmInteractive.TestElmInteractiveScenario(scenario.Value.loadedScenario.component);
-
-                                    return new
-                                    {
-                                        loadResult = scenario.Value,
-                                        durationMs = scenarioStopwatch.ElapsedMilliseconds,
-                                        scenarioReport
-                                    };
-                                });
+                            ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
+                                namedDistinctScenarios,
+                                namedScenario => namedScenario.Value.loadedScenario.component);
 
                         var passedScenarios =
                             scenariosResults
-                            .Where(t => t.Value.scenarioReport.Passed)
+                            .Where(t => t.Value.Passed)
                             .ToImmutableList();
 
                         var failedScenarios =
                             scenariosResults
-                            .Where(t => !t.Value.scenarioReport.Passed)
+                            .Where(t => !t.Value.Passed)
                             .ToImmutableList();
-
-                        Console.ForegroundColor = failedScenarios.Any() ? ConsoleColor.Red : ConsoleColor.Green;
 
                         var overallStats = new[]
                         {
                             (label : "Failed", value : failedScenarios.Count.ToString()),
                             (label : "Passed", value : passedScenarios.Count.ToString()),
-                            (label : "Total", value : scenarioLoadResults.Count.ToString()),
-                            (label : "Duration", value : exceptLoadingStopatch.ElapsedMilliseconds.ToString("### ### ###") + " ms"),
+                            (label : "Total", value : scenariosResults.Count.ToString()),
+                            (label : "Duration", value : exceptLoadingStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms"),
                         };
 
-                        Console.WriteLine(
+                        console.WriteLine(
                             string.Join(
                                 " - ",
                                 (failedScenarios.Any() ? "Failed" : "Passed") + "!",
                                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
-                                aggregateCompositionHash[..10] + " (elm-fs " + AppVersionId + ")"));
+                                aggregateCompositionHash[..10] + " (elm-fs " + AppVersionId + ")"),
+                            color: failedScenarios.Any() ? Pine.IConsole.TextColor.Red : Pine.IConsole.TextColor.Green);
 
                         foreach (var failedScenario in failedScenarios)
                         {
-                            var scenarioId = failedScenario.Value.loadResult.hashBase16;
+                            var scenarioId = failedScenario.Key.Value.hashBase16;
 
-                            Console.WriteLine(
+                            console.WriteLine(
                                 "Failed scenario " + scenarioId[..10] + " ('" + failedScenario.Key + "'):");
 
-                            Console.WriteLine(failedScenario.Value.scenarioReport.Exception?.ToString());
+                            console.WriteLine(failedScenario.Value.Exception?.ToString()!);
                         }
-
-                        Console.ForegroundColor = consoleForegroundBefore;
                     });
                 });
 

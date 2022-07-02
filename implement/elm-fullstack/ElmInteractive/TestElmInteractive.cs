@@ -10,9 +10,10 @@ namespace elm_fullstack.ElmInteractive;
 
 public class TestElmInteractive
 {
-    public record InteractiveScenarioTestResult(
+    public record InteractiveScenarioTestReport(
         int totalStepsCount,
-        IReadOnlyList<InteractiveScenarioTestStepResult> testedSteps)
+        IReadOnlyList<InteractiveScenarioTestStepResult> testedSteps,
+        TimeSpan elapsedTime)
     {
         public bool Passed => testedSteps.Count == totalStepsCount && testedSteps.All(s => s.Passed) && Exception == null;
 
@@ -26,8 +27,21 @@ public class TestElmInteractive
         public bool Passed => exception == null;
     }
 
-    static public InteractiveScenarioTestResult TestElmInteractiveScenario(Composition.TreeWithStringPath scenarioTree)
+    static public ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
+        IReadOnlyCollection<TContainer> scenarioContainers,
+        Func<TContainer, Composition.TreeWithStringPath> getScenario) where TContainer : notnull =>
+        scenarioContainers
+        .AsParallel()
+        .WithDegreeOfParallelism(4)
+        .Select(scenarioContainer => (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer))))
+        .ToImmutableDictionary(
+            s => s.scenarioContainer,
+            elementSelector: s => s.testReport);
+
+    static public InteractiveScenarioTestReport TestElmInteractiveScenario(Composition.TreeWithStringPath scenarioTree)
     {
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         var appCodeTree =
             scenarioTree.GetNodeAtPath(new[] { "context-app" });
 
@@ -91,8 +105,9 @@ public class TestElmInteractive
             .TakeUntil(s => !s.Passed)
             .ToImmutableList();
 
-        return new InteractiveScenarioTestResult(
+        return new InteractiveScenarioTestReport(
             totalStepsCount: testScenarioSteps.Count,
-            testedSteps: testedSteps);
+            testedSteps: testedSteps,
+            elapsedTime: totalStopwatch.Elapsed);
     }
 }
