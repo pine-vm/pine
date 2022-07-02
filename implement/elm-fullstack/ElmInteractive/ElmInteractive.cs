@@ -11,6 +11,8 @@ namespace elm_fullstack.ElmInteractive;
 
 public class ElmInteractive
 {
+    static public readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavascriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+
     static public Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
         TreeWithStringPath appCodeTree,
         string submission,
@@ -87,6 +89,15 @@ public class ElmInteractive
 
     static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToEvaluateElm()
     {
+        var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
+
+        javascriptEngine.Evaluate(JavascriptToEvaluateElm.Value);
+
+        return javascriptEngine;
+    }
+
+    static public string PrepareJavascriptToEvaluateElm()
+    {
         var parseElmAppCodeFiles = ParseElmSyntaxAppCodeFiles();
 
         var javascriptFromElmMake =
@@ -99,24 +110,18 @@ public class ElmInteractive
         var listFunctionToPublish =
             new[]
             {
-                    (functionNameInElm: "Main.evaluateSubmissionInInteractive",
-                    publicName: "evaluateSubmissionInInteractive",
-                    arity: 1),
+                (functionNameInElm: "Main.evaluateSubmissionInInteractive",
+                publicName: "evaluateSubmissionInInteractive",
+                arity: 1),
             };
 
-        var javascriptPreparedToRun =
+        return
             ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
                 javascriptMinusCrashes,
                 listFunctionToPublish);
-
-        var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
-
-        javascriptEngine.Evaluate(javascriptPreparedToRun);
-
-        return javascriptEngine;
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> ParseElmSyntaxAppCodeFiles() =>
+    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> ParseElmSyntaxAppCodeFiles() =>
         DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
             filePaths: new[]
             {

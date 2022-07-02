@@ -20,14 +20,14 @@ public class ExecutableFile
         public int ExitCode;
     }
 
-    static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) ExecuteFileWithArguments(
-        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> environmentFilesNotExecutable,
-        byte[] executableFile,
+    static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
+        IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
+        ReadOnlyMemory<byte> executableFile,
         string arguments,
         IDictionary<string, string>? environmentStrings,
         IImmutableList<string>? workingDirectory = null,
-        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>>? environmentFilesExecutable = null,
-        IReadOnlyDictionary<string, IReadOnlyList<byte>>? environmentPathExecutableFiles = null)
+        IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>? environmentFilesExecutable = null,
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? environmentPathExecutableFiles = null)
     {
         var environmentStringsDict =
             environmentStrings?.ToImmutableDictionary() ?? ImmutableDictionary<string, string>.Empty;
@@ -36,14 +36,14 @@ public class ExecutableFile
 
         var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        string writeEnvironmentFile(KeyValuePair<IImmutableList<string>, IReadOnlyList<byte>> environmentFile)
+        string writeEnvironmentFile(KeyValuePair<IImmutableList<string>, ReadOnlyMemory<byte>> environmentFile)
         {
             var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.Key));
             var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath)!;
 
             Directory.CreateDirectory(environmentFileDirectory);
 
-            File.WriteAllBytes(environmentFilePath, (environmentFile.Value as byte[]) ?? environmentFile.Value.ToArray());
+            File.WriteAllBytes(environmentFilePath, environmentFile.Value.ToArray());
 
             return environmentFilePath;
         }
@@ -58,11 +58,11 @@ public class ExecutableFile
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "";
 
         var allExecutableFiles =
-            (environmentFilesExecutable ?? ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty)
+            (environmentFilesExecutable ?? ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>.Empty)
             .ToImmutableDictionary()
             .SetItems(
-                (environmentPathExecutableFiles ?? ImmutableDictionary<string, IReadOnlyList<byte>>.Empty)
-                .Select(execFile => new KeyValuePair<IImmutableList<string>, IReadOnlyList<byte>>(
+                (environmentPathExecutableFiles ?? ImmutableDictionary<string, ReadOnlyMemory<byte>>.Empty)
+                .Select(execFile => new KeyValuePair<IImmutableList<string>, ReadOnlyMemory<byte>>(
                     ImmutableList.Create(environmentPathContainerDirectoryName, execFile.Key + executableFileNameAppendix), execFile.Value)))
             .SetItem(mainExecutableFilePathRelative, executableFile);
 
@@ -156,13 +156,21 @@ public class ExecutableFile
         byte[] executableFile,
         string arguments,
         IDictionary<string, string> environmentStrings,
-        IImmutableList<string>? workingDirectory = null) =>
-        ExecuteFileWithArguments(
-            environmentFilesNotExecutable: Composition.ToFlatDictionaryWithPathComparer(environmentFiles),
-            executableFile: executableFile,
-            arguments: arguments,
-            environmentStrings: environmentStrings,
-            workingDirectory: workingDirectory);
+        IImmutableList<string>? workingDirectory = null)
+    {
+        var (processOutput, resultingFiles) =
+            ExecuteFileWithArguments(
+                environmentFilesNotExecutable: Composition.ToFlatDictionaryWithPathComparer(
+                    environmentFiles.Select(f => (f.path, (ReadOnlyMemory<byte>)f.content.ToArray())).ToImmutableList()),
+                executableFile: executableFile,
+                arguments: arguments,
+                environmentStrings: environmentStrings,
+                workingDirectory: workingDirectory);
+
+        return (
+            processOutput,
+            resultingFiles: resultingFiles.Select(f => (f.path, content: (IReadOnlyList<byte>)f.content.ToArray())).ToImmutableList());
+    }
 
 
     //  Helper for Linux platform. Thank you Kyle Spearrin!

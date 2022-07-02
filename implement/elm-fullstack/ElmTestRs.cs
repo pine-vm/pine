@@ -1,4 +1,5 @@
 ﻿using Pine;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -92,12 +93,12 @@ public class ElmTestRs
             ("c531a3fb716175599033a5b71b150c14cc260c79a5c2f180927c840ac5d470c4",
             @"https://github.com/denoland/deno/releases/download/v1.20.6/deno-x86_64-pc-windows-msvc.zip"));
 
-    static public byte[]? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
+    static public ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
-    static public byte[]? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
+    static public ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
 
     static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmProjectFiles)
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmProjectFiles)
     {
         var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
 
@@ -109,17 +110,17 @@ public class ElmTestRs
          * */
 
         var environmentPathExecutableFiles =
-            ImmutableDictionary<string, IReadOnlyList<byte>>.Empty
-            .SetItem("deno", DenoExecutableFileForCurrentOs()!);
+            ImmutableDictionary<string, ReadOnlyMemory<byte>>.Empty
+            .SetItem("deno", DenoExecutableFileForCurrentOs()!.Value);
 
         var environmentFilesExecutable =
-            ImmutableDictionary.Create<IImmutableList<string>, IReadOnlyList<byte>>()
+            ImmutableDictionary.Create<IImmutableList<string>, ReadOnlyMemory<byte>>()
             .SetItem(ImmutableList.Create(elmExecutableFileName), ElmFullstack.ProcessFromElm019Code.GetElmExecutableFile);
 
         var executeElmTestResult =
             ExecutableFile.ExecuteFileWithArguments(
             environmentFilesNotExecutable: elmProjectFiles,
-            executableFile: elmTestExecutableFile,
+            executableFile: elmTestExecutableFile.Value,
             arguments: "--compiler=./" + elmExecutableFileName + "  --deno  --report=json",
             environmentStrings: null,
             workingDirectory: null,

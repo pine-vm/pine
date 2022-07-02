@@ -15,12 +15,12 @@ public class Filesystem
             Environment.GetEnvironmentVariable(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME")!,
             "pine", ".cache");
 
-    static public IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
+    static public IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
         GetFilesFromDirectory(
             directoryPath: directoryPath,
             filterByRelativeName: _ => true);
 
-    static public IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> GetFilesFromDirectory(
+    static public IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> GetFilesFromDirectory(
         string directoryPath,
         Func<IImmutableList<string>, bool> filterByRelativeName) =>
         Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
@@ -28,7 +28,7 @@ public class Filesystem
             (absolutePath: filePath,
             relativePath: (IImmutableList<string>)GetRelativePath(directoryPath, filePath).Split(Path.DirectorySeparatorChar).ToImmutableList()))
         .Where(filePath => filterByRelativeName(filePath.relativePath))
-        .Select(filePath => (filePath.relativePath, (IReadOnlyList<byte>)File.ReadAllBytes(filePath.absolutePath)))
+        .Select(filePath => (filePath.relativePath, (ReadOnlyMemory<byte>)File.ReadAllBytes(filePath.absolutePath)))
         .ToList();
 
     static public string GetRelativePath(

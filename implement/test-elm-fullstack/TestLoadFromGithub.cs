@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace test_elm_fullstack;
@@ -105,8 +107,7 @@ public class TestLoadFromGithub
         Assert.IsNotNull(blobContent, "Found blobContent.");
 
         Assert.AreEqual(expectedFileHash,
-            Pine.CommonConversion.StringBase16FromByteArray(
-                Pine.CommonConversion.HashSHA256(blobContent.ToArray()))
+            Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Value.Span))
             .ToLowerInvariant(),
             "Loaded blob content hash equals expected hash.");
     }
@@ -177,7 +178,7 @@ public class TestLoadFromGithub
                 gitCloneUrlPrefixes: ImmutableList.Create("https://github.com/elm-fullstack/"),
                 fileCacheDirectory: System.IO.Path.Combine(tempWorkingDirectory, "server-cache"));
 
-            IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> consultServer(
+            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> consultServer(
                 Pine.LoadFromGitHubOrGitLab.GetRepositoryFilesPartialForCommitRequest request)
             {
                 using var httpClient = new HttpClient();
@@ -214,8 +215,7 @@ public class TestLoadFromGithub
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
-                    Pine.CommonConversion.StringBase16FromByteArray(
-                        Pine.CommonConversion.HashSHA256(blobContent.ToArray()))
+                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Value.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
             }
@@ -236,8 +236,7 @@ public class TestLoadFromGithub
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
-                    Pine.CommonConversion.StringBase16FromByteArray(
-                        Pine.CommonConversion.HashSHA256(blobContent.ToArray()))
+                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Value.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
 

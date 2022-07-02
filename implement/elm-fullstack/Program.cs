@@ -652,7 +652,7 @@ public class Program
             });
         });
 
-    static (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>? compiledAppFiles)
+    static (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileAppAndSaveCompositionToZipArchive(string sourcePath)
     {
         var compileResult = CompileApp(sourcePath);
@@ -677,7 +677,7 @@ public class Program
         return compileResult;
     }
 
-    static public (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>? compiledAppFiles)
+    static public (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileApp(string sourcePath)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1051,15 +1051,17 @@ public class Program
         {
             var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
 
-            yield return "a tree containing " + blobs.Count + " blobs with an aggregate size of " + blobs.Sum(blob => blob.blobContent.Count) + " bytes.";
+            yield return "a tree containing " + blobs.Count + " blobs with an aggregate size of " + blobs.Sum(blob => (long)blob.blobContent.Length) + " bytes.";
 
             if (listBlobs)
-                yield return "blobs paths and sizes:\n" + string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path) + " (" + blobAtPath.blobContent.Count + ")"));
+                yield return
+                    "blobs paths and sizes:\n" +
+                    string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path) + " (" + blobAtPath.blobContent.Length + ")"));
 
             yield break;
         }
 
-        yield return "a blob containing " + composition.BlobContent.Length + " bytes";
+        yield return "a blob containing " + composition.BlobContent.Value.Length + " bytes";
     }
 
     static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
@@ -1145,7 +1147,7 @@ public class Program
         return (compositionId, summary: new SourceSummaryStructure
         (
             numberOfFiles: allBlobs.Count,
-            totalSizeOfFilesContents: allBlobs.Select(blob => blob.blobContent.Count).Sum()
+            totalSizeOfFilesContents: allBlobs.Select(blob => blob.blobContent.Length).Sum()
         ));
     }
 
@@ -1697,7 +1699,7 @@ public class Program
         );
     }
 
-    static (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
+    static (IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
         string sourceAdminInterface,
         string? sourceAdminPassword)
     {
@@ -1745,7 +1747,7 @@ public class Program
         return ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }
 
-    static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
+    static IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
         string sourcePath, string? sourcePassword)
     {
         if (!LooksLikeLocalSite(sourcePath))

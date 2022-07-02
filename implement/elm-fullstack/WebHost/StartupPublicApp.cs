@@ -436,10 +436,10 @@ public class StartupPublicApp
                 if (matchFromSourceComposition.BlobContent == null)
                     throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
 
-                return matchFromSourceComposition.BlobContent.ToArray();
+                return matchFromSourceComposition.BlobContent.Value.ToArray();
             }
 
-            return BlobLibrary.GetBlobWithSHA256(sha256);
+            return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();
         }
 
         InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>

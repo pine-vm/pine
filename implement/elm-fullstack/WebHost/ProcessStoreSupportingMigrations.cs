@@ -247,10 +247,10 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         this.fileStore = fileStore;
     }
 
-    IReadOnlyList<byte>? LoadComponentSerialRepresentationForHash(IReadOnlyList<byte> componentHash) =>
-        LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16FromByteArray(componentHash));
+    ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash) =>
+        LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16(componentHash));
 
-    IReadOnlyList<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
+    ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
     {
         var filePath =
             GetFilePathForComponentInComponentFileStore(componentHashBase16);
@@ -265,7 +265,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 return CommonConversion.Inflate(deflatedFile);
         }
 
-        return originalFile;
+        return originalFile!.ToArray();
     }
 
     public Composition.Component? LoadComponent(string componentHashBase16)
@@ -276,7 +276,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             return null;
 
         var loadComponentResult =
-            Composition.Deserialize(fromComponentStore, LoadComponentSerialRepresentationForHash);
+            Composition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash);
 
         if (loadComponentResult.Ok == null)
             throw new Exception("Failed to load component " + componentHashBase16 + ": " + loadComponentResult.Err);
@@ -409,7 +409,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         }
     }
 
-    public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse_Before_2021_07()
+    public IEnumerable<ReadOnlyMemory<byte>> EnumerateSerializedCompositionLogRecordsReverse_Before_2021_07()
     {
         var compositionHeadHash = fileStore.GetFileContent(CompositionHeadHashFilePath);
 
@@ -431,12 +431,12 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             if (compositionRecordComponent.BlobContent == null)
                 throw new Exception("Unexpected content for composition record component " + nextHashBase16);
 
-            var compositionRecordArray = compositionRecordComponent.BlobContent;
+            var compositionRecordBytes = compositionRecordComponent.BlobContent;
 
             var recordStructure = JsonSerializer.Deserialize<CompositionLogRecordInFile>(
-                Encoding.UTF8.GetString(compositionRecordArray))!;
+                Encoding.UTF8.GetString(compositionRecordBytes.Value.Span))!;
 
-            yield return compositionRecordArray;
+            yield return compositionRecordBytes.Value;
 
             if (recordStructure.compositionEvent?.RevertProcessTo != null)
             {

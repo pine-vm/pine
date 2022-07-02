@@ -71,7 +71,7 @@ public class TestElmInteractive
                 try
                 {
                     submission =
-                        Encoding.UTF8.GetString(testStep.component.GetBlobAtPath(new[] { "submission" })!.ToArray());
+                        Encoding.UTF8.GetString(testStep.component.GetBlobAtPath(new[] { "submission" })!.Value.Span);
 
                     var evalResult =
                         interactiveSession.Submit(submission);
@@ -81,7 +81,7 @@ public class TestElmInteractive
 
                     if (expectedValueFile != null)
                     {
-                        var expectedValue = Encoding.UTF8.GetString(expectedValueFile.ToArray());
+                        var expectedValue = Encoding.UTF8.GetString(expectedValueFile.Value.Span);
 
                         Assert.IsNull(evalResult.Err, "Submission result has error: " + evalResult.Err);
 

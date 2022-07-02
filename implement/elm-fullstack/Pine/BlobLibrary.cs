@@ -11,13 +11,13 @@ namespace Pine;
 
 public class BlobLibrary
 {
-    static public Func<Func<byte[], byte[]?>, Func<byte[], byte[]?>>? OverrideGetBlobWithSHA256;
+    static public Func<Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?>, Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?>>? OverrideGetBlobWithSHA256;
 
     static readonly string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
 
     static string ContainerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 
-    static public byte[]? LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
+    static public ReadOnlyMemory<byte>? LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
     {
         var hashAndRemoteSource =
             dict.FirstOrDefault(c => RuntimeInformation.IsOSPlatform(c.Key)).Value;
@@ -32,7 +32,7 @@ public class BlobLibrary
             getIfNotCached: () => DownloadFromUrlAndExtractBlobWithMatchingHash(hashAndRemoteSource.remoteSource, hash));
     }
 
-    static public byte[]? GetBlobWithSHA256(byte[] sha256)
+    static public ReadOnlyMemory<byte>? GetBlobWithSHA256(ReadOnlyMemory<byte> sha256)
     {
         try
         {
@@ -43,8 +43,8 @@ public class BlobLibrary
             if (blobCandidate == null)
                 return null;
 
-            if (!(Enumerable.SequenceEqual(Composition.GetHash(Composition.Component.Blob(blobCandidate)), sha256) ||
-                Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate), sha256)))
+            if (!(Composition.GetHash(Composition.Component.Blob(blobCandidate.Value)).AsSpan().SequenceEqual(sha256.Span) ||
+                System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
                 return null;
 
             return blobCandidate;
@@ -52,19 +52,19 @@ public class BlobLibrary
         catch (Exception e)
         {
             throw new Exception(
-                "Did not find blob with hash " + CommonConversion.StringBase16FromByteArray(sha256),
+                "Did not find blob with hash " + CommonConversion.StringBase16(sha256),
                 innerException: e);
         }
     }
 
-    static public byte[]? GetBlobWithSHA256Cached(byte[] sha256) =>
+    static public ReadOnlyMemory<byte>? GetBlobWithSHA256Cached(ReadOnlyMemory<byte> sha256) =>
         GetBlobWithSHA256Cached(sha256, null);
 
-    static public byte[]? GetBlobWithSHA256Cached(byte[] sha256, Func<byte[]?>? getIfNotCached)
+    static public ReadOnlyMemory<byte>? GetBlobWithSHA256Cached(ReadOnlyMemory<byte> sha256, Func<ReadOnlyMemory<byte>?>? getIfNotCached)
     {
         var sha256DirectoryName = "by-sha256";
 
-        var fileName = BitConverter.ToString(sha256).Replace("-", "").ToLowerInvariant();
+        var fileName = BitConverter.ToString(sha256.ToArray()).Replace("-", "").ToLowerInvariant();
 
         var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
 
@@ -88,11 +88,11 @@ public class BlobLibrary
         {
             var fromExplicitSource = getIfNotCached();
 
-            if (fromExplicitSource != null && blobHasExpectedSHA256(fromExplicitSource))
-                return tryUpdateCacheAndContinueFromBlob(fromExplicitSource);
+            if (fromExplicitSource != null && blobHasExpectedSHA256(fromExplicitSource.Value))
+                return tryUpdateCacheAndContinueFromBlob(fromExplicitSource.Value);
         }
 
-        byte[] tryUpdateCacheAndContinueFromBlob(byte[] responseContent)
+        ReadOnlyMemory<byte> tryUpdateCacheAndContinueFromBlob(ReadOnlyMemory<byte> responseContent)
         {
             if (!blobHasExpectedSHA256(responseContent))
             {
@@ -103,7 +103,7 @@ public class BlobLibrary
 
             try
             {
-                File.WriteAllBytes(cacheFilePath, responseContent);
+                File.WriteAllBytes(cacheFilePath, responseContent.ToArray());
             }
             catch (IOException)
             {
@@ -113,7 +113,7 @@ public class BlobLibrary
             return responseContent;
         }
 
-        byte[]? tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
+        ReadOnlyMemory<byte>? tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
         {
             if (httpResponse.StatusCode == HttpStatusCode.NotFound)
                 return null;
@@ -163,19 +163,22 @@ public class BlobLibrary
         return httpClient.GetAsync(url).Result;
     }
 
-    static public byte[]? DownloadFromUrlAndExtractBlobWithMatchingHash(
+    static public ReadOnlyMemory<byte>? DownloadFromUrlAndExtractBlobWithMatchingHash(
         string sourceUrl,
         byte[] sha256)
     {
-        return DownloadFromUrlAndExtractBlobs(sourceUrl).FirstOrDefault(BlobHasSHA256(sha256))?.ToArray();
+        return
+            DownloadFromUrlAndExtractBlobs(sourceUrl)
+            .Where(BlobHasSHA256(sha256)).Cast<ReadOnlyMemory<byte>?>()
+            .FirstOrDefault();
     }
 
-    static public Func<IReadOnlyList<byte>, bool> BlobHasSHA256(byte[] sha256) =>
+    static public Func<ReadOnlyMemory<byte>, bool> BlobHasSHA256(ReadOnlyMemory<byte> sha256) =>
         blobCandidate =>
-        Enumerable.SequenceEqual(Composition.GetHash(Composition.Component.Blob(blobCandidate)), sha256) ||
-        Enumerable.SequenceEqual(CommonConversion.HashSHA256(blobCandidate as byte[] ?? blobCandidate.ToArray()), sha256);
+        Composition.GetHash(Composition.Component.Blob(blobCandidate)).AsSpan().SequenceEqual(sha256.Span) ||
+        System.Security.Cryptography.SHA256.HashData(blobCandidate.Span).AsSpan().SequenceEqual(sha256.Span);
 
-    static public IEnumerable<IReadOnlyList<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
+    static public IEnumerable<ReadOnlyMemory<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
         DownloadFromUrlAndExtractTrees(sourceUrl)
         .SelectMany(tree => tree.EnumerateBlobsTransitive().Select(blob => blob.blobContent));
 
@@ -193,7 +196,7 @@ public class BlobLibrary
         if (responseContent == null)
             yield break;
 
-        yield return Composition.TreeWithStringPath.Blob(responseContent);
+        yield return Composition.TreeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
 
         {
             Composition.TreeWithStringPath? fromZipArchive = null;
@@ -225,7 +228,7 @@ public class BlobLibrary
         }
         else if (sourceUrl.EndsWith(".gz"))
         {
-            byte[]? fromGzip = null;
+            ReadOnlyMemory<byte>? fromGzip = null;
 
             try
             {
@@ -234,7 +237,7 @@ public class BlobLibrary
             catch { }
 
             if (fromGzip != null)
-                yield return Composition.TreeWithStringPath.Blob(fromGzip);
+                yield return Composition.TreeWithStringPath.Blob((ReadOnlyMemory<byte>)fromGzip);
         }
     }
 }

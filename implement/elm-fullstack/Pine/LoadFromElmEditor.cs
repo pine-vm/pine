@@ -36,12 +36,12 @@ namespace Pine
             /// 
             /// applyBlobChanges : List BlobChangeSequenceElement -> Bytes.Bytes -> Bytes.Bytes
             /// </summary>
-            static public IImmutableList<byte> ApplyBlobChanges(
+            static public ReadOnlyMemory<byte> ApplyBlobChanges(
                 IReadOnlyList<BlobChangeSequenceElement> changes,
-                IImmutableList<byte>? blobBefore)
+                ReadOnlyMemory<byte>? blobBefore)
             {
-                static (IImmutableList<byte> originalBlobRemainingBytes, IImmutableList<byte> changedBlobBytes) applyChange(
-                    BlobChangeSequenceElement change, IImmutableList<byte> originalBlobRemainingBytes, IImmutableList<byte> changedBlobBytes)
+                static (ReadOnlyMemory<byte> originalBlobRemainingBytes, ReadOnlyMemory<byte> changedBlobBytes) applyChange(
+                    BlobChangeSequenceElement change, ReadOnlyMemory<byte> originalBlobRemainingBytes, ReadOnlyMemory<byte> changedBlobBytes)
                 {
                     var reuseBytes = change.ReuseBytes?[0];
                     var removeBytes = change.RemoveBytes?[0];
@@ -50,14 +50,14 @@ namespace Pine
                     if (reuseBytes != null)
                     {
                         return (
-                            originalBlobRemainingBytes.RemoveRange(0, reuseBytes.Value),
-                            changedBlobBytes.AddRange(originalBlobRemainingBytes.Take(reuseBytes.Value)));
+                            originalBlobRemainingBytes[reuseBytes.Value..],
+                            CommonConversion.Concat(changedBlobBytes.Span, originalBlobRemainingBytes[..reuseBytes.Value].Span));
                     }
 
                     if (removeBytes != null)
                     {
                         return (
-                            originalBlobRemainingBytes.RemoveRange(0, removeBytes.Value),
+                            originalBlobRemainingBytes.Slice(removeBytes.Value),
                             changedBlobBytes);
                     }
 
@@ -67,7 +67,7 @@ namespace Pine
 
                         return (
                             originalBlobRemainingBytes,
-                            changedBlobBytes.AddRange(bytes));
+                            CommonConversion.Concat(changedBlobBytes.Span, bytes.AsSpan()));
                     }
 
                     throw new Exception("Unexpected shape of BlobChangeSequenceElement");
@@ -76,8 +76,8 @@ namespace Pine
                 return
                     changes.Aggregate(
                         seed:
-                        (originalBlobRemainingBytes: blobBefore ?? ImmutableList<byte>.Empty,
-                        changedBlobBytes: (IImmutableList<byte>)ImmutableList<byte>.Empty),
+                        (originalBlobRemainingBytes: blobBefore ?? ReadOnlyMemory<byte>.Empty,
+                        changedBlobBytes: ReadOnlyMemory<byte>.Empty),
                         (prev, change) => applyChange(change, originalBlobRemainingBytes: prev.originalBlobRemainingBytes, changedBlobBytes: prev.changedBlobBytes))
                     .changedBlobBytes;
             }
@@ -246,7 +246,7 @@ namespace Pine
                         var blobValueBefore = compositionAfterRemovals.GetBlobAtPath(blobChange.Item1);
 
                         var changedBlobValue = ProjectState_2021_01.ProjectStateDifference.ApplyBlobChanges(
-                            blobChange.Item2, blobValueBefore?.ToImmutableList());
+                            blobChange.Item2, blobValueBefore);
 
                         return previousComposition.SetNodeAtPathSorted(blobChange.Item1, Composition.TreeWithStringPath.Blob(changedBlobValue));
                     });

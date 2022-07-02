@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
@@ -7,14 +8,14 @@ namespace Pine;
 
 public class DotNetAssembly
 {
-    static public Result<string, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> LoadFromAssemblyManifestResourceStreamContents(
+    static public Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> LoadFromAssemblyManifestResourceStreamContents(
         IReadOnlyList<IReadOnlyList<string>> filePaths,
         string resourceNameCommonPrefix,
         Assembly assembly)
     {
         var seed =
-            Result<string, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>.ok(
-                ImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>.Empty
+            Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.ok(
+                ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>.Empty
                 .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>()));
 
         return
@@ -28,13 +29,14 @@ public class DotNetAssembly
 
                     var resourceName = resourceNameCommonPrefix + string.Join(".", filePath);
 
-                    var fileContent = GetManifestResourceStreamContentAsListOfBytes(assembly, resourceName);
+                    var fileContent = GetManifestResourceStreamContentAsBytes(assembly, resourceName);
 
                     if (fileContent == null)
-                        return Result<string, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>>.err("Failed to get content for resource: " + resourceName);
+                        return Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.err(
+                            "Failed to get content for resource: " + resourceName);
 
                     return
-                        aggregate.map(dict => dict.SetItem(filePath.ToImmutableList(), fileContent));
+                        aggregate.map(dict => dict.SetItem(filePath.ToImmutableList(), fileContent.Value));
                 });
     }
 
@@ -49,7 +51,7 @@ public class DotNetAssembly
         return dict.SetItem(key, value);
     }
 
-    static public IReadOnlyList<byte>? GetManifestResourceStreamContentAsListOfBytes(Assembly assembly, string name)
+    static public ReadOnlyMemory<byte>? GetManifestResourceStreamContentAsBytes(Assembly assembly, string name)
     {
         using var stream = assembly.GetManifestResourceStream(name);
 

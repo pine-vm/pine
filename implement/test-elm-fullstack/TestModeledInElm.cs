@@ -18,7 +18,7 @@ public class TestModeledInElm
     static string FilePathStringFromPath(IImmutableList<string> path) =>
         Path.Combine(path.ToArray());
 
-    static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetLoweredElmAppFromDirectoryPath(
+    static IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>
         TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromDirectoryPath(directoryPath));
 
@@ -26,7 +26,7 @@ public class TestModeledInElm
     Get the value from `tests` in the Elm module `Main`.
     */
     static string? GetTestsValueFromModuleMain(
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmAppFiles)
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmAppFiles)
     {
         var javascriptFromElmMake = ProcessFromElm019Code.CompileElmToJavascript(
             elmAppFiles,

@@ -15,6 +15,9 @@ public class CommonConversion
     static public string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
         BitConverter.ToString(bytes as byte[] ?? bytes.ToArray()).Replace("-", "").ToLowerInvariant();
 
+    static public string StringBase16(ReadOnlyMemory<byte> bytes) =>
+        BitConverter.ToString(bytes.ToArray()).Replace("-", "").ToLowerInvariant();
+
     static public byte[] HashSHA256(byte[] input) => SHA256.HashData(input);
 
     static public byte[] CompressGzip(byte[] original)
@@ -65,4 +68,12 @@ public class CommonConversion
 
     static public string TimeStringViewForReport(DateTimeOffset time) =>
         time.ToString("yyyy-MM-ddTHH-mm-ss");
+
+    public static ReadOnlyMemory<T> Concat<T>(ReadOnlySpan<T> s1, ReadOnlySpan<T> s2)
+    {
+        var array = new T[s1.Length + s2.Length];
+        s1.CopyTo(array);
+        s2.CopyTo(array.AsSpan(s1.Length));
+        return array;
+    }
 }

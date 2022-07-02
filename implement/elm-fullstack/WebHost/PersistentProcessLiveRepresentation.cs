@@ -44,7 +44,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         CompositionEventWithResolvedDependencies? composition);
 
     public record struct ReductionWithResolvedDependencies(
-        byte[] elmAppState,
+        ReadOnlyMemory<byte> elmAppState,
         Composition.Component appConfig,
         Composition.TreeWithStringPath appConfigAsTree);
 
@@ -89,11 +89,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         this.lastElmAppVolatileProcess = lastElmAppVolatileProcess;
     }
 
-    static public (IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> files, string lastCompositionLogRecordHashBase16)
+    static public (IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16)
         GetFilesForRestoreProcess(
         IFileStoreReader fileStoreReader)
     {
-        var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+        var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
         var recordingReader = new DelegatingFileStoreReader
         (
@@ -104,7 +104,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                 if (fileContent != null)
                 {
-                    filesForProcessRestore[filePath] = fileContent;
+                    filesForProcessRestore[filePath] = fileContent.ToArray();
                 }
 
                 return fileContent;
@@ -161,7 +161,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         (
                             appConfig: appConfigComponent,
                             appConfigAsTree: parseAppConfigAsTree.Ok,
-                            elmAppState: elmAppStateComponent.BlobContent.ToArray()
+                            elmAppState: elmAppStateComponent.BlobContent.Value
                         );
                     }
                 }
@@ -243,7 +243,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                             compositionLogRecord.reduction.Value.appConfigAsTree,
                             overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
-                    var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState);
+                    var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState.Span);
 
                     var setStateResult =
                         AttemptProcessEvent(
@@ -459,7 +459,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         CompositionLogRecordInFile.CompositionEvent compositionEvent,
         IProcessStoreReader storeReader)
     {
-        IReadOnlyList<byte> loadComponentFromValueInFileStructureAndAssertIsBlob(ValueInFileStructure valueInFileStructure)
+        ReadOnlyMemory<byte> loadComponentFromValueInFileStructureAndAssertIsBlob(ValueInFileStructure valueInFileStructure)
         {
             if (valueInFileStructure.LiteralStringUtf8 != null)
                 return Encoding.UTF8.GetBytes(valueInFileStructure.LiteralStringUtf8);
@@ -467,7 +467,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             return loadComponentFromStoreAndAssertIsBlob(valueInFileStructure.HashBase16!);
         }
 
-        IReadOnlyList<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
+        ReadOnlyMemory<byte> loadComponentFromStoreAndAssertIsBlob(string componentHash)
         {
             var component = storeReader.LoadComponent(componentHash);
 
@@ -477,7 +477,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             if (component.BlobContent == null)
                 throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
 
-            return component.BlobContent;
+            return component.BlobContent.Value;
         }
 
         Composition.TreeWithStringPath loadComponentFromStoreAndAssertIsTree(string componentHash)

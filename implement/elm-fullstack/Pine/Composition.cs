@@ -2,22 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Security.Cryptography;
 
 namespace Pine;
 
 public class Composition
 {
-    public record Component(byte[]? BlobContent = null, IImmutableList<Component>? ListContent = null)
+    public record Component(ReadOnlyMemory<byte>? BlobContent = null, IImmutableList<Component>? ListContent = null)
     {
-        static public Component Blob(IReadOnlyList<byte> blobContent) =>
-            new(BlobContent: blobContent as byte[] ?? blobContent.ToArray());
+        static public Component Blob(ReadOnlyMemory<byte> blobContent) =>
+            new(BlobContent: blobContent);
 
         static public Component List(ImmutableList<Component> listContent) =>
             new(ListContent: listContent);
 
         public virtual bool Equals(Component? other)
         {
-            if (other == null)
+            if (other is null)
                 return false;
 
             if (BlobContent != null || other.BlobContent != null)
@@ -25,7 +26,7 @@ public class Composition
                 if (BlobContent == null || other.BlobContent == null)
                     return false;
 
-                return BlobContent.SequenceEqual(other.BlobContent);
+                return BlobContent.Value.Span.SequenceEqual(other.BlobContent.Value.Span);
             }
 
             if (ListContent == null || other.ListContent == null)
@@ -91,31 +92,36 @@ public class Composition
 
     static public Result<string, Component> ComponentFromUnsignedInteger(System.Numerics.BigInteger integer) =>
         BlobValueFromUnsignedInteger(integer)
-        .map(Component.Blob);
+        .map(blob => Component.Blob(blob!.Value));
 
-    static public Result<string, IReadOnlyList<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
+    static public Result<string, ReadOnlyMemory<byte>?> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
     {
         var signedBlobValue = BlobValueFromSignedInteger(integer);
 
-        if (signedBlobValue[0] != 0)
-            return Result<string, IReadOnlyList<byte>>.err("Argument is a negative integer.");
+        if (signedBlobValue.Span[0] != 0)
+            return Result<string, ReadOnlyMemory<byte>?>.err("Argument is a negative integer.");
 
-        return Result<string, IReadOnlyList<byte>>.ok(signedBlobValue.Skip(1).ToArray());
+        return Result<string, ReadOnlyMemory<byte>?>.ok(signedBlobValue[1..]);
     }
 
     static public Component ComponentFromSignedInteger(System.Numerics.BigInteger integer) =>
         Component.Blob(BlobValueFromSignedInteger(integer));
 
-    static public IReadOnlyList<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
+    static public ReadOnlyMemory<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
     {
-        var integerValue = System.Numerics.BigInteger.Abs(integer);
+        var absoluteValue = System.Numerics.BigInteger.Abs(integer);
 
         var signByte =
-            (byte)(integerValue == integer ? 0 : 0x80);
+            (byte)(absoluteValue == integer ? 0 : 0x80);
 
-        return
-            ImmutableList.Create(signByte)
-            .AddRange(integerValue.ToByteArray(isUnsigned: true, isBigEndian: true));
+        var absoluteArray = absoluteValue.ToByteArray(isUnsigned: true, isBigEndian: true);
+
+        var memory = new byte[1 + absoluteArray.Length];
+
+        memory[0] = signByte;
+        absoluteArray.CopyTo(memory, 1);
+
+        return memory;
     }
 
     static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromComponent(Component component)
@@ -124,10 +130,10 @@ public class Composition
             return Result<string, System.Numerics.BigInteger?>.err(
                 "Only a BlobValue can represent an integer.");
 
-        return SignedIntegerFromBlobValue(component.BlobContent);
+        return SignedIntegerFromBlobValue(component.BlobContent.Value.Span);
     }
 
-    static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromBlobValue(byte[] blobValue)
+    static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
     {
         if (blobValue.Length < 1)
             return Result<string, System.Numerics.BigInteger?>.err(
@@ -142,7 +148,7 @@ public class Composition
         var isNegative = signByte != 0;
 
         var integerValue =
-            UnsignedIntegerFromBlobValue(blobValue.AsSpan(1));
+            UnsignedIntegerFromBlobValue(blobValue.Slice(1));
 
         return
             Result<string, System.Numerics.BigInteger?>.ok(
@@ -156,7 +162,7 @@ public class Composition
                 "Only a BlobValue can represent an integer.");
 
         return Result<string, System.Numerics.BigInteger?>.ok(
-            UnsignedIntegerFromBlobValue(component.BlobContent));
+            UnsignedIntegerFromBlobValue(component.BlobContent.Value.Span));
     }
 
     static public System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>
@@ -164,40 +170,40 @@ public class Composition
 
     public record TreeWithStringPath : IEquatable<TreeWithStringPath>
     {
-        public byte[]? BlobContent { private init; get; }
+        public ReadOnlyMemory<byte>? BlobContent { private init; get; }
 
         public IImmutableList<(string name, TreeWithStringPath component)>? TreeContent { private init; get; }
 
         static public readonly IComparer<string> TreeEntryNameComparer = StringComparer.Ordinal;
 
-        static public TreeWithStringPath Blob(byte[] blobContent) =>
+        static public TreeWithStringPath Blob(ReadOnlyMemory<byte> blobContent) =>
             new() { BlobContent = blobContent };
-
-        static public TreeWithStringPath Blob(IReadOnlyList<byte> blobContent) =>
-            new() { BlobContent = blobContent as byte[] ?? blobContent.ToArray() };
 
         static public TreeWithStringPath SortedTree(IImmutableList<(string name, TreeWithStringPath component)> treeContent) =>
             Sort(new() { TreeContent = treeContent });
 
+        static public TreeWithStringPath NonSortedTree(IImmutableList<(string name, TreeWithStringPath component)> treeContent) =>
+            new() { TreeContent = treeContent };
+
         static public TreeWithStringPath EmptyTree => SortedTree(ImmutableList<(string name, TreeWithStringPath component)>.Empty);
 
 
-        public IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> EnumerateBlobsTransitive()
+        public IImmutableList<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive()
         {
-            if (TreeContent == null)
+            if (BlobContent != null)
             {
-                return ImmutableList.Create<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)>(
-                    (ImmutableList<string>.Empty, BlobContent!));
+                return ImmutableList.Create<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)>(
+                    (ImmutableList<string>.Empty, BlobContent.Value));
             }
 
             return
-                TreeContent.SelectMany(treeEntry =>
+                TreeContent!.SelectMany(treeEntry =>
                     treeEntry.component.EnumerateBlobsTransitive()
                     .Select(child => (child.path.Insert(0, treeEntry.name), child.blobContent)))
                 .ToImmutableList();
         }
 
-        public IReadOnlyList<byte>? GetBlobAtPath(IReadOnlyList<string> path) =>
+        public ReadOnlyMemory<byte>? GetBlobAtPath(IReadOnlyList<string> path) =>
             GetNodeAtPath(path)?.BlobContent;
 
         public TreeWithStringPath? GetNodeAtPath(IReadOnlyList<string> path)
@@ -274,11 +280,14 @@ public class Composition
             ?
             node
             :
-            new TreeWithStringPath { TreeContent = node.TreeContent.OrderBy(child => child.name).ToImmutableList() };
+            new TreeWithStringPath
+            {
+                TreeContent = node.TreeContent.OrderBy(child => child.name).Select(child => (child.name, Sort(child.component))).ToImmutableList()
+            };
 
         public virtual bool Equals(TreeWithStringPath? other)
         {
-            if (other == null)
+            if (other is null)
                 return false;
 
             if (BlobContent != null || other.BlobContent != null)
@@ -286,7 +295,7 @@ public class Composition
                 if (BlobContent == null || other.BlobContent == null)
                     return false;
 
-                return BlobContent.SequenceEqual(other.BlobContent);
+                return BlobContent.Value.Span.SequenceEqual(other.BlobContent.Value.Span);
             }
 
             if (TreeContent == null || other.TreeContent == null)
@@ -302,7 +311,7 @@ public class Composition
                     var thisElement = TreeContent.ElementAt(i);
                     var otherElement = other.TreeContent.ElementAt(i);
 
-                    return thisElement.name.SequenceEqual(otherElement.name) &&
+                    return thisElement.name == otherElement.name &&
                         thisElement.component.Equals(otherElement.component);
                 });
         }
@@ -317,7 +326,7 @@ public class Composition
     {
         if (composition.BlobContent != null)
         {
-            return ParseAsTreeWithStringPathResult.ok(TreeWithStringPath.Blob(composition.BlobContent));
+            return ParseAsTreeWithStringPathResult.ok(TreeWithStringPath.Blob(composition.BlobContent.Value));
         }
 
         if (composition.ListContent != null)
@@ -377,7 +386,7 @@ public class Composition
     static public Component FromTreeWithStringPath(TreeWithStringPath tree)
     {
         if (tree.BlobContent != null)
-            return Component.Blob(tree.BlobContent);
+            return Component.Blob(tree.BlobContent.Value);
 
         if (tree.TreeContent != null)
         {
@@ -398,7 +407,7 @@ public class Composition
     }
 
     static public TreeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
-        IEnumerable<(string path, IReadOnlyList<byte> blobContent)> blobsWithPath) =>
+        IEnumerable<(string path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         SortedTreeFromSetOfBlobs(
             blobsWithPath.Select(blobWithPath =>
             {
@@ -410,13 +419,8 @@ public class Composition
             })
         );
 
-    static public TreeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
-        IEnumerable<(string path, byte[] blobContent)> blobsWithPath) =>
-        SortedTreeFromSetOfBlobsWithCommonFilePath(
-            blobsWithPath.Select(blobWithPath => (blobWithPath.path, (IReadOnlyList<byte>)blobWithPath.blobContent)));
-
     static public TreeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
-        IEnumerable<(IImmutableList<PathT> path, IReadOnlyList<byte> blobContent)> blobsWithPath,
+        IEnumerable<(IImmutableList<PathT> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath,
         Func<PathT, string> mapPathComponent) =>
         SortedTreeFromSetOfBlobs(
             blobsWithPath.Select(blobWithPath =>
@@ -424,11 +428,11 @@ public class Composition
                 blobContent: blobWithPath.blobContent)));
 
     static public TreeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
-        IEnumerable<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> blobsWithPath) =>
+        IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         SortedTreeFromSetOfBlobs(blobsWithPath, pathComponent => pathComponent);
 
     static public TreeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
-        IReadOnlyDictionary<IImmutableList<string>, IReadOnlyList<byte>> blobsWithPath) =>
+        IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> blobsWithPath) =>
         SortedTreeFromSetOfBlobsWithStringPath(
             blobsWithPath.Select(pathAndBlobContent => (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
@@ -441,11 +445,11 @@ public class Composition
         SortedTreeFromSetOfBlobs(tree.EnumerateBlobsTransitive());
 
     static public TreeWithStringPath SortedTreeFromSetOfBlobs(
-        IEnumerable<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> blobsWithPath) =>
+        IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         TreeWithStringPath.SortedTree(treeContent: SortedTreeContentFromSetOfBlobs(blobsWithPath));
 
     static public IImmutableList<(string name, TreeWithStringPath obj)> SortedTreeContentFromSetOfBlobs(
-        IEnumerable<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> blobsWithPath) =>
+        IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         blobsWithPath
         .Aggregate(
             (IImmutableList<(string name, TreeWithStringPath obj)>)
@@ -455,7 +459,7 @@ public class Composition
     static public IImmutableList<(string name, TreeWithStringPath obj)> SetBlobAtPathSorted(
         IImmutableList<(string name, TreeWithStringPath obj)> treeContentBefore,
         IImmutableList<string> path,
-        IReadOnlyList<byte> blobContent)
+        ReadOnlyMemory<byte> blobContent)
     {
         var pathFirstElement = path.First();
 
@@ -483,16 +487,16 @@ public class Composition
     }
 
     static public Result<string, Component> Deserialize(
-        byte[] serializedComponent,
-        Func<IReadOnlyList<byte>, IReadOnlyList<byte>> loadSerializedComponentByHash) =>
-        Deserialize(serializedComponent.ToImmutableList(), loadSerializedComponentByHash);
+        ReadOnlyMemory<byte> serializedComponent,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> loadSerializedComponentByHash) =>
+        Deserialize(serializedComponent, loadSerializedComponentByHash);
 
     static public Result<string, Component> Deserialize(
-        IReadOnlyList<byte> serializedComponent,
-        Func<IReadOnlyList<byte>, IReadOnlyList<byte>?> loadSerializedComponentByHash)
+        ReadOnlyMemory<byte> serializedComponent,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?> loadSerializedComponentByHash)
     {
         var asciiStringUpToNull =
-            System.Text.Encoding.ASCII.GetString(serializedComponent.TakeWhile(c => c != '\0').ToArray());
+            System.Text.Encoding.ASCII.GetString(serializedComponent.Span).Split('\0').First();
 
         var asciiStringUpToFirstSpace =
             asciiStringUpToNull.Split(' ').First();
@@ -501,21 +505,21 @@ public class Composition
         {
             var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
 
-            var expectedCount = serializedComponent.Count - beginningToRemoveLength;
+            var expectedCount = serializedComponent.Length - beginningToRemoveLength;
 
             var count = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
 
             if (count != expectedCount)
                 return Result<string, Component>.err("Unexpected count: got " + count + ", but I expected " + expectedCount);
 
-            return Result<string, Component>.ok(Component.Blob(serializedComponent.Skip(beginningToRemoveLength).ToList()));
+            return Result<string, Component>.ok(Component.Blob(serializedComponent.Slice(beginningToRemoveLength)));
         }
 
         if (asciiStringUpToFirstSpace == "list")
         {
             var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
 
-            var remainingBytes = serializedComponent.Skip(beginningToRemoveLength).ToList();
+            var remainingBytes = serializedComponent.Slice(beginningToRemoveLength);
 
             var parsedElementCount = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
 
@@ -523,28 +527,28 @@ public class Composition
 
             var expectedRemainingLength = parsedElementCount * elementHashLength;
 
-            if (remainingBytes.Count != expectedRemainingLength)
+            if (remainingBytes.Length != expectedRemainingLength)
                 return Result<string, Component>.err(
-                    "Unexpected remaining length: " + remainingBytes.Count + " instead of " + expectedRemainingLength);
+                    "Unexpected remaining length: " + remainingBytes.Length + " instead of " + expectedRemainingLength);
 
             var elementsHashes =
                 Enumerable.Range(0, parsedElementCount)
-                .Select(elementIndex => (IReadOnlyList<byte>)remainingBytes.Skip(elementIndex * elementHashLength).Take(elementHashLength).ToList())
+                .Select(elementIndex => remainingBytes.Slice(elementIndex * elementHashLength, elementHashLength))
                 .ToImmutableList();
 
-            Result<string, Component> TryLoadElementForHash(IReadOnlyList<byte> elementHash)
+            Result<string, Component> TryLoadElementForHash(ReadOnlyMemory<byte> elementHash)
             {
                 var loadedElementSerialRepresentation = loadSerializedComponentByHash(elementHash);
 
                 if (loadedElementSerialRepresentation == null)
                     return Result<string, Component>.err(
-                        "Failed to load list element " + CommonConversion.StringBase16FromByteArray(elementHash));
+                        "Failed to load list element " + CommonConversion.StringBase16(elementHash));
 
-                if (!CommonConversion.HashSHA256(loadedElementSerialRepresentation.ToArray()).SequenceEqual(elementHash))
+                if (!SHA256.HashData(loadedElementSerialRepresentation.Value.Span).AsSpan().SequenceEqual(elementHash.Span))
                     return Result<string, Component>.err(
-                        "Hash for loaded element does not match " + CommonConversion.StringBase16FromByteArray(elementHash));
+                        "Hash for loaded element does not match " + CommonConversion.StringBase16(elementHash));
 
-                return Deserialize(loadedElementSerialRepresentation.ToImmutableList(), loadSerializedComponentByHash);
+                return Deserialize(loadedElementSerialRepresentation.Value, loadSerializedComponentByHash);
             }
 
             var loadElementsResults =
@@ -556,9 +560,9 @@ public class Composition
                 loadElementsResults
                 .FirstOrDefault(elementResult => elementResult.loadResult.Ok == null);
 
-            if (firstFailed.elementHash != null)
+            if (firstFailed.loadResult != null)
                 return Result<string, Component>.err(
-                    "Failed to load element " + CommonConversion.StringBase16FromByteArray(firstFailed.elementHash) + ": " + firstFailed.loadResult.Err);
+                    "Failed to load element " + CommonConversion.StringBase16(firstFailed.elementHash) + ": " + firstFailed.loadResult.Err);
 
             return Result<string, Component>.ok(
                 Component.List(loadElementsResults.Select(elementResult => elementResult.loadResult.Ok!).ToImmutableList()));
@@ -575,11 +579,11 @@ public class Composition
     {
         if (component.BlobContent != null)
         {
-            var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.BlobContent.Length.ToString() + "\0");
+            var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.BlobContent.Value.Length.ToString() + "\0");
 
-            var serialRepresentation = new byte[prefix.Length + component.BlobContent.Length];
+            var serialRepresentation = new byte[prefix.Length + component.BlobContent.Value.Length];
 
-            var componentBlobContentArray = component.BlobContent.ToArray();
+            var componentBlobContentArray = component.BlobContent.Value.ToArray();
 
             Buffer.BlockCopy(prefix, 0, serialRepresentation, 0, prefix.Length);
             Buffer.BlockCopy(componentBlobContentArray, 0, serialRepresentation, prefix.Length, componentBlobContentArray.Length);
@@ -681,12 +685,12 @@ public class Composition
         public int GetHashCode(IReadOnlyList<byte> obj) => obj.Count;
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> TreeToFlatDictionaryWithPathComparer(
+    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> TreeToFlatDictionaryWithPathComparer(
         TreeWithStringPath tree) =>
         ToFlatDictionaryWithPathComparer(tree.EnumerateBlobsTransitive());
 
-    static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> ToFlatDictionaryWithPathComparer(
-        IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> filesBeforeSorting) =>
+    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> ToFlatDictionaryWithPathComparer(
+        IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> filesBeforeSorting) =>
         filesBeforeSorting.ToImmutableSortedDictionary(
             entry => entry.filePath,
             entry => entry.fileContent,

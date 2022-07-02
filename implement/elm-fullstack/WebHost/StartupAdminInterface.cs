@@ -182,15 +182,17 @@ public class StartupAdminInterface
 
                     var webAppConfigurationFile =
                         appConfigFilesNamesAndContents
-                        .FirstOrDefault(filePathAndContent => filePathAndContent.path.SequenceEqual(JsonFilePath))
-                        .blobContent;
+                        .Where(filePathAndContent => filePathAndContent.path.SequenceEqual(JsonFilePath))
+                        .Select(filePathAndContent => filePathAndContent.blobContent)
+                        .Cast<ReadOnlyMemory<byte>?>()
+                        .FirstOrDefault();
 
                     var webAppConfiguration =
                         webAppConfigurationFile == null
                         ?
                         null
                         :
-                        System.Text.Json.JsonSerializer.Deserialize<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.ToArray()));
+                        System.Text.Json.JsonSerializer.Deserialize<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.Value.Span));
 
                     return
                         Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
@@ -428,7 +430,7 @@ public class StartupAdminInterface
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");
 
                             var elmAppStateReductionString =
-                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent);
+                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.Value.Span);
 
                             context.Response.StatusCode = 200;
                             context.Response.ContentType = "application/json";
@@ -500,7 +502,7 @@ public class StartupAdminInterface
                                     processStoreFileStore.DeleteFile(filePath);
 
                                 foreach (var replacementFile in replacementFiles)
-                                    processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content);
+                                    processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content.ToArray());
 
                                 startPublicApp();
                             }

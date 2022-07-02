@@ -34,7 +34,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
 
     public PersistentProcessWithHistoryOnFileFromElm019Code(
         IProcessStoreReader storeReader,
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmAppFiles,
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmAppFiles,
         Action<string> logger,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {

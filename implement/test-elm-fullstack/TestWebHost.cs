@@ -102,20 +102,21 @@ public class TestWebHost
 
         var demoFiles = new[]
         {
-                new
-                {
-                    path= ImmutableList.Create("demo-file.mp3"),
-                    content= Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
-                        .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
-                        .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem)))
-                        .ToImmutableList()
-                },
-                new
-                {
-                    path= ImmutableList.Create("alpha", "beta","demo-file-gamma.text"),
-                    content= System.Text.Encoding.UTF8.GetBytes("Some file content").ToImmutableList()
-                }
-            };
+            new
+            {
+                path= ImmutableList.Create("demo-file.mp3"),
+                content= (ReadOnlyMemory<byte>)Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
+                    .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
+                    .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((ushort)elem)))
+                    .ToImmutableList()
+                    .ToArray()
+            },
+            new
+            {
+                path= ImmutableList.Create("alpha", "beta","demo-file-gamma.text"),
+                content= (ReadOnlyMemory<byte>)System.Text.Encoding.UTF8.GetBytes("Some file content")
+            }
+        };
 
         var webAppSourceFiles =
             demoFiles
@@ -146,7 +147,7 @@ public class TestWebHost
 
             var inspectResponseContent = System.Text.Encoding.UTF8.GetString(responseContent);
 
-            CollectionAssert.AreEqual(demoFile.content, responseContent);
+            CollectionAssert.AreEqual(demoFile.content.ToArray(), responseContent);
         }
 
         {

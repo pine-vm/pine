@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
@@ -145,8 +146,7 @@ public class VolatileProcess
         return string.Join("\n",
             tree.EnumerateBlobsTransitive().Select(blobAtPath =>
             "Found " +
-            CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(
-                blobAtPath.blobContent as byte[] ?? blobAtPath.blobContent.ToArray())) +
+            CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobAtPath.blobContent.Span)) +
                 " at " + string.Join("/", blobAtPath.path)));
     }
 
@@ -323,7 +323,7 @@ public class VolatileProcess
                             return GetBlobFromHashAndHintUrls(hash, hintUrls)?.ToArray();
                         });
 
-                    var assembly = assemblyFromCacheOrLink ?? getFileFromHashSHA256?.Invoke(hash);
+                    var assembly = assemblyFromCacheOrLink?.ToArray() ?? getFileFromHashSHA256?.Invoke(hash);
 
                     if (assembly == null)
                         return new ImmutableArray<PortableExecutableReference>();
@@ -410,10 +410,12 @@ public class VolatileProcess
                     var matchingBlob =
                         tree.EnumerateBlobsTransitive()
                         .Select(blobWithPath => blobWithPath.blobContent)
-                        .FirstOrDefault(BlobLibrary.BlobHasSHA256(hash));
+                        .Where(BlobLibrary.BlobHasSHA256(hash))
+                        .Cast<ReadOnlyMemory<byte>?>()
+                        .FirstOrDefault();
 
                     if (matchingBlob != null)
-                        return matchingBlob;
+                        return matchingBlob.Value.ToArray();
                 }
             }
 

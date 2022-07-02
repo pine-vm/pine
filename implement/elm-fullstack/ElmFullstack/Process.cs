@@ -115,14 +115,14 @@ public class ProcessFromElm019Code
     static public (IDisposableProcessWithStringInterface process,
         (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
         ProcessFromElmCodeFiles(
-        IReadOnlyCollection<(IImmutableList<string>, IReadOnlyList<byte>)> elmCodeFiles,
+        IReadOnlyCollection<(IImmutableList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null) =>
         ProcessFromElmCodeFiles(Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
 
     static public (IDisposableProcessWithStringInterface process,
         (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
         ProcessFromElmCodeFiles(
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
         var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
@@ -147,13 +147,13 @@ public class ProcessFromElm019Code
     }
 
     static public string CompileElmToJavascript(
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
         CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
 
     static public string CompileElmToHtml(
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
         CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
@@ -179,7 +179,7 @@ public class ProcessFromElm019Code
     [...]
     */
     static public string CompileElm(
-        IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> elmCodeFiles,
+        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
         string? elmMakeCommandAppendix = null)
@@ -193,7 +193,7 @@ public class ProcessFromElm019Code
 
         var command = "make " + Filesystem.MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
-        var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles)>();
+        var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> resultingFiles)>();
 
         do
         {
@@ -237,12 +237,15 @@ public class ProcessFromElm019Code
                 .Where(file => !elmCodeFiles.ContainsKey(file.path))
                 .ToImmutableList();
 
-            var outputFileContent =
+            var outputFiles =
                 newFiles
-                .FirstOrDefault(resultFile => resultFile.path.SequenceEqual(ImmutableList.Create(outputFileName))).content;
+                .Where(resultFile => resultFile.path.SequenceEqual(ImmutableList.Create(outputFileName)))
+                .ToImmutableList();
 
-            if (outputFileContent != null)
-                return Encoding.UTF8.GetString(outputFileContent.ToArray());
+            if (1 <= outputFiles.Count)
+            {
+                return Encoding.UTF8.GetString(outputFiles.First().content.Span);
+            }
 
             var errorQualifiesForRetry =
                 commandResults.processOutput.StandardError?.Contains("openBinaryFile: resource busy (file is locked)") ?? false;
@@ -261,8 +264,8 @@ public class ProcessFromElm019Code
             "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
     }
 
-    static public byte[] GetElmExecutableFile =>
-        BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!;
+    static public ReadOnlyMemory<byte> GetElmExecutableFile =>
+        BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!.Value;
 
     static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty

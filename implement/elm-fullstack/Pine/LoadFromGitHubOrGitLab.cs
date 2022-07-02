@@ -109,7 +109,7 @@ static public class LoadFromGitHubOrGitLab
 
     static public Result<string, LoadFromUrlSuccess> LoadFromUrl(
         string sourceUrl,
-        Func<GetRepositoryFilesPartialForCommitRequest, IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>>> getRepositoryFilesPartialForCommit)
+        Func<GetRepositoryFilesPartialForCommitRequest, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> getRepositoryFilesPartialForCommit)
     {
         var parsedUrl = ParseUrl(sourceUrl);
 
@@ -271,7 +271,7 @@ static public class LoadFromGitHubOrGitLab
                     if (loadedBlobSHA1Base16Lower != expectedSHA)
                         throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                    return Composition.TreeWithStringPath.Blob(blobContent: memoryStream.ToArray());
+                    return Composition.TreeWithStringPath.Blob(memoryStream.ToArray());
                 }
 
                 throw new Exception("Unexpected kind of git object: " + gitObject.GetType() + ", " + gitObject.Id);
@@ -314,7 +314,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetRepositoryFilesPartialForCommitDefault(GetRepositoryFilesPartialForCommitRequest request)
+    static IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitDefault(GetRepositoryFilesPartialForCommitRequest request)
     {
         var getNew = () =>
         {
@@ -347,7 +347,7 @@ static public class LoadFromGitHubOrGitLab
         return getNew();
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
+    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
         string cloneUrl,
         string commit)
     {
@@ -381,7 +381,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
+    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
         string cloneUrl,
         string commit)
     {
@@ -448,7 +448,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, IReadOnlyList<byte>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
+    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
         string cloneUrl,
         string? branchName)
     {
@@ -541,7 +541,7 @@ static public class LoadFromGitHubOrGitLab
         (string hash, CommitContent content) rootCommit,
         (string hash, CommitContent content) firstParentCommitWithSameTree)
     {
-        public IReadOnlyList<byte>? AsBlob => tree.BlobContent;
+        public ReadOnlyMemory<byte>? AsBlob => tree.BlobContent;
     }
 
     public record CommitContent(
