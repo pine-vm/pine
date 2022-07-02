@@ -9,8 +9,8 @@
 #r "System.Runtime.InteropServices.RuntimeInformation"
 #r "System.Text.Json"
 
-// from elm-fullstack-separate-assemblies-4505d5fa0951dbb5d83383b17058704c58ebc674-linux-x64.zip
-#r "sha256:67d1550a5b06e9b361fdc9220062dd960e036e7daaa063e92380d186f93089cf"
+// https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-07-02/elm-fullstack-separate-assemblies-89f884766b8e0abe18145e365a0c7bd738c849df-linux-x64.zip
+#r "sha256:e29f7ca36d559816f8f083d358de1ffb519bee9de01b510611484b568c36258c"
 
 using System;
 using System.Collections.Generic;
@@ -202,10 +202,10 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
         }
 
         var aggregateFileSize =
-            blobs.Sum(file => file.blobContent.Count);
+            blobs.Sum(file => file.blobContent.Length);
 
         var filesBySize =
-            blobs.OrderByDescending(file => file.blobContent.Count).ToImmutableList();
+            blobs.OrderByDescending(file => file.blobContent.Length).ToImmutableList();
 
         var largestFilesToDisplay =
             filesBySize.Take(3).ToImmutableList();
@@ -213,7 +213,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
         if (loadCompositionLimitAggregateFileSize < aggregateFileSize)
         {
             var largestFilesDescriptions =
-                largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.blobContent.Count + " bytes)");
+                largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.blobContent.Length + " bytes)");
 
             return responseErrorExceedingLimit(
                 "Aggregate file size: " + aggregateFileSize +
@@ -380,7 +380,8 @@ static public byte[] GetElmExecutableFileCompressedGzip =>
         Loaded 2019-10-29 from
         https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
         */
-        "d1bf666298cbe3c5447b9ca0ea608552d750e5d232f9845c2af11907b654903b"));
+        "d1bf666298cbe3c5447b9ca0ea608552d750e5d232f9845c2af11907b654903b"))
+    ?.ToArray();
 
 static public string overrideElmMakeHomeDirectory = null;
 
@@ -452,7 +453,8 @@ static public class ElmFormat
             Loaded 2020-08-12 from
             https://github.com/avh4/elm-format/releases/download/0.8.3/elm-format-0.8.3-win-i386.zip
             */
-            "5fc848a7215f400aae60bd02101809c63bd084e0972b9a8962633afc81a53cbd"));
+            "5fc848a7215f400aae60bd02101809c63bd084e0972b9a8962633afc81a53cbd"))
+        ?.ToArray();
 
 }
 

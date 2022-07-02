@@ -16,7 +16,6 @@ namespace test_elm_fullstack
             originalString?.Trim()?.Replace("\n\r", "\n")?.Replace("\r\n", "\n");
 
         [TestMethod]
-        [Ignore]
         public void Elm_editor_backend_support_format_elm_module_text()
         {
             var webAppSource =
