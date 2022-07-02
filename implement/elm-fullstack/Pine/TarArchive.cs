@@ -31,6 +31,6 @@ static public class TarArchive
                 return (name: tarEntry.Key, component: Composition.TreeWithStringPath.Blob(componentBytes));
             }).ToImmutableList();
 
-        return Composition.TreeWithStringPath.Tree(treeEntries);
+        return Composition.TreeWithStringPath.SortedTree(treeEntries);
     }
 }

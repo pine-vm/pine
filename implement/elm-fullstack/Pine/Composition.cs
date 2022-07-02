@@ -162,34 +162,24 @@ public class Composition
     static public System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>
         new(blobValue, isUnsigned: true, isBigEndian: true);
 
-    public class TreeWithStringPath : IEquatable<TreeWithStringPath>
+    public record TreeWithStringPath : IEquatable<TreeWithStringPath>
     {
+        public byte[]? BlobContent { private init; get; }
+
+        public IImmutableList<(string name, TreeWithStringPath component)>? TreeContent { private init; get; }
+
         static public readonly IComparer<string> TreeEntryNameComparer = StringComparer.Ordinal;
 
-        public readonly byte[]? BlobContent;
-
-        public readonly IImmutableList<(string name, TreeWithStringPath component)>? TreeContent;
-
-        public TreeWithStringPath(byte[] blobContent)
-        {
-            BlobContent = blobContent;
-        }
-
-        public TreeWithStringPath(IImmutableList<(string name, TreeWithStringPath component)> treeContent)
-        {
-            TreeContent = treeContent;
-        }
-
         static public TreeWithStringPath Blob(byte[] blobContent) =>
-            new(blobContent: blobContent);
+            new() { BlobContent = blobContent };
 
         static public TreeWithStringPath Blob(IReadOnlyList<byte> blobContent) =>
-            new(blobContent: blobContent as byte[] ?? blobContent.ToArray());
+            new() { BlobContent = blobContent as byte[] ?? blobContent.ToArray() };
 
-        static public TreeWithStringPath Tree(IImmutableList<(string name, TreeWithStringPath component)> treeContent) =>
-            new(treeContent: treeContent);
+        static public TreeWithStringPath SortedTree(IImmutableList<(string name, TreeWithStringPath component)> treeContent) =>
+            Sort(new() { TreeContent = treeContent });
 
-        static public TreeWithStringPath EmptyTree => Tree(ImmutableList<(string name, TreeWithStringPath component)>.Empty);
+        static public TreeWithStringPath EmptyTree => SortedTree(ImmutableList<(string name, TreeWithStringPath component)>.Empty);
 
 
         public IImmutableList<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> EnumerateBlobsTransitive()
@@ -255,7 +245,7 @@ public class Composition
                     return ImmutableList.Create((treeNode.name, componentAfterRemoval));
                 }).ToImmutableList();
 
-            return Tree(treeContent);
+            return SortedTree(treeContent);
         }
 
         public TreeWithStringPath SetNodeAtPathSorted(IReadOnlyList<string> path, TreeWithStringPath node)
@@ -276,10 +266,17 @@ public class Composition
                 .OrderBy(treeEntry => treeEntry.Item1, TreeEntryNameComparer)
                 .ToImmutableList();
 
-            return Tree(treeEntries);
+            return SortedTree(treeEntries);
         }
 
-        public bool Equals(TreeWithStringPath? other)
+        static TreeWithStringPath Sort(TreeWithStringPath node) =>
+            node.TreeContent == null
+            ?
+            node
+            :
+            new TreeWithStringPath { TreeContent = node.TreeContent.OrderBy(child => child.name).ToImmutableList() };
+
+        public virtual bool Equals(TreeWithStringPath? other)
         {
             if (other == null)
                 return false;
@@ -310,8 +307,6 @@ public class Composition
                 });
         }
 
-        override public bool Equals(object? obj) => Equals(obj as TreeWithStringPath);
-
         public override int GetHashCode()
         {
             return HashCode.Combine(BlobContent, TreeContent);
@@ -322,7 +317,7 @@ public class Composition
     {
         if (composition.BlobContent != null)
         {
-            return ParseAsTreeWithStringPathResult.ok(new TreeWithStringPath(blobContent: composition.BlobContent));
+            return ParseAsTreeWithStringPathResult.ok(TreeWithStringPath.Blob(composition.BlobContent));
         }
 
         if (composition.ListContent != null)
@@ -372,7 +367,7 @@ public class Composition
 
             return
                 ParseAsTreeWithStringPathResult.ok(
-                    TreeWithStringPath.Tree(
+                    TreeWithStringPath.SortedTree(
                         treeContent: compositionResults.Select(compositionResult => compositionResult.Ok!.Value).ToImmutableList()));
         }
 
@@ -447,7 +442,7 @@ public class Composition
 
     static public TreeWithStringPath SortedTreeFromSetOfBlobs(
         IEnumerable<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> blobsWithPath) =>
-        TreeWithStringPath.Tree(treeContent: SortedTreeContentFromSetOfBlobs(blobsWithPath));
+        TreeWithStringPath.SortedTree(treeContent: SortedTreeContentFromSetOfBlobs(blobsWithPath));
 
     static public IImmutableList<(string name, TreeWithStringPath obj)> SortedTreeContentFromSetOfBlobs(
         IEnumerable<(IImmutableList<string> path, IReadOnlyList<byte> blobContent)> blobsWithPath) =>
@@ -472,7 +467,7 @@ public class Composition
             ?
             TreeWithStringPath.Blob(blobContent: blobContent)
             :
-            TreeWithStringPath.Tree(
+            TreeWithStringPath.SortedTree(
                 treeContent:
                     SetBlobAtPathSorted(
                         componentBefore?.TreeContent ?? ImmutableList<(string name, TreeWithStringPath obj)>.Empty,

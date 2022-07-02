@@ -65,7 +65,7 @@ static public class BuildConfigurationFromArguments
             return true;
         }
 
-        return Composition.TreeWithStringPath.Tree(
+        return Composition.TreeWithStringPath.SortedTree(
             treeContent:
                 originalTree.TreeContent
                 .Where(keepNode)

@@ -879,7 +879,7 @@ public class Program
                             ?
                             namedDistinctScenarios.Single().Value.loadedScenario.component
                             :
-                            Composition.TreeWithStringPath.Tree(
+                            Composition.TreeWithStringPath.SortedTree(
                                 namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component)).ToImmutableList());
 
                         var aggregateComposition =

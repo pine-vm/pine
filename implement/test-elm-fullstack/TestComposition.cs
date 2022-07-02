@@ -21,7 +21,7 @@ public class TestComposition
                 },
                 new
                 {
-                    input = Composition.TreeWithStringPath.Tree(
+                    input = Composition.TreeWithStringPath.SortedTree(
                         new []
                         {
                             (name: "ABC ä 😀",
@@ -95,7 +95,7 @@ public class TestComposition
                                 }.ToImmutableList())
                         }.ToImmutableList()),
                     expectedOutput = Composition.ParseAsTreeWithStringPathResult.ok(
-                        Composition.TreeWithStringPath.Tree(
+                        Composition.TreeWithStringPath.SortedTree(
                             treeContent:
                             new []
                             {
@@ -303,7 +303,7 @@ public class TestComposition
         {
                 new
                 {
-                    input = Composition.TreeWithStringPath.Tree(
+                    input = Composition.TreeWithStringPath.SortedTree(
                         treeContent:
                         ImmutableList.Create(
                             ("ba-", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(0))),
@@ -316,7 +316,7 @@ public class TestComposition
                             ("", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(7))),
                             ("🌿", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(8))),
                             ("🌲", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(9))),
-                            ("c", Composition.TreeWithStringPath.Tree(
+                            ("c", Composition.TreeWithStringPath.SortedTree(
                                 treeContent:
                                 ImmutableList.Create(
                                     ("gamma", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(10))),
@@ -326,7 +326,7 @@ public class TestComposition
                             ("bA", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(12)))
                             )
                     ),
-                    expected = Composition.TreeWithStringPath.Tree(
+                    expected = Composition.TreeWithStringPath.SortedTree(
                         treeContent:
                         ImmutableList.Create(
                             ("", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(7))),
@@ -335,7 +335,7 @@ public class TestComposition
                             ("ba", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(1))),
                             ("ba-", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(0))),
                             ("bb", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(2))),
-                            ("c", Composition.TreeWithStringPath.Tree(
+                            ("c", Composition.TreeWithStringPath.SortedTree(
                                 treeContent:
                                 ImmutableList.Create(
                                     ("alpha", Composition.TreeWithStringPath.Blob(ImmutableList.Create<byte>(11))),

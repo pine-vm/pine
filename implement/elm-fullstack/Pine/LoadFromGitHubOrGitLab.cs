@@ -237,7 +237,7 @@ static public class LoadFromGitHubOrGitLab
             {
                 if (gitObject is Tree gitTree)
                 {
-                    return Composition.TreeWithStringPath.Tree(
+                    return Composition.TreeWithStringPath.SortedTree(
                         treeContent:
                             gitTree.Select(treeEntry =>
                                 (treeEntry.Name,
