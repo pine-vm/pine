@@ -9,8 +9,8 @@
 #r "System.Runtime.InteropServices.RuntimeInformation"
 #r "System.Text.Json"
 
-// https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-07-02/elm-fullstack-separate-assemblies-89f884766b8e0abe18145e365a0c7bd738c849df-linux-x64.zip
-#r "sha256:e29f7ca36d559816f8f083d358de1ffb519bee9de01b510611484b568c36258c"
+// https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-07-03/elm-fullstack-separate-assemblies-82e85c75fd1551716c231cd300f91601064d64db-linux-x64.zip
+#r "sha256:da32023e1810b2af498908ccc124e1b9c53ebf7502df29d73fb08646343cfd8f"
 
 using System;
 using System.Collections.Generic;
@@ -178,7 +178,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
 
         var composition = Pine.Composition.FromTreeWithStringPath(loadFromGitResult.Ok.tree);
 
-        var compositionId = Pine.CommonConversion.StringBase16FromByteArray(Pine.Composition.GetHash(composition));
+        var compositionId = Pine.CommonConversion.StringBase16(Pine.Composition.GetHash(composition));
 
         var blobs =
             loadFromGitResult.Ok.tree.EnumerateBlobsTransitive()
@@ -364,7 +364,7 @@ string MakePlatformSpecificPath(IReadOnlyList<string> path) =>
     string.Join(System.IO.Path.DirectorySeparatorChar.ToString(), path);
 
 static public byte[] GetElmExecutableFile =>
-    Pine.CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip);
+    Pine.CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip).ToArray();
 
 static public byte[] GetElmExecutableFileCompressedGzip =>
     Pine.BlobLibrary.GetBlobWithSHA256(Pine.CommonConversion.ByteArrayFromStringBase16(
@@ -437,24 +437,19 @@ static public class ElmFormat
     }
 
     static public byte[] GetElmFormatExecutableFile =>
-        Pine.CommonConversion.DecompressGzip(GetElmFormatExecutableFileCompressedGzip);
-
-    static public byte[] GetElmFormatExecutableFileCompressedGzip =>
-        Pine.BlobLibrary.GetBlobWithSHA256(Pine.CommonConversion.ByteArrayFromStringBase16(
-            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)
-            ?
-            /*
-            Loaded 2020-08-12 from
-            https://github.com/avh4/elm-format/releases/download/0.8.3/elm-format-0.8.3-linux-x64.tgz
-            */
-            "488a7eab12837d66aaed8eb23b80647a02c87c38daf6f1a3c4e60fff59fe01be"
-            :
-            /*
-            Loaded 2020-08-12 from
-            https://github.com/avh4/elm-format/releases/download/0.8.3/elm-format-0.8.3-win-i386.zip
-            */
-            "5fc848a7215f400aae60bd02101809c63bd084e0972b9a8962633afc81a53cbd"))
+        Pine.BlobLibrary.LoadFileForCurrentOs(ElmFormatExecutableFileByOs)
         ?.ToArray();
+
+    static public IReadOnlyDictionary<System.Runtime.InteropServices.OSPlatform, (string hash, string remoteSource)> ElmFormatExecutableFileByOs =
+        ImmutableDictionary<System.Runtime.InteropServices.OSPlatform, (string hash, string remoteSource)>.Empty
+        .Add(
+            System.Runtime.InteropServices.OSPlatform.Linux,
+            ("f3d3e4765bd2a895e63fa4b24232d14cc458dcf6aa3392fd7c5481dfc3dd5d44",
+            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-linux-x64.tgz"))
+        .Add(
+            System.Runtime.InteropServices.OSPlatform.Windows,
+            ("277a57429a810a70a432f7a0a64b0eba4f0213d5ea86f60103ad6b17d80b0381",
+            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-win-x64.zip"));
 
 }
 
