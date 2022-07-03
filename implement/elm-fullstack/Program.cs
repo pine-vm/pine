@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-07-02";
+    static public string AppVersionId => "2022-07-03";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -361,7 +361,7 @@ public class Program
                     var appConfigValueInFile =
                         new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                            HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
                         };
 
                     var initElmAppState =
@@ -738,7 +738,7 @@ public class Program
 
             var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
             var compiledComposition = Composition.FromTreeWithStringPath(compiledTree);
-            var compiledCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(compiledComposition));
+            var compiledCompositionId = CommonConversion.StringBase16(Composition.GetHash(compiledComposition));
 
             compilationStopwatch.Stop();
 
@@ -860,7 +860,7 @@ public class Program
                             {
                                 var asComposition = Composition.FromTreeWithStringPath(loadedScenario.component);
 
-                                var hashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(asComposition));
+                                var hashBase16 = CommonConversion.StringBase16(Composition.GetHash(asComposition));
 
                                 return new
                                 {
@@ -886,7 +886,7 @@ public class Program
                             Composition.FromTreeWithStringPath(aggregateCompositionTree);
 
                         var aggregateCompositionHash =
-                            CommonConversion.StringBase16FromByteArray(Composition.GetHash(aggregateComposition));
+                            CommonConversion.StringBase16(Composition.GetHash(aggregateComposition));
 
                         console.WriteLine(
                             "Succesfully loaded " + namedDistinctScenarios.Count +
@@ -1028,14 +1028,17 @@ public class Program
 
                 var composition = Composition.FromTreeWithStringPath(loadCompositionResult.Ok.Value.tree);
 
-                var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
+                var compositionId = CommonConversion.StringBase16(Composition.GetHash(composition));
 
                 Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
                 var compositionDescription =
                     string.Join(
                         "\n",
-                        DescribeCompositionForHumans(loadCompositionResult.Ok.Value.tree, listBlobs: listBlobsOption.HasValue()));
+                        DescribeCompositionForHumans(
+                            loadCompositionResult.Ok.Value.tree,
+                            listBlobs: listBlobsOption.HasValue(),
+                            extractBlobName: sourcePath.Split('\\', '/').Last()));
 
                 Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
 
@@ -1045,7 +1048,8 @@ public class Program
 
     static public IEnumerable<string> DescribeCompositionForHumans(
         Composition.TreeWithStringPath composition,
-        bool listBlobs)
+        bool listBlobs,
+        string? extractBlobName)
     {
         if (composition.BlobContent == null)
         {
@@ -1055,13 +1059,37 @@ public class Program
 
             if (listBlobs)
                 yield return
-                    "blobs paths and sizes:\n" +
-                    string.Join("\n", blobs.Select(blobAtPath => string.Join("/", blobAtPath.path) + " (" + blobAtPath.blobContent.Length + ")"));
+                    "blobs paths, sizes and hashes:\n" +
+                    string.Join(
+                        "\n",
+                        blobs.Select(blobAtPath =>
+                        string.Join("/", blobAtPath.path) + " : " +
+                        blobAtPath.blobContent.Length + " bytes, " +
+                        CommonConversion.StringBase16(Composition.GetHash(Composition.Component.Blob(blobAtPath.blobContent)))[..10]));
 
             yield break;
         }
 
         yield return "a blob containing " + composition.BlobContent.Value.Length + " bytes";
+
+        if (extractBlobName != null)
+        {
+            foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, composition.BlobContent.Value))
+            {
+                var extractedTreeCompositionId =
+                    CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(extractedTree)));
+
+                var compositionDescription =
+                    string.Join(
+                        "\n",
+                        DescribeCompositionForHumans(
+                            extractedTree,
+                            listBlobs: listBlobs,
+                            extractBlobName: null));
+
+                yield return "Extracted composition " + extractedTreeCompositionId + ", which is " + compositionDescription;
+            }
+        }
     }
 
     static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
@@ -1140,7 +1168,7 @@ public class Program
 
     static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(Composition.TreeWithStringPath sourceTree)
     {
-        var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(sourceTree));
+        var compositionId = CommonConversion.StringBase16(Composition.GetHash(sourceTree));
 
         var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
@@ -1207,10 +1235,10 @@ public class Program
         var appConfigZipArchive = buildResult.configZipArchive;
 
         var appConfigZipArchiveFileId =
-            CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(appConfigZipArchive));
+            CommonConversion.StringBase16(CommonConversion.HashSHA256(appConfigZipArchive));
 
         var filteredSourceCompositionId =
-            CommonConversion.StringBase16FromByteArray(
+            CommonConversion.StringBase16(
                 Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
@@ -1294,7 +1322,7 @@ public class Program
                 var appConfigValueInFile =
                     new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent))
+                        HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
                     };
 
                 var compositionLogEvent =
@@ -1507,7 +1535,7 @@ public class Program
         }
 
         var appStateComponent = Composition.Component.Blob(appStateSerial);
-        var appStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appStateComponent));
+        var appStateId = CommonConversion.StringBase16(Composition.GetHash(appStateComponent));
 
         report = report with { appStateSummary = new AppStateSummary(hash: appStateId, length: appStateSerial.Length) };
 
@@ -1568,7 +1596,7 @@ public class Program
 
         var elmAppStateComponent = Composition.Component.Blob(elmAppStateSerialized);
 
-        var elmAppStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent));
+        var elmAppStateId = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent));
 
         var httpResponse = AttemptHttpRequest(() =>
             {
@@ -1631,7 +1659,7 @@ public class Program
         var elmAppStateSerialized = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
         var elmAppStateComponent = Composition.Component.Blob(elmAppStateSerialized);
-        var elmAppStateId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent));
+        var elmAppStateId = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent));
 
         return elmAppStateSerialized;
     }
@@ -1786,7 +1814,7 @@ public class Program
             Composition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
 
         var processHistoryComponentHash = Composition.GetHash(Composition.FromTreeWithStringPath(processHistoryTree));
-        var processHistoryComponentHashBase16 = CommonConversion.StringBase16FromByteArray(processHistoryComponentHash);
+        var processHistoryComponentHashBase16 = CommonConversion.StringBase16(processHistoryComponentHash);
 
         var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
 
@@ -1909,10 +1937,10 @@ public class Program
         var configZipArchive = buildResult.configZipArchive;
 
         var configZipArchiveFileId =
-            CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(configZipArchive));
+            CommonConversion.StringBase16(CommonConversion.HashSHA256(configZipArchive));
 
         var webAppConfigFileId =
-            CommonConversion.StringBase16FromByteArray(
+            CommonConversion.StringBase16(
                 Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(configZipArchive)))));
 

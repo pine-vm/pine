@@ -32,7 +32,7 @@ public record CompositionRecordInFile(
     ValueInFile? SetState = default,
     IReadOnlyList<ValueInFile>? AppendedEvents = default)
 {
-    static public byte[] HashFromSerialRepresentation(byte[] serialized) => CommonConversion.HashSHA256(serialized);
+    static public byte[] HashFromSerialRepresentation(byte[] serialized) => CommonConversion.HashSHA256(serialized).ToArray();
 }
 
 public record ReductionRecord(

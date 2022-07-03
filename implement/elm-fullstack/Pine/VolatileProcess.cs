@@ -328,8 +328,8 @@ public class VolatileProcess
                     if (assembly == null)
                         return new ImmutableArray<PortableExecutableReference>();
 
-                    if (!Composition.GetHash(Composition.Component.Blob(assembly)).SequenceEqual(hash) &&
-                        !CommonConversion.HashSHA256(assembly).SequenceEqual(hash))
+                    if (!Composition.GetHash(Composition.Component.Blob(assembly)).Span.SequenceEqual(hash) &&
+                        !CommonConversion.HashSHA256(assembly).Span.SequenceEqual(hash))
                         return new ImmutableArray<PortableExecutableReference>();
 
                     var assemblyMetadata = AssemblyMetadata.CreateFromImage(assembly);

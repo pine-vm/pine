@@ -36,7 +36,7 @@ static public class BuildConfigurationFromArguments
 
         var filteredSourceComposition = Composition.FromTreeWithStringPath(filteredSourceTree);
 
-        var filteredSourceCompositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(filteredSourceComposition));
+        var filteredSourceCompositionId = CommonConversion.StringBase16(Composition.GetHash(filteredSourceComposition));
 
         Console.WriteLine("Loaded source composition " + filteredSourceCompositionId + " from '" + sourcePath + "'.");
 

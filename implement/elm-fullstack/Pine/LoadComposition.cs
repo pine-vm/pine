@@ -7,7 +7,8 @@ namespace Pine;
 public record LoadCompositionOrigin(
     LoadFromGitHubOrGitLab.LoadFromUrlSuccess? FromGit = null,
     object? FromLocalFileSystem = null,
-    LoadFromElmEditor.ParseUrlResult? FromEditor = null);
+    LoadFromElmEditor.ParseUrlResult? FromEditor = null,
+    object? FromHttp = null);
 
 static public class LoadComposition
 {
@@ -36,6 +37,17 @@ static public class LoadComposition
                 .ResultMap(loadFromEditorOk =>
                 ((TreeWithStringPath tree, LoadCompositionOrigin origin)?)
                 (loadFromEditorOk.tree, new LoadCompositionOrigin(FromEditor: loadFromEditorOk.parsedUrl)));
+        }
+
+        if (System.Text.RegularExpressions.Regex.Match(sourcePath, "^http(s|)\\:", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Success)
+        {
+            return
+                asProcess
+                .WithLogEntryAdded("Loading via HTTP...")
+                .MapResult(BlobLibrary.DownloadBlobViaHttpGetResponseBody)
+                .ResultMap(loadFromHttpGet =>
+                ((TreeWithStringPath tree, LoadCompositionOrigin origin)?)
+                (TreeWithStringPath.Blob(loadFromHttpGet!.Value), new LoadCompositionOrigin(FromHttp: new object())));
         }
 
         return

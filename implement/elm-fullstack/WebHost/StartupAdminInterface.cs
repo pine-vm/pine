@@ -331,7 +331,7 @@ public class StartupAdminInterface
 
                     var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
-                    var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfigComponent));
+                    var appConfigHashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent));
 
                     logger.LogInformation("Got request to deploy app config " + appConfigHashBase16);
 
@@ -368,7 +368,7 @@ public class StartupAdminInterface
                                 return;
                             }
 
-                            var appConfigHashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(appConfig));
+                            var appConfigHashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfig));
 
                             var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
 
@@ -424,7 +424,7 @@ public class StartupAdminInterface
                             var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
 
                             var elmAppStateReductionComponent =
-                                components.First(c => CommonConversion.StringBase16FromByteArray(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
+                                components.First(c => CommonConversion.StringBase16(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
 
                             if(elmAppStateReductionComponent.BlobContent == null)
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");
@@ -452,7 +452,7 @@ public class StartupAdminInterface
                             var appConfigValueInFile =
                                 new ValueInFileStructure
                                 {
-                                    HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
+                                    HashBase16 = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent))
                                 };
 
                             processStoreWriter.StoreComponent(elmAppStateComponent);

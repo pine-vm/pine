@@ -69,7 +69,7 @@ public class TestLoadComposition
                     .ToImmutableList();
 
                 var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.Value.tree)!;
-                var compositionId = CommonConversion.StringBase16FromByteArray(Composition.GetHash(composition));
+                var compositionId = CommonConversion.StringBase16(Composition.GetHash(composition));
 
                 Assert.AreEqual(testCase.expectedCompositionId, compositionId);
             }

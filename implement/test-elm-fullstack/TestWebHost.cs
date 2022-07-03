@@ -666,8 +666,8 @@ public class TestWebHost
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 CollectionAssert.AreEqual(
-                    Composition.GetHash(webAppConfigTree),
-                    Composition.GetHash(responseAppConfigTree),
+                    Composition.GetHash(webAppConfigTree).ToArray(),
+                    Composition.GetHash(responseAppConfigTree).ToArray(),
                     "Get the same configuration back.");
             }
 
@@ -1343,7 +1343,7 @@ public class TestWebHost
 
             Assert.AreEqual(
                 deployReport.filteredSourceCompositionId,
-                CommonConversion.StringBase16FromByteArray(Composition.GetHash(restoredProcessLastDeployedAppComponent)),
+                CommonConversion.StringBase16(Composition.GetHash(restoredProcessLastDeployedAppComponent)),
                 "App ID in restored process equals app ID from deployment report.");
         }
 

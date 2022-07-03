@@ -43,8 +43,8 @@ public class TestLoadFromGithub
             loadedFilesNamesAndContents
             .Select(fileNameAndContent =>
                 (fileNameAndContent.fileName,
-                    Pine.CommonConversion.StringBase16FromByteArray(
-                        Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
+                    Pine.CommonConversion.StringBase16(
+                        Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
             .ToImmutableList();
 
         CollectionAssert.AreEquivalent(
@@ -78,8 +78,8 @@ public class TestLoadFromGithub
             loadedFilesNamesAndContents
             .Select(fileNameAndContent =>
                 (fileNameAndContent.fileName,
-                    fileHash: Pine.CommonConversion.StringBase16FromByteArray(
-                        Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent.ToArray())).ToLowerInvariant()))
+                    fileHash: Pine.CommonConversion.StringBase16(
+                        Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
             .ToImmutableList();
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)

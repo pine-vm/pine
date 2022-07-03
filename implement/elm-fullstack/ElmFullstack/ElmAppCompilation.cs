@@ -47,10 +47,10 @@ namespace ElmFullstack
             ElmAppInterfaceConfig interfaceConfig)
         {
             var sourceFilesHash =
-                CommonConversion.StringBase16FromByteArray(Composition.GetHash(Composition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
+                CommonConversion.StringBase16(Composition.GetHash(Composition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
 
             var compilationHash =
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
+                CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
                     System.Text.Json.JsonSerializer.Serialize(new
                     {
                         sourceFilesHash,
@@ -320,7 +320,7 @@ namespace ElmFullstack
             );
 
             var argumentsJsonHash =
-                CommonConversion.StringBase16FromByteArray(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(argumentsJson)));
+                CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(argumentsJson)));
 
             serializeStopwatch.Stop();
 
@@ -406,7 +406,7 @@ namespace ElmFullstack
             IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var compilerId =
-                CommonConversion.StringBase16FromByteArray(
+                CommonConversion.StringBase16(
                     Composition.GetHash(
                         Composition.FromTreeWithStringPath(
                             Composition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles))));

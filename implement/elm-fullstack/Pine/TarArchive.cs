@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -7,9 +8,9 @@ namespace Pine;
 
 static public class TarArchive
 {
-    static public Composition.TreeWithStringPath TreeWithStringPathFromTarArchive(IReadOnlyList<byte> tarArchive)
+    static public Composition.TreeWithStringPath TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
     {
-        using var archiveReader = SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(tarArchive as byte[] ?? tarArchive.ToArray()));
+        using var archiveReader = SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(tarArchive.ToArray()));
 
         return TreeWithStringPathFromTarArchiveEntries(archiveReader.Entries);
     }

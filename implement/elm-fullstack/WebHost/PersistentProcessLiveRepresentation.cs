@@ -638,12 +638,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     ? null
                     : new ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(elmAppStateComponent))
+                        HashBase16 = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent))
                     },
                 appConfig:
                     new ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16FromByteArray(
+                        HashBase16 = CommonConversion.StringBase16(
                             Composition.GetHash(lastAppConfig.appConfigComponent)),
                     }
             );

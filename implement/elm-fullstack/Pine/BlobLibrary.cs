@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace Pine;
 
@@ -43,7 +44,7 @@ public class BlobLibrary
             if (blobCandidate == null)
                 return null;
 
-            if (!(Composition.GetHash(Composition.Component.Blob(blobCandidate.Value)).AsSpan().SequenceEqual(sha256.Span) ||
+            if (!(Composition.GetHash(Composition.Component.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
                 System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
                 return null;
 
@@ -147,7 +148,35 @@ public class BlobLibrary
         return tryUpdateCacheAndContinueFromHttpResponse(httpResponse);
     }
 
-    static public HttpResponseMessage DownloadViaHttp(string url)
+    static public Result<string, ReadOnlyMemory<byte>?> DownloadBlobViaHttpGetResponseBody(string sourceUrl) =>
+        DownloadBlobViaHttpGetResponseBodyAsync(sourceUrl).Result;
+
+    static public async Task<Result<string, ReadOnlyMemory<byte>?>> DownloadBlobViaHttpGetResponseBodyAsync(string sourceUrl)
+    {
+        try
+        {
+            var httpResponse = await DownloadViaHttpAsync(sourceUrl);
+
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                return Result<string, ReadOnlyMemory<byte>?>.err(
+                    "Unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" + httpResponse.StatusCode + ")");
+            }
+
+            var responseContent = await httpResponse.Content.ReadAsByteArrayAsync();
+
+            return Result<string, ReadOnlyMemory<byte>?>.ok(responseContent);
+        }
+        catch (Exception e)
+        {
+            return Result<string, ReadOnlyMemory<byte>?>.err("Runtime exception: " + e.ToString());
+        }
+    }
+
+    static public HttpResponseMessage DownloadViaHttp(string url) =>
+        DownloadViaHttpAsync(url).Result;
+
+    static public async Task<HttpResponseMessage> DownloadViaHttpAsync(string url)
     {
         var handler = new HttpClientHandler
         {
@@ -160,12 +189,12 @@ public class BlobLibrary
         httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
         httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new StringWithQualityHeaderValue("deflate"));
 
-        return httpClient.GetAsync(url).Result;
+        return await httpClient.GetAsync(url);
     }
 
     static public ReadOnlyMemory<byte>? DownloadFromUrlAndExtractBlobWithMatchingHash(
         string sourceUrl,
-        byte[] sha256)
+        ReadOnlyMemory<byte> sha256)
     {
         return
             DownloadFromUrlAndExtractBlobs(sourceUrl)
@@ -175,7 +204,7 @@ public class BlobLibrary
 
     static public Func<ReadOnlyMemory<byte>, bool> BlobHasSHA256(ReadOnlyMemory<byte> sha256) =>
         blobCandidate =>
-        Composition.GetHash(Composition.Component.Blob(blobCandidate)).AsSpan().SequenceEqual(sha256.Span) ||
+        Composition.GetHash(Composition.Component.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
         System.Security.Cryptography.SHA256.HashData(blobCandidate.Span).AsSpan().SequenceEqual(sha256.Span);
 
     static public IEnumerable<ReadOnlyMemory<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
@@ -198,6 +227,14 @@ public class BlobLibrary
 
         yield return Composition.TreeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
 
+        var blobName = sourceUrl.Split('/', '\\').Last();
+
+        foreach (var extracted in ExtractTreesFromNamedBlob(blobName, responseContent))
+            yield return extracted;
+    }
+
+    static public IEnumerable<Composition.TreeWithStringPath> ExtractTreesFromNamedBlob(string blobName, ReadOnlyMemory<byte> blobContent)
+    {
         {
             Composition.TreeWithStringPath? fromZipArchive = null;
 
@@ -205,7 +242,7 @@ public class BlobLibrary
             {
                 fromZipArchive =
                     Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        ZipArchive.EntriesFromZipArchive(responseContent));
+                        ZipArchive.EntriesFromZipArchive(blobContent));
             }
             catch { }
 
@@ -213,26 +250,26 @@ public class BlobLibrary
                 yield return fromZipArchive;
         }
 
-        if (sourceUrl.EndsWith(".tar.gz"))
+        if (blobName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || blobName.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
         {
             Composition.TreeWithStringPath? fromTarArchive = null;
 
             try
             {
-                fromTarArchive = TarArchive.TreeWithStringPathFromTarArchive(CommonConversion.DecompressGzip(responseContent));
+                fromTarArchive = TarArchive.TreeWithStringPathFromTarArchive(CommonConversion.DecompressGzip(blobContent));
             }
             catch { }
 
             if (fromTarArchive != null)
                 yield return fromTarArchive;
         }
-        else if (sourceUrl.EndsWith(".gz"))
+        else if (blobName.EndsWith(".gz"))
         {
             ReadOnlyMemory<byte>? fromGzip = null;
 
             try
             {
-                fromGzip = CommonConversion.DecompressGzip(responseContent);
+                fromGzip = CommonConversion.DecompressGzip(blobContent);
             }
             catch { }
 

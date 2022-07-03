@@ -200,9 +200,6 @@ public class TestComposition
             var asComposition = Composition.FromTreeWithStringPath(
                 Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
 
-            var h0 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(testCase.expectedOutput));
-            var h1 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(asComposition));
-
             Assert.AreEqual(testCase.expectedOutput, asComposition);
         }
     }
@@ -215,7 +212,7 @@ public class TestComposition
             new
             {
                 input = Composition.Component.Blob(new byte[]{0,1,2}),
-                expectedHashBase16 = CommonConversion.StringBase16FromByteArray(
+                expectedHashBase16 = CommonConversion.StringBase16(
                     CommonConversion.HashSHA256(Encoding.ASCII.GetBytes("blob 3\0").Concat(new byte[]{0,1,2}).ToArray()))
             },
         };
@@ -224,7 +221,7 @@ public class TestComposition
         {
             var hash = Composition.GetHash(testCase.input);
 
-            Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16FromByteArray(hash), ignoreCase: true);
+            Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16(hash), ignoreCase: true);
         }
     }
 

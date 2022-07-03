@@ -571,10 +571,10 @@ public class Composition
         return Result<string, Component>.err("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
     }
 
-    static public byte[] GetSerialRepresentation(Component component) =>
+    static public ReadOnlyMemory<byte> GetSerialRepresentation(Component component) =>
         GetSerialRepresentationAndDependencies(component).serialRepresentation;
 
-    static public (byte[] serialRepresentation, IReadOnlyCollection<Component> dependencies)
+    static public (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<Component> dependencies)
         GetSerialRepresentationAndDependencies(Component component)
     {
         if (component.BlobContent != null)
@@ -599,17 +599,17 @@ public class Composition
             var prefix = System.Text.Encoding.ASCII.GetBytes("list " + componentsHashes.Count.ToString() + "\0");
 
             return
-                (serialRepresentation: prefix.Concat(componentsHashes.SelectMany(t => t)).ToArray(),
+                (serialRepresentation: CommonConversion.Concat(new[] { (ReadOnlyMemory<byte>)prefix }.Concat(componentsHashes).ToList()).ToArray(),
                 dependencies: component.ListContent);
         }
 
         throw new System.Exception("Incomplete match on sum type.");
     }
 
-    static public byte[] GetHash(Component component) =>
+    static public ReadOnlyMemory<byte> GetHash(Component component) =>
         GetHashAndDependencies(component).hash;
 
-    static public (byte[] hash, IReadOnlyCollection<Component> dependencies)
+    static public (ReadOnlyMemory<byte> hash, IReadOnlyCollection<Component> dependencies)
         GetHashAndDependencies(Component component)
     {
         var (serialRepresentation, dependencies) = GetSerialRepresentationAndDependencies(component);
@@ -617,12 +617,12 @@ public class Composition
         return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies: dependencies);
     }
 
-    static public byte[] GetHash(TreeWithStringPath component) =>
+    static public ReadOnlyMemory<byte> GetHash(TreeWithStringPath component) =>
         CommonConversion.HashSHA256(GetSerialRepresentation(FromTreeWithStringPath(component)!));
 
-    static public Component? FindComponentByHash(Component component, byte[] hash)
+    static public Component? FindComponentByHash(Component component, ReadOnlyMemory<byte> hash)
     {
-        if (GetHash(component).SequenceEqual(hash))
+        if (GetHash(component).Span.SequenceEqual(hash.Span))
             return component;
 
         if (component?.ListContent != null)

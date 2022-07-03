@@ -158,7 +158,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                     DeployAppConfigAndInitElmAppState =
                         new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16FromByteArray(Composition.GetHash(deployAppConfigAndInitElmState))
+                            HashBase16 = CommonConversion.StringBase16(Composition.GetHash(deployAppConfigAndInitElmState))
                         }
                 };
 

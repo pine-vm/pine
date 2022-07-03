@@ -15,7 +15,7 @@ public record FileStoreReaderProjectionResult(
 
 public interface IProcessStoreWriter
 {
-    (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent);
+    (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent);
 
     void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction);
 
@@ -116,11 +116,11 @@ record DelegatingProcessStoreReader(
 }
 
 public record DelegatingProcessStoreWriter(
-    Func<CompositionLogRecordInFile.CompositionEvent, (byte[] recordHash, string recordHashBase16)> AppendCompositionLogRecordDelegate,
+    Func<CompositionLogRecordInFile.CompositionEvent, (ReadOnlyMemory<byte> recordHash, string recordHashBase16)> AppendCompositionLogRecordDelegate,
     Action<Composition.Component> StoreComponentDelegate,
     Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate) : IProcessStoreWriter
 {
-    public (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
+    public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
         AppendCompositionLogRecordDelegate(compositionEvent);
 
     public void StoreComponent(Composition.Component component) =>
@@ -141,9 +141,9 @@ public record CompositionLogRecordInFile(
     static public string? CompositionLogFirstRecordParentHashBase16 => null;
 
     static public string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
-        CommonConversion.StringBase16FromByteArray(HashFromCompositionRecord(compositionRecord));
+        CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
 
-    static public byte[] HashFromCompositionRecord(byte[] compositionRecord) =>
+    static public ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
         Composition.GetHash(Composition.Component.Blob(compositionRecord));
 
     public record CompositionEvent(
@@ -281,7 +281,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         if (loadComponentResult.Ok == null)
             throw new Exception("Failed to load component " + componentHashBase16 + ": " + loadComponentResult.Err);
 
-        if (CommonConversion.StringBase16FromByteArray(Composition.GetHash(loadComponentResult.Ok)) != componentHashBase16)
+        if (CommonConversion.StringBase16(Composition.GetHash(loadComponentResult.Ok)) != componentHashBase16)
             throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
         return loadComponentResult.Ok;
@@ -491,7 +491,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             (CompositionLogRecordInFile.HashBase16FromCompositionRecord(originalStoreLastCompositionRecord.record), originalStoreLastCompositionRecord.filePath);
     }
 
-    public (byte[] recordHash, string recordHashBase16) AppendCompositionLogRecord(
+    public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(
         CompositionLogRecordInFile.CompositionEvent compositionEvent)
     {
         lock (appendLock)
@@ -519,7 +519,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             var compositionLogRecordSerialized = GetCompositionLogRecordSerialized(compositionLogRecordStructure);
 
             var recordHash = CompositionLogRecordInFile.HashFromCompositionRecord(compositionLogRecordSerialized);
-            var recordHashBase16 = CommonConversion.StringBase16FromByteArray(recordHash);
+            var recordHashBase16 = CommonConversion.StringBase16(recordHash);
 
             var compositionLogRecordSerializedWithDelimiter =
                 compositionLogRecordSerialized.Concat(compositionLogEntryDelimiter)
@@ -554,13 +554,13 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         StoreComponentAndGetHash(component);
     }
 
-    (byte[] hash, string hashBase16) StoreComponentAndGetHash(Composition.Component component)
+    (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(Composition.Component component)
     {
         var (serialRepresentation, dependencies) = Composition.GetSerialRepresentationAndDependencies(component);
 
         var hash = CommonConversion.HashSHA256(serialRepresentation);
 
-        var hashBase16 = CommonConversion.StringBase16FromByteArray(hash);
+        var hashBase16 = CommonConversion.StringBase16(hash);
 
         void storeSelf()
         {
@@ -572,7 +572,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                 {
                     DeflatedLiteralElementFileStore.SetFileContent(
                         GetFilePathForComponentInComponentFileStore(hashBase16),
-                        deflated);
+                        deflated.ToArray());
 
                     return;
                 }
@@ -580,7 +580,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
             LiteralElementFileStore.SetFileContent(
                 GetFilePathForComponentInComponentFileStore(hashBase16),
-                serialRepresentation);
+                serialRepresentation.ToArray());
         }
 
         storeSelf();
