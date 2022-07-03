@@ -852,42 +852,42 @@ type String
 
 eq : a -> a -> Bool
 eq a b =
-    PineKernel.equals [ a, b ]
+    PineKernel.equal [ a, b ]
 
 
 neq : a -> a -> Bool
 neq a b =
-    PineKernel.equalsNot [ a, b ]
+    PineKernel.logical_not (PineKernel.equal [ a, b ])
 
 
 add : number -> number -> number
 add a b =
-    PineKernel.addInt [ a, b ]
+    PineKernel.add_int [ a, b ]
 
 
 sub : number -> number -> number
 sub a b =
-    PineKernel.subInt [ a, b ]
+    PineKernel.sub_int [ a, b ]
 
 
 mul : number -> number -> number
 mul a b =
-    PineKernel.mulInt [ a, b ]
+    PineKernel.mul_int [ a, b ]
 
 
 idiv : number -> number -> number
 idiv a b =
-    PineKernel.divInt [ a, b ]
+    PineKernel.div_int [ a, b ]
 
 
 and : Bool -> Bool -> Bool
 and a b =
-    PineKernel.andBool [ a, b ]
+    PineKernel.logical_and [ a, b ]
 
 
 or : Bool -> Bool -> Bool
 or a b =
-    PineKernel.orBool [ a, b ]
+    PineKernel.logical_or [ a, b ]
 
 
 append : appendable -> appendable -> appendable
@@ -896,9 +896,9 @@ append a b =
     String stringA ->
         case b of
         String stringB ->
-            String (PineKernel.listConcat [stringA, stringB])
-        _ -> PineKernel.listConcat [a, b]
-    _ -> PineKernel.listConcat [a, b]
+            String (PineKernel.concat [stringA, stringB])
+        _ -> PineKernel.concat [a, b]
+    _ -> PineKernel.concat [a, b]
 
 
 lt : comparable -> comparable -> Bool
@@ -913,12 +913,12 @@ gt a b =
 
 le : comparable -> comparable -> Bool
 le a b =
-    or (PineKernel.equals [a, b]) (lt a b)
+    or (PineKernel.equal [a, b]) (lt a b)
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    or (PineKernel.equals [a, b]) (gt a b)
+    or (PineKernel.equal [a, b]) (gt a b)
 
 
 apR : a -> (a -> b) -> b
@@ -1042,7 +1042,7 @@ rangeHelp lo hi list =
 
 cons : a -> List a -> List a
 cons element list =
-    PineKernel.listConcat [ [ element ], list ]
+    PineKernel.concat [ [ element ], list ]
 
 
 map : (a -> b) -> List a -> List b
@@ -1072,12 +1072,12 @@ filter isGood list =
 
 length : List a -> Int
 length list =
-    PineKernel.listLength list
+    PineKernel.length list
 
 
 reverse : List a -> List a
 reverse list =
-    PineKernel.listReverse list
+    PineKernel.reverse list
 
 
 member : a -> List a -> Bool
@@ -1106,7 +1106,7 @@ append xs ys =
 
 concat : List (List a) -> List a
 concat lists =
-    PineKernel.listConcat lists
+    PineKernel.concat lists
 
 
 isEmpty : List a -> Bool
@@ -1141,12 +1141,12 @@ tail list =
 
 take : Int -> List a -> List a
 take n list =
-    PineKernel.listTake [ n, list ]
+    PineKernel.take [ n, list ]
 
 
 drop : Int -> List a -> List a
 drop n list =
-    PineKernel.listSkip [ n, list ]
+    PineKernel.skip [ n, list ]
 
 
 """
@@ -1163,7 +1163,7 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    PineKernel.blobConcat [ PineKernel.blobValueOneByteZero, char ]
+    PineKernel.concat [ PineKernel.blobValueOneByteZero, char ]
 
 """
     , """
@@ -1259,7 +1259,7 @@ replace before after string =
 
 append : String -> String -> String
 append a b =
-    PineKernel.listConcat [ toList a, toList b ]
+    PineKernel.concat [ toList a, toList b ]
 
 
 concat : List String -> String
@@ -1553,7 +1553,7 @@ pineExpressionFromElm elmExpression =
                 Ok negatedExpression ->
                     Ok
                         (Pine.KernelApplicationExpression
-                            { function = "negateInt"
+                            { functionName = "negate_int"
                             , argument = negatedExpression
                             }
                         )
@@ -1604,7 +1604,7 @@ pineExpressionFromElm elmExpression =
                                             [ singleArgument ] ->
                                                 Ok
                                                     (Pine.KernelApplicationExpression
-                                                        { function = functionLocalName
+                                                        { functionName = functionLocalName
                                                         , argument = singleArgument
                                                         }
                                                     )
@@ -2049,7 +2049,7 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
     let
         continueWithOnlyEqualsCondition valueToCompare =
             Ok
-                { conditionExpression = equalsCondition caseBlockValueExpression valueToCompare
+                { conditionExpression = equalCondition [ caseBlockValueExpression, valueToCompare ]
                 , declarations = []
                 }
     in
@@ -2079,16 +2079,17 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                     (\elementsResults ->
                         let
                             matchesLengthCondition =
-                                equalsCondition
-                                    (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt (List.length listElements))))
-                                    (countListElementsExpression caseBlockValueExpression)
+                                equalCondition
+                                    [ Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt (List.length listElements)))
+                                    , countListElementsExpression caseBlockValueExpression
+                                    ]
 
                             condition =
                                 (matchesLengthCondition
                                     :: List.concatMap .conditions elementsResults
                                 )
                                     |> booleanConjunctionExpressionFromList
-                                        (equalsCondition caseBlockValueExpression (Pine.ListExpression []))
+                                        (equalCondition [ caseBlockValueExpression, Pine.ListExpression [] ])
 
                             declarations =
                                 elementsResults |> List.concatMap .declarations
@@ -2113,11 +2114,9 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
 
                         conditionExpression =
                             Pine.KernelApplicationExpression
-                                { function = "notBool"
+                                { functionName = "logical_not"
                                 , argument =
-                                    equalsCondition
-                                        caseBlockValueExpression
-                                        (listSkipExpression 1 caseBlockValueExpression)
+                                    equalCondition [ caseBlockValueExpression, listSkipExpression 1 caseBlockValueExpression ]
                                 }
                     in
                     Ok
@@ -2147,9 +2146,10 @@ pineExpressionFromElmPattern caseBlockValueExpression elmPattern =
                             )
 
                 conditionExpression =
-                    equalsCondition
-                        (Pine.LiteralExpression (Pine.valueFromString qualifiedName.name))
-                        (pineKernel_ListHead caseBlockValueExpression)
+                    equalCondition
+                        [ Pine.LiteralExpression (Pine.valueFromString qualifiedName.name)
+                        , pineKernel_ListHead caseBlockValueExpression
+                        ]
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
                 Err error ->
@@ -2208,7 +2208,7 @@ booleanConjunctionExpressionFromList defaultIfEmpty operands =
         firstOperator :: otherOperators ->
             otherOperators
                 |> List.foldl
-                    (\single aggregate -> applyKernelFunctionWithTwoArguments "andBool" aggregate single)
+                    (\single aggregate -> applyKernelFunctionWithTwoArguments "logical_and" aggregate single)
                     firstOperator
 
 
@@ -2225,7 +2225,7 @@ countListElementsExpression =
 pineKernel_ListHead : Pine.Expression -> Pine.Expression
 pineKernel_ListHead listExpression =
     Pine.KernelApplicationExpression
-        { function = "listHead"
+        { functionName = "list_head"
         , argument = listExpression
         }
 
@@ -2233,7 +2233,7 @@ pineKernel_ListHead listExpression =
 pineKernel_ListLength : Pine.Expression -> Pine.Expression
 pineKernel_ListLength listExpression =
     Pine.KernelApplicationExpression
-        { function = "listLength"
+        { functionName = "length"
         , argument = listExpression
         }
 
@@ -2241,7 +2241,7 @@ pineKernel_ListLength listExpression =
 pineKernel_ListConcat : Pine.Expression -> Pine.Expression
 pineKernel_ListConcat argument =
     Pine.KernelApplicationExpression
-        { function = "listConcat"
+        { functionName = "concat"
         , argument = argument
         }
 
@@ -2269,7 +2269,7 @@ listSkipExpression numberToDrop listExpression =
 
     else
         applyKernelFunctionWithTwoArguments
-            "listSkip"
+            "skip"
             (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt numberToDrop)))
             listExpression
 
@@ -2320,9 +2320,10 @@ pineExpressionForRecordAccess fieldName recordExpression =
     in
     Pine.ConditionalExpression
         { condition =
-            equalsCondition
-                (Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName))
-                (pineKernel_ListHead recordExpression)
+            equalCondition
+                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                , pineKernel_ListHead recordExpression
+                ]
         , ifTrue =
             Pine.StringTagExpression
                 { tag = "Completed record access: " ++ fieldName
@@ -2380,15 +2381,18 @@ expressionToLookupNameInGivenScope name scopeExpression =
         )
 
 
-equalsCondition : Pine.Expression -> Pine.Expression -> Pine.Expression
-equalsCondition =
-    applyKernelFunctionWithTwoArguments "equals"
+equalCondition : List Pine.Expression -> Pine.Expression
+equalCondition list =
+    Pine.KernelApplicationExpression
+        { functionName = "equal"
+        , argument = Pine.ListExpression list
+        }
 
 
 applyKernelFunctionWithTwoArguments : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
 applyKernelFunctionWithTwoArguments kernelFunctionName argA argB =
     Pine.KernelApplicationExpression
-        { function = kernelFunctionName
+        { functionName = kernelFunctionName
         , argument = Pine.ListExpression [ argA, argB ]
         }
 

@@ -21,7 +21,7 @@ type alias ListExpressionStructure =
 
 
 type alias KernelApplicationExpressionStructure =
-    { function : String
+    { functionName : String
     , argument : Expression
     }
 
@@ -104,16 +104,25 @@ evaluateExpression context expression =
                     )
 
         KernelApplicationExpression application ->
-            case Dict.get application.function pineKernelFunctions of
+            case Dict.get application.functionName pineKernelFunctions of
                 Nothing ->
-                    Err (DescribePathEnd ("Did not find kernel function '" ++ application.function ++ "'"))
+                    Err
+                        (DescribePathEnd
+                            ("Did not find kernel function '"
+                                ++ application.functionName
+                                ++ "'. There are "
+                                ++ String.fromInt (Dict.size pineKernelFunctions)
+                                ++ " kernel functions available: "
+                                ++ String.join ", " (Dict.keys pineKernelFunctions)
+                            )
+                        )
 
                 Just kernelFunction ->
                     evaluateExpression context application.argument
                         |> Result.andThen
                             (\arg ->
                                 kernelFunction arg
-                                    |> Result.mapError (DescribePathNode ("Failed to apply kernel function '" ++ application.function ++ "': "))
+                                    |> Result.mapError (DescribePathNode ("Failed to apply kernel function '" ++ application.functionName ++ "': "))
                                     |> Result.mapError (\e -> DescribePathNode ("Argument: " ++ describeValue 2 arg) e)
                             )
 
@@ -216,116 +225,104 @@ lookUpNameInListValue nameAsValue context =
 
 pineKernelFunctions : Dict.Dict String KernelFunction
 pineKernelFunctions =
-    [ ( "equals"
+    [ ( "equal"
+      , pineDecodeList
+            >> Result.map
+                (\list ->
+                    list
+                        |> List.all ((==) (list |> List.head |> Maybe.withDefault (ListValue [])))
+                        |> valueFromBool
+                )
+            >> Result.mapError DescribePathEnd
+      )
+    , ( "logical_not"
+      , boolFromValue
+            >> Result.fromMaybe (DescribePathEnd "Value is neither True nor False")
+            >> Result.map (not >> valueFromBool)
+      )
+    , ( "logical_and", kernelFunctionExpectingListOfTypeBool (List.foldl (&&) True) )
+    , ( "logical_or", kernelFunctionExpectingListOfTypeBool (List.foldl (||) False) )
+    , ( "length"
+      , mapFromListValueOrBlobValue { fromList = List.length, fromBlob = List.length }
+            >> (BigInt.fromInt >> valueFromBigInt)
+            >> Ok
+      )
+    , ( "skip"
       , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = Ok
+            { mapArg0 = intFromValue >> Result.mapError DescribePathEnd
             , mapArg1 = Ok
-            , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue == rightValue))
+            , apply =
+                \count ->
+                    mapFromListValueOrBlobValue
+                        { fromList = List.drop count >> ListValue
+                        , fromBlob = List.drop count >> BlobValue
+                        }
+                        >> Ok
             }
       )
-    , ( "equalsNot"
+    , ( "take"
       , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = Ok
+            { mapArg0 = intFromValue >> Result.mapError DescribePathEnd
             , mapArg1 = Ok
-            , apply = \leftValue rightValue -> Ok (valueFromBool (leftValue /= rightValue))
+            , apply =
+                \count ->
+                    mapFromListValueOrBlobValue
+                        { fromList = List.take count >> ListValue
+                        , fromBlob = List.take count >> BlobValue
+                        }
+                        >> Ok
             }
       )
-    , ( "notBool"
-      , (/=) trueValue >> valueFromBool >> Ok
+    , ( "reverse"
+      , mapFromListValueOrBlobValue
+            { fromList = List.reverse >> ListValue
+            , fromBlob = List.reverse >> BlobValue
+            }
+            >> Ok
       )
-    , ( "andBool", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (&&) )
-    , ( "orBool", kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool (||) )
-    , ( "listHead"
+    , ( "concat"
+      , pineDecodeList
+            >> Result.mapError DescribePathEnd
+            >> Result.map
+                (List.foldl
+                    (\next aggregate ->
+                        case ( aggregate, next ) of
+                            ( ListValue aggregateList, ListValue nextList ) ->
+                                ListValue (aggregateList ++ nextList)
+
+                            ( BlobValue aggregateBlob, BlobValue nextBlob ) ->
+                                BlobValue (aggregateBlob ++ nextBlob)
+
+                            _ ->
+                                next
+                    )
+                    (ListValue [])
+                )
+      )
+    , ( "list_head"
       , pineDecodeList
             >> Result.map (List.head >> Maybe.withDefault (ListValue []))
             >> Result.mapError DescribePathEnd
       )
-    , ( "listSkip"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-            , mapArg1 = Ok
-            , apply =
-                \countBigInt listValue ->
-                    (case countBigInt |> BigInt.toString |> String.toInt of
-                        Nothing ->
-                            Err "Failed to map from BigInt"
-
-                        Just count ->
-                            case listValue of
-                                ListValue list ->
-                                    Ok (ListValue (List.drop count list))
-
-                                _ ->
-                                    Err "Not a list value"
-                    )
-                        |> Result.mapError DescribePathEnd
-            }
-      )
-    , ( "listTake"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-            , mapArg1 = Ok
-            , apply =
-                \countBigInt listValue ->
-                    (case countBigInt |> BigInt.toString |> String.toInt of
-                        Nothing ->
-                            Err "Failed to map from BigInt"
-
-                        Just count ->
-                            case listValue of
-                                ListValue list ->
-                                    Ok (ListValue (List.take count list))
-
-                                _ ->
-                                    Err "Not a list value"
-                    )
-                        |> Result.mapError DescribePathEnd
-            }
-      )
-    , ( "negateInt"
+    , ( "negate_int"
       , bigIntFromValue
             >> Result.mapError DescribePathEnd
             >> Result.map (BigInt.negate >> valueFromBigInt)
       )
-    , ( "addInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.add )
-    , ( "subInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.sub )
-    , ( "mulInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.mul )
-    , ( "divInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt BigInt.div )
+    , ( "add_int"
+      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl BigInt.add)
+      )
+    , ( "sub_int"
+      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.sub b a))
+      )
+    , ( "mul_int"
+      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl BigInt.mul)
+      )
+    , ( "div_int"
+      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.div b a))
+      )
     , ( "lessThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.lt )
     , ( "greaterThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.gt )
-    , ( "listConcat"
-      , pineDecodeList
-            >> Result.andThen (List.map pineDecodeList >> Result.Extra.combine)
-            >> Result.mapError DescribePathEnd
-            >> Result.map (List.concat >> ListValue)
-      )
-    , ( "listReverse"
-      , pineDecodeList
-            >> Result.mapError DescribePathEnd
-            >> Result.map (List.reverse >> ListValue)
-      )
-    , ( "listLength"
-      , pineDecodeList
-            >> Result.mapError DescribePathEnd
-            >> Result.map (List.length >> BigInt.fromInt >> valueFromBigInt)
-      )
-    , ( "blobConcat"
-      , pineDecodeList
-            >> Result.andThen
-                (List.map
-                    (\blobValue ->
-                        case blobValue of
-                            BlobValue blob ->
-                                Ok blob
-
-                            _ ->
-                                Err "Not a blob"
-                    )
-                    >> Result.Extra.combine
-                )
-            >> Result.mapError DescribePathEnd
-            >> Result.map (List.concat >> BlobValue)
-      )
     , ( "look_up_name_in_ListValue"
       , kernelFunctionExpectingExactlyTwoArguments
             { mapArg0 = Ok
@@ -367,7 +364,7 @@ pineKernelFunctions =
                                                                         |> LiteralExpression
                                                                 , argument =
                                                                     KernelApplicationExpression
-                                                                        { function = "listConcat"
+                                                                        { functionName = "concat"
                                                                         , argument =
                                                                             ListExpression
                                                                                 [ ListExpression
@@ -395,6 +392,16 @@ pineKernelFunctions =
       )
     ]
         |> Dict.fromList
+
+
+mapFromListValueOrBlobValue : { fromList : List Value -> a, fromBlob : List Int -> a } -> Value -> a
+mapFromListValueOrBlobValue { fromList, fromBlob } value =
+    case value of
+        ListValue list ->
+            fromList list
+
+        BlobValue blob ->
+            fromBlob blob
 
 
 evaluateFunctionApplication : EvalContext -> ApplicationExpressionStructure -> Result (PathDescription String) Value
@@ -429,20 +436,6 @@ evaluateFunctionApplication context application =
             )
 
 
-intFromBigInt : BigInt.BigInt -> Result String Int
-intFromBigInt bigInt =
-    case bigInt |> BigInt.toString |> String.toInt of
-        Nothing ->
-            Err "Failed to String.toInt"
-
-        Just int ->
-            if String.fromInt int /= BigInt.toString bigInt then
-                Err "Integer out of supported range for String.toInt"
-
-            else
-                Ok int
-
-
 kernelFunctionOnTwoBigIntWithBooleanResult : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> KernelFunction
 kernelFunctionOnTwoBigIntWithBooleanResult apply =
     kernelFunctionExpectingExactlyTwoBigInt
@@ -455,10 +448,23 @@ kernelFunctionExpectingExactlyTwoBigIntAndProducingBool apply =
         (\a0 a1 -> Ok (valueFromBool (apply a0 a1)))
 
 
-kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt : (BigInt.BigInt -> BigInt.BigInt -> BigInt.BigInt) -> KernelFunction
-kernelFunctionExpectingExactlyTwoBigIntAndProducingBigInt apply =
-    kernelFunctionExpectingExactlyTwoBigInt
-        (\a0 a1 -> Ok (valueFromBigInt (apply a0 a1)))
+kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt :
+    (BigInt.BigInt -> List BigInt.BigInt -> BigInt.BigInt)
+    -> KernelFunction
+kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt apply =
+    pineDecodeList
+        >> Result.andThen (List.map bigIntFromValue >> Result.Extra.combine)
+        >> Result.andThen
+            (\list ->
+                case list of
+                    [] ->
+                        Err "List is empty. Expected at least one element"
+
+                    firstElement :: otherElements ->
+                        Ok (apply firstElement otherElements)
+            )
+        >> Result.map valueFromBigInt
+        >> Result.mapError DescribePathEnd
 
 
 kernelFunctionExpectingExactlyTwoBigInt : (BigInt.BigInt -> BigInt.BigInt -> Result (PathDescription String) Value) -> KernelFunction
@@ -470,13 +476,12 @@ kernelFunctionExpectingExactlyTwoBigInt apply =
         }
 
 
-kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool : (Bool -> Bool -> Bool) -> KernelFunction
-kernelFunctionExpectingExactlyTwoArgumentsOfTypeBool apply =
-    kernelFunctionExpectingExactlyTwoArguments
-        { mapArg0 = boolFromValue >> Result.fromMaybe (DescribePathEnd "Is not trueValue or falseValue")
-        , mapArg1 = boolFromValue >> Result.fromMaybe (DescribePathEnd "Is not trueValue or falseValue")
-        , apply = \a b -> Ok (valueFromBool (apply a b))
-        }
+kernelFunctionExpectingListOfTypeBool : (List Bool -> Bool) -> KernelFunction
+kernelFunctionExpectingListOfTypeBool apply =
+    pineDecodeList
+        >> Result.andThen (List.map (boolFromValue >> Result.fromMaybe "Value is neither True nor False") >> Result.Extra.combine)
+        >> Result.map (apply >> valueFromBool)
+        >> Result.mapError DescribePathEnd
 
 
 kernelFunctionExpectingExactlyTwoArguments :
@@ -573,7 +578,7 @@ describeExpression depthLimit expression =
                 ++ ")"
 
         KernelApplicationExpression application ->
-            "kernel-application(" ++ application.function ++ ")"
+            "kernel-application(" ++ application.functionName ++ ")"
 
         ConditionalExpression _ ->
             "conditional"
@@ -721,6 +726,25 @@ unsignedBlobValueFromBigInt bigint =
                 Nothing
 
 
+intFromValue : Value -> Result String Int
+intFromValue =
+    bigIntFromValue >> Result.andThen intFromBigInt
+
+
+intFromBigInt : BigInt.BigInt -> Result String Int
+intFromBigInt bigInt =
+    case bigInt |> BigInt.toString |> String.toInt of
+        Nothing ->
+            Err "Failed to String.toInt"
+
+        Just int ->
+            if String.fromInt int /= BigInt.toString bigInt then
+                Err "Integer out of supported range for String.toInt"
+
+            else
+                Ok int
+
+
 bigIntFromValue : Value -> Result String BigInt.BigInt
 bigIntFromValue value =
     case value of
@@ -814,7 +838,7 @@ pineEncodeExpression expression =
 
         KernelApplicationExpression app ->
             ( "KernelApplication"
-            , [ ( "function", valueFromString app.function )
+            , [ ( "functionName", valueFromString app.functionName )
               , ( "argument", pineEncodeExpression app.argument )
               ]
                 |> Dict.fromList
@@ -896,7 +920,7 @@ pineDecodeKernelApplicationExpression =
     pineDecodeRecord
         >> Result.andThen
             (always (Ok KernelApplicationExpressionStructure)
-                |> pineDecodeRecordField "function" stringFromValue
+                |> pineDecodeRecordField "functionName" stringFromValue
                 |> pineDecodeRecordField "argument" pineDecodeExpression
             )
 

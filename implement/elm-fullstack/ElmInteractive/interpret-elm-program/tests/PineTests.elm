@@ -18,7 +18,7 @@ pineExpressionEncodeDecodeRoundtrip =
       )
     , ( "kernel application one arg"
       , Pine.KernelApplicationExpression
-            { function = "kernel_function_name"
+            { functionName = "kernel_function_name"
             , argument = Pine.LiteralExpression (Pine.BlobValue [ 6, 7, 8 ])
             }
       )
