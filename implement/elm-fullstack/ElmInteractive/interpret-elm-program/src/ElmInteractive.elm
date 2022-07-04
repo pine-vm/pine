@@ -903,22 +903,28 @@ append a b =
 
 lt : comparable -> comparable -> Bool
 lt a b =
-    PineKernel.lessThanInt [ a, b ]
+    PineKernel.logical_and
+    [ (le a b)
+    , PineKernel.logical_not (PineKernel.equal [a, b])
+    ]
 
 
 gt : comparable -> comparable -> Bool
 gt a b =
-    PineKernel.greaterThanInt [ a, b ]
+    PineKernel.logical_and
+    [ (ge a b)
+    , PineKernel.logical_not (PineKernel.equal [a, b])
+    ]
 
 
 le : comparable -> comparable -> Bool
 le a b =
-    or (PineKernel.equal [a, b]) (lt a b)
+    PineKernel.equal [ PineKernel.sort_int [a, b], [a, b] ]
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    or (PineKernel.equal [a, b]) (gt a b)
+    PineKernel.equal [ PineKernel.sort_int [b, a], [b, a] ]
 
 
 apR : a -> (a -> b) -> b
@@ -1553,7 +1559,7 @@ pineExpressionFromElm elmExpression =
                 Ok negatedExpression ->
                     Ok
                         (Pine.KernelApplicationExpression
-                            { functionName = "negate_int"
+                            { functionName = "neg_int"
                             , argument = negatedExpression
                             }
                         )

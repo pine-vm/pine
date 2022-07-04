@@ -304,7 +304,7 @@ pineKernelFunctions =
             >> Result.map (List.head >> Maybe.withDefault (ListValue []))
             >> Result.mapError DescribePathEnd
       )
-    , ( "negate_int"
+    , ( "neg_int"
       , bigIntFromValue
             >> Result.mapError DescribePathEnd
             >> Result.map (BigInt.negate >> valueFromBigInt)
@@ -321,8 +321,10 @@ pineKernelFunctions =
     , ( "div_int"
       , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.div b a))
       )
-    , ( "lessThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.lt )
-    , ( "greaterThanInt", kernelFunctionExpectingExactlyTwoBigIntAndProducingBool BigInt.gt )
+    , ( "sort_int"
+      , kernelFunctionExpectingListOfBigInt
+            (List.sortWith BigInt.compare >> List.map valueFromBigInt >> ListValue >> Ok)
+      )
     , ( "look_up_name_in_ListValue"
       , kernelFunctionExpectingExactlyTwoArguments
             { mapArg0 = Ok
@@ -452,18 +454,25 @@ kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt :
     (BigInt.BigInt -> List BigInt.BigInt -> BigInt.BigInt)
     -> KernelFunction
 kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt apply =
+    kernelFunctionExpectingListOfBigInt
+        (\list ->
+            case list of
+                [] ->
+                    Err "List is empty. Expected at least one element"
+
+                firstElement :: otherElements ->
+                    Ok (valueFromBigInt (apply firstElement otherElements))
+        )
+
+
+kernelFunctionExpectingListOfBigInt :
+    (List BigInt.BigInt -> Result String Value)
+    -> Value
+    -> Result (PathDescription String) Value
+kernelFunctionExpectingListOfBigInt apply =
     pineDecodeList
         >> Result.andThen (List.map bigIntFromValue >> Result.Extra.combine)
-        >> Result.andThen
-            (\list ->
-                case list of
-                    [] ->
-                        Err "List is empty. Expected at least one element"
-
-                    firstElement :: otherElements ->
-                        Ok (apply firstElement otherElements)
-            )
-        >> Result.map valueFromBigInt
+        >> Result.andThen apply
         >> Result.mapError DescribePathEnd
 
 
