@@ -31,6 +31,17 @@ public record Result<ErrT, OkT>
         new(Ok: ok);
 
     /// <summary>
+    /// Returns whether this value represents an error case.
+    /// </summary>
+    public bool IsErr() => Err != null;
+
+    /// <summary>
+    /// Returns whether this value represents a success case.
+    /// </summary>
+    public bool IsOk() => Ok != null;
+
+
+    /// <summary>
     /// Maps the value of the 'Ok' case.
     /// </summary>
     public Result<ErrT, MappedOkT> map<MappedOkT>(Func<OkT, MappedOkT> okMap)

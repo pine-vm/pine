@@ -11,21 +11,15 @@ namespace elm_fullstack.ElmInteractive;
 public class TestElmInteractive
 {
     public record InteractiveScenarioTestReport(
-        int totalStepsCount,
-        IReadOnlyList<InteractiveScenarioTestStepResult> testedSteps,
+        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, object> result)> stepsReports,
         TimeSpan elapsedTime)
     {
-        public bool Passed => testedSteps.Count == totalStepsCount && testedSteps.All(s => s.Passed) && Exception == null;
-
-        public Exception? Exception => testedSteps.Select(s => s.exception).WhereNotNull().FirstOrDefault();
+        public bool Passed => stepsReports.All(s => s.result.IsOk());
     }
 
-    public record InteractiveScenarioTestStepResult(
-        int durationMs,
-        Exception? exception)
-    {
-        public bool Passed => exception == null;
-    }
+    public record InteractiveScenarioTestStepFailure(
+        string submission,
+        string errorAsText);
 
     static public ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
@@ -58,56 +52,72 @@ public class TestElmInteractive
 
         var testScenarioSteps = stepsDirectory.TreeContent;
 
-        var testedSteps =
+        var stepsReports =
             testScenarioSteps
-            .Select(testStep =>
+            .Select(sessionStep =>
             {
-                var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var stepName = sessionStep.name;
 
-                var stepName = testStep.name;
+                var submission =
+                    Encoding.UTF8.GetString(sessionStep.component.GetBlobAtPath(new[] { "submission" })!.Value.Span);
 
-                string? submission = null;
+                var expectedValueFile = sessionStep.component.GetBlobAtPath(new[] { "expected-value" });
 
-                try
+                var expectedResponse = expectedValueFile is null ? null : Encoding.UTF8.GetString(expectedValueFile.Value.Span);
+
+                return new
                 {
-                    submission =
-                        Encoding.UTF8.GetString(testStep.component.GetBlobAtPath(new[] { "submission" })!.Value.Span);
+                    stepName,
+                    submission,
+                    expectedResponse
+                };
+            })
+            .Select(sessionStep =>
+            {
 
-                    var evalResult =
-                        interactiveSession.Submit(submission);
-
-                    var expectedValueFile =
-                        testStep.component.GetBlobAtPath(new[] { "expected-value" });
-
-                    if (expectedValueFile != null)
+                Result<InteractiveScenarioTestStepFailure, object> getResult()
+                {
+                    try
                     {
-                        var expectedValue = Encoding.UTF8.GetString(expectedValueFile.Value.Span);
+                        var evalResult =
+                            interactiveSession.Submit(sessionStep.submission);
 
                         Assert.IsNull(evalResult.Err, "Submission result has error: " + evalResult.Err);
 
-                        Assert.AreEqual(
-                            expectedValue,
-                            evalResult.Ok?.SubmissionResponseValue?.valueAsElmExpressionText,
-                            "Value from evaluation does not match expected value.");
+                        if (sessionStep.expectedResponse != null)
+                        {
+                            if (sessionStep.expectedResponse != evalResult.Ok?.SubmissionResponseValue?.valueAsElmExpressionText)
+                            {
+                                var errorText =
+                                "Response from interactive does not match expected value. Expected:\n" +
+                                sessionStep.expectedResponse +
+                                "\nBut got this response:\n" +
+                                evalResult.Ok?.SubmissionResponseValue?.valueAsElmExpressionText;
+
+                                return Result<InteractiveScenarioTestStepFailure, object>.err(
+                                    new InteractiveScenarioTestStepFailure(
+                                        submission: sessionStep.submission,
+                                        errorAsText: errorText));
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        return Result<InteractiveScenarioTestStepFailure, object>.err(
+                            new InteractiveScenarioTestStepFailure(
+                                submission: sessionStep.submission,
+                                errorAsText: "Runtime exception:\n" + e.ToString()));
                     }
 
-                    return new InteractiveScenarioTestStepResult(
-                        durationMs: (int)stepStopwatch.Elapsed.TotalMilliseconds,
-                        exception: null);
+                    return Result<InteractiveScenarioTestStepFailure, object>.ok(new object());
                 }
-                catch (Exception e)
-                {
-                    return new InteractiveScenarioTestStepResult(
-                        durationMs: (int)stepStopwatch.Elapsed.TotalMilliseconds,
-                        exception: new Exception("Failed step '" + stepName + "' with exception.\nSubmission in this step:\n" + submission, e));
-                }
+
+                return (sessionStep.stepName, getResult());
             })
-            .TakeUntil(s => !s.Passed)
             .ToImmutableList();
 
         return new InteractiveScenarioTestReport(
-            totalStepsCount: testScenarioSteps.Count,
-            testedSteps: testedSteps,
+            stepsReports: stepsReports,
             elapsedTime: totalStopwatch.Elapsed);
     }
 }

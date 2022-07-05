@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-07-03";
+    static public string AppVersionId => "2022-07-05";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -871,7 +871,7 @@ public class Program
                             })
                             .DistinctBy(loadedScenario => loadedScenario.hashBase16)
                             .ToImmutableDictionary(
-                                keySelector: scenario => scenario.loadedScenario.name + "-" + scenario.hashBase16[..8],
+                                keySelector: scenario => scenario.loadedScenario.name + "-" + scenario.hashBase16[..10],
                                 elementSelector: scenario => scenario);
 
                         var aggregateCompositionTree =
@@ -899,40 +899,56 @@ public class Program
                                 namedDistinctScenarios,
                                 namedScenario => namedScenario.Value.loadedScenario.component);
 
-                        var passedScenarios =
+                        var allSteps =
                             scenariosResults
-                            .Where(t => t.Value.Passed)
+                            .SelectMany(scenario => scenario.Value.stepsReports.Select(step => (scenario, step)))
                             .ToImmutableList();
 
-                        var failedScenarios =
-                            scenariosResults
-                            .Where(t => !t.Value.Passed)
-                            .ToImmutableList();
+                        console.WriteLine(scenariosResults.Count + " scenario(s) resulted in " + allSteps.Count + " steps.");
+
+                        var passedSteps =
+                            allSteps.Where(step => step.step.result.IsOk()).ToImmutableList();
+
+                        var failedSteps =
+                            allSteps.Where(step => !step.step.result.IsOk()).ToImmutableList();
 
                         var overallStats = new[]
                         {
-                            (label : "Failed", value : failedScenarios.Count.ToString()),
-                            (label : "Passed", value : passedScenarios.Count.ToString()),
-                            (label : "Total", value : scenariosResults.Count.ToString()),
+                            (label : "Failed", value : failedSteps.Count.ToString()),
+                            (label : "Passed", value : passedSteps.Count.ToString()),
+                            (label : "Total", value : allSteps.Count.ToString()),
                             (label : "Duration", value : exceptLoadingStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms"),
                         };
 
                         console.WriteLine(
                             string.Join(
                                 " - ",
-                                (failedScenarios.Any() ? "Failed" : "Passed") + "!",
+                                (failedSteps.Any() ? "Failed" : "Passed") + "!",
                                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
                                 aggregateCompositionHash[..10] + " (elm-fs " + AppVersionId + ")"),
-                            color: failedScenarios.Any() ? Pine.IConsole.TextColor.Red : Pine.IConsole.TextColor.Green);
+                            color: failedSteps.Any() ? Pine.IConsole.TextColor.Red : Pine.IConsole.TextColor.Green);
+
+                        var failedScenarios =
+                            failedSteps
+                            .GroupBy(failedStep => failedStep.scenario.Key.Key)
+                            .ToImmutableSortedDictionary(
+                                keySelector: failedScenario => failedScenario.Key,
+                                elementSelector: failedScenario => failedScenario);
 
                         foreach (var failedScenario in failedScenarios)
                         {
-                            var scenarioId = failedScenario.Key.Value.hashBase16;
+                            var scenarioId = failedScenario.Value.Key;
 
                             console.WriteLine(
-                                "Failed scenario " + scenarioId[..10] + " ('" + failedScenario.Key + "'):");
+                                "Failed " + failedScenario.Value.Count() + " step(s) in scenario " + scenarioId + ":",
+                                color: Pine.IConsole.TextColor.Red);
 
-                            console.WriteLine(failedScenario.Value.Exception?.ToString()!);
+                            foreach (var failedStep in failedScenario.Value)
+                            {
+                                console.WriteLine(
+                                    "Failed step '" + failedStep.step.name + "':\n" + failedStep.step.result?.Err?.errorAsText!,
+                                    color: Pine.IConsole.TextColor.Red);
+                            }
                         }
                     });
                 });

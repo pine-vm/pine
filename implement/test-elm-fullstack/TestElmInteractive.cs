@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -15,6 +14,8 @@ public class TestElmInteractive
     [TestMethod]
     public void TestElmInteractiveScenarios()
     {
+        var console = (IConsole)StaticConsole.Instance;
+
         var scenarios =
             Directory.EnumerateDirectories(pathToScenariosDirectory)
             .SelectMany(scenarioDirectory =>
@@ -36,30 +37,43 @@ public class TestElmInteractive
                 scenarios,
                 scenario => LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!);
 
-        Console.WriteLine("Total scenarios: " + scenariosResults.Count);
-        Console.WriteLine("Passed: " + scenariosResults.Values.Count(scenarioResult => scenarioResult.Passed));
-
-        var failedScenarios =
+        var allSteps =
             scenariosResults
-            .Where(scenarioNameAndResult => !scenarioNameAndResult.Value.Passed)
+            .SelectMany(scenario => scenario.Value.stepsReports.Select(step => (scenario, step)))
             .ToImmutableList();
 
-        foreach (var scenarioNameAndResult in failedScenarios)
-        {
-            var causeText =
-                scenarioNameAndResult.Value.Exception != null ?
-                "exception:\n" + scenarioNameAndResult.Value.Exception.ToString()
-                :
-                "unknown cause";
+        var passedSteps =
+            allSteps.Where(step => step.step.result.IsOk()).ToImmutableList();
 
-            Console.WriteLine("Scenario '" + scenarioNameAndResult.Key.scenarioName + "' failed with " + causeText);
-        }
+        var failedSteps =
+            allSteps.Where(step => !step.step.result.IsOk()).ToImmutableList();
 
-        if (failedScenarios.Any())
+        var failedScenarios =
+            failedSteps
+            .GroupBy(failedStep => failedStep.scenario.Key.scenarioName)
+            .ToImmutableSortedDictionary(
+                keySelector: failedScenario => failedScenario.Key,
+                elementSelector: failedScenario => failedScenario);
+
+        console.WriteLine("Total scenarios: " + scenariosResults.Count);
+        console.WriteLine("Total steps: " + allSteps.Count);
+        console.WriteLine("Passed scenarios: " + scenariosResults.Values.Count(scenarioResult => scenarioResult.Passed));
+        console.WriteLine("Passed steps: " + passedSteps.Count);
+
+        foreach (var failedScenario in failedScenarios)
         {
-            throw new Exception(
-                "Failed for " + failedScenarios.Count + " scenarios:\n" +
-                string.Join("\n", failedScenarios.Select(scenarioNameAndResult => scenarioNameAndResult.Key.scenarioName)));
+            var scenarioId = failedScenario.Value.Key;
+
+            console.WriteLine(
+                "Failed " + failedScenario.Value.Count() + " step(s) in scenario " + scenarioId + ":",
+                color: IConsole.TextColor.Red);
+
+            foreach (var failedStep in failedScenario.Value)
+            {
+                console.WriteLine(
+                    "Failed step '" + failedStep.step.name + "':\n" + failedStep.step.result?.Err?.errorAsText!,
+                    color: IConsole.TextColor.Red);
+            }
         }
     }
 }
