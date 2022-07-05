@@ -347,42 +347,28 @@ pineKernelFunctions =
                                 ListValue [ argumentNameValue, functionExpressionValue ] ->
                                     stringFromValue argumentNameValue
                                         |> Result.mapError DescribePathEnd
-                                        |> Result.andThen
+                                        |> Result.map
                                             (\argumentName ->
-                                                decodeExpressionFromValue functionExpressionValue
-                                                    |> Result.mapError DescribePathEnd
-                                                    |> Result.map
-                                                        (\funcExpr ->
-                                                            ApplicationExpression
-                                                                { function =
-                                                                    ApplicationExpression
-                                                                        { function =
-                                                                            funcExpr
-                                                                                |> encodeExpressionAsValue
+                                                ApplicationExpression
+                                                    { function = functionExpressionValue |> LiteralExpression
+                                                    , argument =
+                                                        KernelApplicationExpression
+                                                            { functionName = "concat"
+                                                            , argument =
+                                                                ListExpression
+                                                                    [ ListExpression
+                                                                        [ ListExpression
+                                                                            [ argumentName
+                                                                                |> valueFromString
                                                                                 |> LiteralExpression
-                                                                        , argument = ApplicationArgumentExpression
-                                                                        }
-                                                                        |> encodeExpressionAsValue
-                                                                        |> LiteralExpression
-                                                                , argument =
-                                                                    KernelApplicationExpression
-                                                                        { functionName = "concat"
-                                                                        , argument =
-                                                                            ListExpression
-                                                                                [ ListExpression
-                                                                                    [ ListExpression
-                                                                                        [ argumentName
-                                                                                            |> valueFromString
-                                                                                            |> LiteralExpression
-                                                                                        , ApplicationArgumentExpression
-                                                                                        ]
-                                                                                    ]
-                                                                                , LiteralExpression (ListValue contextElements)
-                                                                                ]
-                                                                        }
-                                                                }
-                                                                |> encodeExpressionAsValue
-                                                        )
+                                                                            , ApplicationArgumentExpression
+                                                                            ]
+                                                                        ]
+                                                                    , LiteralExpression (ListValue contextElements)
+                                                                    ]
+                                                            }
+                                                    }
+                                                    |> encodeExpressionAsValue
                                             )
 
                                 _ ->
