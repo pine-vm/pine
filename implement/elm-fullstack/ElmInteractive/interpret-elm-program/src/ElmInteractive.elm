@@ -97,35 +97,34 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
 submissionInInteractiveInPineContext : Pine.EvalContext -> String -> Result String ( Pine.EvalContext, SubmissionResponse )
 submissionInInteractiveInPineContext expressionContext submission =
-    case parseInteractiveSubmissionFromString submission of
-        Err error ->
-            Err ("Failed to parse submission: " ++ error)
+    parseInteractiveSubmissionIntoPineExpression submission
+        |> Result.andThen
+            (\pineExpression ->
+                case Pine.evaluateExpression expressionContext pineExpression of
+                    Err error ->
+                        Err ("Failed to evaluate expression:\n" ++ Pine.displayStringFromPineError error)
 
-        Ok (DeclarationSubmission elmDeclaration) ->
-            case expandContextWithElmDeclaration elmDeclaration expressionContext of
-                Err expandError ->
-                    Err ("Failed to expand the context with declaration: " ++ expandError)
+                    Ok (Pine.BlobValue _) ->
+                        Err "Type mismatch: Pine expression evaluated to a blob"
 
-                Ok expandedContext ->
-                    Ok ( expandedContext, SubmissionResponseNoValue )
+                    Ok (Pine.ListValue [ newState, responseValue ]) ->
+                        case pineValueAsElmValue responseValue of
+                            Err error ->
+                                Err ("Failed to encode as Elm value: " ++ error)
 
-        Ok (ExpressionSubmission elmExpression) ->
-            case pineExpressionFromElm elmExpression of
-                Err error ->
-                    Err ("Failed to map from Elm to Pine expression: " ++ error)
+                            Ok valueAsElmValue ->
+                                Ok
+                                    ( { applicationArgument = newState }
+                                    , SubmissionResponseValue { value = valueAsElmValue }
+                                    )
 
-                Ok pineExpression ->
-                    case Pine.evaluateExpression expressionContext pineExpression of
-                        Err error ->
-                            Err ("Failed to evaluate expression:\n" ++ Pine.displayStringFromPineError error)
-
-                        Ok pineValue ->
-                            case pineValueAsElmValue pineValue of
-                                Err error ->
-                                    Err ("Failed to encode as Elm value: " ++ error)
-
-                                Ok valueAsElmValue ->
-                                    Ok ( expressionContext, SubmissionResponseValue { value = valueAsElmValue } )
+                    Ok (Pine.ListValue resultList) ->
+                        Err
+                            ("Type mismatch: Pine expression evaluated to a list with unexpected number of elements: "
+                                ++ String.fromInt (List.length resultList)
+                                ++ " instead of 2"
+                            )
+            )
 
 
 expandContextWithElmDeclaration : Elm.Syntax.Declaration.Declaration -> Pine.EvalContext -> Result String Pine.EvalContext
@@ -2584,6 +2583,80 @@ operatorPrecendencePriority =
     , ( "/", 1 )
     ]
         |> Dict.fromList
+
+
+{-| The expression evaluates to a list with two elements:
+The first element contains the new interactive session state for the possible next submission.
+The second element contains the response, the value to display to the user.
+-}
+parseInteractiveSubmissionIntoPineExpression : String -> Result String Pine.Expression
+parseInteractiveSubmissionIntoPineExpression submission =
+    case parseInteractiveSubmissionFromString submission of
+        Err error ->
+            Err ("Failed to parse submission: " ++ error)
+
+        Ok (DeclarationSubmission elmDeclaration) ->
+            case elmDeclaration of
+                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                    case pineExpressionFromElmFunction functionDeclaration of
+                        Err error ->
+                            Err ("Failed to translate Elm function declaration: " ++ error)
+
+                        Ok ( declaredName, declaredFunctionExpression ) ->
+                            Ok
+                                (Pine.ListExpression
+                                    [ Pine.KernelApplicationExpression
+                                        { functionName = "concat"
+                                        , argument =
+                                            Pine.ListExpression
+                                                [ Pine.ListExpression
+                                                    [ Pine.LiteralExpression
+                                                        (Pine.valueFromContextExpansionWithName
+                                                            ( declaredName
+                                                            , Pine.encodeExpressionAsValue declaredFunctionExpression
+                                                            )
+                                                        )
+                                                    ]
+                                                , Pine.ApplicationArgumentExpression
+                                                ]
+                                        }
+                                    , Pine.LiteralExpression (Pine.valueFromString ("Declared " ++ declaredName))
+                                    ]
+                                )
+
+                Elm.Syntax.Declaration.AliasDeclaration _ ->
+                    Err "Alias declaration as submission is not implemented"
+
+                Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+                    Err "Custom type declaration as submission is not implemented"
+
+                Elm.Syntax.Declaration.PortDeclaration _ ->
+                    Err "Port declaration as submission is not implemented"
+
+                Elm.Syntax.Declaration.InfixDeclaration _ ->
+                    Err "Infix declaration as submission is not implemented"
+
+                Elm.Syntax.Declaration.Destructuring _ _ ->
+                    Err "Destructuring as submission is not implemented"
+
+        Ok (ExpressionSubmission elmExpression) ->
+            case pineExpressionFromElm elmExpression of
+                Err error ->
+                    Err ("Failed to map from Elm to Pine expression: " ++ error)
+
+                Ok pineExpression ->
+                    Ok
+                        (Pine.ListExpression
+                            [ Pine.ApplicationArgumentExpression
+                            , Pine.ApplicationExpression
+                                { function =
+                                    pineExpression
+                                        |> Pine.encodeExpressionAsValue
+                                        |> Pine.LiteralExpression
+                                , argument = Pine.ApplicationArgumentExpression
+                                }
+                            ]
+                        )
 
 
 parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission
