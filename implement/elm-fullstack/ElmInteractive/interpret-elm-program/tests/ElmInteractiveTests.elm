@@ -1,8 +1,10 @@
 module ElmInteractiveTests exposing (..)
 
+import BigInt
 import ElmInteractive exposing (InteractiveContext(..))
 import Expect
 import Json.Encode
+import Pine
 import Test
 
 
@@ -442,3 +444,196 @@ expectationForElmInteractiveScenario scenario =
                 )
             |> Result.map ElmInteractive.elmValueAsExpression
         )
+
+
+evolutionStagesToMakeElmFunction : Test.Test
+evolutionStagesToMakeElmFunction =
+    [ Test.test "Literal" <|
+        \_ ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                , Pine.LiteralExpression (Pine.valueFromString "just a literal")
+                ]
+                |> Pine.evaluateExpression Pine.emptyEvalContext
+                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Expect.equal
+                    (Ok (Pine.LiteralExpression (Pine.valueFromString "just a literal")))
+    , Test.test "List with one element" <|
+        \_ ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                        , Pine.LiteralExpression (Pine.valueFromString "test")
+                        ]
+                    ]
+                ]
+                |> Pine.evaluateExpression Pine.emptyEvalContext
+                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Expect.equal
+                    (Ok
+                        (Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "test") ]
+                        )
+                    )
+    , Test.test "Kernel application with empty list" <|
+        \_ ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                        , Pine.LiteralExpression (Pine.valueFromString "kernel_function_name")
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                        , Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "List")
+                            , Pine.LiteralExpression (Pine.ListValue [])
+                            ]
+                        ]
+                    ]
+                ]
+                |> Pine.evaluateExpression Pine.emptyEvalContext
+                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Expect.equal
+                    (Ok
+                        (Pine.KernelApplicationExpression
+                            { functionName = "kernel_function_name"
+                            , argument = Pine.ListExpression []
+                            }
+                        )
+                    )
+    , Test.test "Kernel application concat" <|
+        \_ ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                        , Pine.LiteralExpression (Pine.valueFromString "concat")
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                        , Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                            , Pine.ApplicationArgumentExpression
+                            ]
+                        ]
+                    ]
+                ]
+                |> Pine.evaluateExpression
+                    (Pine.emptyEvalContext
+                        |> Pine.addToContextAppArgument
+                            [ Pine.valueFromContextExpansionWithName
+                                ( "alfa", Pine.valueFromBigInt (BigInt.fromInt 123) )
+                            ]
+                    )
+                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Expect.equal
+                    (Ok
+                        (Pine.KernelApplicationExpression
+                            { functionName = "concat"
+                            , argument =
+                                Pine.LiteralExpression
+                                    (Pine.ListValue
+                                        [ Pine.valueFromContextExpansionWithName
+                                            ( "alfa", Pine.valueFromBigInt (BigInt.fromInt 123) )
+                                        ]
+                                    )
+                            }
+                        )
+                    )
+    , Test.test "Kernel application concat with context" <|
+        \_ ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                        , Pine.LiteralExpression (Pine.valueFromString "concat")
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                        , Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "List")
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                    , Pine.ApplicationArgumentExpression
+                                    ]
+                                , Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "ApplicationArgument")
+                                    , Pine.ListExpression []
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+                |> Pine.evaluateExpression
+                    (Pine.emptyEvalContext
+                        |> Pine.addToContextAppArgument
+                            [ Pine.valueFromContextExpansionWithName
+                                ( "beta", Pine.valueFromBigInt (BigInt.fromInt 345) )
+                            ]
+                    )
+                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Expect.equal
+                    (Ok
+                        (Pine.KernelApplicationExpression
+                            { functionName = "concat"
+                            , argument =
+                                Pine.ListExpression
+                                    [ Pine.LiteralExpression
+                                        (Pine.ListValue
+                                            [ Pine.valueFromContextExpansionWithName
+                                                ( "beta", Pine.valueFromBigInt (BigInt.fromInt 345) )
+                                            ]
+                                        )
+                                    , Pine.ApplicationArgumentExpression
+                                    ]
+                            }
+                        )
+                    )
+    , Test.test "Complete make function" <|
+        \_ ->
+            Pine.LiteralExpression (Pine.valueFromString "Not really a function")
+                |> ElmInteractive.makeElmFunction "argument_name"
+                |> Pine.evaluateExpression
+                    (Pine.emptyEvalContext
+                        |> Pine.addToContextAppArgument
+                            [ Pine.valueFromContextExpansionWithName
+                                ( "delta", Pine.valueFromBigInt (BigInt.fromInt 567) )
+                            ]
+                    )
+                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Expect.equal
+                    (Ok
+                        (Pine.ApplicationExpression
+                            { function = Pine.LiteralExpression (Pine.valueFromString "Not really a function")
+                            , argument =
+                                Pine.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument =
+                                        Pine.ListExpression
+                                            [ Pine.ListExpression
+                                                [ Pine.ListExpression
+                                                    [ Pine.LiteralExpression (Pine.valueFromString "argument_name")
+                                                    , Pine.ApplicationArgumentExpression
+                                                    ]
+                                                ]
+                                            , Pine.LiteralExpression
+                                                (Pine.ListValue
+                                                    [ Pine.valueFromContextExpansionWithName
+                                                        ( "delta", Pine.valueFromBigInt (BigInt.fromInt 567) )
+                                                    ]
+                                                )
+                                            ]
+                                    }
+                            }
+                        )
+                    )
+    ]
+        |> Test.describe "Make Elm Function"

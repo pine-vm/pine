@@ -1924,17 +1924,57 @@ functionExpressionFromArgumentsNamesAndExpression argumentsNames expression =
 
 buildFunctionBindingArgumentToName : String -> Pine.Expression -> Pine.Expression
 buildFunctionBindingArgumentToName argumentName function =
-    -- TODO: Use 'function' tag analog to record tag
-    applyKernelFunctionWithTwoArguments
-        "make_elm_func"
-        Pine.ApplicationArgumentExpression
-        (Pine.ListExpression
-            [ Pine.LiteralExpression (Pine.valueFromString argumentName)
-            , function
-                |> Pine.encodeExpressionAsValue
-                |> Pine.LiteralExpression
+    makeElmFunction argumentName (Pine.LiteralExpression (Pine.encodeExpressionAsValue function))
+
+
+{-| Builds an expression that maps the current application argument into a literal and wraps that in a function application expression that will bind the next application argument to the given name, together with the earlier captured context.
+In other words, it captures the current environment together with the function to enable transport to and reuse in other places.
+-}
+makeElmFunction : String -> Pine.Expression -> Pine.Expression
+makeElmFunction argumentName functionExpression =
+    Pine.ListExpression
+        [ Pine.LiteralExpression (Pine.valueFromString "Application")
+        , Pine.ListExpression
+            [ Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "function")
+                , functionExpression |> Pine.encodeExpressionAsValue |> Pine.LiteralExpression
+                ]
+            , Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                , Pine.ListExpression
+                    [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
+                    , Pine.ListExpression
+                        [ Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                            , Pine.LiteralExpression (Pine.valueFromString "concat")
+                            ]
+                        , Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                            , Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                , Pine.ListExpression
+                                    [ Pine.ListExpression
+                                        [ Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString argumentName)
+                                            , Pine.ApplicationArgumentExpression
+                                            ]
+                                        ]
+                                        |> Pine.encodeExpressionAsValue
+                                        |> Pine.LiteralExpression
+                                    , Pine.ListExpression
+                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+
+                                        -- Below is the part we cannot express using a literal.
+                                        , Pine.ApplicationArgumentExpression
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
             ]
-        )
+        ]
 
 
 buildPositionalApplicationExpression : { function : Pine.Expression, argument : Pine.Expression } -> Pine.Expression
@@ -1983,9 +2023,7 @@ pineExpressionFromElmValueConstructor valueConstructor =
         ( constructorName
         , argumentsNames
             |> List.foldl
-                (\argumentName prevExpression ->
-                    buildFunctionBindingArgumentToName argumentName prevExpression
-                )
+                buildFunctionBindingArgumentToName
                 (Pine.tagValueExpression constructorName (argumentsNames |> List.map expressionToLookupNameInEnvironment))
         )
 

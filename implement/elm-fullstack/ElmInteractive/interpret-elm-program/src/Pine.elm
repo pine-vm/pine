@@ -335,49 +335,6 @@ pineKernelFunctions =
                         |> Result.map (List.singleton >> ListValue)
             }
       )
-    , ( "make_elm_func"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = Ok
-            , mapArg1 = Ok
-            , apply =
-                \contextValue argumentNameAndFunctionExpr ->
-                    case contextValue of
-                        ListValue contextElements ->
-                            case argumentNameAndFunctionExpr of
-                                ListValue [ argumentNameValue, functionExpressionValue ] ->
-                                    stringFromValue argumentNameValue
-                                        |> Result.mapError DescribePathEnd
-                                        |> Result.map
-                                            (\argumentName ->
-                                                ApplicationExpression
-                                                    { function = functionExpressionValue |> LiteralExpression
-                                                    , argument =
-                                                        KernelApplicationExpression
-                                                            { functionName = "concat"
-                                                            , argument =
-                                                                ListExpression
-                                                                    [ ListExpression
-                                                                        [ ListExpression
-                                                                            [ argumentName
-                                                                                |> valueFromString
-                                                                                |> LiteralExpression
-                                                                            , ApplicationArgumentExpression
-                                                                            ]
-                                                                        ]
-                                                                    , LiteralExpression (ListValue contextElements)
-                                                                    ]
-                                                            }
-                                                    }
-                                                    |> encodeExpressionAsValue
-                                            )
-
-                                _ ->
-                                    Err (DescribePathEnd "Unexpected shape in argumentNameAndFunctionExpr")
-
-                        _ ->
-                            Err (DescribePathEnd "Unexpected shape in contextValue")
-            }
-      )
     ]
         |> Dict.fromList
 

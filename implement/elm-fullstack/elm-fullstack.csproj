@@ -5,8 +5,8 @@
     <TargetFramework>net6.0</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2022.0705.0.0</AssemblyVersion>
-    <FileVersion>2022.0705.0.0</FileVersion>
+    <AssemblyVersion>2022.0706.0.0</AssemblyVersion>
+    <FileVersion>2022.0706.0.0</FileVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
