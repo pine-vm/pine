@@ -8,16 +8,12 @@ import Result.Extra
 
 type Expression
     = LiteralExpression Value
-    | ListExpression ListExpressionStructure
+    | ListExpression (List Expression)
     | ApplicationExpression ApplicationExpressionStructure
     | KernelApplicationExpression KernelApplicationExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
     | ApplicationArgumentExpression
     | StringTagExpression StringTagExpressionStructure
-
-
-type alias ListExpressionStructure =
-    List Expression
 
 
 type alias KernelApplicationExpressionStructure =
@@ -104,16 +100,16 @@ evaluateExpression context expression =
                     )
 
         KernelApplicationExpression application ->
-            case Dict.get application.functionName pineKernelFunctions of
+            case Dict.get application.functionName kernelFunctions of
                 Nothing ->
                     Err
                         (DescribePathEnd
                             ("Did not find kernel function '"
                                 ++ application.functionName
                                 ++ "'. There are "
-                                ++ String.fromInt (Dict.size pineKernelFunctions)
+                                ++ String.fromInt (Dict.size kernelFunctions)
                                 ++ " kernel functions available: "
-                                ++ String.join ", " (Dict.keys pineKernelFunctions)
+                                ++ String.join ", " (Dict.keys kernelFunctions)
                             )
                         )
 
@@ -223,10 +219,10 @@ lookUpNameInListValue nameAsValue context =
             Err (DescribePathEnd "applicationArgument is not a list")
 
 
-pineKernelFunctions : Dict.Dict String KernelFunction
-pineKernelFunctions =
+kernelFunctions : Dict.Dict String KernelFunction
+kernelFunctions =
     [ ( "equal"
-      , pineDecodeList
+      , decodePineListValue
             >> Result.map
                 (\list ->
                     list
@@ -281,7 +277,7 @@ pineKernelFunctions =
             >> Ok
       )
     , ( "concat"
-      , pineDecodeList
+      , decodePineListValue
             >> Result.mapError DescribePathEnd
             >> Result.map
                 (List.foldl
@@ -300,7 +296,7 @@ pineKernelFunctions =
                 )
       )
     , ( "list_head"
-      , pineDecodeList
+      , decodePineListValue
             >> Result.map (List.head >> Maybe.withDefault (ListValue []))
             >> Result.mapError DescribePathEnd
       )
@@ -413,7 +409,7 @@ kernelFunctionExpectingListOfBigInt :
     -> Value
     -> Result (PathDescription String) Value
 kernelFunctionExpectingListOfBigInt apply =
-    pineDecodeList
+    decodePineListValue
         >> Result.andThen (List.map bigIntFromValue >> Result.Extra.combine)
         >> Result.andThen apply
         >> Result.mapError DescribePathEnd
@@ -430,7 +426,7 @@ kernelFunctionExpectingExactlyTwoBigInt apply =
 
 kernelFunctionExpectingListOfTypeBool : (List Bool -> Bool) -> KernelFunction
 kernelFunctionExpectingListOfTypeBool apply =
-    pineDecodeList
+    decodePineListValue
         >> Result.andThen (List.map (boolFromValue >> Result.fromMaybe "Value is neither True nor False") >> Result.Extra.combine)
         >> Result.map (apply >> valueFromBool)
         >> Result.mapError DescribePathEnd
@@ -443,7 +439,8 @@ kernelFunctionExpectingExactlyTwoArguments :
     }
     -> KernelFunction
 kernelFunctionExpectingExactlyTwoArguments configuration =
-    pineDecodeListWithExactlyTwoElements
+    decodePineListValue
+        >> Result.andThen decodeListWithExactlyTwoElements
         >> Result.mapError DescribePathEnd
         >> Result.andThen
             (\( arg0Value, arg1Value ) ->
@@ -757,17 +754,7 @@ hexadecimalRepresentationFromBlobValue =
 
 
 encodeExpressionAsValue : Expression -> Value
-encodeExpressionAsValue =
-    pineEncodeExpression
-
-
-decodeExpressionFromValue : Value -> Result String Expression
-decodeExpressionFromValue =
-    pineDecodeExpression
-
-
-pineEncodeExpression : Expression -> Value
-pineEncodeExpression expression =
+encodeExpressionAsValue expression =
     (case expression of
         LiteralExpression literal ->
             ( "Literal"
@@ -776,25 +763,25 @@ pineEncodeExpression expression =
 
         ListExpression listExpr ->
             ( "List"
-            , listExpr |> List.map pineEncodeExpression |> ListValue
+            , listExpr |> List.map encodeExpressionAsValue |> ListValue
             )
 
         ApplicationExpression app ->
             ( "Application"
-            , [ ( "function", pineEncodeExpression app.function )
-              , ( "argument", pineEncodeExpression app.argument )
+            , [ ( "function", encodeExpressionAsValue app.function )
+              , ( "argument", encodeExpressionAsValue app.argument )
               ]
                 |> Dict.fromList
-                |> pineEncodeRecord
+                |> encodeRecordToPineValue
             )
 
         KernelApplicationExpression app ->
             ( "KernelApplication"
             , [ ( "functionName", valueFromString app.functionName )
-              , ( "argument", pineEncodeExpression app.argument )
+              , ( "argument", encodeExpressionAsValue app.argument )
               ]
                 |> Dict.fromList
-                |> pineEncodeRecord
+                |> encodeRecordToPineValue
             )
 
         ConditionalExpression conditional ->
@@ -803,9 +790,9 @@ pineEncodeExpression expression =
               , ( "ifTrue", conditional.ifTrue )
               , ( "ifFalse", conditional.ifFalse )
               ]
-                |> List.map (Tuple.mapSecond pineEncodeExpression)
+                |> List.map (Tuple.mapSecond encodeExpressionAsValue)
                 |> Dict.fromList
-                |> pineEncodeRecord
+                |> encodeRecordToPineValue
             )
 
         ApplicationArgumentExpression ->
@@ -819,115 +806,91 @@ pineEncodeExpression expression =
               , ( "tagged", encodeExpressionAsValue tagged )
               ]
                 |> Dict.fromList
-                |> pineEncodeRecord
+                |> encodeRecordToPineValue
             )
     )
-        |> (\( tagName, unionTagValue ) -> pineEncodeUnion tagName unionTagValue)
+        |> (\( tagName, unionTagValue ) -> encodeUnionToPineValue tagName unionTagValue)
 
 
-pineDecodeExpression : Value -> Result String Expression
-pineDecodeExpression value =
+decodeExpressionFromValue : Value -> Result String Expression
+decodeExpressionFromValue value =
     value
-        |> pineDecodeUnion
-            ([ ( "Literal"
-               , LiteralExpression >> Ok
-               )
-             , ( "List"
-               , pineDecodeList
-                    >> Result.andThen (List.map pineDecodeExpression >> Result.Extra.combine)
-                    >> Result.map ListExpression
-               )
-             , ( "Application"
-               , pineDecodeApplicationExpression >> Result.map ApplicationExpression
-               )
-             , ( "KernelApplication"
-               , pineDecodeKernelApplicationExpression >> Result.map KernelApplicationExpression
-               )
-             , ( "Conditional"
-               , pineDecodeConditionalExpression >> Result.map ConditionalExpression
-               )
-             , ( "ApplicationArgument"
-               , always (Ok ApplicationArgumentExpression)
-               )
-             , ( "StringTag"
-               , pineDecodeStringTagExpression >> Result.map StringTagExpression
-               )
-             ]
-                |> Dict.fromList
+        |> decodeUnionFromPineValue
+            (Dict.fromList
+                [ ( "Literal"
+                  , LiteralExpression >> Ok
+                  )
+                , ( "List"
+                  , decodePineListValue
+                        >> Result.andThen (List.map decodeExpressionFromValue >> Result.Extra.combine)
+                        >> Result.map ListExpression
+                  )
+                , ( "Application"
+                  , decodeApplicationExpression >> Result.map ApplicationExpression
+                  )
+                , ( "KernelApplication"
+                  , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
+                  )
+                , ( "Conditional"
+                  , decodeConditionalExpression >> Result.map ConditionalExpression
+                  )
+                , ( "ApplicationArgument"
+                  , always (Ok ApplicationArgumentExpression)
+                  )
+                , ( "StringTag"
+                  , decodeStringTagExpression >> Result.map StringTagExpression
+                  )
+                ]
             )
 
 
-pineDecodeApplicationExpression : Value -> Result String ApplicationExpressionStructure
-pineDecodeApplicationExpression =
-    pineDecodeRecord
+decodeApplicationExpression : Value -> Result String ApplicationExpressionStructure
+decodeApplicationExpression =
+    decodeRecordFromPineValue
         >> Result.andThen
             (always (Ok ApplicationExpressionStructure)
-                |> pineDecodeRecordField "function" pineDecodeExpression
-                |> pineDecodeRecordField "argument" pineDecodeExpression
+                |> decodeRecordField "function" decodeExpressionFromValue
+                |> decodeRecordField "argument" decodeExpressionFromValue
             )
 
 
-pineDecodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
-pineDecodeKernelApplicationExpression =
-    pineDecodeRecord
+decodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
+decodeKernelApplicationExpression =
+    decodeRecordFromPineValue
         >> Result.andThen
             (always (Ok KernelApplicationExpressionStructure)
-                |> pineDecodeRecordField "functionName" stringFromValue
-                |> pineDecodeRecordField "argument" pineDecodeExpression
+                |> decodeRecordField "functionName" stringFromValue
+                |> decodeRecordField "argument" decodeExpressionFromValue
             )
 
 
-pineDecodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
-pineDecodeConditionalExpression =
-    pineDecodeRecord
+decodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
+decodeConditionalExpression =
+    decodeRecordFromPineValue
         >> Result.andThen
             (always (Ok ConditionalExpressionStructure)
-                |> pineDecodeRecordField "condition" pineDecodeExpression
-                |> pineDecodeRecordField "ifTrue" pineDecodeExpression
-                |> pineDecodeRecordField "ifFalse" pineDecodeExpression
+                |> decodeRecordField "condition" decodeExpressionFromValue
+                |> decodeRecordField "ifTrue" decodeExpressionFromValue
+                |> decodeRecordField "ifFalse" decodeExpressionFromValue
             )
 
 
-pineDecodeStringTagExpression : Value -> Result String StringTagExpressionStructure
-pineDecodeStringTagExpression =
-    pineDecodeRecord
+decodeStringTagExpression : Value -> Result String StringTagExpressionStructure
+decodeStringTagExpression =
+    decodeRecordFromPineValue
         >> Result.andThen
             (always (Ok StringTagExpressionStructure)
-                |> pineDecodeRecordField "tag" stringFromValue
-                |> pineDecodeRecordField "tagged" pineDecodeExpression
+                |> decodeRecordField "tag" stringFromValue
+                |> decodeRecordField "tagged" decodeExpressionFromValue
             )
 
 
-pineEncodeMaybe : (a -> Value) -> Maybe a -> Value
-pineEncodeMaybe justEncoder maybe =
-    case maybe of
-        Nothing ->
-            pineEncodeUnion "Nothing" (ListValue [])
-
-        Just just ->
-            pineEncodeUnion "Just" (justEncoder just)
-
-
-pineDecodeMaybe : (Value -> Result String a) -> Value -> Result String (Maybe a)
-pineDecodeMaybe justDecoder =
-    pineDecodeUnion
-        ([ ( "Nothing"
-           , always (Ok Nothing)
-           )
-         , ( "Just"
-           , justDecoder >> Result.map Just
-           )
-         ]
-            |> Dict.fromList
-        )
-
-
-pineDecodeRecordField :
+decodeRecordField :
     String
-    -> (Value -> Result String field)
-    -> (Dict.Dict String Value -> Result String (field -> record))
-    -> (Dict.Dict String Value -> Result String record)
-pineDecodeRecordField fieldName fieldDecoder finalDecoder =
+    -> (recordfield -> Result String field)
+    -> (Dict.Dict String recordfield -> Result String (field -> record))
+    -> (Dict.Dict String recordfield -> Result String record)
+decodeRecordField fieldName fieldDecoder finalDecoder =
     \recordDict ->
         case Dict.get fieldName recordDict of
             Nothing ->
@@ -945,16 +908,16 @@ pineDecodeRecordField fieldName fieldDecoder finalDecoder =
                         )
 
 
-pineDecodeRecord : Value -> Result String (Dict.Dict String Value)
-pineDecodeRecord =
-    pineDecodeList
+decodeRecordFromPineValue : Value -> Result String (Dict.Dict String Value)
+decodeRecordFromPineValue =
+    decodePineListValue
         >> Result.andThen
             (List.foldl
                 (\fieldAsValue ->
                     Result.andThen
                         (\fields ->
                             fieldAsValue
-                                |> pineDecodeList
+                                |> decodePineListValue
                                 |> Result.andThen
                                     (\fieldList ->
                                         case fieldList of
@@ -973,25 +936,25 @@ pineDecodeRecord =
         >> Result.map Dict.fromList
 
 
-pineEncodeRecord : Dict.Dict String Value -> Value
-pineEncodeRecord fields =
-    fields
-        |> Dict.toList
-        |> List.map
+encodeRecordToPineValue : Dict.Dict String Value -> Value
+encodeRecordToPineValue =
+    Dict.toList
+        >> List.map
             (\( fieldName, fieldValue ) ->
                 ListValue [ valueFromString fieldName, fieldValue ]
             )
-        |> ListValue
+        >> ListValue
 
 
-pineEncodeUnion : String -> Value -> Value
-pineEncodeUnion tagName unionTagValue =
+encodeUnionToPineValue : String -> Value -> Value
+encodeUnionToPineValue tagName unionTagValue =
     ListValue [ valueFromString tagName, unionTagValue ]
 
 
-pineDecodeUnion : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
-pineDecodeUnion tags =
-    pineDecodeListWithExactlyTwoElements
+decodeUnionFromPineValue : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
+decodeUnionFromPineValue tags =
+    decodePineListValue
+        >> Result.andThen decodeListWithExactlyTwoElements
         >> Result.andThen
             (\( tagNameValue, unionTagValue ) ->
                 stringFromValue tagNameValue
@@ -1011,22 +974,18 @@ pineDecodeUnion tags =
         >> Result.mapError ((++) "Failed to decode union: ")
 
 
-pineDecodeListWithExactlyTwoElements : Value -> Result String ( Value, Value )
-pineDecodeListWithExactlyTwoElements =
-    pineDecodeList
-        >> Result.andThen
-            (\list ->
-                case list of
-                    [ a, b ] ->
-                        Ok ( a, b )
+decodeListWithExactlyTwoElements : List a -> Result String ( a, a )
+decodeListWithExactlyTwoElements list =
+    case list of
+        [ a, b ] ->
+            Ok ( a, b )
 
-                    _ ->
-                        Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
-            )
+        _ ->
+            Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
 
 
-pineDecodeList : Value -> Result String (List Value)
-pineDecodeList value =
+decodePineListValue : Value -> Result String (List Value)
+decodePineListValue value =
     case value of
         ListValue list ->
             Ok list
