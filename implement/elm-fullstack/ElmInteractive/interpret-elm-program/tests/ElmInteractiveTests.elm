@@ -433,16 +433,7 @@ expectationForElmInteractiveScenario :
 expectationForElmInteractiveScenario scenario =
     Expect.equal (Ok scenario.expectedValueElmExpression)
         (ElmInteractive.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
-            |> Result.andThen
-                (\submissionResponse ->
-                    case submissionResponse of
-                        ElmInteractive.SubmissionResponseNoValue ->
-                            Err "This submission does not evaluate to a value."
-
-                        ElmInteractive.SubmissionResponseValue responseWithValue ->
-                            Ok responseWithValue.value
-                )
-            |> Result.map ElmInteractive.elmValueAsExpression
+            |> Result.map .displayText
         )
 
 

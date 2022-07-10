@@ -33,9 +33,8 @@ type InteractiveContext
     | InitContextFromApp { modulesTexts : List String }
 
 
-type SubmissionResponse
-    = SubmissionResponseValue { value : ElmValue }
-    | SubmissionResponseNoValue
+type alias SubmissionResponse =
+    { displayText : String }
 
 
 type ElmValue
@@ -55,23 +54,9 @@ type alias ProjectParsedElmFile =
     }
 
 
-evaluateExpressionText : InteractiveContext -> String -> Result String Json.Encode.Value
-evaluateExpressionText context elmExpressionText =
-    submissionInInteractive context [] elmExpressionText
-        |> Result.andThen
-            (\submissionResponse ->
-                case submissionResponse of
-                    SubmissionResponseNoValue ->
-                        Err "This submission does not evaluate to a value."
-
-                    SubmissionResponseValue responseWithValue ->
-                        Ok (elmValueAsJson responseWithValue.value)
-            )
-
-
 submissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
 submissionInInteractive context previousSubmissions submission =
-    case pineExpressionContextForElmInteractive context of
+    case pineEvalContextForElmInteractive context of
         Err error ->
             Err ("Failed to prepare the initial context: " ++ error)
 
@@ -108,15 +93,8 @@ submissionInInteractiveInPineContext expressionContext submission =
                         Err "Type mismatch: Pine expression evaluated to a blob"
 
                     Ok (Pine.ListValue [ newState, responseValue ]) ->
-                        case pineValueAsElmValue responseValue of
-                            Err error ->
-                                Err ("Failed to encode as Elm value: " ++ error)
-
-                            Ok valueAsElmValue ->
-                                Ok
-                                    ( { applicationArgument = newState }
-                                    , SubmissionResponseValue { value = valueAsElmValue }
-                                    )
+                        submissionResponseFromResponsePineValue responseValue
+                            |> Result.map (Tuple.pair { applicationArgument = newState })
 
                     Ok (Pine.ListValue resultList) ->
                         Err
@@ -125,6 +103,16 @@ submissionInInteractiveInPineContext expressionContext submission =
                                 ++ " instead of 2"
                             )
             )
+
+
+submissionResponseFromResponsePineValue : Pine.Value -> Result String SubmissionResponse
+submissionResponseFromResponsePineValue responseValue =
+    case pineValueAsElmValue responseValue of
+        Err error ->
+            Err ("Failed to encode as Elm value: " ++ error)
+
+        Ok valueAsElmValue ->
+            Ok { displayText = elmValueAsExpression valueAsElmValue }
 
 
 expandContextWithElmDeclaration : Elm.Syntax.Declaration.Declaration -> Pine.EvalContext -> Result String Pine.EvalContext
@@ -339,8 +327,8 @@ elmValueAsElmRecord elmValue =
             Err "Value is not a list."
 
 
-pineExpressionContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
-pineExpressionContextForElmInteractive context =
+pineEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
+pineEvalContextForElmInteractive context =
     let
         contextModulesTexts =
             case context of

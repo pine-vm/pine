@@ -35,7 +35,7 @@ evalDelayFromUserInputMilliseconds =
 init : ( State, Cmd Event )
 init =
     ( { expression = ""
-      , evaluationContext = ElmInteractive.pineExpressionContextForElmInteractive ElmInteractive.DefaultContext
+      , evaluationContext = ElmInteractive.pineEvalContextForElmInteractive ElmInteractive.DefaultContext
       , lastUserInputExpressionTime = Nothing
       , lastEvaluatedExpression = Nothing
       }
@@ -123,7 +123,7 @@ updateLastEvaluatedExpression stateBefore =
                         Just
                             ( expression
                             , if String.isEmpty (String.trim expression) then
-                                Ok ElmInteractive.SubmissionResponseNoValue
+                                Ok { displayText = "" }
 
                               else
                                 ElmInteractive.submissionInInteractiveInPineContext evaluationContext expression
@@ -184,17 +184,12 @@ view state =
                                 |> monospaceParagraph
 
                         Ok evalSuccess ->
-                            case evalSuccess of
-                                ElmInteractive.SubmissionResponseNoValue ->
-                                    Element.text "Got no value in response for this submission."
-
-                                ElmInteractive.SubmissionResponseValue responseValue ->
-                                    (responseValue.value |> ElmInteractive.elmValueAsExpression)
-                                        |> Html.text
-                                        |> List.singleton
-                                        |> Html.div [ HA.style "white-space" "pre-wrap" ]
-                                        |> Element.html
-                                        |> monospaceParagraph
+                            evalSuccess.displayText
+                                |> Html.text
+                                |> List.singleton
+                                |> Html.div [ HA.style "white-space" "pre-wrap" ]
+                                |> Element.html
+                                |> monospaceParagraph
             in
             [ Element.text "Updating..."
                 |> Element.el [ Element.Font.size (defaultFontSize * 3 // 2), Element.transparent isUpToDate ]
@@ -214,7 +209,7 @@ view state =
         evalResultElement =
             case state.lastEvaluatedExpression of
                 Nothing ->
-                    evalResultElementFromEvalResult (Ok ElmInteractive.SubmissionResponseNoValue) False
+                    evalResultElementFromEvalResult (Ok { displayText = "" }) False
 
                 Just ( evaluatedExpression, evaluatedExpressionResult ) ->
                     evalResultElementFromEvalResult evaluatedExpressionResult (evaluatedExpression == state.expression)

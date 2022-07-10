@@ -23,16 +23,20 @@ public class TestElmInteractive
 
     static public ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
-        Func<TContainer, Composition.TreeWithStringPath> getScenario) where TContainer : notnull =>
+        Func<TContainer, Composition.TreeWithStringPath> getScenario,
+        ImplementationType implementationType) where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
         .WithDegreeOfParallelism(4)
-        .Select(scenarioContainer => (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer))))
+        .Select(scenarioContainer =>
+        (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer), implementationType)))
         .ToImmutableDictionary(
             s => s.scenarioContainer,
             elementSelector: s => s.testReport);
 
-    static public InteractiveScenarioTestReport TestElmInteractiveScenario(Composition.TreeWithStringPath scenarioTree)
+    static public InteractiveScenarioTestReport TestElmInteractiveScenario(
+        Composition.TreeWithStringPath scenarioTree,
+        ImplementationType implementationType)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -48,7 +52,7 @@ public class TestElmInteractive
         if (!stepsDirectory.TreeContent.Any())
             throw new Exception("Found no stepsDirectories");
 
-        using var interactiveSession = new InteractiveSession(appCodeTree: appCodeTree);
+        using var interactiveSession = IInteractiveSession.Create(appCodeTree: appCodeTree, implementationType);
 
         var testScenarioSteps = stepsDirectory.TreeContent;
 
@@ -86,13 +90,13 @@ public class TestElmInteractive
 
                         if (sessionStep.expectedResponse != null)
                         {
-                            if (sessionStep.expectedResponse != evalResult.Ok?.SubmissionResponseValue?.valueAsElmExpressionText)
+                            if (sessionStep.expectedResponse != evalResult.Ok?.displayText)
                             {
                                 var errorText =
                                 "Response from interactive does not match expected value. Expected:\n" +
                                 sessionStep.expectedResponse +
                                 "\nBut got this response:\n" +
-                                evalResult.Ok?.SubmissionResponseValue?.valueAsElmExpressionText;
+                                evalResult.Ok?.displayText;
 
                                 return Result<InteractiveScenarioTestStepFailure, object>.err(
                                     new InteractiveScenarioTestStepFailure(

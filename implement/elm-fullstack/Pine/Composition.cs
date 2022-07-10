@@ -13,8 +13,10 @@ public class Composition
         static public Component Blob(ReadOnlyMemory<byte> blobContent) =>
             new(BlobContent: blobContent);
 
-        static public Component List(ImmutableList<Component> listContent) =>
+        static public Component List(IImmutableList<Component> listContent) =>
             new(ListContent: listContent);
+
+        static public readonly Component EmptyList = List(ImmutableList<Component>.Empty);
 
         public virtual bool Equals(Component? other)
         {

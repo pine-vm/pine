@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Pine;
 
@@ -78,7 +78,7 @@ public record Result<ErrT, OkT>
     /// <summary>
     /// Prevent construction of invalid values: Make the default constructor private to force using the explicit construction methods.
     /// </summary>
-    protected Result(ErrT? Err = default, OkT? Ok = default)
+    internal Result(ErrT? Err = default, OkT? Ok = default)
     {
         if (!(default(ErrT) == null))
             throw new InvalidOperationException(

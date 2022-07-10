@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-07-07";
+    static public string AppVersionId => "2022-07-09";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -766,26 +766,42 @@ public class Program
     }
 
     static CommandLineApplication AddInteractiveCmd(CommandLineApplication app) =>
-        app.Command("interactive", enterInteractiveCmd =>
+        app.Command("interactive", interactiveCmd =>
         {
-            enterInteractiveCmd.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
+            interactiveCmd.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
 
             var contextAppOption =
-                enterInteractiveCmd
+                interactiveCmd
                 .Option(
                     template: "--context-app",
                     description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
                     optionType: CommandOptionType.SingleValue);
 
             var enableInspectionOption =
-                enterInteractiveCmd
+                interactiveCmd
                 .Option(
                     template: "--enable-inspection",
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
 
+            var implementationOption =
+                app
+                .Option(
+                    template: "--implementation",
+                    description: "Select the implementation for evaluating Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ImplementationType>()) + "). Defaults to " + ElmInteractive.IInteractiveSession.DefaultImplementation,
+                    optionType: CommandOptionType.SingleValue,
+                    inherited: true);
+
+            ElmInteractive.ImplementationType parseImplementationTypeFromOption()
+            {
+                if (implementationOption?.Value() is string implementationAsString)
+                    return Enum.Parse<ElmInteractive.ImplementationType>(implementationAsString, ignoreCase: true);
+
+                return ElmInteractive.IInteractiveSession.DefaultImplementation;
+            }
+
             var testCommand =
-                enterInteractiveCmd.Command("test", testCmd =>
+                interactiveCmd.Command("test", testCmd =>
                 {
                     testCmd.Description = "Test the interactive automatically with given scenarios and reports timings.";
 
@@ -897,7 +913,8 @@ public class Program
                         var scenariosResults =
                             ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                                 namedDistinctScenarios,
-                                namedScenario => namedScenario.Value.loadedScenario.component);
+                                namedScenario => namedScenario.Value.loadedScenario.component,
+                                parseImplementationTypeFromOption());
 
                         var allSteps =
                             scenariosResults
@@ -953,7 +970,7 @@ public class Program
                     });
                 });
 
-            enterInteractiveCmd.OnExecute(() =>
+            interactiveCmd.OnExecute(() =>
             {
                 ReadLine.HistoryEnabled = true;
 
@@ -981,7 +998,9 @@ public class Program
                         throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
                 }
 
-                using var interactiveSession = new ElmInteractive.InteractiveSession(appCodeTree: contextAppCodeTree);
+                using var interactiveSession = ElmInteractive.IInteractiveSession.Create(
+                    appCodeTree: contextAppCodeTree,
+                    parseImplementationTypeFromOption());
 
                 while (true)
                 {
@@ -1010,7 +1029,7 @@ public class Program
                             evalStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms.");
                     }
 
-                    Console.WriteLine(evalResult.Ok.SubmissionResponseValue?.valueAsElmExpressionText);
+                    Console.WriteLine(evalResult.Ok.displayText);
                 }
             });
         });

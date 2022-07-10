@@ -202,7 +202,7 @@ init =
             Time.millisToPosix 0
 
         evaluationContextResult =
-            ElmInteractive.pineExpressionContextForElmInteractive ElmInteractive.DefaultContext
+            ElmInteractive.pineEvalContextForElmInteractive ElmInteractive.DefaultContext
 
         trainingSession =
             case lessons of
@@ -854,12 +854,7 @@ computeSolutionFromLessonInContext evaluationContext lessonChallenge =
             "Failed to evaluate: " ++ error
 
         Ok ( _, response ) ->
-            case response of
-                ElmInteractive.SubmissionResponseNoValue ->
-                    "Submission has no return value"
-
-                ElmInteractive.SubmissionResponseValue responseValue ->
-                    responseValue.value |> ElmInteractive.elmValueAsExpression
+            response.displayText
 
 
 onEnter : event -> Element.Attribute event
