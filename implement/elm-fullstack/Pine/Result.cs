@@ -80,16 +80,6 @@ public record Result<ErrT, OkT>
     /// </summary>
     internal Result(ErrT? Err = default, OkT? Ok = default)
     {
-        if (!(default(ErrT) == null))
-            throw new InvalidOperationException(
-              "Only use types with a default value of null for the type argument " + nameof(ErrT) +
-              ". For value types, use Nullable<T> for wrapping.");
-
-        if (!(default(OkT) == null))
-            throw new InvalidOperationException(
-              "Only use types with a default value of null for the type argument " + nameof(OkT) +
-              ". For value types, use Nullable<T> for wrapping.");
-
         if (Err != null && Ok != null)
             throw new ArgumentException("Both Err and Ok are not null.");
 
@@ -98,5 +88,24 @@ public record Result<ErrT, OkT>
 
         this.Err = Err;
         this.Ok = Ok;
+    }
+
+    static Result()
+    {
+        /*
+         * Adapt to default(T?) not working.
+         * https://stackoverflow.com/questions/72170047/why-doesnt-return-defaultt-give-a-null-when-t-is-constrained-to-enum
+         * */
+
+        string composeErrorMessage(Type type) =>
+            "Problem with type arguments in instance " + typeof(Result<ErrT, OkT>).FullName + ": " +
+            "Only use types with a default value of null for the type argument " + type.FullName +
+              ". For value types, use Nullable<T> for wrapping.";
+
+        if (!(default(ErrT) == null))
+            throw new InvalidOperationException(composeErrorMessage(typeof(ErrT)));
+
+        if (!(default(OkT) == null))
+            throw new InvalidOperationException(composeErrorMessage(typeof(OkT)));
     }
 }

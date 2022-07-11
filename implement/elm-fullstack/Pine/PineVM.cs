@@ -137,14 +137,14 @@ public static class PineVM
 
     static readonly Composition.Component FalseValue = tagValue("False", ImmutableArray<Composition.Component>.Empty);
 
-    static public Result<string, bool> decodeBoolFromValue(Composition.Component value) =>
+    static public Result<string, bool?> decodeBoolFromValue(Composition.Component value) =>
         value == TrueValue
         ?
-        Result<string, bool>.ok(true)
+        Result<string, bool?>.ok(true)
         :
-        (value == FalseValue ? Result<string, bool>.ok(false)
+        (value == FalseValue ? Result<string, bool?>.ok(false)
         :
-        Result<string, bool>.err("Value is neither True nor False"));
+        Result<string, bool?>.err("Value is neither True nor False"));
 
     static Composition.Component tagValue(string tagName, IImmutableList<Composition.Component> tagArguments) =>
         Composition.Component.List(
@@ -331,12 +331,12 @@ public static class PineVM
             ?
             true
             :
-            list.All(e => e.Equals(list[0])))
-            .map(valueFromBool);
+            (bool?)list.All(e => e.Equals(list[0])))
+            .map(b => valueFromBool(b!.Value));
 
         static public Result<string, Composition.Component> logical_not(Composition.Component value) =>
             decodeBoolFromValue(value)
-            .map(b => valueFromBool(!b));
+            .map(b => valueFromBool(!b!.Value));
 
         static public Result<string, Composition.Component> logical_and(Composition.Component value) =>
             KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: true, func: (a, b) => a && b), value);
@@ -519,7 +519,7 @@ public static class PineVM
             Composition.Component value) =>
             DecodePineListValue(value)
             .andThen(list => ResultListMapCombine(list, decodeBoolFromValue))
-            .map(compose)
+            .map(bools => compose(bools.Select(b => b!.Value).ToImmutableList()))
             .map(valueFromBool);
     }
 }
