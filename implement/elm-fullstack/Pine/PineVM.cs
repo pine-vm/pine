@@ -515,12 +515,12 @@ public static class PineVM
             .andThen(argB => compose(argA, argB))));
 
         static Result<string, Composition.Component> KernelFunctionExpectingListOfTypeBool(
-            Func<IReadOnlyList<bool>, bool> compose,
+            Func<IReadOnlyList<bool>, bool?> compose,
             Composition.Component value) =>
             DecodePineListValue(value)
             .andThen(list => ResultListMapCombine(list, decodeBoolFromValue))
             .map(bools => compose(bools.Select(b => b!.Value).ToImmutableList()))
-            .map(valueFromBool);
+            .map(b => valueFromBool(b!.Value));
     }
 }
 
