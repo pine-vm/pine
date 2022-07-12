@@ -526,8 +526,8 @@ parseElmModuleTextIntoNamedExports availableForDependency moduleToTranslate =
         moduleName =
             Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule)
 
-        declarationsOfOtherModules : List (Result String ( String, DeclarationInTranslation ))
-        declarationsOfOtherModules =
+        declarationsOfOtherModulesResults : List (Result String ( String, DeclarationInTranslation ))
+        declarationsOfOtherModulesResults =
             availableForDependency
                 |> Dict.toList
                 |> List.map
@@ -616,33 +616,38 @@ parseElmModuleTextIntoNamedExports availableForDependency moduleToTranslate =
                                 []
                     )
     in
-    case (declarationsResults ++ declarationsOfOtherModules) |> Result.Extra.combine of
+    case declarationsOfOtherModulesResults |> Result.Extra.combine of
         Err error ->
-            Err ("Failed to translate declaration: " ++ error)
+            Err ("Failed to translate declaration for other module: " ++ error)
 
-        Ok declarations ->
-            let
-                declarationsDict =
-                    Dict.fromList declarations
+        Ok declarationsOfOtherModules ->
+            case declarationsResults |> Result.Extra.combine of
+                Err error ->
+                    Err ("Failed to translate declaration: " ++ error)
 
-                declarationsValues =
-                    declarations
-                        |> List.map
-                            (\( name, expression ) ->
-                                ( name, buildDeclarationValue declarationsDict ( name, expression ) )
-                            )
+                Ok declarations ->
+                    let
+                        availableDeclarationsDict =
+                            Dict.fromList (declarations ++ declarationsOfOtherModules)
 
-                declarationsValuesForInfix =
-                    redirectsForInfix
-                        |> Dict.toList
-                        |> List.filterMap
-                            (\( name, function ) ->
-                                declarationsValues
-                                    |> List.Extra.find (Tuple.first >> (==) function)
-                                    |> Maybe.map (Tuple.second >> Tuple.pair name)
-                            )
-            in
-            Ok ( moduleName, declarationsValues ++ declarationsValuesForInfix )
+                        declarationsValues =
+                            declarations
+                                |> List.map
+                                    (\( name, expression ) ->
+                                        ( name, buildDeclarationValue availableDeclarationsDict ( name, expression ) )
+                                    )
+
+                        declarationsValuesForInfix =
+                            redirectsForInfix
+                                |> Dict.toList
+                                |> List.filterMap
+                                    (\( name, function ) ->
+                                        declarationsValues
+                                            |> List.Extra.find (Tuple.first >> (==) function)
+                                            |> Maybe.map (Tuple.second >> Tuple.pair name)
+                                    )
+                    in
+                    Ok ( moduleName, declarationsValues ++ declarationsValuesForInfix )
 
 
 type alias DeclarationInTranslation =
