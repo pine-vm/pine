@@ -5,8 +5,8 @@
     <TargetFramework>net6.0</TargetFramework>
     <RootNamespace>elm_fullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2022.0712.0.0</AssemblyVersion>
-    <FileVersion>2022.0712.0.0</FileVersion>
+    <AssemblyVersion>2022.0713.0.0</AssemblyVersion>
+    <FileVersion>2022.0713.0.0</FileVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
@@ -20,16 +20,16 @@
 
   <ItemGroup>
     <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.116.0" />
-    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.18.3" />
+    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.18.4" />
     <PackageReference Include="LibGit2Sharp" Version="0.27.0-preview-0182" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.3.0" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.3.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.3.0-1.final" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.3.1" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.3.1" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.3.0-2.final" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="MSTest.TestFramework" Version="2.2.8" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
-    <PackageReference Include="SharpCompress" Version="0.31.0" />
+    <PackageReference Include="SharpCompress" Version="0.32.1" />
     <PackageReference Include="System.Collections.Immutable" Version="6.0.0" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
