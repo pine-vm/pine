@@ -2584,9 +2584,22 @@ The second element contains the response, the value to display to the user.
 -}
 parseInteractiveSubmissionIntoPineExpression : String -> Result String Pine.Expression
 parseInteractiveSubmissionIntoPineExpression submission =
+    let
+        buildExpressionForNewStateAndResponse config =
+            Pine.ListExpression
+                [ config.newStateExpression
+                , config.responseExpression
+                ]
+    in
     case parseInteractiveSubmissionFromString submission of
         Err error ->
-            Err ("Failed to parse submission: " ++ error)
+            Ok
+                (buildExpressionForNewStateAndResponse
+                    { newStateExpression = Pine.ApplicationArgumentExpression
+                    , responseExpression =
+                        Pine.LiteralExpression (Pine.valueFromString ("Failed to parse submission: " ++ error))
+                    }
+                )
 
         Ok (DeclarationSubmission elmDeclaration) ->
             case elmDeclaration of
@@ -2597,24 +2610,26 @@ parseInteractiveSubmissionIntoPineExpression submission =
 
                         Ok ( declaredName, declaredFunctionExpression ) ->
                             Ok
-                                (Pine.ListExpression
-                                    [ Pine.KernelApplicationExpression
-                                        { functionName = "concat"
-                                        , argument =
-                                            Pine.ListExpression
-                                                [ Pine.ListExpression
-                                                    [ Pine.LiteralExpression
-                                                        (Pine.valueFromContextExpansionWithName
-                                                            ( declaredName
-                                                            , Pine.encodeExpressionAsValue declaredFunctionExpression
+                                (buildExpressionForNewStateAndResponse
+                                    { newStateExpression =
+                                        Pine.KernelApplicationExpression
+                                            { functionName = "concat"
+                                            , argument =
+                                                Pine.ListExpression
+                                                    [ Pine.ListExpression
+                                                        [ Pine.LiteralExpression
+                                                            (Pine.valueFromContextExpansionWithName
+                                                                ( declaredName
+                                                                , Pine.encodeExpressionAsValue declaredFunctionExpression
+                                                                )
                                                             )
-                                                        )
+                                                        ]
+                                                    , Pine.ApplicationArgumentExpression
                                                     ]
-                                                , Pine.ApplicationArgumentExpression
-                                                ]
-                                        }
-                                    , Pine.LiteralExpression (Pine.valueFromString ("Declared " ++ declaredName))
-                                    ]
+                                            }
+                                    , responseExpression =
+                                        Pine.LiteralExpression (Pine.valueFromString ("Declared " ++ declaredName))
+                                    }
                                 )
 
                 Elm.Syntax.Declaration.AliasDeclaration _ ->
@@ -2639,16 +2654,17 @@ parseInteractiveSubmissionIntoPineExpression submission =
 
                 Ok pineExpression ->
                     Ok
-                        (Pine.ListExpression
-                            [ Pine.ApplicationArgumentExpression
-                            , Pine.ApplicationExpression
-                                { function =
-                                    pineExpression
-                                        |> Pine.encodeExpressionAsValue
-                                        |> Pine.LiteralExpression
-                                , argument = Pine.ApplicationArgumentExpression
-                                }
-                            ]
+                        (buildExpressionForNewStateAndResponse
+                            { newStateExpression = Pine.ApplicationArgumentExpression
+                            , responseExpression =
+                                Pine.ApplicationExpression
+                                    { function =
+                                        pineExpression
+                                            |> Pine.encodeExpressionAsValue
+                                            |> Pine.LiteralExpression
+                                    , argument = Pine.ApplicationArgumentExpression
+                                    }
+                            }
                         )
 
 
