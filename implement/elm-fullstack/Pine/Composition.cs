@@ -100,7 +100,7 @@ public class Composition
     {
         var signedBlobValue = BlobValueFromSignedInteger(integer);
 
-        if (signedBlobValue.Span[0] != 0)
+        if (signedBlobValue.Span[0] != 4)
             return Result<string, ReadOnlyMemory<byte>?>.err("Argument is a negative integer.");
 
         return Result<string, ReadOnlyMemory<byte>?>.ok(signedBlobValue[1..]);
@@ -114,7 +114,7 @@ public class Composition
         var absoluteValue = System.Numerics.BigInteger.Abs(integer);
 
         var signByte =
-            (byte)(absoluteValue == integer ? 0 : 0x80);
+            (byte)(absoluteValue == integer ? 4 : 2);
 
         var absoluteArray = absoluteValue.ToByteArray(isUnsigned: true, isBigEndian: true);
 
@@ -143,11 +143,11 @@ public class Composition
 
         var signByte = blobValue[0];
 
-        if (signByte != 0 && signByte != 0x80)
+        if (signByte != 4 && signByte != 2)
             return Result<string, System.Numerics.BigInteger?>.err(
                 "Unexpected value for sign byte of integer: " + signByte);
 
-        var isNegative = signByte != 0;
+        var isNegative = signByte != 4;
 
         var integerValue =
             UnsignedIntegerFromBlobValue(blobValue.Slice(1));

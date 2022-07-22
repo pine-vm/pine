@@ -633,10 +633,10 @@ blobValueFromBigInt bigint =
 
         signByte =
             if value == bigint then
-                0
+                4
 
             else
-                0x80
+                2
 
         unsignedBytesFromIntValue intValue =
             if BigInt.lt intValue (BigInt.fromInt 0x0100) then
@@ -670,7 +670,7 @@ unsignedBlobValueFromBigInt bigint =
             Nothing
 
         signByte :: unsignedBytes ->
-            if signByte == 0 then
+            if signByte == 4 then
                 Just unsignedBytes
 
             else
@@ -713,19 +713,15 @@ bigIntFromBlobValue blobValue =
             Err "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?"
 
         sign :: intValueBytes ->
-            if sign /= 0 && sign /= 0x80 then
-                Err ("Unexpected value for sign byte of integer: " ++ String.fromInt sign)
+            case sign of
+                4 ->
+                    intValueBytes |> bigIntFromUnsignedBlobValue |> Ok
 
-            else
-                intValueBytes
-                    |> bigIntFromUnsignedBlobValue
-                    |> (if sign == 0 then
-                            identity
+                2 ->
+                    intValueBytes |> bigIntFromUnsignedBlobValue |> BigInt.negate |> Ok
 
-                        else
-                            BigInt.negate
-                       )
-                    |> Ok
+                _ ->
+                    Err ("Unexpected value for sign byte of integer: " ++ String.fromInt sign)
 
 
 bigIntFromUnsignedValue : Value -> Maybe BigInt.BigInt

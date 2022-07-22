@@ -181,7 +181,7 @@ pineValueAsElmValue pineValue =
                     Ok (ElmInternal "empty-blob")
 
                 firstByte :: _ ->
-                    if firstByte == 0 || firstByte == 0x80 then
+                    if firstByte == 4 || firstByte == 2 then
                         blobValue
                             |> Pine.bigIntFromBlobValue
                             |> Result.map ElmInteger
@@ -1050,7 +1050,7 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    PineKernel.concat [ PineKernel.blobValueOneByteZero, char ]
+    PineKernel.concat [ PineKernel.take [ 1, 0 ], char ]
 
 """
     , """
@@ -1494,25 +1494,20 @@ pineExpressionFromElm stack elmExpression =
                         )
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            case pineValueFromFunctionOrValue moduleName localName of
-                Just directValue ->
-                    Ok ( Pine.LiteralExpression directValue, noDependencies )
+            if moduleName == [] then
+                pineExpressionFromElmFunctionOrValue localName stack
 
-                Nothing ->
-                    if moduleName == [] then
-                        pineExpressionFromElmFunctionOrValue localName stack
-
-                    else
-                        getDeclarationValueFromCompilation ( moduleName, localName ) stack
-                            |> Result.map
-                                (\declaredValue ->
-                                    ( Pine.ApplicationExpression
-                                        { function = Pine.LiteralExpression declaredValue
-                                        , argument = Pine.ListExpression []
-                                        }
-                                    , noDependencies
-                                    )
-                                )
+            else
+                getDeclarationValueFromCompilation ( moduleName, localName ) stack
+                    |> Result.map
+                        (\declaredValue ->
+                            ( Pine.ApplicationExpression
+                                { function = Pine.LiteralExpression declaredValue
+                                , argument = Pine.ListExpression []
+                                }
+                            , noDependencies
+                            )
+                        )
 
         Elm.Syntax.Expression.Application application ->
             case application of
@@ -1685,20 +1680,6 @@ pineExpressionFromElm stack elmExpression =
                 ("Unsupported type of expression: "
                     ++ (elmExpression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0)
                 )
-
-
-pineValueFromFunctionOrValue : List String -> String -> Maybe Pine.Value
-pineValueFromFunctionOrValue moduleName nameInModule =
-    if moduleName == [ pineKernelModuleName ] then
-        case nameInModule of
-            "blobValueOneByteZero" ->
-                Just (Pine.BlobValue [ 0 ])
-
-            _ ->
-                Nothing
-
-    else
-        Nothing
 
 
 pineExpressionFromElmLetBlock :
