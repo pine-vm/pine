@@ -2,7 +2,6 @@ module Pine exposing (..)
 
 import BigInt
 import Dict
-import Maybe.Extra
 import Result.Extra
 
 
@@ -603,19 +602,22 @@ stringFromValue : Value -> Result String String
 stringFromValue value =
     case value of
         ListValue charsValues ->
-            case charsValues |> List.map bigIntFromUnsignedValue |> Maybe.Extra.combine of
-                Nothing ->
-                    Err "Failed to map list elements to unsigned integers."
-
-                Just chars ->
-                    chars
-                        |> List.map (BigInt.toString >> String.toInt >> Maybe.map Char.fromCode)
-                        |> Maybe.Extra.combine
-                        |> Maybe.map String.fromList
-                        |> Result.fromMaybe "Programming error: Failed to map from integers to chars."
+            stringFromListValue charsValues
 
         _ ->
             Err "Only a ListValue can represent a string."
+
+
+stringFromListValue : List Value -> Result String String
+stringFromListValue =
+    List.map
+        (bigIntFromUnsignedValue
+            >> Result.fromMaybe "Failed to map to big int"
+            >> Result.andThen intFromBigInt
+        )
+        >> Result.Extra.combine
+        >> Result.mapError ((++) "Failed to map list elements to chars: ")
+        >> Result.map (List.map Char.fromCode >> String.fromList)
 
 
 valueFromBigInt : BigInt.BigInt -> Value

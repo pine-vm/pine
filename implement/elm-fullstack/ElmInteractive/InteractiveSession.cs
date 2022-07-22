@@ -81,9 +81,18 @@ public class InteractiveSessionNew : IInteractiveSession
     {
         lock (submissionLock)
         {
+            var buildPineEvalContextResult = buildPineEvalContextTask.Result;
+
+            if (buildPineEvalContextResult.Ok == null)
+            {
+                return Pine.Result<string, ElmInteractive.EvaluatedSctructure>.err(
+                    "Failed to build initial Pine eval context: " + buildPineEvalContextResult.Err);
+            }
+
             var parseSubmissionResult =
-                ElmInteractive.ParseInteractiveSubmissionIntoPineExpression(
+                ElmInteractive.CompileInteractiveSubmissionIntoPineExpression(
                     evalElmPreparedJsEngine.Value,
+                    environment: buildPineEvalContextResult.Ok,
                     submission: submission);
 
             if (parseSubmissionResult.Ok == null)
@@ -98,14 +107,6 @@ public class InteractiveSessionNew : IInteractiveSession
             {
                 return Pine.Result<string, ElmInteractive.EvaluatedSctructure>.err(
                     "Failed to decode expression: " + decodeExpressionResult.Err);
-            }
-
-            var buildPineEvalContextResult = buildPineEvalContextTask.Result;
-
-            if (buildPineEvalContextResult.Ok == null)
-            {
-                return Pine.Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Failed to build initial Pine eval context: " + buildPineEvalContextResult.Err);
             }
 
             var evalResult = Pine.PineVM.EvaluateExpression(buildPineEvalContextResult.Ok, decodeExpressionResult.Ok);

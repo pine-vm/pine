@@ -73,10 +73,16 @@ pineEvalContextForElmInteractive =
         >> Json.Encode.encode 0
 
 
-parseInteractiveSubmissionIntoPineExpression : String -> String
-parseInteractiveSubmissionIntoPineExpression submission =
-    ElmInteractive.parseInteractiveSubmissionIntoPineExpression submission
-        |> Result.map Pine.encodeExpressionAsValue
+compileInteractiveSubmissionIntoPineExpression : String -> String
+compileInteractiveSubmissionIntoPineExpression requestJson =
+    requestJson
+        |> Json.Decode.decodeString json_Decode_compileInteractiveSubmissionIntoPineExpression
+        |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode request: ")
+        |> Result.andThen
+            (\( environment, submission ) ->
+                ElmInteractive.compileInteractiveSubmissionIntoPineExpression environment submission
+                    |> Result.map Pine.encodeExpressionAsValue
+            )
         |> json_encode_Result Json.Encode.string json_encode_pineValue
         |> Json.Encode.encode 0
 
@@ -108,26 +114,22 @@ jsonDecodeEvaluateSubmissionArguments =
         (Json.Decode.field "previousLocalSubmissions" (Json.Decode.list Json.Decode.string))
 
 
-json_encode_pineValue : Pine.Value -> Json.Encode.Value
-json_encode_pineValue value =
-    case value of
-        Pine.ListValue list ->
-            Json.Encode.object
-                [ ( "List", Json.Encode.list json_encode_pineValue list ) ]
+json_Decode_compileInteractiveSubmissionIntoPineExpression : Json.Decode.Decoder ( Pine.Value, String )
+json_Decode_compileInteractiveSubmissionIntoPineExpression =
+    Json.Decode.map2
+        (\environment submission -> ( environment, submission ))
+        (Json.Decode.field "environment" json_decode_pineValue)
+        (Json.Decode.field "submission" Json.Decode.string)
 
-        Pine.BlobValue blob ->
-            Json.Encode.object
-                [ ( "Blob", Json.Encode.list Json.Encode.int blob ) ]
+
+json_encode_pineValue : Pine.Value -> Json.Encode.Value
+json_encode_pineValue =
+    ElmInteractive.json_encode_pineValue
 
 
 json_decode_pineValue : Json.Decode.Decoder Pine.Value
 json_decode_pineValue =
-    Json.Decode.oneOf
-        [ Json.Decode.field "List" (Json.Decode.lazy (\_ -> Json.Decode.list json_decode_pineValue))
-            |> Json.Decode.map Pine.ListValue
-        , Json.Decode.field "Blob" (Json.Decode.list Json.Decode.int)
-            |> Json.Decode.map Pine.BlobValue
-        ]
+    ElmInteractive.json_decode_pineValue
 
 
 {-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>)
@@ -140,7 +142,7 @@ main =
         , update =
             \_ stateBefore ->
                 ( [ parseElmModuleTextToJson (evaluateSubmissionInInteractive "") |> always ""
-                  , parseInteractiveSubmissionIntoPineExpression ""
+                  , compileInteractiveSubmissionIntoPineExpression ""
                   , pineEvalContextForElmInteractive ""
                   , submissionResponseFromResponsePineValue ""
                   ]

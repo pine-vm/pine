@@ -68,23 +68,37 @@ public class ElmInteractive
             .map(fromJson => ParsePineComponentFromJson(fromJson!));
     }
 
-    static public Result<string?, Component?> ParseInteractiveSubmissionIntoPineExpression(
+    static public Result<string?, Component?> CompileInteractiveSubmissionIntoPineExpression(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        Component environment,
         string submission)
     {
+        var requestJson =
+            System.Text.Json.JsonSerializer.Serialize(
+                new CompileInteractiveSubmissionIntoPineExpressionRequest
+                (
+                    environment: PineValueFromJson.FromComponent(environment),
+                    submission: submission
+                ),
+                options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 });
+
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("parseInteractiveSubmissionIntoPineExpression", submission).ToString()!;
+            evalElmPreparedJsEngine.CallFunction("compileInteractiveSubmissionIntoPineExpression", requestJson).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string?, PineValueFromJson?>>(
                 responseJson,
-                new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
+                options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
 
         return
             responseStructure
             .AsResult()
             .map(fromJson => (Component?)ParsePineComponentFromJson(fromJson!));
     }
+
+    record CompileInteractiveSubmissionIntoPineExpressionRequest(
+        PineValueFromJson environment,
+        string submission);
 
     static public Result<string?, EvaluatedSctructure?> SubmissionResponseFromResponsePineValue(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
@@ -126,6 +140,8 @@ public class ElmInteractive
 
         public IReadOnlyList<int>? Blob { init; get; }
 
+        public string? ListAsString { init; get; }
+
         static public PineValueFromJson FromComponent(Component component)
         {
             if (component.ListContent != null)
@@ -146,7 +162,10 @@ public class ElmInteractive
         if (fromJson.Blob != null)
             return Component.Blob(fromJson.Blob.Select(b => (byte)b).ToArray());
 
-        throw new NotImplementedException("Unexpected shape");
+        if (fromJson.ListAsString != null)
+            return ComponentFromString(fromJson.ListAsString);
+
+        throw new NotImplementedException("Unexpected shape of Pine value from JSON");
     }
 
     static IReadOnlyCollection<string>? ModulesTextsFromAppCodeTree(TreeWithStringPath? appCodeTree) =>
@@ -209,8 +228,8 @@ public class ElmInteractive
                 publicName: "pineEvalContextForElmInteractive",
                 arity: 1),
 
-                (functionNameInElm: "Main.parseInteractiveSubmissionIntoPineExpression",
-                publicName: "parseInteractiveSubmissionIntoPineExpression",
+                (functionNameInElm: "Main.compileInteractiveSubmissionIntoPineExpression",
+                publicName: "compileInteractiveSubmissionIntoPineExpression",
                 arity: 1),
 
                 (functionNameInElm: "Main.submissionResponseFromResponsePineValue",
