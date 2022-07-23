@@ -9,24 +9,24 @@ public interface IInteractiveSession : IDisposable
 {
     Pine.Result<string, ElmInteractive.EvaluatedSctructure> Submit(string submission);
 
-    static ImplementationType DefaultImplementation => ImplementationType.Old;
+    static ElmEngineType DefaultImplementation => ElmEngineType.JavaScript;
 
-    static IInteractiveSession Create(TreeWithStringPath? appCodeTree, ImplementationType type) =>
-        type switch
+    static IInteractiveSession Create(TreeWithStringPath? appCodeTree, ElmEngineType engineType) =>
+        engineType switch
         {
-            ImplementationType.Old => new InteractiveSessionClassic(appCodeTree),
-            ImplementationType.New => new InteractiveSessionNew(appCodeTree),
-            _ => throw new ArgumentOutOfRangeException(nameof(type), $"Not expected type value: {type}"),
+            ElmEngineType.JavaScript => new InteractiveSessionJavaScript(appCodeTree),
+            ElmEngineType.Pine => new InteractiveSessionPine(appCodeTree),
+            _ => throw new ArgumentOutOfRangeException(nameof(engineType), $"Unexpected engine type value: {engineType}"),
         };
 }
 
-public enum ImplementationType
+public enum ElmEngineType
 {
-    Old = 1,
-    New = 4
+    JavaScript = 1,
+    Pine = 4
 }
 
-public class InteractiveSessionClassic : IInteractiveSession
+public class InteractiveSessionJavaScript : IInteractiveSession
 {
     readonly TreeWithStringPath? appCodeTree;
 
@@ -35,7 +35,7 @@ public class InteractiveSessionClassic : IInteractiveSession
 
     readonly IList<string> previousSubmissions = new List<string>();
 
-    public InteractiveSessionClassic(TreeWithStringPath? appCodeTree)
+    public InteractiveSessionJavaScript(TreeWithStringPath? appCodeTree)
     {
         this.appCodeTree = appCodeTree;
     }
@@ -61,7 +61,7 @@ public class InteractiveSessionClassic : IInteractiveSession
     }
 }
 
-public class InteractiveSessionNew : IInteractiveSession
+public class InteractiveSessionPine : IInteractiveSession
 {
     readonly object submissionLock = new();
 
@@ -69,7 +69,7 @@ public class InteractiveSessionNew : IInteractiveSession
 
     readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
-    public InteractiveSessionNew(TreeWithStringPath? appCodeTree)
+    public InteractiveSessionPine(TreeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
             ElmInteractive.PineEvalContextForElmInteractive(

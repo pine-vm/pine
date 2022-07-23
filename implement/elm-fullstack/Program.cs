@@ -784,18 +784,18 @@ public class Program
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
 
-            var implementationOption =
-                app
+            var elmEngineOption =
+                interactiveCmd
                 .Option(
-                    template: "--implementation",
-                    description: "Select the implementation for evaluating Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ImplementationType>()) + "). Defaults to " + ElmInteractive.IInteractiveSession.DefaultImplementation,
+                    template: "--elm-engine",
+                    description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineType>()) + "). Defaults to " + ElmInteractive.IInteractiveSession.DefaultImplementation,
                     optionType: CommandOptionType.SingleValue,
                     inherited: true);
 
-            ElmInteractive.ImplementationType parseImplementationTypeFromOption()
+            ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
             {
-                if (implementationOption?.Value() is string implementationAsString)
-                    return Enum.Parse<ElmInteractive.ImplementationType>(implementationAsString, ignoreCase: true);
+                if (elmEngineOption?.Value() is string implementationAsString)
+                    return Enum.Parse<ElmInteractive.ElmEngineType>(implementationAsString, ignoreCase: true);
 
                 return ElmInteractive.IInteractiveSession.DefaultImplementation;
             }
@@ -914,7 +914,7 @@ public class Program
                             ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                                 namedDistinctScenarios,
                                 namedScenario => namedScenario.Value.loadedScenario.component,
-                                parseImplementationTypeFromOption());
+                                parseElmEngineTypeFromOption());
 
                         var allSteps =
                             scenariosResults
@@ -974,8 +974,10 @@ public class Program
             {
                 ReadLine.HistoryEnabled = true;
 
+                var elmEngineType = parseElmEngineTypeFromOption();
+
                 Console.WriteLine(
-                    "---- Elm Interactive v" + AppVersionId + " ----");
+                    "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
 
                 Composition.TreeWithStringPath? contextAppCodeTree = null;
 
@@ -1000,7 +1002,7 @@ public class Program
 
                 using var interactiveSession = ElmInteractive.IInteractiveSession.Create(
                     appCodeTree: contextAppCodeTree,
-                    parseImplementationTypeFromOption());
+                    engineType: elmEngineType);
 
                 while (true)
                 {

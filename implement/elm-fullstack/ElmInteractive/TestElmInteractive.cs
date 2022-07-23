@@ -24,7 +24,7 @@ public class TestElmInteractive
     static public ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
         Func<TContainer, Composition.TreeWithStringPath> getScenario,
-        ImplementationType implementationType) where TContainer : notnull =>
+        ElmEngineType implementationType) where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
         .WithDegreeOfParallelism(4)
@@ -36,7 +36,7 @@ public class TestElmInteractive
 
     static public InteractiveScenarioTestReport TestElmInteractiveScenario(
         Composition.TreeWithStringPath scenarioTree,
-        ImplementationType implementationType)
+        ElmEngineType implementationType)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
