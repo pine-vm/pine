@@ -420,6 +420,28 @@ named_literal =
                        , expectedValueElmExpression = "289589985200426854031398766651426"
                        }
         -}
+        , Test.test "Reference declaration via module alias" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = InitContextFromApp { modulesTexts = [ """
+module Beta exposing (..)
+
+import Alfa as OtherModule
+
+
+test = OtherModule.alfa_decl
+
+""", """
+module Alfa exposing (..)
+
+
+alfa_decl = 567
+
+""" ] }
+                    , previousSubmissions = []
+                    , submission = " Beta.test "
+                    , expectedValueElmExpression = "567"
+                    }
         ]
 
 

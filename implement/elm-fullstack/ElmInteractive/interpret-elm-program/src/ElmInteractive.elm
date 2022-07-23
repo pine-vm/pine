@@ -412,7 +412,7 @@ listModuleTransitiveDependenciesExcludingModules :
     Set.Set (List String)
     -> List Elm.Syntax.File.File
     -> Elm.Syntax.File.File
-    -> Result ( List (List String), String ) (List (List String))
+    -> Result ( List Elm.Syntax.ModuleName.ModuleName, String ) (List Elm.Syntax.ModuleName.ModuleName)
 listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
     let
         currentName =
@@ -455,19 +455,12 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
             |> Result.map (List.concat >> (++) >> (|>) [ currentName ] >> List.Extra.unique)
 
 
-getDirectDependenciesFromModule : Elm.Syntax.File.File -> Set.Set (List String)
+getDirectDependenciesFromModule : Elm.Syntax.File.File -> Set.Set Elm.Syntax.ModuleName.ModuleName
 getDirectDependenciesFromModule file =
     let
         explicit =
             file.imports
-                |> List.map
-                    (Elm.Syntax.Node.value
-                        >> (\imp ->
-                                imp.moduleAlias
-                                    |> Maybe.withDefault imp.moduleName
-                                    |> Elm.Syntax.Node.value
-                           )
-                    )
+                |> List.map (Elm.Syntax.Node.value >> .moduleName >> Elm.Syntax.Node.value)
 
         implicit =
             if List.member (Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)) moduleNamesWithoutImplicitImport then
@@ -507,14 +500,26 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
         moduleName =
             Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule)
 
+        moduleAliases : Dict.Dict (List String) (List String)
+        moduleAliases =
+            moduleToTranslate.parsedModule.imports
+                |> List.filterMap
+                    (Elm.Syntax.Node.value
+                        >> (\imp ->
+                                imp.moduleAlias
+                                    |> Maybe.map
+                                        (\moduleAlias ->
+                                            ( Elm.Syntax.Node.value moduleAlias, Elm.Syntax.Node.value imp.moduleName )
+                                        )
+                           )
+                    )
+                |> Dict.fromList
+
         declarationsOfOtherModules : Dict.Dict String InternalDeclaration
         declarationsOfOtherModules =
             availableModules
                 |> Dict.toList
-                |> List.map
-                    (Tuple.mapSecond CompiledDeclaration
-                        >> Tuple.mapFirst (String.join ".")
-                    )
+                |> List.map (Tuple.mapSecond CompiledDeclaration >> Tuple.mapFirst (String.join "."))
                 |> Dict.fromList
     in
     let
@@ -557,7 +562,8 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                 |> Dict.fromList
 
         initialCompilationStack =
-            { availableDeclarations =
+            { moduleAliases = moduleAliases
+            , availableDeclarations =
                 declarationsOfOtherModules
                     |> Dict.union (Dict.map (always ElmFunctionDeclaration) localFunctionDeclarations)
                     |> Dict.union (declarationsFromCustomTypes |> Dict.map (always CompiledDeclaration))
@@ -1418,7 +1424,8 @@ elmValuesToExposeToGlobal =
 
 
 type alias CompilationStack =
-    { availableDeclarations : Dict.Dict String InternalDeclaration
+    { moduleAliases : Dict.Dict (List String) (List String)
+    , availableDeclarations : Dict.Dict String InternalDeclaration
     , inliningParentDeclarations : Set.Set String
     }
 
@@ -2442,13 +2449,18 @@ pineExpressionFromElmFunctionOrValueWithoutLocalResolution name compilation =
 
 
 getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Value
-getDeclarationValueFromCompilation ( moduleName, nameInModule ) compilation =
-    case compilation.availableDeclarations |> Dict.get (String.join "." moduleName) of
+getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation =
+    let
+        canonicalModuleName =
+            Dict.get localModuleName compilation.moduleAliases
+                |> Maybe.withDefault localModuleName
+    in
+    case compilation.availableDeclarations |> Dict.get (String.join "." canonicalModuleName) of
         Nothing ->
-            Err ("Did not find module '" ++ String.join "." moduleName ++ "'")
+            Err ("Did not find module '" ++ String.join "." canonicalModuleName ++ "'")
 
         Just (ElmFunctionDeclaration _) ->
-            Err ("Got function declaration for module '" ++ String.join "." moduleName ++ "'")
+            Err ("Got function declaration for module '" ++ String.join "." canonicalModuleName ++ "'")
 
         Just (CompiledDeclaration moduleValue) ->
             let
@@ -2654,7 +2666,8 @@ compileInteractiveSubmissionIntoPineExpression environment submission =
                         ]
 
                 initialStack =
-                    { availableDeclarations = environmentDeclarations |> Dict.map (always CompiledDeclaration)
+                    { moduleAliases = Dict.empty
+                    , availableDeclarations = environmentDeclarations |> Dict.map (always CompiledDeclaration)
                     , inliningParentDeclarations = Set.empty
                     }
             in
