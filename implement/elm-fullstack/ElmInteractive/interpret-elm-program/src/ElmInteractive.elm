@@ -1489,7 +1489,7 @@ pineExpressionFromElm stack elmExpression =
         Elm.Syntax.Expression.Negation negatedElmExpression ->
             case pineExpressionFromElm stack (Elm.Syntax.Node.value negatedElmExpression) of
                 Err error ->
-                    Err ("Failed to map negated expression: " ++ error)
+                    Err ("Failed to compile negated expression: " ++ error)
 
                 Ok ( negatedExpression, dependencies ) ->
                     Ok
@@ -1528,7 +1528,7 @@ pineExpressionFromElm stack elmExpression =
                             |> Result.Extra.combine
                     of
                         Err error ->
-                            Err ("Failed to map Elm arguments: " ++ error)
+                            Err ("Failed to compile Elm arguments: " ++ error)
 
                         Ok arguments ->
                             let
@@ -1539,7 +1539,7 @@ pineExpressionFromElm stack elmExpression =
                                             |> pineExpressionFromElm stack
                                     of
                                         Err error ->
-                                            Err ("Failed to map Elm function syntax: " ++ error)
+                                            Err ("Failed to compile Elm function syntax: " ++ error)
 
                                         Ok ( appliedFunctionSyntax, dependencies ) ->
                                             Ok
@@ -1583,11 +1583,11 @@ pineExpressionFromElm stack elmExpression =
 
             else
                 pineExpressionFromElm stack (Elm.Syntax.Node.value leftExpr)
-                    |> Result.mapError ((++) "Failed to map left expression: ")
+                    |> Result.mapError ((++) "Failed to compile left expression: ")
                     |> Result.andThen
                         (\( leftExpression, leftDeps ) ->
                             pineExpressionFromElm stack (Elm.Syntax.Node.value rightExpr)
-                                |> Result.mapError ((++) "Failed to map right expression: ")
+                                |> Result.mapError ((++) "Failed to compile right expression: ")
                                 |> Result.andThen
                                     (\( rightExpression, rightDeps ) ->
                                         pineExpressionFromElmFunctionOrValue ("(" ++ operator ++ ")") stack
@@ -1607,7 +1607,7 @@ pineExpressionFromElm stack elmExpression =
                                                 )
                                     )
                         )
-                    |> Result.mapError ((++) ("Failed to map OperatorApplication '" ++ operator ++ "': "))
+                    |> Result.mapError ((++) ("Failed to compile OperatorApplication '" ++ operator ++ "': "))
 
         Elm.Syntax.Expression.PrefixOperator operator ->
             pineExpressionFromElmFunctionOrValue ("(" ++ operator ++ ")") stack
@@ -1615,17 +1615,17 @@ pineExpressionFromElm stack elmExpression =
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case pineExpressionFromElm stack (Elm.Syntax.Node.value elmCondition) of
                 Err error ->
-                    Err ("Failed to map Elm condition: " ++ error)
+                    Err ("Failed to compile Elm condition: " ++ error)
 
                 Ok ( conditionExpression, conditionExpressionDeps ) ->
                     case pineExpressionFromElm stack (Elm.Syntax.Node.value elmExpressionIfTrue) of
                         Err error ->
-                            Err ("Failed to map Elm expressionIfTrue: " ++ error)
+                            Err ("Failed to compile Elm expressionIfTrue: " ++ error)
 
                         Ok ( expressionIfTrue, expressionIfTrueDeps ) ->
                             case pineExpressionFromElm stack (Elm.Syntax.Node.value elmExpressionIfFalse) of
                                 Err error ->
-                                    Err ("Failed to map Elm expressionIfFalse: " ++ error)
+                                    Err ("Failed to compile Elm expressionIfFalse: " ++ error)
 
                                 Ok ( expressionIfFalse, expressionIfFalseDeps ) ->
                                     Ok
@@ -1857,7 +1857,7 @@ declarationsFromPattern pattern =
                     |> Result.Extra.combine
             of
                 Err error ->
-                    Err ("Failed to map tuple element: " ++ error)
+                    Err ("Failed to compile tuple element: " ++ error)
 
                 Ok tupleElementsDeconstructions ->
                     Ok
@@ -2001,7 +2001,7 @@ pineExpressionFromElmCaseBlock :
 pineExpressionFromElmCaseBlock stack caseBlock =
     case pineExpressionFromElm stack (Elm.Syntax.Node.value caseBlock.expression) of
         Err error ->
-            Err ("Failed to map case block expression: " ++ error)
+            Err ("Failed to compile case block expression: " ++ error)
 
         Ok ( expression, conditionDependencies ) ->
             case
@@ -2010,7 +2010,7 @@ pineExpressionFromElmCaseBlock stack caseBlock =
                     |> Result.Extra.combine
             of
                 Err error ->
-                    Err ("Failed to map case in case-of block: " ++ error)
+                    Err ("Failed to compile case in case-of block: " ++ error)
 
                 Ok cases ->
                     let
@@ -2052,7 +2052,7 @@ pineExpressionFromElmCaseBlockCase :
 pineExpressionFromElmCaseBlockCase stack caseBlockValueExpression ( elmPattern, elmExpression ) =
     case pineExpressionFromElm stack (Elm.Syntax.Node.value elmExpression) of
         Err error ->
-            Err ("Failed to map case expression: " ++ error)
+            Err ("Failed to compile case expression: " ++ error)
 
         Ok caseValueExpression ->
             pineExpressionFromElmPattern stack caseBlockValueExpression elmPattern
@@ -2183,7 +2183,7 @@ pineExpressionFromElmPattern stack caseBlockValueExpression elmPattern =
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
                 Err error ->
-                    Err ("Failed to map pattern in case block: " ++ error)
+                    Err ("Failed to compile pattern in case block: " ++ error)
 
                 Ok declarationsNames ->
                     let
@@ -2327,7 +2327,7 @@ pineExpressionFromElmRecord stack recordSetters =
             (\( fieldName, fieldExpressionNode ) ->
                 case pineExpressionFromElm stack (Elm.Syntax.Node.value fieldExpressionNode) of
                     Err error ->
-                        Err ("Failed to map record field: " ++ error)
+                        Err ("Failed to compile record field: " ++ error)
 
                     Ok ( fieldExpression, fieldExpressionDeps ) ->
                         Ok
@@ -2358,7 +2358,7 @@ pineExpressionFromElmRecordAccess :
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
 pineExpressionFromElmRecordAccess stack fieldName recordElmExpression =
     pineExpressionFromElm stack recordElmExpression
-        |> Result.mapError ((++) "Failed to map record expression: ")
+        |> Result.mapError ((++) "Failed to compile record expression: ")
         |> Result.map
             (\( recordExpression, recordExpressionDeps ) ->
                 ( pineExpressionForRecordAccess fieldName recordExpression
@@ -2468,7 +2468,11 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
                     Pine.valueFromString nameInModule
             in
             Pine.lookUpNameInListValue nameInModuleAsValue moduleValue
-                |> Result.mapError (Pine.displayStringFromPineError >> String.replace "\n" ":")
+                |> Result.mapError
+                    (Pine.displayStringFromPineError
+                        >> String.replace "\n" ": "
+                        >> (++) ("Failed lookup in module '" ++ (String.join "." canonicalModuleName ++ "': "))
+                    )
 
 
 expressionToLookupNameInEnvironment : String -> Pine.Expression
@@ -2730,7 +2734,7 @@ compileInteractiveSubmissionIntoPineExpression environment submission =
                 Ok (ExpressionSubmission elmExpression) ->
                     case pineExpressionFromElm initialStack elmExpression of
                         Err error ->
-                            Err ("Failed to map from Elm to Pine expression: " ++ error)
+                            Err ("Failed to compile Elm to Pine expression: " ++ error)
 
                         Ok ( pineExpression, _ ) ->
                             Ok
