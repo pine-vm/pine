@@ -71,8 +71,15 @@ public class ElmInteractive
     static public Result<string?, Component?> CompileInteractiveSubmissionIntoPineExpression(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         Component environment,
-        string submission)
+        string submission,
+        Action<string>? addInspectionLogEntry)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        void logDuration(string label) =>
+            addInspectionLogEntry?.Invoke(
+                label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
+
         var requestJson =
             System.Text.Json.JsonSerializer.Serialize(
                 new CompileInteractiveSubmissionIntoPineExpressionRequest
@@ -82,18 +89,30 @@ public class ElmInteractive
                 ),
                 options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 });
 
+        logDuration("Serialize to JSON (" + CommandLineInterface.FormatIntegerForDisplay(requestJson.Length) + " chars)");
+
+        clock.Restart();
+
         var responseJson =
             evalElmPreparedJsEngine.CallFunction("compileInteractiveSubmissionIntoPineExpression", requestJson).ToString()!;
+
+        logDuration("JavaScript function");
+
+        clock.Restart();
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string?, PineValueFromJson?>>(
                 responseJson,
                 options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
 
-        return
+        var response =
             responseStructure
             .AsResult()
             .map(fromJson => (Component?)ParsePineComponentFromJson(fromJson!));
+
+        logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineComponentFromJson));
+
+        return response;
     }
 
     record CompileInteractiveSubmissionIntoPineExpressionRequest(
@@ -144,6 +163,11 @@ public class ElmInteractive
 
         static public PineValueFromJson FromComponent(Component component)
         {
+            var asStringResult = StringFromComponent(component);
+
+            if (asStringResult.Ok is string asString)
+                return new PineValueFromJson { ListAsString = asString };
+
             if (component.ListContent != null)
                 return new PineValueFromJson { List = component.ListContent.Select(FromComponent).ToImmutableList() };
 

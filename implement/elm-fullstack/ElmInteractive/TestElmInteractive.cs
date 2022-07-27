@@ -90,13 +90,13 @@ public class TestElmInteractive
 
                         if (sessionStep.expectedResponse != null)
                         {
-                            if (sessionStep.expectedResponse != evalResult.Ok?.displayText)
+                            if (sessionStep.expectedResponse != evalResult.Ok?.interactiveResponse?.displayText)
                             {
                                 var errorText =
                                 "Response from interactive does not match expected value. Expected:\n" +
                                 sessionStep.expectedResponse +
                                 "\nBut got this response:\n" +
-                                evalResult.Ok?.displayText;
+                                evalResult.Ok?.interactiveResponse?.displayText;
 
                                 return Result<InteractiveScenarioTestStepFailure, object>.err(
                                     new InteractiveScenarioTestStepFailure(

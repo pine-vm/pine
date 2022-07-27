@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-07-24";
+    static public string AppVersionId => "2022-07-27";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -934,7 +934,7 @@ public class Program
                             (label : "Failed", value : failedSteps.Count.ToString()),
                             (label : "Passed", value : passedSteps.Count.ToString()),
                             (label : "Total", value : allSteps.Count.ToString()),
-                            (label : "Duration", value : exceptLoadingStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms"),
+                            (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay(exceptLoadingStopwatch.ElapsedMilliseconds) + " ms"),
                         };
 
                         console.WriteLine(
@@ -1027,11 +1027,15 @@ public class Program
                     if (enableInspectionOption.HasValue())
                     {
                         Console.WriteLine(
-                            "Evaluation took " +
-                            evalStopwatch.ElapsedMilliseconds.ToString("### ### ###") + " ms.");
+                            "Processing this submission took " +
+                            CommandLineInterface.FormatIntegerForDisplay(evalStopwatch.ElapsedMilliseconds) + " ms.");
+
+                        Console.WriteLine(
+                            "Inspection log has " + (evalResult.Ok.inspectionLog?.Count ?? 0) + " entries:\n" +
+                            string.Join("\n", evalResult.Ok.inspectionLog.EmptyIfNull()));
                     }
 
-                    Console.WriteLine(evalResult.Ok.displayText);
+                    Console.WriteLine(evalResult.Ok.interactiveResponse.displayText);
                 }
             });
         });
