@@ -2992,11 +2992,68 @@ json_encode_pineValue value =
 
 json_decode_pineValue : Json.Decode.Decoder Pine.Value
 json_decode_pineValue =
+    json_decode_pineValueWithDictionary Dict.empty
+
+
+json_decode_pineValueWithDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder Pine.Value
+json_decode_pineValueWithDictionary dictionary =
+    json_decode_optionalNullableField "Dictionary" (json_decode_pineValueDictionary dictionary)
+        |> Json.Decode.map (Maybe.withDefault Dict.empty >> (\newDict -> Dict.union newDict dictionary))
+        |> Json.Decode.andThen json_decode_pineValueApplyingDictionary
+
+
+json_decode_pineValueDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder (Dict.Dict String Pine.Value)
+json_decode_pineValueDictionary dictionary =
+    Json.Decode.list (json_decode_pineValueDictionaryEntry dictionary)
+        |> Json.Decode.map Dict.fromList
+
+
+json_decode_pineValueDictionaryEntry : Dict.Dict String Pine.Value -> Json.Decode.Decoder ( String, Pine.Value )
+json_decode_pineValueDictionaryEntry dictionary =
+    Json.Decode.map2 Tuple.pair
+        (Json.Decode.field "key" Json.Decode.string)
+        (Json.Decode.field "value" (Json.Decode.lazy (\_ -> json_decode_pineValueWithDictionary dictionary)))
+
+
+json_decode_pineValueApplyingDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder Pine.Value
+json_decode_pineValueApplyingDictionary dictionary =
     Json.Decode.oneOf
-        [ Json.Decode.field "List" (Json.Decode.lazy (\_ -> Json.Decode.list json_decode_pineValue))
+        [ Json.Decode.field "List"
+            (Json.Decode.lazy (\_ -> Json.Decode.list (json_decode_pineValueWithDictionary dictionary)))
             |> Json.Decode.map Pine.ListValue
         , Json.Decode.field "ListAsString" Json.Decode.string
             |> Json.Decode.map Pine.valueFromString
         , Json.Decode.field "Blob" (Json.Decode.list Json.Decode.int)
             |> Json.Decode.map Pine.BlobValue
+        , Json.Decode.field "Reference" Json.Decode.string
+            |> Json.Decode.andThen
+                (\reference ->
+                    dictionary
+                        |> Dict.get reference
+                        |> Maybe.map Json.Decode.succeed
+                        |> Maybe.withDefault (Json.Decode.fail ("Did not find dictionary entry for reference '" ++ reference ++ "'"))
+                )
         ]
+
+
+json_decode_optionalNullableField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
+json_decode_optionalNullableField fieldName decoder =
+    Json.Decode.map (Maybe.andThen identity)
+        (json_decode_optionalField fieldName (Json.Decode.nullable decoder))
+
+
+json_decode_optionalField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)
+json_decode_optionalField fieldName decoder =
+    let
+        finishDecoding json =
+            case Json.Decode.decodeValue (Json.Decode.field fieldName Json.Decode.value) json of
+                Ok _ ->
+                    -- The field is present, so run the decoder on it.
+                    Json.Decode.map Just (Json.Decode.field fieldName decoder)
+
+                Err _ ->
+                    -- The field was missing, which is fine!
+                    Json.Decode.succeed Nothing
+    in
+    Json.Decode.value
+        |> Json.Decode.andThen finishDecoding

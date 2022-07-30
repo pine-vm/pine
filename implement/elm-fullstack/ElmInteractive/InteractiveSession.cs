@@ -78,7 +78,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 appCodeTree: appCodeTree));
     }
 
-    public Pine.Result<string, SubmissionResponse> Submit(string submission)
+    public Result<string, SubmissionResponse> Submit(string submission)
     {
         var inspectionLog = new List<string>();
 
@@ -87,7 +87,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .map(r => new SubmissionResponse(r, inspectionLog));
     }
 
-    public Pine.Result<string, ElmInteractive.EvaluatedSctructure> Submit(
+    public Result<string, ElmInteractive.EvaluatedSctructure> Submit(
         string submission,
         Action<string>? addInspectionLogEntry)
     {
@@ -124,7 +124,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     "Failed to parse submission: " + compileSubmissionResult.Err);
             }
 
-            var decodeExpressionResult = Pine.PineVM.DecodeExpressionFromValue(compileSubmissionResult.Ok);
+            var decodeExpressionResult = PineVM.DecodeExpressionFromValue(compileSubmissionResult.Ok);
 
             if (decodeExpressionResult.Ok == null)
             {
@@ -134,7 +134,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
             clock.Restart();
 
-            var evalResult = Pine.PineVM.EvaluateExpression(buildPineEvalContextResult.Ok, decodeExpressionResult.Ok);
+            var evalResult = PineVM.EvaluateExpression(buildPineEvalContextResult.Ok, decodeExpressionResult.Ok);
 
             logDuration("eval");
 

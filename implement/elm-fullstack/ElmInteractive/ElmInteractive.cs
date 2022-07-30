@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using ElmFullstack;
 using Pine;
 using static Pine.Composition;
@@ -84,10 +86,14 @@ public class ElmInteractive
             System.Text.Json.JsonSerializer.Serialize(
                 new CompileInteractiveSubmissionIntoPineExpressionRequest
                 (
-                    environment: PineValueFromJson.FromComponent(environment),
+                    environment: PineValueFromJson.FromComponentBuildingDictionary(environment),
                     submission: submission
                 ),
-                options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 });
+                options: new System.Text.Json.JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                    MaxDepth = 1000
+                });
 
         logDuration("Serialize to JSON (" + CommandLineInterface.FormatIntegerForDisplay(requestJson.Length) + " chars)");
 
@@ -126,7 +132,7 @@ public class ElmInteractive
         var responseJson =
             evalElmPreparedJsEngine.CallFunction(
                 "submissionResponseFromResponsePineValue",
-                System.Text.Json.JsonSerializer.Serialize(PineValueFromJson.FromComponent(response))).ToString()!;
+                System.Text.Json.JsonSerializer.Serialize(PineValueFromJson.FromComponentWithoutBuildingDictionary(response))).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string?, EvaluatedSctructure?>>(responseJson)!;
@@ -152,27 +158,188 @@ public class ElmInteractive
         }
     }
 
-
     record PineValueFromJson
     {
+        public IReadOnlyCollection<DictionaryEntry>? Dictionary { init; get; } = null;
+
         public IReadOnlyList<PineValueFromJson>? List { init; get; }
 
         public IReadOnlyList<int>? Blob { init; get; }
 
         public string? ListAsString { init; get; }
 
-        static public PineValueFromJson FromComponent(Component component)
+        public string? Reference { init; get; }
+
+        public record DictionaryEntry(string key, PineValueFromJson value);
+
+        record PineValueFromJsonIntermediate(
+            IReadOnlyList<PineValueFromJsonIntermediate>? List,
+            ReadOnlyMemory<byte>? Blob,
+            string? ListAsString)
+            : IEquatable<PineValueFromJsonIntermediate>
         {
-            var asStringResult = StringFromComponent(component);
+            public virtual bool Equals(PineValueFromJsonIntermediate? other) =>
+                Equals(this, other);
 
-            if (asStringResult.Ok is string asString)
-                return new PineValueFromJson { ListAsString = asString };
+            public override int GetHashCode()
+            {
+                if (ListAsString != null)
+                    return ListAsString.GetHashCode();
 
-            if (component.ListContent != null)
-                return new PineValueFromJson { List = component.ListContent.Select(FromComponent).ToImmutableList() };
+                if (Blob.HasValue)
+                    return Blob.GetHashCode();
 
-            if (component.BlobContent != null)
-                return new PineValueFromJson { Blob = component.BlobContent.Value.ToArray().Select(b => (int)b).ToImmutableArray() };
+                if (List != null)
+                    return List.GetHashCode();
+
+                return base.GetHashCode();
+            }
+
+            static public bool Equals(PineValueFromJsonIntermediate? left, PineValueFromJsonIntermediate? right)
+            {
+                if (left is null && right is null)
+                    return true;
+
+                if (left is null || right is null)
+                    return false;
+
+                if (left.ListAsString != null && right.ListAsString != null)
+                    return left.ListAsString == right.ListAsString;
+
+                if (left.List != null && right.List != null)
+                {
+                    if (left.List.Count != right.List.Count)
+                        return false;
+
+                    var leftEnumerator = left.List.GetEnumerator();
+                    var rightEnumerator = right.List.GetEnumerator();
+
+                    while (leftEnumerator.MoveNext())
+                    {
+                        rightEnumerator.MoveNext();
+
+                        if (!Equals(leftEnumerator.Current, rightEnumerator.Current))
+                            return false;
+                    }
+
+                    return true;
+                }
+
+                if (left.Blob != null && right.Blob != null)
+                    return left.Blob.Value.Span.SequenceEqual(right.Blob.Value.Span);
+
+                return false;
+            }
+
+            static public PineValueFromJsonIntermediate FromComponent(Component component)
+            {
+                var asStringResult = StringFromComponent(component);
+
+                if (asStringResult.Ok is string asString)
+                    return new PineValueFromJsonIntermediate(ListAsString: asString, Blob: null, List: null);
+
+                if (component.ListContent != null)
+                    return new PineValueFromJsonIntermediate
+                    (
+                        List: component.ListContent.Select(FromComponent).ToImmutableList(),
+                        Blob: null,
+                        ListAsString: null
+                    );
+
+                if (component.BlobContent != null)
+                    return new PineValueFromJsonIntermediate(Blob: component.BlobContent, ListAsString: null, List: null);
+
+                throw new NotImplementedException("Unexpected shape");
+            }
+        }
+
+
+        static public PineValueFromJson FromComponentBuildingDictionary(Component component)
+        {
+            var intermediate = PineValueFromJsonIntermediate.FromComponent(component);
+
+            var usageCount = new ConcurrentDictionary<PineValueFromJsonIntermediate, int>();
+
+            void mutatingCountUsagesRecursive(PineValueFromJsonIntermediate component)
+            {
+                usageCount!.AddOrUpdate(component, addValue: 1, updateValueFactory: (_, countBefore) => countBefore + 1);
+
+                if (component.List is not null)
+                {
+                    foreach (var item in component.List)
+                    {
+                        mutatingCountUsagesRecursive(item);
+                    }
+                }
+            }
+
+            mutatingCountUsagesRecursive(intermediate);
+
+            var componentsUsedMultipleTimes =
+                usageCount
+                .Where(count => count.Value > 1)
+                .ToImmutableDictionary(x => x.Key, x => x.Value);
+
+            int keyIndex = 0;
+
+            var dictionary = new ConcurrentDictionary<PineValueFromJsonIntermediate, string>();
+
+            void mutatingBuildDictionaryRecursive(PineValueFromJsonIntermediate component)
+            {
+                if (dictionary!.ContainsKey(component))
+                    return;
+
+                if (componentsUsedMultipleTimes!.ContainsKey(component))
+                {
+                    dictionary[component] = keyIndex++.ToString();
+                    return;
+                }
+
+                if (component.List is not null)
+                {
+                    foreach (var item in component.List)
+                    {
+                        mutatingBuildDictionaryRecursive(item);
+                    }
+                }
+            }
+
+            mutatingBuildDictionaryRecursive(intermediate);
+
+            var dictionaryForSerial =
+                dictionary
+                .Select(entry => new DictionaryEntry(key: entry.Value, value: FromComponentWithoutBuildingDictionary(entry.Key)))
+                .ToImmutableArray();
+
+            return FromComponentWithoutBuildingDictionary(
+                intermediate,
+                dictionary: dictionary)
+                with
+            { Dictionary = dictionaryForSerial };
+        }
+
+        static public PineValueFromJson FromComponentWithoutBuildingDictionary(Component component) =>
+            FromComponentWithoutBuildingDictionary(PineValueFromJsonIntermediate.FromComponent(component));
+
+        static PineValueFromJson FromComponentWithoutBuildingDictionary(
+            PineValueFromJsonIntermediate intermediate,
+            IDictionary<PineValueFromJsonIntermediate, string>? dictionary = null)
+        {
+            if (dictionary?.TryGetValue(intermediate, out var result) ?? false)
+                return new PineValueFromJson { Reference = result };
+
+            if (intermediate.ListAsString != null)
+                return new PineValueFromJson { ListAsString = intermediate.ListAsString };
+
+            if (intermediate.List != null)
+                return new PineValueFromJson
+                {
+                    List = intermediate.List.Select(
+                        listElement => FromComponentWithoutBuildingDictionary(listElement, dictionary)).ToImmutableList()
+                };
+
+            if (intermediate.Blob != null)
+                return new PineValueFromJson { Blob = intermediate.Blob.Value.ToArray().Select(b => (int)b).ToImmutableArray() };
 
             throw new NotImplementedException("Unexpected shape");
         }

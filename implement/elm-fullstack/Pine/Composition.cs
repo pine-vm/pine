@@ -8,7 +8,7 @@ namespace Pine;
 
 public class Composition
 {
-    public record Component(ReadOnlyMemory<byte>? BlobContent = null, IImmutableList<Component>? ListContent = null)
+    public record Component(ReadOnlyMemory<byte>? BlobContent = null, IImmutableList<Component>? ListContent = null) : IEquatable<Component>
     {
         static public Component Blob(ReadOnlyMemory<byte> blobContent) =>
             new(BlobContent: blobContent);
