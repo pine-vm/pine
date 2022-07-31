@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-07-30";
+    static public string AppVersionId => "2022-07-31";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -792,6 +792,12 @@ public class Program
                     optionType: CommandOptionType.SingleValue,
                     inherited: true);
 
+            var submitOption =
+                interactiveCmd.Option(
+                    template: "--submit",
+                    description: "Option to submit a string as if entered during the interactive session.",
+                    optionType: CommandOptionType.MultipleValue);
+
             ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
             {
                 if (elmEngineOption?.Value() is string implementationAsString)
@@ -972,8 +978,6 @@ public class Program
 
             interactiveCmd.OnExecute(() =>
             {
-                ReadLine.HistoryEnabled = true;
-
                 var elmEngineType = parseElmEngineTypeFromOption();
 
                 Console.WriteLine(
@@ -1004,24 +1008,21 @@ public class Program
                     appCodeTree: contextAppCodeTree,
                     engineType: elmEngineType);
 
-                while (true)
+                void processSubmission(string submission)
                 {
-                    var submission = ReadLine.Read("> ");
-
                     if (!(0 < submission?.Trim()?.Length))
-                        continue;
+                        return;
 
                     var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                    var evalResult =
-                        interactiveSession.Submit(submission);
+                    var evalResult = interactiveSession.Submit(submission);
 
                     evalStopwatch.Stop();
 
                     if (evalResult.Ok == null)
                     {
                         Console.WriteLine("Failed to evaluate: " + evalResult.Err);
-                        continue;
+                        return;
                     }
 
                     if (enableInspectionOption.HasValue())
@@ -1036,6 +1037,24 @@ public class Program
                     }
 
                     Console.WriteLine(evalResult.Ok.interactiveResponse.displayText);
+                }
+
+                var promptPrefix = "> ";
+
+                foreach (var submission in submitOption.Values.EmptyIfNull().WhereNotNull())
+                {
+                    Console.WriteLine(promptPrefix + submission);
+
+                    processSubmission(submission);
+                }
+
+                ReadLine.HistoryEnabled = true;
+
+                while (true)
+                {
+                    var submission = ReadLine.Read(promptPrefix);
+
+                    processSubmission(submission);
                 }
             });
         });

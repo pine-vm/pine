@@ -323,7 +323,7 @@ public class ElmInteractive
 
         static PineValueFromJson FromComponentWithoutBuildingDictionary(
             PineValueFromJsonIntermediate intermediate,
-            IDictionary<PineValueFromJsonIntermediate, string>? dictionary = null)
+            IReadOnlyDictionary<PineValueFromJsonIntermediate, string>? dictionary = null)
         {
             if (dictionary?.TryGetValue(intermediate, out var result) ?? false)
                 return new PineValueFromJson { Reference = result };
