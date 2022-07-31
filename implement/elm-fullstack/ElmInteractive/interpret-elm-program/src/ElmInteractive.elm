@@ -2780,7 +2780,7 @@ getDeclarationsFromEnvironment environment =
                             |> Result.mapError ((++) "Failed to decode environment entry: ")
                     )
                 |> Result.Extra.combine
-                |> Result.map Dict.fromList
+                |> Result.map (List.reverse >> Dict.fromList)
 
 
 parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission
