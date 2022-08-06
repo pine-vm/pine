@@ -2417,7 +2417,7 @@ pineExpressionFromElmFunctionOrValue name compilation =
             Ok
                 ( Pine.ApplicationExpression
                     { function = Pine.LiteralExpression compiledDeclaration
-                    , argument = Pine.ApplicationArgumentExpression
+                    , argument = Pine.ListExpression []
                     }
                 , noDependencies
                 )
