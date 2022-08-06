@@ -1980,17 +1980,51 @@ pineExpressionFromElmValueConstructor valueConstructor =
     let
         constructorName =
             Elm.Syntax.Node.value valueConstructor.name
-
-        argumentsNames =
-            valueConstructor.arguments
-                |> List.indexedMap
-                    (\i _ -> String.join "_" [ "const_tag", constructorName, "arg", String.fromInt i ])
     in
     ( constructorName
-    , argumentsNames
-        |> List.foldl
-            buildFunctionBindingArgumentToName
-            (Pine.tagValueExpression constructorName (argumentsNames |> List.map expressionToLookupNameInEnvironment))
+    , case List.length valueConstructor.arguments of
+        0 ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString constructorName)
+                , Pine.ListExpression []
+                ]
+
+        1 ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString constructorName)
+                , Pine.ListExpression [ Pine.ApplicationArgumentExpression ]
+                ]
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+
+        2 ->
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                        , Pine.LiteralExpression (Pine.valueFromString constructorName)
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        , Pine.ListExpression
+                            [ Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.ApplicationArgumentExpression
+                                ]
+                            , Pine.ApplicationArgumentExpression
+                                |> Pine.encodeExpressionAsValue
+                                |> Pine.LiteralExpression
+                            ]
+                        ]
+                    ]
+                ]
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+
+        argumentsCount ->
+            Pine.LiteralExpression
+                (Pine.valueFromString ("Compilation not implemented for this number of arguments: " ++ String.fromInt argumentsCount))
     )
 
 
