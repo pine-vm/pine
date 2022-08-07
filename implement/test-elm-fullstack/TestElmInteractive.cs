@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
@@ -75,6 +76,13 @@ public class TestElmInteractive
                     "Failed step '" + failedStep.step.name + "':\n" + failedStep.step.result?.Err?.errorAsText!,
                     color: IConsole.TextColor.Red);
             }
+        }
+
+        if (failedScenarios.Any())
+        {
+            throw new Exception(
+                "Failed for " + failedScenarios.Count + " scenarios:\n" +
+                string.Join("\n", failedScenarios.Select(scenarioNameAndResult => scenarioNameAndResult.Key)));
         }
     }
 }
