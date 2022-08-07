@@ -28,6 +28,7 @@ module CompileFullstackApp exposing
     , parseInterfaceRecordTree
     , parseSourceFileFunction
     , parseSourceFileFunctionName
+    , parserDeadEndToString
     , parserDeadEndsToString
     )
 
@@ -247,6 +248,25 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
         sourceModules =
             elmModulesDictFromAppFiles sourceFiles
                 |> Dict.map (always (Tuple.mapSecond Tuple.second))
+
+        sourceModulesReferencingCompilationInterface =
+            sourceModules
+                |> Dict.toList
+                |> List.filter
+                    (\( moduleName, _ ) ->
+                        compilationInterfaceElmModuleNamePrefixes
+                            |> List.any
+                                (\compilationInterfacePrefix ->
+                                    String.startsWith (compilationInterfacePrefix ++ ".") moduleName
+                                )
+                    )
+
+        modulesToAdd =
+            if sourceModulesReferencingCompilationInterface == [] then
+                []
+
+            else
+                modulesToAddForBase64
     in
     modulesToAdd
         |> List.foldl
@@ -4724,8 +4744,8 @@ importSyntaxTextFromModuleNameAndAlias ( moduleName, maybeAlias ) =
         ++ (maybeAlias |> Maybe.map ((++) " as ") |> Maybe.withDefault "")
 
 
-modulesToAdd : List String
-modulesToAdd =
+modulesToAddForBase64 : List String
+modulesToAddForBase64 =
     [ -- https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Base64.elm
       String.trimLeft
         """
