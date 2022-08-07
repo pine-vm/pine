@@ -1373,6 +1373,111 @@ fromIntFromDigitsChars digitsCharacters int =
         upperDigitsString ++ [ Maybe.withDefault 'e' (digitCharacterFromValue lastDigitValue) ]
 
 """
+    , """
+module Bytes exposing (..)
+
+
+type Bytes
+    = Bytes (List Int)
+
+
+width : Bytes -> Int
+width bytes =
+    case bytes of
+    Bytes list -> PineKernel.length list
+
+
+type Endianness = LE | BE
+
+"""
+    , """
+module Bytes.Encode exposing (..)
+
+
+import Bytes
+
+
+type Encoder
+  = U8 Int
+  | U16 Endianness Int
+  | U32 Endianness Int
+  | SequenceEncoder (List Encoder)
+  | BytesEncoder Bytes
+
+
+encode : Encoder -> Bytes
+encode builder =
+    Bytes.Bytes (encodeBlob builder)
+
+
+encodeBlob : Encoder -> List Int
+encodeBlob builder =
+  case builder of
+    U8    n ->
+        PineKernel.take [ 1, (PineKernel.reverse n) ]
+
+    U16 e n ->
+        let
+            littleEndian =
+                PineKernel.take [ 2, (PineKernel.reverse (PineKernel.skip [ 1, n ])) ]
+        in
+        if (e == Bytes.LE)
+        then littleEndian
+        else PineKernel.reverse littleEndian
+
+    U32 e n ->
+        let
+            littleEndian =
+                PineKernel.take [ 4, (PineKernel.reverse (PineKernel.skip [ 1, n ])) ]
+        in
+        if (e == Bytes.LE)
+        then littleEndian
+        else PineKernel.reverse littleEndian
+
+    SequenceEncoder bs ->
+        PineKernel.concat (List.map encodeBlob bs)
+
+    BytesEncoder bs ->
+        case bs of
+        Bytes.Bytes blob -> blob
+
+
+
+-- INTEGERS
+
+
+{-| Encode integers from `0` to `255` in one byte.
+-}
+unsignedInt8 : Int -> Encoder
+unsignedInt8 =
+  U8
+
+
+{-| Encode integers from `0` to `65535` in two bytes.
+-}
+unsignedInt16 : Endianness -> Int -> Encoder
+unsignedInt16 =
+  U16
+
+
+{-| Encode integers from `0` to `4294967295` in four bytes.
+-}
+unsignedInt32 : Endianness -> Int -> Encoder
+unsignedInt32 =
+  U32
+
+
+bytes : Bytes -> Encoder
+bytes =
+  Bytes
+
+
+sequence : List Encoder -> Encoder
+sequence builders =
+  SequenceEncoder builders
+
+
+"""
     ]
 
 

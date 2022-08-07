@@ -119,6 +119,11 @@ appStateMigrationInterfaceFunctionName =
     "migrate"
 
 
+encodingModuleImportBytes : ( List String, Maybe String )
+encodingModuleImportBytes =
+    ( [ "CompilerGenerated", "EncodeBytes" ], Just "EncodeBytes" )
+
+
 encodingModuleImportBase64 : ( List String, Maybe String )
 encodingModuleImportBase64 =
     ( [ "CompilerGenerated", "Base64" ], Just "Base64" )
@@ -249,24 +254,50 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
             elmModulesDictFromAppFiles sourceFiles
                 |> Dict.map (always (Tuple.mapSecond Tuple.second))
 
-        sourceModulesReferencingCompilationInterface =
+        compilationInterfaceModuleDependencies : Dict.Dict String (List String)
+        compilationInterfaceModuleDependencies =
+            [ ( "SourceFiles", modulesToAddForBytesCoding )
+            , ( "ElmMake", modulesToAddForBytesCoding )
+            , ( "GenerateJsonCoders", modulesToAddForBase64Coding )
+            ]
+                |> Dict.fromList
+
+        usedCompilationInterfaceModules : Set.Set String
+        usedCompilationInterfaceModules =
             sourceModules
-                |> Dict.toList
-                |> List.filter
-                    (\( moduleName, _ ) ->
+                |> Dict.keys
+                |> List.concatMap
+                    (\moduleName ->
                         compilationInterfaceElmModuleNamePrefixes
-                            |> List.any
+                            |> List.concatMap
                                 (\compilationInterfacePrefix ->
-                                    String.startsWith (compilationInterfacePrefix ++ ".") moduleName
+                                    if String.startsWith (compilationInterfacePrefix ++ ".") moduleName then
+                                        [ String.dropLeft (String.length compilationInterfacePrefix + 1) moduleName ]
+
+                                    else
+                                        []
                                 )
                     )
+                |> Set.fromList
 
-        modulesToAdd =
-            if sourceModulesReferencingCompilationInterface == [] then
-                []
+        containsBackend =
+            Dict.get (String.join "." rootModuleName) sourceModules /= Nothing
+
+        modulesToAddForBackendDepdendencies =
+            if containsBackend then
+                Set.fromList modulesToAddForBase64Coding
 
             else
-                modulesToAddForBase64
+                Set.empty
+
+        modulesToAdd =
+            usedCompilationInterfaceModules
+                |> Set.toList
+                |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
+                |> List.concat
+                |> Set.fromList
+                |> Set.union modulesToAddForBackendDepdendencies
+                |> Set.toList
     in
     modulesToAdd
         |> List.foldl
@@ -1867,7 +1898,7 @@ type FileTreeNode blobStructure
                                             |> Result.mapError (Elm.Syntax.Node.Node (Elm.Syntax.Node.range functionDeclaration))
                                     )
                                     (addImportsInElmModuleText
-                                        [ encodingModuleImportBase64
+                                        [ encodingModuleImportBytes
                                         , ( String.split "." generatedModuleName, Nothing )
                                         ]
                                         moduleText
@@ -1954,7 +1985,7 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
                                             |> Result.mapError (Elm.Syntax.Node.Node declarationRange)
                                     )
                                     (addImportsInElmModuleText
-                                        [ encodingModuleImportBase64
+                                        [ encodingModuleImportBytes
                                         , ( String.split "." generatedModuleName, Nothing )
                                         ]
                                         moduleText
@@ -3706,6 +3737,86 @@ buildGZipBase64ElmExpression bytes =
     buildBase64ElmExpression (Flate.deflateGZip bytes)
 
 
+buildUint32Uint8ElmExpression : Bytes.Bytes -> Result String String
+buildUint32Uint8ElmExpression bytes =
+    let
+        uint32_count =
+            Bytes.width bytes // 4
+
+        uint8_offset =
+            uint32_count * 4
+
+        uint8_count =
+            Bytes.width bytes - uint8_offset
+
+        uint32_decoder =
+            if uint32_count == 0 then
+                Bytes.Decode.succeed []
+
+            else
+                bytes_decode_list uint32_count (Bytes.Decode.unsignedInt32 Bytes.BE)
+
+        uint8_decoder =
+            if uint8_count == 0 then
+                Bytes.Decode.succeed []
+
+            else
+                bytes_decode_withOffset uint8_offset (bytes_decode_list uint8_count (Bytes.Decode.unsignedInt32 Bytes.BE))
+
+        expressionFromListInt list =
+            "[ " ++ String.join ", " (List.map String.fromInt list) ++ " ]"
+
+        recordExpression fields =
+            "{ "
+                ++ (fields
+                        |> List.map (\( fieldName, fieldValueExpression ) -> fieldName ++ " = " ++ fieldValueExpression)
+                        |> String.join ", "
+                   )
+                ++ " }"
+
+        decoder =
+            uint32_decoder
+                |> Bytes.Decode.andThen
+                    (\uint32 ->
+                        uint8_decoder |> Bytes.Decode.map (\uint8 -> { uint32 = uint32, uint8 = uint8 })
+                    )
+    in
+    case Bytes.Decode.decode decoder bytes of
+        Nothing ->
+            Err "Failed decoding bytes to integers"
+
+        Just { uint32, uint8 } ->
+            Ok
+                (recordExpression
+                    [ ( "uint32", expressionFromListInt uint32 )
+                    , ( "uint8", expressionFromListInt uint8 )
+                    ]
+                )
+
+
+bytes_decode_list : Int -> Bytes.Decode.Decoder a -> Bytes.Decode.Decoder (List a)
+bytes_decode_list length aDecoder =
+    if length == 0 then
+        Bytes.Decode.succeed []
+
+    else
+        Bytes.Decode.loop ( length, [] ) (bytes_decode_listStep aDecoder)
+
+
+bytes_decode_listStep : Bytes.Decode.Decoder a -> ( Int, List a ) -> Bytes.Decode.Decoder (Bytes.Decode.Step ( Int, List a ) (List a))
+bytes_decode_listStep elementDecoder ( n, elements ) =
+    if n <= 0 then
+        Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse elements))
+
+    else
+        Bytes.Decode.map (\element -> Bytes.Decode.Loop ( n - 1, element :: elements )) elementDecoder
+
+
+bytes_decode_withOffset : Int -> Bytes.Decode.Decoder a -> Bytes.Decode.Decoder a
+bytes_decode_withOffset offset decoder =
+    Bytes.Decode.bytes (max 0 offset) |> Bytes.Decode.andThen (\_ -> decoder)
+
+
 stringExpressionFromString : String -> String
 stringExpressionFromString string =
     "\""
@@ -4189,17 +4300,25 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
             , valueModuleBuildExpression = buildGZipBase64ElmExpression
             }
 
-        fromBase64ToBytes =
-            [ "|> Base64.toBytes"
-            , "|> Maybe.withDefault (\"Failed to convert from base64\" |> Bytes.Encode.string |> Bytes.Encode.encode)"
+        mappingUint32Uint8 =
+            { fieldName = "uint32_uint8"
+            , valueModuleBuildExpression = buildUint32Uint8ElmExpression
+            }
+
+        fromUint32Uint8ToBytes =
+            [ "|> EncodeBytes.bytes_encoder_from_uint32_uint8"
+            , "|> Bytes.Encode.encode"
             ]
                 |> String.join " "
+
+        mappingBytes =
+            ( mappingUint32Uint8, Just fromUint32Uint8ToBytes )
 
         mapToValueDict : Dict.Dict (List String) ( { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }, Maybe String )
         mapToValueDict =
             [ ( [ "base64" ], ( mappingBase64, Nothing ) )
-            , ( [ "bytes" ], ( mappingBase64, Just fromBase64ToBytes ) )
-            , ( [], ( mappingBase64, Just fromBase64ToBytes ) )
+            , ( [ "bytes" ], mappingBytes )
+            , ( [], mappingBytes )
             , ( [ "utf8" ], ( mappingUtf8, Nothing ) )
             , ( [ "gzip", "base64" ], ( mappingGZipBase64, Nothing ) )
             ]
@@ -4354,16 +4473,6 @@ integrateSourceFilesFunctionRecordFieldName fieldName configBefore =
 
         Nothing ->
             Err ("Unsupported field name: " ++ fieldName)
-
-
-parseInterfaceFunctionFlags : (String -> aggregate -> Result String aggregate) -> aggregate -> List String -> Result String aggregate
-parseInterfaceFunctionFlags parseFlag =
-    Ok
-        >> listFoldlToAggregateResult
-            (\flag ->
-                parseFlag flag
-                    >> Result.mapError ((++) ("Error parsing flag '" ++ flag ++ "': "))
-            )
 
 
 parseFlagsAndPathPatternFromFunctionName : Dict.Dict String prefix -> String -> Result String ( prefix, List String, String )
@@ -4744,8 +4853,29 @@ importSyntaxTextFromModuleNameAndAlias ( moduleName, maybeAlias ) =
         ++ (maybeAlias |> Maybe.map ((++) " as ") |> Maybe.withDefault "")
 
 
-modulesToAddForBase64 : List String
-modulesToAddForBase64 =
+modulesToAddForBytesCoding : List String
+modulesToAddForBytesCoding =
+    [ String.trimLeft """
+module CompilerGenerated.EncodeBytes exposing (..)
+
+import Bytes
+import Bytes.Encode
+
+
+bytes_encoder_from_uint32_uint8 : { uint32 : List Int, uint8 : List Int } -> Bytes.Encode.Encoder
+bytes_encoder_from_uint32_uint8 { uint32, uint8 } =
+    [ uint32 |> List.map (Bytes.Encode.unsignedInt32 Bytes.BE)
+    , uint8 |> List.map Bytes.Encode.unsignedInt8
+    ]
+        |> List.concat
+        |> Bytes.Encode.sequence
+
+"""
+    ]
+
+
+modulesToAddForBase64Coding : List String
+modulesToAddForBase64Coding =
     [ -- https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Base64.elm
       String.trimLeft
         """
