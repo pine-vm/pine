@@ -565,7 +565,7 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             { moduleAliases = moduleAliases
             , availableDeclarations =
                 declarationsOfOtherModules
-                    |> Dict.union (Dict.map (always ElmFunctionDeclaration) localFunctionDeclarations)
+                    |> Dict.union (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
                     |> Dict.union (declarationsFromCustomTypes |> Dict.map (always CompiledDeclaration))
             , inliningParentDeclarations = Set.empty
             }
@@ -659,6 +659,14 @@ type alias DeclarationInTranslation =
     { referencedLocalNames : Set.Set String
     , expression : Pine.Expression
     }
+
+
+internalDeclarationFromFunction : Elm.Syntax.Expression.Function -> InternalDeclaration
+internalDeclarationFromFunction elmFunction =
+    ElmFunctionDeclaration
+        { arguments = (Elm.Syntax.Node.value elmFunction.declaration).arguments |> List.map Elm.Syntax.Node.value
+        , expression = Elm.Syntax.Node.value (Elm.Syntax.Node.value elmFunction.declaration).expression
+        }
 
 
 buildDeclarationValue : Dict.Dict String DeclarationInTranslation -> ( String, DeclarationInTranslation ) -> Pine.Value
@@ -1544,7 +1552,13 @@ addInliningParentDeclaration name compilation =
 
 type InternalDeclaration
     = CompiledDeclaration Pine.Value
-    | ElmFunctionDeclaration Elm.Syntax.Expression.Function
+    | ElmFunctionDeclaration ElmFunctionDeclarationStruct
+
+
+type alias ElmFunctionDeclarationStruct =
+    { arguments : List Elm.Syntax.Pattern.Pattern
+    , expression : Elm.Syntax.Expression.Expression
+    }
 
 
 type alias CompiledExpressionDependencies =
@@ -1798,8 +1812,31 @@ pineExpressionFromElmLetBlock :
     CompilationStack
     -> Elm.Syntax.Expression.LetBlock
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmLetBlock stack letBlock =
+pineExpressionFromElmLetBlock stackBefore letBlock =
     let
+        newAvailableDeclarations =
+            letBlock.declarations
+                |> List.concatMap
+                    (\letDeclaration ->
+                        case Elm.Syntax.Node.value letDeclaration of
+                            Elm.Syntax.Expression.LetFunction letFunction ->
+                                [ ( Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunction.declaration).name
+                                  , internalDeclarationFromFunction letFunction
+                                  )
+                                ]
+
+                            Elm.Syntax.Expression.LetDestructuring _ _ ->
+                                []
+                    )
+                |> Dict.fromList
+
+        stack =
+            { stackBefore
+                | availableDeclarations =
+                    stackBefore.availableDeclarations
+                        |> Dict.union newAvailableDeclarations
+            }
+
         declarationsResults =
             letBlock.declarations
                 |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmLetDeclaration stack)
@@ -1872,7 +1909,7 @@ pineExpressionFromElmFunction stack function =
 
 pineExpressionFromElmFunctionWithoutName :
     CompilationStack
-    -> { arguments : List Elm.Syntax.Pattern.Pattern, expression : Elm.Syntax.Expression.Expression }
+    -> ElmFunctionDeclarationStruct
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
 pineExpressionFromElmFunctionWithoutName stack function =
     case pineExpressionFromElm stack function.expression of
@@ -2548,9 +2585,10 @@ pineExpressionFromElmFunctionOrValue name compilation =
                 continueWithoutLocalResolution ()
 
             else
-                pineExpressionFromElmFunction (addInliningParentDeclaration name compilation) elmFunctionDeclaration
+                pineExpressionFromElmFunctionWithoutName
+                    (addInliningParentDeclaration name compilation)
+                    elmFunctionDeclaration
                     |> Result.mapError ((++) ("Failed to inline function '" ++ name ++ "': "))
-                    |> Result.map Tuple.second
 
         Just (CompiledDeclaration compiledDeclaration) ->
             Ok
@@ -2566,6 +2604,10 @@ pineExpressionFromElmFunctionOrValueWithoutLocalResolution : String -> Compilati
 pineExpressionFromElmFunctionOrValueWithoutLocalResolution name compilation =
     case elmValuesToExposeToGlobal |> List.filter (Tuple.second >> (==) name) |> List.head of
         Nothing ->
+            let
+                log =
+                    Debug.log "Compiling to lookup (no inlining)" { name = name }
+            in
             Ok
                 ( Pine.ApplicationExpression
                     { function = expressionToLookupNameInEnvironment name
