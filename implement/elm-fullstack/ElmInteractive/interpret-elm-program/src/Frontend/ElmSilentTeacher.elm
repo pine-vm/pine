@@ -202,7 +202,7 @@ init =
             Time.millisToPosix 0
 
         evaluationContextResult =
-            ElmInteractive.pineEvalContextForElmInteractive ElmInteractive.DefaultContext
+            ElmInteractive.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
 
         trainingSession =
             case lessons of

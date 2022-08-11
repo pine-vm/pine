@@ -73,7 +73,7 @@ public class InteractiveSessionPine : IInteractiveSession
     public InteractiveSessionPine(TreeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
-            ElmInteractive.PineEvalContextForElmInteractive(
+            ElmInteractive.CompileEvalContextForElmInteractive(
                 evalElmPreparedJsEngine.Value,
                 appCodeTree: appCodeTree));
     }
@@ -110,7 +110,7 @@ public class InteractiveSessionPine : IInteractiveSession
             clock.Restart();
 
             var compileSubmissionResult =
-                ElmInteractive.CompileInteractiveSubmissionIntoPineExpression(
+                ElmInteractive.CompileInteractiveSubmission(
                     evalElmPreparedJsEngine.Value,
                     environment: buildPineEvalContextResult.Ok,
                     submission: submission,

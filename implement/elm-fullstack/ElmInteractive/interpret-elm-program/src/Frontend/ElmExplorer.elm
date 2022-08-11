@@ -35,7 +35,7 @@ evalDelayFromUserInputMilliseconds =
 init : ( State, Cmd Event )
 init =
     ( { expression = ""
-      , evaluationContext = ElmInteractive.pineEvalContextForElmInteractive ElmInteractive.DefaultContext
+      , evaluationContext = ElmInteractive.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
       , lastUserInputExpressionTime = Nothing
       , lastEvaluatedExpression = Nothing
       }

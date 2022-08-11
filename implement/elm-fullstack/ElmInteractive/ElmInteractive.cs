@@ -48,7 +48,7 @@ public class ElmInteractive
             responseStructure.DecodedArguments.Evaluated);
     }
 
-    static public Result<string, Component> PineEvalContextForElmInteractive(
+    static public Result<string, Component> CompileEvalContextForElmInteractive(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         TreeWithStringPath? appCodeTree)
     {
@@ -57,7 +57,7 @@ public class ElmInteractive
         var argumentsJson = System.Text.Json.JsonSerializer.Serialize(modulesTexts ?? ImmutableList<string>.Empty);
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("pineEvalContextForElmInteractive", argumentsJson).ToString()!;
+            evalElmPreparedJsEngine.CallFunction("compileEvalContextForElmInteractive", argumentsJson).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string, PineValueFromJson>>(
@@ -70,7 +70,7 @@ public class ElmInteractive
             .map(fromJson => ParsePineComponentFromJson(fromJson!));
     }
 
-    static public Result<string?, Component?> CompileInteractiveSubmissionIntoPineExpression(
+    static public Result<string?, Component?> CompileInteractiveSubmission(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         Component environment,
         string submission,
@@ -84,7 +84,7 @@ public class ElmInteractive
 
         var requestJson =
             System.Text.Json.JsonSerializer.Serialize(
-                new CompileInteractiveSubmissionIntoPineExpressionRequest
+                new CompileInteractiveSubmissionRequest
                 (
                     environment: PineValueFromJson.FromComponentBuildingDictionary(environment),
                     submission: submission
@@ -100,7 +100,7 @@ public class ElmInteractive
         clock.Restart();
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("compileInteractiveSubmissionIntoPineExpression", requestJson).ToString()!;
+            evalElmPreparedJsEngine.CallFunction("compileInteractiveSubmission", requestJson).ToString()!;
 
         logDuration("JavaScript function");
 
@@ -121,7 +121,7 @@ public class ElmInteractive
         return response;
     }
 
-    record CompileInteractiveSubmissionIntoPineExpressionRequest(
+    record CompileInteractiveSubmissionRequest(
         PineValueFromJson environment,
         string submission);
 
@@ -415,12 +415,12 @@ public class ElmInteractive
                 publicName: "evaluateSubmissionInInteractive",
                 arity: 1),
 
-                (functionNameInElm: "Main.pineEvalContextForElmInteractive",
-                publicName: "pineEvalContextForElmInteractive",
+                (functionNameInElm: "Main.compileEvalContextForElmInteractive",
+                publicName: "compileEvalContextForElmInteractive",
                 arity: 1),
 
-                (functionNameInElm: "Main.compileInteractiveSubmissionIntoPineExpression",
-                publicName: "compileInteractiveSubmissionIntoPineExpression",
+                (functionNameInElm: "Main.compileInteractiveSubmission",
+                publicName: "compileInteractiveSubmission",
                 arity: 1),
 
                 (functionNameInElm: "Main.submissionResponseFromResponsePineValue",

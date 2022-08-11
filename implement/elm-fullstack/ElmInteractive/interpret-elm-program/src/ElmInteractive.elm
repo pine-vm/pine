@@ -57,7 +57,7 @@ type alias ProjectParsedElmFile =
 
 submissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
 submissionInInteractive context previousSubmissions submission =
-    case pineEvalContextForElmInteractive context of
+    case compileEvalContextForElmInteractive context of
         Err error ->
             Err ("Failed to prepare the initial context: " ++ error)
 
@@ -83,7 +83,7 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
 submissionInInteractiveInPineContext : Pine.EvalContext -> String -> Result String ( Pine.EvalContext, SubmissionResponse )
 submissionInInteractiveInPineContext expressionContext submission =
-    compileInteractiveSubmissionIntoPineExpression expressionContext.applicationArgument submission
+    compileInteractiveSubmission expressionContext.applicationArgument submission
         |> Result.andThen
             (\pineExpression ->
                 case Pine.evaluateExpression expressionContext pineExpression of
@@ -308,8 +308,8 @@ elmValueAsElmRecord elmValue =
             Err "Value is not a list."
 
 
-pineEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
-pineEvalContextForElmInteractive context =
+compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
+compileEvalContextForElmInteractive context =
     let
         contextModulesTexts =
             case context of
@@ -374,10 +374,10 @@ pineEvalContextForElmInteractive context =
                         (\moduleToTranslate ->
                             Result.andThen
                                 (\aggregate ->
-                                    parseElmModuleTextIntoPineValue aggregate moduleToTranslate
+                                    compileElmModuleTextIntoPineValue aggregate moduleToTranslate
                                         |> Result.mapError
                                             ((++)
-                                                ("Failed to translate elm module '"
+                                                ("Failed to compile elm module '"
                                                     ++ String.join "." (Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule))
                                                     ++ "': "
                                                 )
@@ -488,14 +488,14 @@ parsedElmFileFromOnlyFileText fileText =
                 }
 
 
-parseElmModuleTextIntoPineValue : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
-parseElmModuleTextIntoPineValue availableForDependency moduleToTranslate =
-    parseElmModuleTextIntoNamedExports availableForDependency moduleToTranslate
+compileElmModuleTextIntoPineValue : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
+compileElmModuleTextIntoPineValue availableForDependency moduleToTranslate =
+    compileElmModuleTextIntoNamedExports availableForDependency moduleToTranslate
         |> Result.map (Tuple.mapSecond (List.map Pine.valueFromContextExpansionWithName >> Pine.ListValue))
 
 
-parseElmModuleTextIntoNamedExports : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
-parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
+compileElmModuleTextIntoNamedExports : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
+compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
     let
         moduleName =
             Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule)
@@ -534,7 +534,7 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                                 customTypeDeclaration.constructors
                                     |> List.map
                                         (Elm.Syntax.Node.value
-                                            >> pineExpressionFromElmValueConstructor
+                                            >> compileElmSyntaxValueConstructor
                                             >> Tuple.mapSecond Pine.encodeExpressionAsValue
                                         )
 
@@ -600,7 +600,7 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                 |> Dict.toList
                 |> List.map
                     (\( _, functionDeclaration ) ->
-                        pineExpressionFromElmFunction initialCompilationStack functionDeclaration
+                        compileElmSyntaxFunction initialCompilationStack functionDeclaration
                             |> Result.map
                                 (Tuple.mapSecond
                                     (\( expression, dependencies ) ->
@@ -611,7 +611,7 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                                 )
                             |> Result.mapError
                                 ((++)
-                                    ("Failed to translate function '"
+                                    ("Failed to compile function '"
                                         ++ Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
                                         ++ "': "
                                     )
@@ -620,7 +620,7 @@ parseElmModuleTextIntoNamedExports availableModules moduleToTranslate =
     in
     case functionDeclarationsResults |> Result.Extra.combine of
         Err error ->
-            Err ("Failed to translate declaration: " ++ error)
+            Err ("Failed to compile declaration: " ++ error)
 
         Ok functionDeclarations ->
             let
@@ -1575,11 +1575,11 @@ noDependencies =
     { referencedNames = Set.empty }
 
 
-pineExpressionFromElm :
+compileElmSyntaxExpression :
     CompilationStack
     -> Elm.Syntax.Expression.Expression
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElm stack elmExpression =
+compileElmSyntaxExpression stack elmExpression =
     case elmExpression of
         Elm.Syntax.Expression.Literal literal ->
             Ok
@@ -1606,7 +1606,7 @@ pineExpressionFromElm stack elmExpression =
                 )
 
         Elm.Syntax.Expression.Negation negatedElmExpression ->
-            case pineExpressionFromElm stack (Elm.Syntax.Node.value negatedElmExpression) of
+            case compileElmSyntaxExpression stack (Elm.Syntax.Node.value negatedElmExpression) of
                 Err error ->
                     Err ("Failed to compile negated expression: " ++ error)
 
@@ -1621,7 +1621,7 @@ pineExpressionFromElm stack elmExpression =
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             if moduleName == [] then
-                pineExpressionFromElmFunctionOrValue localName stack
+                compileElmFunctionOrValueLookup localName stack
 
             else
                 getDeclarationValueFromCompilation ( moduleName, localName ) stack
@@ -1643,7 +1643,7 @@ pineExpressionFromElm stack elmExpression =
                 appliedFunctionElmSyntax :: elmArguments ->
                     case
                         elmArguments
-                            |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm stack)
+                            |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
                             |> Result.Extra.combine
                     of
                         Err error ->
@@ -1655,7 +1655,7 @@ pineExpressionFromElm stack elmExpression =
                                     case
                                         appliedFunctionElmSyntax
                                             |> Elm.Syntax.Node.value
-                                            |> pineExpressionFromElm stack
+                                            |> compileElmSyntaxExpression stack
                                     of
                                         Err error ->
                                             Err ("Failed to compile Elm function syntax: " ++ error)
@@ -1698,18 +1698,18 @@ pineExpressionFromElm stack elmExpression =
                     mapExpressionForOperatorPrecedence elmExpression
             in
             if orderedElmExpression /= elmExpression then
-                pineExpressionFromElm stack orderedElmExpression
+                compileElmSyntaxExpression stack orderedElmExpression
 
             else
-                pineExpressionFromElm stack (Elm.Syntax.Node.value leftExpr)
+                compileElmSyntaxExpression stack (Elm.Syntax.Node.value leftExpr)
                     |> Result.mapError ((++) "Failed to compile left expression: ")
                     |> Result.andThen
                         (\( leftExpression, leftDeps ) ->
-                            pineExpressionFromElm stack (Elm.Syntax.Node.value rightExpr)
+                            compileElmSyntaxExpression stack (Elm.Syntax.Node.value rightExpr)
                                 |> Result.mapError ((++) "Failed to compile right expression: ")
                                 |> Result.andThen
                                     (\( rightExpression, rightDeps ) ->
-                                        pineExpressionFromElmFunctionOrValue ("(" ++ operator ++ ")") stack
+                                        compileElmFunctionOrValueLookup ("(" ++ operator ++ ")") stack
                                             |> Result.map
                                                 (\( operationFunction, operationFunctionDeps ) ->
                                                     ( Pine.ApplicationExpression
@@ -1729,20 +1729,20 @@ pineExpressionFromElm stack elmExpression =
                     |> Result.mapError ((++) ("Failed to compile OperatorApplication '" ++ operator ++ "': "))
 
         Elm.Syntax.Expression.PrefixOperator operator ->
-            pineExpressionFromElmFunctionOrValue ("(" ++ operator ++ ")") stack
+            compileElmFunctionOrValueLookup ("(" ++ operator ++ ")") stack
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
-            case pineExpressionFromElm stack (Elm.Syntax.Node.value elmCondition) of
+            case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmCondition) of
                 Err error ->
                     Err ("Failed to compile Elm condition: " ++ error)
 
                 Ok ( conditionExpression, conditionExpressionDeps ) ->
-                    case pineExpressionFromElm stack (Elm.Syntax.Node.value elmExpressionIfTrue) of
+                    case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmExpressionIfTrue) of
                         Err error ->
                             Err ("Failed to compile Elm expressionIfTrue: " ++ error)
 
                         Ok ( expressionIfTrue, expressionIfTrueDeps ) ->
-                            case pineExpressionFromElm stack (Elm.Syntax.Node.value elmExpressionIfFalse) of
+                            case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmExpressionIfFalse) of
                                 Err error ->
                                     Err ("Failed to compile Elm expressionIfFalse: " ++ error)
 
@@ -1758,14 +1758,14 @@ pineExpressionFromElm stack elmExpression =
                                         )
 
         Elm.Syntax.Expression.LetExpression letBlock ->
-            pineExpressionFromElmLetBlock stack letBlock
+            compileElmSyntaxLetBlock stack letBlock
 
         Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
-            pineExpressionFromElm stack (Elm.Syntax.Node.value parenthesizedExpression)
+            compileElmSyntaxExpression stack (Elm.Syntax.Node.value parenthesizedExpression)
 
         Elm.Syntax.Expression.ListExpr listExpression ->
             listExpression
-                |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm stack)
+                |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
                 |> Result.Extra.combine
                 |> Result.map
                     (\list ->
@@ -1775,19 +1775,19 @@ pineExpressionFromElm stack elmExpression =
                     )
 
         Elm.Syntax.Expression.CaseExpression caseBlock ->
-            pineExpressionFromElmCaseBlock stack caseBlock
+            compileElmSyntaxCaseBlock stack caseBlock
 
         Elm.Syntax.Expression.LambdaExpression lambdaExpression ->
-            pineExpressionFromElmLambda stack lambdaExpression
+            compileElmSyntaxLambda stack lambdaExpression
 
         Elm.Syntax.Expression.RecordExpr recordExpr ->
             recordExpr
                 |> List.map Elm.Syntax.Node.value
-                |> pineExpressionFromElmRecord stack
+                |> compileElmSyntaxRecord stack
 
         Elm.Syntax.Expression.TupledExpression tupleElements ->
             tupleElements
-                |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElm stack)
+                |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
                 |> Result.Extra.combine
                 |> Result.map
                     (\elements ->
@@ -1797,7 +1797,7 @@ pineExpressionFromElm stack elmExpression =
                     )
 
         Elm.Syntax.Expression.RecordAccess expressionNode nameNode ->
-            pineExpressionFromElmRecordAccess stack
+            compileElmSyntaxRecordAccess stack
                 (Elm.Syntax.Node.value nameNode)
                 (Elm.Syntax.Node.value expressionNode)
 
@@ -1808,11 +1808,11 @@ pineExpressionFromElm stack elmExpression =
                 )
 
 
-pineExpressionFromElmLetBlock :
+compileElmSyntaxLetBlock :
     CompilationStack
     -> Elm.Syntax.Expression.LetBlock
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmLetBlock stackBefore letBlock =
+compileElmSyntaxLetBlock stackBefore letBlock =
     let
         newAvailableDeclarations =
             letBlock.declarations
@@ -1839,16 +1839,16 @@ pineExpressionFromElmLetBlock stackBefore letBlock =
 
         declarationsResults =
             letBlock.declarations
-                |> List.map (Elm.Syntax.Node.value >> pineExpressionFromElmLetDeclaration stack)
+                |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxLetDeclaration stack)
     in
     case declarationsResults |> Result.Extra.combine of
         Err error ->
-            Err ("Failed to translate declaration in let block: " ++ error)
+            Err ("Failed to compile declaration in let block: " ++ error)
 
         Ok declarations ->
-            case pineExpressionFromElm stack (Elm.Syntax.Node.value letBlock.expression) of
+            case compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression) of
                 Err error ->
-                    Err ("Failed to translate expression in let block: " ++ error)
+                    Err ("Failed to compile expression in let block: " ++ error)
 
                 Ok ( expressionInExpandedContext, expressionInExpandedContextDeps ) ->
                     Ok
@@ -1861,14 +1861,14 @@ pineExpressionFromElmLetBlock stackBefore letBlock =
                         )
 
 
-pineExpressionFromElmLetDeclaration :
+compileElmSyntaxLetDeclaration :
     CompilationStack
     -> Elm.Syntax.Expression.LetDeclaration
     -> Result String ( List ( String, Pine.Expression ), CompiledExpressionDependencies )
-pineExpressionFromElmLetDeclaration stack declaration =
+compileElmSyntaxLetDeclaration stack declaration =
     case declaration of
         Elm.Syntax.Expression.LetFunction letFunction ->
-            pineExpressionFromElmFunction stack letFunction
+            compileElmSyntaxFunction stack letFunction
                 |> Result.map
                     (\( functionName, ( function, functionDeps ) ) ->
                         ( [ ( functionName, function ) ], functionDeps )
@@ -1877,12 +1877,12 @@ pineExpressionFromElmLetDeclaration stack declaration =
         Elm.Syntax.Expression.LetDestructuring patternNode expressionNode ->
             (case declarationsFromPattern (Elm.Syntax.Node.value patternNode) of
                 Err error ->
-                    Err ("Failed to translate pattern: " ++ error)
+                    Err ("Failed to compile pattern: " ++ error)
 
                 Ok deconstruct ->
-                    case pineExpressionFromElm stack (Elm.Syntax.Node.value expressionNode) of
+                    case compileElmSyntaxExpression stack (Elm.Syntax.Node.value expressionNode) of
                         Err error ->
-                            Err ("Failed to translate expression: " ++ error)
+                            Err ("Failed to compile expression: " ++ error)
 
                         Ok ( pineExpression, pineExpressionDeps ) ->
                             Ok ( deconstruct pineExpression, pineExpressionDeps )
@@ -1890,12 +1890,12 @@ pineExpressionFromElmLetDeclaration stack declaration =
                 |> Result.mapError ((++) "Failed destructuring in let block: ")
 
 
-pineExpressionFromElmFunction :
+compileElmSyntaxFunction :
     CompilationStack
     -> Elm.Syntax.Expression.Function
     -> Result String ( String, ( Pine.Expression, CompiledExpressionDependencies ) )
-pineExpressionFromElmFunction stack function =
-    pineExpressionFromElmFunctionWithoutName stack
+compileElmSyntaxFunction stack function =
+    compileElmSyntaxFunctionWithoutName stack
         { arguments = (Elm.Syntax.Node.value function.declaration).arguments |> List.map Elm.Syntax.Node.value
         , expression = Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).expression
         }
@@ -1907,14 +1907,14 @@ pineExpressionFromElmFunction stack function =
             )
 
 
-pineExpressionFromElmFunctionWithoutName :
+compileElmSyntaxFunctionWithoutName :
     CompilationStack
     -> ElmFunctionDeclarationStruct
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmFunctionWithoutName stack function =
-    case pineExpressionFromElm stack function.expression of
+compileElmSyntaxFunctionWithoutName stack function =
+    case compileElmSyntaxExpression stack function.expression of
         Err error ->
-            Err ("Failed to translate expression in let function: " ++ error)
+            Err ("Failed to compile expression in let function: " ++ error)
 
         Ok ( functionBodyExpression, functionBodyExpressionDeps ) ->
             case
@@ -1927,7 +1927,7 @@ pineExpressionFromElmFunctionWithoutName stack function =
                     |> Result.Extra.combine
             of
                 Err error ->
-                    Err ("Failed to translate function argument pattern: " ++ error)
+                    Err ("Failed to compile function argument pattern: " ++ error)
 
                 Ok argumentsDeconstructDeclarationsBuilders ->
                     let
@@ -2117,8 +2117,8 @@ buildClosureExpression environment expression =
         }
 
 
-pineExpressionFromElmValueConstructor : Elm.Syntax.Type.ValueConstructor -> ( String, Pine.Expression )
-pineExpressionFromElmValueConstructor valueConstructor =
+compileElmSyntaxValueConstructor : Elm.Syntax.Type.ValueConstructor -> ( String, Pine.Expression )
+compileElmSyntaxValueConstructor valueConstructor =
     let
         constructorName =
             Elm.Syntax.Node.value valueConstructor.name
@@ -2170,19 +2170,19 @@ pineExpressionFromElmValueConstructor valueConstructor =
     )
 
 
-pineExpressionFromElmCaseBlock :
+compileElmSyntaxCaseBlock :
     CompilationStack
     -> Elm.Syntax.Expression.CaseBlock
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmCaseBlock stack caseBlock =
-    case pineExpressionFromElm stack (Elm.Syntax.Node.value caseBlock.expression) of
+compileElmSyntaxCaseBlock stack caseBlock =
+    case compileElmSyntaxExpression stack (Elm.Syntax.Node.value caseBlock.expression) of
         Err error ->
             Err ("Failed to compile case block expression: " ++ error)
 
         Ok ( expression, conditionDependencies ) ->
             case
                 caseBlock.cases
-                    |> List.map (pineExpressionFromElmCaseBlockCase stack expression)
+                    |> List.map (compileElmSyntaxCaseBlockCase stack expression)
                     |> Result.Extra.combine
             of
                 Err error ->
@@ -2214,7 +2214,7 @@ pineExpressionFromElmCaseBlock stack caseBlock =
                         )
 
 
-pineExpressionFromElmCaseBlockCase :
+compileElmSyntaxCaseBlockCase :
     CompilationStack
     -> Pine.Expression
     -> Elm.Syntax.Expression.Case
@@ -2225,13 +2225,13 @@ pineExpressionFromElmCaseBlockCase :
             , declarations : List ( String, Pine.Expression )
             , thenExpression : ( Pine.Expression, CompiledExpressionDependencies )
             }
-pineExpressionFromElmCaseBlockCase stack caseBlockValueExpression ( elmPattern, elmExpression ) =
-    case pineExpressionFromElm stack (Elm.Syntax.Node.value elmExpression) of
+compileElmSyntaxCaseBlockCase stack caseBlockValueExpression ( elmPattern, elmExpression ) =
+    case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmExpression) of
         Err error ->
             Err ("Failed to compile case expression: " ++ error)
 
         Ok caseValueExpression ->
-            pineExpressionFromElmPattern stack caseBlockValueExpression elmPattern
+            compileElmSyntaxPattern stack caseBlockValueExpression elmPattern
                 |> Result.map
                     (\deconstruction ->
                         { conditionExpression = deconstruction.conditionExpression
@@ -2241,7 +2241,7 @@ pineExpressionFromElmCaseBlockCase stack caseBlockValueExpression ( elmPattern, 
                     )
 
 
-pineExpressionFromElmPattern :
+compileElmSyntaxPattern :
     CompilationStack
     -> Pine.Expression
     -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
@@ -2251,7 +2251,7 @@ pineExpressionFromElmPattern :
             { conditionExpression : Pine.Expression
             , declarations : List ( String, Pine.Expression )
             }
-pineExpressionFromElmPattern stack caseBlockValueExpression elmPattern =
+compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
     let
         continueWithOnlyEqualsCondition valueToCompare =
             Ok
@@ -2269,7 +2269,7 @@ pineExpressionFromElmPattern stack caseBlockValueExpression elmPattern =
         Elm.Syntax.Pattern.ListPattern listElements ->
             let
                 conditionsAndDeclarationsFromPattern elementIndex =
-                    pineExpressionFromElmPattern stack
+                    compileElmSyntaxPattern stack
                         (listItemFromIndexExpression elementIndex caseBlockValueExpression)
                         >> Result.map
                             (\listElementResult ->
@@ -2480,28 +2480,28 @@ listSkipExpression numberToDrop listExpression =
             listExpression
 
 
-pineExpressionFromElmLambda :
+compileElmSyntaxLambda :
     CompilationStack
     -> Elm.Syntax.Expression.Lambda
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmLambda stack lambda =
-    pineExpressionFromElmFunctionWithoutName stack
+compileElmSyntaxLambda stack lambda =
+    compileElmSyntaxFunctionWithoutName stack
         { arguments = lambda.args |> List.map Elm.Syntax.Node.value
         , expression = Elm.Syntax.Node.value lambda.expression
         }
 
 
-pineExpressionFromElmRecord :
+compileElmSyntaxRecord :
     CompilationStack
     -> List Elm.Syntax.Expression.RecordSetter
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmRecord stack recordSetters =
+compileElmSyntaxRecord stack recordSetters =
     recordSetters
         |> List.map (Tuple.mapFirst Elm.Syntax.Node.value)
         |> List.sortBy Tuple.first
         |> List.map
             (\( fieldName, fieldExpressionNode ) ->
-                case pineExpressionFromElm stack (Elm.Syntax.Node.value fieldExpressionNode) of
+                case compileElmSyntaxExpression stack (Elm.Syntax.Node.value fieldExpressionNode) of
                     Err error ->
                         Err ("Failed to compile record field: " ++ error)
 
@@ -2527,13 +2527,13 @@ pineExpressionFromElmRecord stack recordSetters =
             )
 
 
-pineExpressionFromElmRecordAccess :
+compileElmSyntaxRecordAccess :
     CompilationStack
     -> String
     -> Elm.Syntax.Expression.Expression
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmRecordAccess stack fieldName recordElmExpression =
-    pineExpressionFromElm stack recordElmExpression
+compileElmSyntaxRecordAccess stack fieldName recordElmExpression =
+    compileElmSyntaxExpression stack recordElmExpression
         |> Result.mapError ((++) "Failed to compile record expression: ")
         |> Result.map
             (\( recordExpression, recordExpressionDeps ) ->
@@ -2570,11 +2570,11 @@ pineExpressionForRecordAccess fieldName recordExpression =
         }
 
 
-pineExpressionFromElmFunctionOrValue : String -> CompilationStack -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmFunctionOrValue name compilation =
+compileElmFunctionOrValueLookup : String -> CompilationStack -> Result String ( Pine.Expression, CompiledExpressionDependencies )
+compileElmFunctionOrValueLookup name compilation =
     let
         continueWithoutLocalResolution _ =
-            pineExpressionFromElmFunctionOrValueWithoutLocalResolution name compilation
+            compileElmFunctionOrValueLookupWithoutLocalResolution name compilation
     in
     case compilation.availableDeclarations |> Dict.get name of
         Nothing ->
@@ -2585,7 +2585,7 @@ pineExpressionFromElmFunctionOrValue name compilation =
                 continueWithoutLocalResolution ()
 
             else
-                pineExpressionFromElmFunctionWithoutName
+                compileElmSyntaxFunctionWithoutName
                     (addInliningParentDeclaration name compilation)
                     elmFunctionDeclaration
                     |> Result.mapError ((++) ("Failed to inline function '" ++ name ++ "': "))
@@ -2600,14 +2600,10 @@ pineExpressionFromElmFunctionOrValue name compilation =
                 )
 
 
-pineExpressionFromElmFunctionOrValueWithoutLocalResolution : String -> CompilationStack -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-pineExpressionFromElmFunctionOrValueWithoutLocalResolution name compilation =
+compileElmFunctionOrValueLookupWithoutLocalResolution : String -> CompilationStack -> Result String ( Pine.Expression, CompiledExpressionDependencies )
+compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
     case elmValuesToExposeToGlobal |> List.filter (Tuple.second >> (==) name) |> List.head of
         Nothing ->
-            let
-                log =
-                    Debug.log "Compiling to lookup (no inlining)" { name = name }
-            in
             Ok
                 ( Pine.ApplicationExpression
                     { function = expressionToLookupNameInEnvironment name
@@ -2836,8 +2832,8 @@ operatorPrecendencePriority =
 The first element contains the new interactive session state for the possible next submission.
 The second element contains the response, the value to display to the user.
 -}
-compileInteractiveSubmissionIntoPineExpression : Pine.Value -> String -> Result String Pine.Expression
-compileInteractiveSubmissionIntoPineExpression environment submission =
+compileInteractiveSubmission : Pine.Value -> String -> Result String Pine.Expression
+compileInteractiveSubmission environment submission =
     case getDeclarationsFromEnvironment environment of
         Err error ->
             Err ("Failed to get declarations from environment: " ++ error)
@@ -2869,9 +2865,9 @@ compileInteractiveSubmissionIntoPineExpression environment submission =
                 Ok (DeclarationSubmission elmDeclaration) ->
                     case elmDeclaration of
                         Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                            case pineExpressionFromElmFunction initialStack functionDeclaration of
+                            case compileElmSyntaxFunction initialStack functionDeclaration of
                                 Err error ->
-                                    Err ("Failed to translate Elm function declaration: " ++ error)
+                                    Err ("Failed to compile Elm function declaration: " ++ error)
 
                                 Ok ( declaredName, ( declaredFunctionExpression, _ ) ) ->
                                     Ok
@@ -2913,7 +2909,7 @@ compileInteractiveSubmissionIntoPineExpression environment submission =
                             Err "Destructuring as submission is not implemented"
 
                 Ok (ExpressionSubmission elmExpression) ->
-                    case pineExpressionFromElm initialStack elmExpression of
+                    case compileElmSyntaxExpression initialStack elmExpression of
                         Err error ->
                             Err ("Failed to compile Elm to Pine expression: " ++ error)
 

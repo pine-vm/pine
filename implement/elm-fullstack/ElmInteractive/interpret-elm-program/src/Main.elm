@@ -59,13 +59,13 @@ evaluateSubmissionInInteractive argumentsJson =
         )
 
 
-pineEvalContextForElmInteractive : String -> String
-pineEvalContextForElmInteractive =
+compileEvalContextForElmInteractive : String -> String
+compileEvalContextForElmInteractive =
     Json.Decode.decodeString (Json.Decode.list Json.Decode.string)
         >> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
         >> Result.andThen
             (\modulesTexts ->
-                ElmInteractive.pineEvalContextForElmInteractive
+                ElmInteractive.compileEvalContextForElmInteractive
                     (ElmInteractive.InitContextFromApp { modulesTexts = modulesTexts })
                     |> Result.mapError ((++) "Failed to prepare the initial context: ")
             )
@@ -73,14 +73,14 @@ pineEvalContextForElmInteractive =
         >> Json.Encode.encode 0
 
 
-compileInteractiveSubmissionIntoPineExpression : String -> String
-compileInteractiveSubmissionIntoPineExpression requestJson =
+compileInteractiveSubmission : String -> String
+compileInteractiveSubmission requestJson =
     requestJson
-        |> Json.Decode.decodeString json_Decode_compileInteractiveSubmissionIntoPineExpression
+        |> Json.Decode.decodeString json_Decode_compileInteractiveSubmission
         |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode request: ")
         |> Result.andThen
             (\( environment, submission ) ->
-                ElmInteractive.compileInteractiveSubmissionIntoPineExpression environment submission
+                ElmInteractive.compileInteractiveSubmission environment submission
                     |> Result.map Pine.encodeExpressionAsValue
             )
         |> json_encode_Result Json.Encode.string json_encode_pineValue
@@ -114,8 +114,8 @@ jsonDecodeEvaluateSubmissionArguments =
         (Json.Decode.field "previousLocalSubmissions" (Json.Decode.list Json.Decode.string))
 
 
-json_Decode_compileInteractiveSubmissionIntoPineExpression : Json.Decode.Decoder ( Pine.Value, String )
-json_Decode_compileInteractiveSubmissionIntoPineExpression =
+json_Decode_compileInteractiveSubmission : Json.Decode.Decoder ( Pine.Value, String )
+json_Decode_compileInteractiveSubmission =
     Json.Decode.map2
         (\environment submission -> ( environment, submission ))
         (Json.Decode.field "environment" json_decode_pineValue)
@@ -142,8 +142,8 @@ main =
         , update =
             \_ stateBefore ->
                 ( [ parseElmModuleTextToJson (evaluateSubmissionInInteractive "") |> always ""
-                  , compileInteractiveSubmissionIntoPineExpression ""
-                  , pineEvalContextForElmInteractive ""
+                  , compileInteractiveSubmission ""
+                  , compileEvalContextForElmInteractive ""
                   , submissionResponseFromResponsePineValue ""
                   ]
                     |> always stateBefore
