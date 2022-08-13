@@ -22,9 +22,10 @@ jobs:
       run: |
         git config --global core.autocrlf false
     - uses: actions/checkout@v2
-    - uses: actions/setup-dotnet@v1
+    - uses: actions/setup-dotnet@v2
       with:
-        dotnet-version: '6.0.302'
+        dotnet-version: '7.0.100-preview.7.22377.5'
+        include-prerelease: true
     - name: Try use dotnet core 3
       run: dotnet --info
     - uses: actions/checkout@v2
