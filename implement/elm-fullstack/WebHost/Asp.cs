@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Pine;
 
 namespace ElmFullstack.WebHost;
 
@@ -80,7 +81,7 @@ static public class Asp
     {
         var httpHeaders =
             httpRequest.Headers
-            .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray()))
+            .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray().WhereNotNull().ToArray()))
             .ToArray();
 
         using var stream = new MemoryStream();

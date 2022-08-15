@@ -33,16 +33,13 @@ public record ProcessWithLog<LogEntryT, ResultT>(
 
 static public class ProcessWithLogExtension
 {
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT?>> ResultAndThenMap<LogEntryT, ErrT, OkT, NewOkT>(
-        this ProcessWithLog<LogEntryT, Result<ErrT, OkT?>> orig,
-        Func<OkT, Result<ErrT, NewOkT?>> andThen) =>
-        orig.MapResult(previousResult =>
-        previousResult.Ok == null ?
-        Result<ErrT, NewOkT?>.err(previousResult.Err) :
-        andThen(previousResult.Ok));
+    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenMap<LogEntryT, ErrT, OkT, NewOkT>(
+        this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
+        Func<OkT, Result<ErrT, NewOkT>> andThen) =>
+        orig.MapResult(previousResult => previousResult.andThen(andThen));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT?>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
-        this ProcessWithLog<LogEntryT, Result<ErrT, OkT?>> orig,
+        this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, NewOkT> map) =>
         orig.ResultAndThenMap(previousResult => Result<ErrT, NewOkT?>.ok(map(previousResult)));
 
@@ -56,7 +53,7 @@ static public class ProcessWithLogExtension
         Func<OkT, ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>> andThen) =>
         orig.Continue(previousResult =>
         previousResult.Ok == null ?
-        new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: Result<ErrT, NewOkT>.err(previousResult.Err)) :
+        new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: Result<ErrT, NewOkT>.err(previousResult.Err!)) :
         andThen(previousResult.Ok));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(

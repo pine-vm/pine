@@ -15,7 +15,7 @@ namespace elm_fullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-08-13";
+    static public string AppVersionId => "2022-08-15";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -598,7 +598,7 @@ public class Program
             {
                 var result = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
 
-                void saveTextToFileAndReportToConsole(string filePath, string text)
+                static void saveTextToFileAndReportToConsole(string filePath, string text)
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 

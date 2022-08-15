@@ -67,7 +67,7 @@ static public class Configuration
 
     static public IReadOnlyList<string> GetSettingPublicWebHostUrls(
         this IConfiguration? configuration) =>
-        configuration?.GetValue<string>(PublicWebHostUrlsSettingKey).Split(new[] { ',', ';' }) ??
+        configuration?.GetValue<string>(PublicWebHostUrlsSettingKey)?.Split(new[] { ',', ';' }) ??
         PublicWebHostUrlsDefault;
 
     static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>

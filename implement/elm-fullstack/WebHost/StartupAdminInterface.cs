@@ -81,7 +81,7 @@ public class StartupAdminInterface
 
         var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
-        var adminPassword = configuration.GetValue<string>(Configuration.AdminPasswordSettingKey);
+        var adminPassword = configuration?.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
         object avoidConcurrencyLock = new();
 
