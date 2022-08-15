@@ -1115,7 +1115,9 @@ public class Program
         {
             var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
 
-            yield return "a tree containing " + blobs.Count + " blobs with an aggregate size of " + blobs.Sum(blob => (long)blob.blobContent.Length) + " bytes.";
+            yield return
+                "a tree containing " + blobs.Count + " blobs with an aggregate size of " +
+                CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(blob => (long)blob.blobContent.Length)) + " bytes.";
 
             if (listBlobs)
                 yield return

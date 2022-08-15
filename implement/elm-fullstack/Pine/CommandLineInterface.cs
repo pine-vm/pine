@@ -1,7 +1,18 @@
-﻿namespace Pine;
+﻿using System.Globalization;
+
+namespace Pine;
 
 public class CommandLineInterface
 {
     static public string FormatIntegerForDisplay(long integer) =>
-        integer.ToString("### ### ### ### ### ### ##0").Trim();
+        FormatIntegerForDisplay(integer, '_');
+
+    static public string FormatIntegerForDisplay(long integer, char thousandsSeparator) =>
+        integer.ToString("N",
+            new NumberFormatInfo
+            {
+                NumberGroupSizes = new[] { 3, 3, 3, 3, 3, 3 },
+                NumberGroupSeparator = thousandsSeparator.ToString(),
+                NumberDecimalDigits = 0
+            });
 }
