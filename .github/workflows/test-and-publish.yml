@@ -26,7 +26,7 @@ jobs:
       with:
         dotnet-version: '7.0.100-preview.7.22377.5'
         include-prerelease: true
-    - name: Try use dotnet core 3
+    - name: Try use dotnet
       run: dotnet --info
     - uses: actions/checkout@v2
 
