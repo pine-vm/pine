@@ -3172,44 +3172,136 @@ json_decode_pineValue =
     json_decode_pineValueWithDictionary Dict.empty
 
 
-json_decode_pineValueWithDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder Pine.Value
+json_decode_pineValueWithDictionary : Dict.Dict String PineValueSupportingReference -> Json.Decode.Decoder Pine.Value
 json_decode_pineValueWithDictionary dictionary =
-    json_decode_optionalNullableField "Dictionary" (json_decode_pineValueDictionary dictionary)
-        |> Json.Decode.map (Maybe.withDefault Dict.empty >> (\newDict -> Dict.union newDict dictionary))
+    json_decode_optionalNullableField "Dictionary" json_decode_pineValueDictionary
+        |> Json.Decode.map (Maybe.withDefault Dict.empty >> (Dict.union >> (|>) dictionary))
         |> Json.Decode.andThen json_decode_pineValueApplyingDictionary
 
 
-json_decode_pineValueDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder (Dict.Dict String Pine.Value)
-json_decode_pineValueDictionary dictionary =
-    Json.Decode.list (json_decode_pineValueDictionaryEntry dictionary)
+json_decode_pineValueDictionary : Json.Decode.Decoder (Dict.Dict String PineValueSupportingReference)
+json_decode_pineValueDictionary =
+    Json.Decode.list json_decode_pineValueDictionaryEntry
         |> Json.Decode.map Dict.fromList
 
 
-json_decode_pineValueDictionaryEntry : Dict.Dict String Pine.Value -> Json.Decode.Decoder ( String, Pine.Value )
-json_decode_pineValueDictionaryEntry dictionary =
+resolvePineValueReferenceToLiteralRecursive :
+    Set.Set String
+    -> Dict.Dict String PineValueSupportingReference
+    -> PineValueSupportingReference
+    -> Result ( List String, String ) Pine.Value
+resolvePineValueReferenceToLiteralRecursive stack dictionary valueSupportingRef =
+    case valueSupportingRef of
+        LiteralValue literal ->
+            Ok literal
+
+        ListSupportingReference list ->
+            list
+                |> List.map (resolvePineValueReferenceToLiteralRecursive stack dictionary)
+                |> Result.Extra.combine
+                |> Result.map Pine.ListValue
+
+        ReferenceValue reference ->
+            if Set.member reference stack then
+                Err ( [], "cyclic reference" )
+
+            else
+                case Dict.get reference dictionary of
+                    Nothing ->
+                        let
+                            keys =
+                                Dict.keys dictionary
+                        in
+                        Err
+                            ( []
+                            , "Did not find dictionary entry for reference '"
+                                ++ reference
+                                ++ "'. Dictionary contains "
+                                ++ String.fromInt (Dict.size dictionary)
+                                ++ " entries between "
+                                ++ Maybe.withDefault "" (List.head keys)
+                                ++ " and "
+                                ++ Maybe.withDefault "" (List.head (List.reverse keys))
+                            )
+
+                    Just foundEntry ->
+                        resolvePineValueReferenceToLiteralRecursive
+                            (Set.insert reference stack)
+                            dictionary
+                            foundEntry
+                            |> Result.mapError (Tuple.mapFirst ((::) reference))
+
+
+json_decode_pineValueDictionaryEntry : Json.Decode.Decoder ( String, PineValueSupportingReference )
+json_decode_pineValueDictionaryEntry =
     Json.Decode.map2 Tuple.pair
         (Json.Decode.field "key" Json.Decode.string)
-        (Json.Decode.field "value" (Json.Decode.lazy (\_ -> json_decode_pineValueWithDictionary dictionary)))
+        (Json.Decode.field "value" json_decode_pineValueSupportingReference)
 
 
-json_decode_pineValueApplyingDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder Pine.Value
+json_decode_pineValueApplyingDictionary : Dict.Dict String PineValueSupportingReference -> Json.Decode.Decoder Pine.Value
 json_decode_pineValueApplyingDictionary dictionary =
+    json_decode_pineValueGeneric
+        { decodeListElement =
+            Json.Decode.lazy (\_ -> json_decode_pineValueWithDictionary dictionary)
+        , consList = Pine.ListValue
+        , decodeReference =
+            \reference ->
+                resolvePineValueReferenceToLiteralRecursive Set.empty dictionary (ReferenceValue reference)
+                    |> Result.Extra.unpack
+                        (\( errorStack, errorMessage ) ->
+                            Json.Decode.fail
+                                ("Failed to resolve entry '"
+                                    ++ reference
+                                    ++ "': "
+                                    ++ errorMessage
+                                    ++ " ("
+                                    ++ String.join ", " errorStack
+                                    ++ ")"
+                                )
+                        )
+                        Json.Decode.succeed
+        , consLiteral = identity
+        }
+
+
+json_decode_pineValueSupportingReference : Json.Decode.Decoder PineValueSupportingReference
+json_decode_pineValueSupportingReference =
+    json_decode_pineValueGeneric
+        { decodeListElement = Json.Decode.lazy (\_ -> json_decode_pineValueSupportingReference)
+        , consList = ListSupportingReference
+        , decodeReference = ReferenceValue >> Json.Decode.succeed
+        , consLiteral = LiteralValue
+        }
+
+
+type PineValueSupportingReference
+    = ListSupportingReference (List PineValueSupportingReference)
+    | LiteralValue Pine.Value
+    | ReferenceValue String
+
+
+type alias DecodePineValueConfig value listElement =
+    { decodeListElement : Json.Decode.Decoder listElement
+    , consList : List listElement -> value
+    , decodeReference : String -> Json.Decode.Decoder value
+    , consLiteral : Pine.Value -> value
+    }
+
+
+json_decode_pineValueGeneric : DecodePineValueConfig value listElement -> Json.Decode.Decoder value
+json_decode_pineValueGeneric config =
     Json.Decode.oneOf
         [ Json.Decode.field "List"
-            (Json.Decode.lazy (\_ -> Json.Decode.list (json_decode_pineValueWithDictionary dictionary)))
-            |> Json.Decode.map Pine.ListValue
+            (Json.Decode.list config.decodeListElement |> Json.Decode.map config.consList)
         , Json.Decode.field "ListAsString" Json.Decode.string
-            |> Json.Decode.map Pine.valueFromString
+            |> Json.Decode.map (Pine.valueFromString >> config.consLiteral)
         , Json.Decode.field "Blob" (Json.Decode.list Json.Decode.int)
-            |> Json.Decode.map Pine.BlobValue
-        , Json.Decode.field "Reference" Json.Decode.string
-            |> Json.Decode.andThen
-                (\reference ->
-                    dictionary
-                        |> Dict.get reference
-                        |> Maybe.map Json.Decode.succeed
-                        |> Maybe.withDefault (Json.Decode.fail ("Did not find dictionary entry for reference '" ++ reference ++ "'"))
-                )
+            |> Json.Decode.map (Pine.BlobValue >> config.consLiteral)
+        , Json.Decode.field "Reference"
+            (Json.Decode.string
+                |> Json.Decode.andThen config.decodeReference
+            )
         ]
 
 
