@@ -426,11 +426,11 @@ public class StartupAdminInterface
                             var elmAppStateReductionComponent =
                                 components.First(c => CommonConversion.StringBase16(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
 
-                            if(elmAppStateReductionComponent.BlobContent == null)
+                            if(elmAppStateReductionComponent is not Composition.BlobComponent elmAppStateReductionComponentBlob)
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");
 
                             var elmAppStateReductionString =
-                                Encoding.UTF8.GetString(elmAppStateReductionComponent.BlobContent.Value.Span);
+                                Encoding.UTF8.GetString(elmAppStateReductionComponentBlob.BlobContent.Span);
 
                             context.Response.StatusCode = 200;
                             context.Response.ContentType = "application/json";

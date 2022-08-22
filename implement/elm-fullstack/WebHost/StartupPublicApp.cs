@@ -433,10 +433,10 @@ public class StartupPublicApp
 
             if (matchFromSourceComposition != null)
             {
-                if (matchFromSourceComposition.BlobContent == null)
+                if (matchFromSourceComposition is not Composition.BlobComponent matchFromSourceCompositionBlobs)
                     throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
 
-                return matchFromSourceComposition.BlobContent.Value.ToArray();
+                return matchFromSourceCompositionBlobs.BlobContent.ToArray();
             }
 
             return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();

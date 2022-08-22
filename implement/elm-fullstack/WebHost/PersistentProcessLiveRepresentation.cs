@@ -152,7 +152,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                             throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree.");
                         }
 
-                        if (elmAppStateComponent.BlobContent == null)
+                        if (elmAppStateComponent is not Composition.BlobComponent elmAppStateComponentBlob)
                         {
                             throw new Exception("Unexpected content of elmAppStateComponent " + reductionRecord.elmAppState?.HashBase16 + ": This is not a blob.");
                         }
@@ -161,7 +161,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         (
                             appConfig: appConfigComponent,
                             appConfigAsTree: parseAppConfigAsTree.Ok,
-                            elmAppState: elmAppStateComponent.BlobContent.Value
+                            elmAppState: elmAppStateComponentBlob.BlobContent
                         );
                     }
                 }
@@ -471,13 +471,13 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             var component = storeReader.LoadComponent(componentHash);
 
-            if (component == null)
+            if (component is null)
                 throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
 
-            if (component.BlobContent == null)
+            if (component is not Composition.BlobComponent blobComponent)
                 throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
 
-            return component.BlobContent.Value;
+            return blobComponent.BlobContent;
         }
 
         Composition.TreeWithStringPath loadComponentFromStoreAndAssertIsTree(string componentHash)

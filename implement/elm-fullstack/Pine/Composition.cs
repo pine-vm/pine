@@ -8,44 +8,79 @@ namespace Pine;
 
 public class Composition
 {
-    public record Component(ReadOnlyMemory<byte>? BlobContent = null, IImmutableList<Component>? ListContent = null) : IEquatable<Component>
+    public abstract record Component : IEquatable<Component>
     {
         static public Component Blob(ReadOnlyMemory<byte> blobContent) =>
-            new(BlobContent: blobContent);
+            new BlobComponent(blobContent);
 
         static public Component List(IImmutableList<Component> listContent) =>
-            new(ListContent: listContent);
+            new ListComponent(listContent);
 
         static public readonly Component EmptyList = List(ImmutableList<Component>.Empty);
+    }
 
-        public virtual bool Equals(Component? other)
+    public record BlobComponent : Component, IEquatable<BlobComponent>
+    {
+        readonly int slimHashCode;
+
+        public ReadOnlyMemory<byte> BlobContent { private init; get; }
+
+        public BlobComponent(ReadOnlyMemory<byte> BlobContent)
+        {
+            this.BlobContent = BlobContent;
+
+            var hash = new HashCode();
+
+            hash.AddBytes(BlobContent.Span);
+
+            slimHashCode = hash.ToHashCode();
+        }
+
+        public virtual bool Equals(BlobComponent? other)
         {
             if (other is null)
                 return false;
 
-            if (BlobContent != null || other.BlobContent != null)
-            {
-                if (BlobContent == null || other.BlobContent == null)
-                    return false;
+            return
+                slimHashCode == other.slimHashCode &&
+                BlobContent.Span.SequenceEqual(other.BlobContent.Span);
+        }
 
-                return BlobContent.Value.Span.SequenceEqual(other.BlobContent.Value.Span);
+        public override int GetHashCode() => slimHashCode;
+    }
+
+    public record ListComponent : Component, IEquatable<ListComponent>
+    {
+        readonly int slimHashCode;
+
+        public IReadOnlyList<Component> ListContent { private init; get; }
+
+        public ListComponent(IReadOnlyList<Component> ListContent)
+        {
+            this.ListContent = ListContent;
+
+            var hash = new HashCode();
+
+            foreach (var item in ListContent)
+            {
+                hash.Add(item.GetHashCode());
             }
 
-            if (ListContent == null || other.ListContent == null)
-                return false;
+            slimHashCode = hash.ToHashCode();
+        }
 
-            if (ListContent.Count != other.ListContent.Count)
+        public virtual bool Equals(ListComponent? other)
+        {
+            if (other is null)
                 return false;
 
             return
-                Enumerable.Range(0, ListContent.Count)
-                .All(i => ListContent.ElementAt(i).Equals(other.ListContent.ElementAt(i)));
+                slimHashCode == other.slimHashCode &&
+                ListContent.Count == other.ListContent.Count &&
+                ListContent.SequenceEqual(other.ListContent);
         }
 
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(BlobContent, ListContent);
-        }
+        public override int GetHashCode() => slimHashCode;
     }
 
     static public Component ComponentFromString(string str) =>
@@ -77,11 +112,11 @@ public class Composition
 
     static public Result<string, string> StringFromComponent(Component component)
     {
-        if (component.ListContent == null)
+        if (component is not ListComponent list)
             return Result<string, string>.err("Only a ListValue can represent a string.");
 
         var charsIntegersResults =
-            component.ListContent
+            list.ListContent
             .Select(UnsignedIntegerFromComponent)
             .ToImmutableList();
 
@@ -128,11 +163,11 @@ public class Composition
 
     static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromComponent(Component component)
     {
-        if (component.BlobContent == null)
+        if (component is not BlobComponent blob)
             return Result<string, System.Numerics.BigInteger?>.err(
                 "Only a BlobValue can represent an integer.");
 
-        return SignedIntegerFromBlobValue(component.BlobContent.Value.Span);
+        return SignedIntegerFromBlobValue(blob.BlobContent.Span);
     }
 
     static public Result<string, System.Numerics.BigInteger?> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
@@ -159,12 +194,12 @@ public class Composition
 
     static public Result<string, System.Numerics.BigInteger?> UnsignedIntegerFromComponent(Component component)
     {
-        if (component.BlobContent == null)
+        if (component is not BlobComponent blob)
             return Result<string, System.Numerics.BigInteger?>.err(
                 "Only a BlobValue can represent an integer.");
 
         return Result<string, System.Numerics.BigInteger?>.ok(
-            UnsignedIntegerFromBlobValue(component.BlobContent.Value.Span));
+            UnsignedIntegerFromBlobValue(blob.BlobContent.Span));
     }
 
     static public System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>
@@ -326,46 +361,42 @@ public class Composition
 
     static public ParseAsTreeWithStringPathResult ParseAsTreeWithStringPath(Component composition)
     {
-        if (composition.BlobContent != null)
-        {
-            return ParseAsTreeWithStringPathResult.ok(TreeWithStringPath.Blob(composition.BlobContent.Value));
-        }
-
-        if (composition.ListContent != null)
+        ParseAsTreeWithStringPathResult continueForListComposition(ListComponent compositionAsList)
         {
             var compositionResults =
-            composition.ListContent
-            .Select((component, componentIndex) =>
-            {
-                if (!(component.ListContent?.Count == 2))
+                compositionAsList.ListContent
+                .Select((component, componentIndex) =>
                 {
-                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
-                        ImmutableList<(int index, string name)>.Empty);
-                }
+                    if (component is not ListComponent componentAsList || componentAsList.ListContent.Count != 2)
+                    {
+                        return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
+                            ImmutableList<(int index, string name)>.Empty);
+                    }
 
-                var nameResult = StringFromComponent(component.ListContent.ElementAt(0));
+                    var nameResult = StringFromComponent(componentAsList.ListContent.ElementAt(0));
 
-                if (nameResult.Ok == null)
-                {
-                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
-                        ImmutableList<(int index, string name)>.Empty);
-                }
+                    if (nameResult.Ok == null)
+                    {
+                        return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
+                            ImmutableList<(int index, string name)>.Empty);
+                    }
 
-                var currentIndexAndName =
-                    (index: componentIndex, name: nameResult.Ok);
+                    var currentIndexAndName =
+                        (index: componentIndex, name: nameResult.Ok);
 
-                var parseResult = ParseAsTreeWithStringPath(component.ListContent.ElementAt(1));
+                    return
+                        ParseAsTreeWithStringPath(componentAsList.ListContent.ElementAt(1)) switch
+                        {
+                            ParseAsTreeWithStringPathResult parseResult when parseResult.Ok is null =>
+                            Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
+                                ImmutableList.Create(currentIndexAndName).AddRange(parseResult.Err!)),
 
-                if (parseResult.Ok == null)
-                {
-                    return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.err(
-                        ImmutableList.Create(currentIndexAndName).AddRange(parseResult.Err!));
-                }
-
-                return Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.ok(
-                    (name: currentIndexAndName.name, parseResult.Ok));
-            })
-            .ToImmutableList();
+                            ParseAsTreeWithStringPathResult parseResult =>
+                            Result<IImmutableList<(int index, string name)>, (string name, TreeWithStringPath component)?>.ok(
+                                (name: currentIndexAndName.name, parseResult.Ok))
+                        };
+                })
+                .ToImmutableList();
 
             var firstError =
                 compositionResults
@@ -373,16 +404,22 @@ public class Composition
                 .Where(componentError => componentError != null)
                 .FirstOrDefault();
 
-            if (firstError != null)
-                return ParseAsTreeWithStringPathResult.err(firstError);
-
             return
-                ParseAsTreeWithStringPathResult.ok(
-                    TreeWithStringPath.SortedTree(
-                        treeContent: compositionResults.Select(compositionResult => compositionResult.Ok!.Value).ToImmutableList()));
+                firstError switch
+                {
+                    null => ParseAsTreeWithStringPathResult.ok(
+                        TreeWithStringPath.SortedTree(
+                            treeContent: compositionResults.Select(compositionResult => compositionResult.Ok!.Value).ToImmutableList())),
+                    not null => ParseAsTreeWithStringPathResult.err(firstError)
+                };
         }
-
-        throw new Exception("Incomplete match on sum type.");
+        return
+            composition switch
+            {
+                BlobComponent compositionAsBlob => ParseAsTreeWithStringPathResult.ok(TreeWithStringPath.Blob(compositionAsBlob.BlobContent)),
+                ListComponent compositionAsList => continueForListComposition(compositionAsList),
+                _ => throw new NotImplementedException("Incomplete match on sum type.")
+            };
     }
 
     static public Component FromTreeWithStringPath(TreeWithStringPath tree)
@@ -579,13 +616,13 @@ public class Composition
     static public (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<Component> dependencies)
         GetSerialRepresentationAndDependencies(Component component)
     {
-        if (component.BlobContent != null)
+        if (component is BlobComponent blobComponent)
         {
-            var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + component.BlobContent.Value.Length.ToString() + "\0");
+            var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + blobComponent.BlobContent.Length.ToString() + "\0");
 
-            var serialRepresentation = new byte[prefix.Length + component.BlobContent.Value.Length];
+            var serialRepresentation = new byte[prefix.Length + blobComponent.BlobContent.Length];
 
-            var componentBlobContentArray = component.BlobContent.Value.ToArray();
+            var componentBlobContentArray = blobComponent.BlobContent.ToArray();
 
             Buffer.BlockCopy(prefix, 0, serialRepresentation, 0, prefix.Length);
             Buffer.BlockCopy(componentBlobContentArray, 0, serialRepresentation, prefix.Length, componentBlobContentArray.Length);
@@ -593,16 +630,16 @@ public class Composition
             return (serialRepresentation, ImmutableHashSet<Component>.Empty);
         }
 
-        if (component.ListContent != null)
+        if (component is ListComponent listComponent)
         {
             var componentsHashes =
-                component.ListContent.Select(GetHash).ToList();
+                listComponent.ListContent.Select(GetHash).ToList();
 
             var prefix = System.Text.Encoding.ASCII.GetBytes("list " + componentsHashes.Count.ToString() + "\0");
 
             return
                 (serialRepresentation: CommonConversion.Concat(new[] { (ReadOnlyMemory<byte>)prefix }.Concat(componentsHashes).ToList()).ToArray(),
-                dependencies: component.ListContent);
+                dependencies: listComponent.ListContent);
         }
 
         throw new System.Exception("Incomplete match on sum type.");
@@ -627,9 +664,9 @@ public class Composition
         if (GetHash(component).Span.SequenceEqual(hash.Span))
             return component;
 
-        if (component?.ListContent != null)
+        if (component is ListComponent listComponent)
         {
-            foreach (var item in component.ListContent)
+            foreach (var item in listComponent.ListContent)
             {
                 var matchInItem = FindComponentByHash(item, hash);
 

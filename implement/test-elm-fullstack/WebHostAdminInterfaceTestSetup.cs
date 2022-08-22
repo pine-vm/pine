@@ -194,13 +194,13 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                 :
                 processStoreReader.LoadComponent(logEntry.HashBase16!);
 
-            if (component == null)
-                throw new Exception("component == null");
+            if (component is null)
+                throw new Exception("component is null");
 
-            if (component.BlobContent == null)
+            if (component is not Composition.BlobComponent blobComponent)
                 throw new Exception("component is not a blob");
 
-            var eventString = Encoding.UTF8.GetString(component.BlobContent.Value.Span);
+            var eventString = Encoding.UTF8.GetString(blobComponent.BlobContent.Span);
 
             return JsonSerializer.Deserialize<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString)!;
         }

@@ -210,10 +210,10 @@ public class ElmInteractive
                 if (asStringResult.Ok is string asString)
                     return new ComponentMappedForTransport(ListAsString: asString, List: null, origin: component);
 
-                if (component.ListContent is IReadOnlyList<Component> asList)
+                if (component is ListComponent listComponent)
                     return new ComponentMappedForTransport(
                         ListAsString: null,
-                        List: asList.Select(FromComponent).ToList(),
+                        List: listComponent.ListContent.Select(FromComponent).ToList(),
                         origin: component);
 
                 return new ComponentMappedForTransport(ListAsString: null, List: null, origin: component);
@@ -317,8 +317,8 @@ public class ElmInteractive
                 };
             }
 
-            if (component.origin.BlobContent is ReadOnlyMemory<byte> blobContent)
-                return new PineValueFromJson { Blob = blobContent.ToArray().Select(b => (int)b).ToImmutableArray() };
+            if (component.origin is BlobComponent blobComponent)
+                return new PineValueFromJson { Blob = blobComponent.BlobContent.ToArray().Select(b => (int)b).ToImmutableArray() };
 
             throw new NotImplementedException("Unexpected shape");
         }

@@ -144,28 +144,28 @@ public class InteractiveSessionPine : IInteractiveSession
                     "Failed to evaluate expression in PineVM: " + evalResult.Err);
             }
 
-            if (evalResult.Ok.ListContent == null)
+            if (evalResult.Ok is not ListComponent evalResultListComponent)
             {
                 return Result<string, ElmInteractive.EvaluatedSctructure>.err(
                     "Type mismatch: Pine expression evaluated to a blob");
             }
 
-            if (evalResult.Ok.ListContent.Count != 2)
+            if (evalResultListComponent.ListContent.Count != 2)
             {
                 return Result<string, ElmInteractive.EvaluatedSctructure>.err(
                     "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                    evalResult.Ok.ListContent.Count +
+                    evalResultListComponent.ListContent.Count +
                     " instead of 2");
             }
 
-            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(Result<string, Component>.ok(evalResult.Ok.ListContent[0]));
+            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(Result<string, Component>.ok(evalResultListComponent.ListContent[0]));
 
             clock.Restart();
 
             var parseSubmissionResponseResult =
                 ElmInteractive.SubmissionResponseFromResponsePineValue(
                     evalElmPreparedJsEngine.Value,
-                    response: evalResult.Ok.ListContent[1]);
+                    response: evalResultListComponent.ListContent[1]);
 
             logDuration("parse-result");
 

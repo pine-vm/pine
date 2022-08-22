@@ -428,15 +428,15 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             if (compositionRecordComponent == null)
                 throw new Exception("Failed to load composition record component " + nextHashBase16);
 
-            if (compositionRecordComponent.BlobContent == null)
+            if (compositionRecordComponent is not Composition.BlobComponent compositionRecordComponentBlob)
                 throw new Exception("Unexpected content for composition record component " + nextHashBase16);
 
-            var compositionRecordBytes = compositionRecordComponent.BlobContent;
+            var compositionRecordBytes = compositionRecordComponentBlob.BlobContent;
+
+            yield return compositionRecordBytes;
 
             var recordStructure = JsonSerializer.Deserialize<CompositionLogRecordInFile>(
-                Encoding.UTF8.GetString(compositionRecordBytes.Value.Span))!;
-
-            yield return compositionRecordBytes.Value;
+                Encoding.UTF8.GetString(compositionRecordBytes.Span))!;
 
             if (recordStructure.compositionEvent?.RevertProcessTo != null)
             {

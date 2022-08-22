@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -149,6 +150,7 @@ public static class PineVM
     static Composition.Component tagValue(string tagName, IImmutableList<Composition.Component> tagArguments) =>
         Composition.Component.List(
             ImmutableList.Create(Composition.ComponentFromString(tagName), Composition.Component.List(tagArguments)));
+
     static public Result<string, Expression> DecodeExpressionFromValue(Composition.Component value) =>
         DecodeUnionFromPineValue(ExpressionDecoders, value);
 
@@ -307,10 +309,11 @@ public static class PineVM
 
     static public Result<string, IImmutableList<Composition.Component>> DecodePineListValue(Composition.Component value)
     {
-        if (value.ListContent == null)
+        if (value is not Composition.ListComponent listComponent)
             return Result<string, IImmutableList<Composition.Component>>.err("Not a list");
 
-        return Result<string, IImmutableList<Composition.Component>>.ok(value.ListContent);
+        return Result<string, IImmutableList<Composition.Component>>.ok(
+            listComponent.ListContent as IImmutableList<Composition.Component> ?? listComponent.ListContent.ToImmutableList());
     }
 
     static public Result<string, (T, T)?> DecodeListWithExactlyTwoElements<T>(IImmutableList<T> list)
@@ -347,11 +350,12 @@ public static class PineVM
         static public Result<string, Composition.Component> length(Composition.Component value) =>
             Result<string, Composition.Component>.ok(
                 Composition.ComponentFromSignedInteger(
-                    value.BlobContent.HasValue
-                    ?
-                    value.BlobContent.Value.Length
-                    :
-                    value.ListContent!.Count));
+                    value switch
+                    {
+                        Composition.BlobComponent blobComponent => blobComponent.BlobContent.Length,
+                        Composition.ListComponent listComponent => listComponent.ListContent.Count,
+                        _ => throw new NotImplementedException()
+                    }));
 
         static public Result<string, Composition.Component> skip(Composition.Component value) =>
             KernelFunctionExpectingExactlyTwoArguments(
@@ -359,11 +363,12 @@ public static class PineVM
                 Result<string, Composition.Component>.ok,
                 compose: (count, list) =>
                 Result<string, Composition.Component>.ok(
-                    list.BlobContent != null
-                    ?
-                    Composition.Component.Blob(list.BlobContent.Value[(int)count!.Value..])
-                    :
-                    Composition.Component.List(list.ListContent!.Skip((int)count!.Value).ToImmutableList())))
+                    list switch
+                    {
+                        Composition.BlobComponent blobComponent => Composition.Component.Blob(blobComponent.BlobContent[(int)count!.Value..]),
+                        Composition.ListComponent listComponent => Composition.Component.List(listComponent.ListContent.Skip((int)count!.Value).ToImmutableList()),
+                        _ => throw new NotImplementedException()
+                    }))
             (value);
 
         static public Result<string, Composition.Component> take(Composition.Component value) =>
@@ -372,20 +377,22 @@ public static class PineVM
                 Result<string, Composition.Component>.ok,
                 compose: (count, list) =>
                 Result<string, Composition.Component>.ok(
-                    list.BlobContent != null
-                    ?
-                    Composition.Component.Blob(list.BlobContent.Value[..(int)count!.Value])
-                    :
-                    Composition.Component.List(list.ListContent!.Take((int)count!.Value).ToImmutableList())))
+                    list switch
+                    {
+                        Composition.BlobComponent blobComponent => Composition.Component.Blob(blobComponent.BlobContent[..(int)count!.Value]),
+                        Composition.ListComponent listComponent => Composition.Component.List(listComponent.ListContent.Take((int)count!.Value).ToImmutableList()),
+                        _ => throw new NotImplementedException()
+                    }))
             (value);
 
         static public Result<string, Composition.Component> reverse(Composition.Component value) =>
             Result<string, Composition.Component>.ok(
-                value.BlobContent != null
-                ?
-                Composition.Component.Blob(value.BlobContent.Value.ToArray().Reverse().ToArray())
-                :
-                Composition.Component.List(value.ListContent!.Reverse().ToImmutableList()));
+                value switch
+                {
+                    Composition.BlobComponent blobComponent => Composition.Component.Blob(blobComponent.BlobContent.ToArray().Reverse().ToArray()),
+                    Composition.ListComponent listComponent => Composition.Component.List(listComponent.ListContent.Reverse().ToImmutableList()),
+                    _ => throw new NotImplementedException()
+                });
 
         static public Result<string, Composition.Component> concat(Composition.Component value) =>
             DecodePineListValue(value)
@@ -393,19 +400,25 @@ public static class PineVM
             list.Aggregate(
                 seed: Composition.Component.EmptyList,
                 func: (aggregate, elem) =>
-                elem.BlobContent != null
-                ?
-                (aggregate.BlobContent != null
-                ?
-                Composition.Component.Blob(CommonConversion.Concat(aggregate.BlobContent.Value.Span, elem.BlobContent.Value.Span))
-                :
-                elem)
-                :
-                (aggregate.ListContent != null
-                ?
-                Composition.Component.List(aggregate.ListContent.AddRange(elem.ListContent!))
-                :
-                elem)));
+                elem switch
+                {
+                    Composition.BlobComponent elemBlobComponent =>
+                    aggregate switch
+                    {
+                        Composition.BlobComponent aggregateBlobComponent =>
+                        Composition.Component.Blob(CommonConversion.Concat(
+                            aggregateBlobComponent.BlobContent.Span, elemBlobComponent.BlobContent.Span)),
+                        _ => elemBlobComponent
+                    },
+                    Composition.ListComponent elemListComponent =>
+                    aggregate switch
+                    {
+                        Composition.ListComponent aggregateListComponent =>
+                        Composition.Component.List(aggregateListComponent.ListContent.Concat(elemListComponent.ListContent).ToImmutableList()),
+                        _ => elemListComponent
+                    },
+                    _ => throw new NotImplementedException()
+                }));
 
         static public Result<string, Composition.Component> list_head(Composition.Component value) =>
             DecodePineListValue(value)
@@ -455,11 +468,12 @@ public static class PineVM
              {
                  var listNamedEntries =
                  list.SelectMany(element =>
-                 element.ListContent?.Count == 2
-                 ?
-                 new[] { (name: element.ListContent[0], named: element.ListContent[1]) }
-                 :
-                 Array.Empty<(Composition.Component name, Composition.Component named)>());
+                 element switch
+                 {
+                     Composition.ListComponent listComponent when listComponent.ListContent.Count == 2 =>
+                     new[] { (name: listComponent.ListContent[0], named: listComponent.ListContent[1]) },
+                     _ => Array.Empty<(Composition.Component name, Composition.Component named)>()
+                 });
 
                  foreach (var namedEntry in listNamedEntries)
                  {
