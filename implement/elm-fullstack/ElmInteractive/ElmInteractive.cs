@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -70,11 +69,12 @@ public class ElmInteractive
             .map(fromJson => ParsePineComponentFromJson(fromJson!));
     }
 
-    static public Result<string, PineValue> CompileInteractiveSubmission(
+    static internal Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         PineValue environment,
         string submission,
-        Action<string>? addInspectionLogEntry)
+        Action<string>? addInspectionLogEntry,
+        CompilationCache? compilationCacheBefore)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -82,11 +82,14 @@ public class ElmInteractive
             addInspectionLogEntry?.Invoke(
                 label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
 
+        var (environmentJson, compilationCacheTask) =
+            PineValueFromJson.FromComponentBuildingDictionary(environment, compilationCacheBefore);
+
         var requestJson =
             System.Text.Json.JsonSerializer.Serialize(
                 new CompileInteractiveSubmissionRequest
                 (
-                    environment: PineValueFromJson.FromComponentBuildingDictionary(environment),
+                    environment: environmentJson,
                     submission: submission
                 ),
                 options: new System.Text.Json.JsonSerializerOptions
@@ -107,19 +110,22 @@ public class ElmInteractive
         clock.Restart();
 
         var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string?, PineValueFromJson?>>(
+            System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string, PineValueFromJson>>(
                 responseJson,
                 options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
 
         var response =
             responseStructure
             .AsResult()
-            .map(fromJson => (PineValue?)ParsePineComponentFromJson(fromJson!));
+            .map(fromJson => ParsePineComponentFromJson(fromJson));
 
         logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineComponentFromJson));
 
-        return response;
+        return response.map(value => (value, compilationCacheTask.Result));
     }
+
+    internal record CompilationCache(
+        IImmutableDictionary<PineValue, PineValueFromJson.ComponentMappedForTransport> valueCache);
 
     record CompileInteractiveSubmissionRequest(
         PineValueFromJson environment,
@@ -158,7 +164,7 @@ public class ElmInteractive
         }
     }
 
-    record PineValueFromJson
+    internal record PineValueFromJson
     {
         public IReadOnlyCollection<DictionaryEntry>? Dictionary { init; get; } = null;
 
@@ -172,7 +178,7 @@ public class ElmInteractive
 
         public record DictionaryEntry(string key, PineValueFromJson value);
 
-        private record ComponentMappedForTransport(
+        internal record ComponentMappedForTransport(
             string? ListAsString,
             IReadOnlyList<ComponentMappedForTransport>? List,
             PineValue origin)
@@ -203,7 +209,23 @@ public class ElmInteractive
                 return left.origin.Equals(right.origin);
             }
 
-            static public ComponentMappedForTransport FromComponent(PineValue component)
+            static public ComponentMappedForTransport FromComponent(
+                PineValue component,
+                IDictionary<PineValue, ComponentMappedForTransport>? cache)
+            {
+                if (cache?.TryGetValue(component, out var mapped) ?? false)
+                    return mapped;
+
+                mapped = FromComponentIgnoringCacheForCurrent(component, cache);
+
+                cache?.Add(component, mapped);
+
+                return mapped;
+            }
+
+            static private ComponentMappedForTransport FromComponentIgnoringCacheForCurrent(
+                PineValue component,
+                IDictionary<PineValue, ComponentMappedForTransport>? cache)
             {
                 if (StringFromComponent(component) is Result<string, string>.Ok asString)
                     return new ComponentMappedForTransport(ListAsString: asString.Success, List: null, origin: component);
@@ -211,26 +233,39 @@ public class ElmInteractive
                 if (component is PineValue.ListValue listComponent)
                     return new ComponentMappedForTransport(
                         ListAsString: null,
-                        List: listComponent.ListContent.Select(FromComponent).ToList(),
+                        List: listComponent.ListContent.Select(item => FromComponent(item, cache)).ToList(),
                         origin: component);
 
                 return new ComponentMappedForTransport(ListAsString: null, List: null, origin: component);
             }
         }
 
-        static public PineValueFromJson FromComponentBuildingDictionary(PineValue component)
+        static public (PineValueFromJson, System.Threading.Tasks.Task<CompilationCache>) FromComponentBuildingDictionary(
+            PineValue component,
+            CompilationCache? compilationCache)
         {
-            var intermediate = ComponentMappedForTransport.FromComponent(component);
+            var intermediateStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var usageCountLowerBoundDictionary = new ConcurrentDictionary<ComponentMappedForTransport, int>();
+            var valueCache = new Dictionary<PineValue, ComponentMappedForTransport>(
+                compilationCache?.valueCache ?? ImmutableDictionary<PineValue, ComponentMappedForTransport>.Empty);
+
+            var intermediate = ComponentMappedForTransport.FromComponent(component, cache: valueCache);
+
+            var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                return new CompilationCache(valueCache: valueCache.ToImmutableDictionary());
+            });
+
+            var usageCountLowerBoundDictionary = new Dictionary<ComponentMappedForTransport, int>();
 
             void mutatingCountUsagesRecursive(ComponentMappedForTransport component)
             {
-                var usageCountLowerBound =
-                    usageCountLowerBoundDictionary!.AddOrUpdate(
-                        component,
-                        addValue: 1,
-                        updateValueFactory: (_, countBefore) => countBefore + 1);
+                if (!usageCountLowerBoundDictionary.TryGetValue(component, out var usageCountLowerBound))
+                    usageCountLowerBound = 0;
+
+                ++usageCountLowerBound;
+
+                usageCountLowerBoundDictionary[component] = usageCountLowerBound;
 
                 if (1 < usageCountLowerBound)
                     return;
@@ -253,11 +288,11 @@ public class ElmInteractive
 
             int keyIndex = 0;
 
-            var dictionary = new ConcurrentDictionary<ComponentMappedForTransport, string>();
+            var dictionary = new Dictionary<ComponentMappedForTransport, string>();
 
             void mutatingBuildDictionaryRecursive(ComponentMappedForTransport component)
             {
-                if (dictionary!.ContainsKey(component))
+                if (dictionary.ContainsKey(component))
                     return;
 
                 if (componentsUsedMultipleTimes!.ContainsKey(component))
@@ -290,11 +325,11 @@ public class ElmInteractive
                 with
             { Dictionary = dictionaryForSerial };
 
-            return componentForJson;
+            return (componentForJson, compilationCacheTask);
         }
 
         static public PineValueFromJson FromComponentWithoutBuildingDictionary(PineValue component) =>
-            FromComponentWithoutBuildingDictionary(ComponentMappedForTransport.FromComponent(component));
+            FromComponentWithoutBuildingDictionary(ComponentMappedForTransport.FromComponent(component, cache: null));
 
         static PineValueFromJson FromComponentWithoutBuildingDictionary(
             ComponentMappedForTransport component,

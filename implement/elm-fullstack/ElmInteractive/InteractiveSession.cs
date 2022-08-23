@@ -70,6 +70,8 @@ public class InteractiveSessionPine : IInteractiveSession
 
     readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
+    ElmInteractive.CompilationCache? lastSubmissionCompilationCache;
+
     public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
@@ -113,7 +115,8 @@ public class InteractiveSessionPine : IInteractiveSession
                             evalElmPreparedJsEngine.Value,
                             environment: buildPineEvalContextOk,
                             submission: submission,
-                            addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry));
+                            addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry),
+                            compilationCacheBefore: lastSubmissionCompilationCache);
 
                     logDuration("compile");
 
@@ -122,8 +125,10 @@ public class InteractiveSessionPine : IInteractiveSession
                     .mapError(error => "Failed to parse submission: " + error)
                     .andThen(compileSubmissionOk =>
                     {
+                        lastSubmissionCompilationCache = compileSubmissionOk.cache;
+
                         return
-                        PineVM.DecodeExpressionFromValue(compileSubmissionOk)
+                        PineVM.DecodeExpressionFromValue(compileSubmissionOk.compiledValue)
                         .mapError(error => "Failed to decode expression: " + error)
                         .andThen(decodeExpressionOk =>
                         {
