@@ -23,7 +23,7 @@ public class TestElmInteractive
 
     static public ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
-        Func<TContainer, Composition.TreeWithStringPath> getScenario,
+        Func<TContainer, TreeNodeWithStringPath> getScenario,
         ElmEngineType implementationType) where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
@@ -35,7 +35,7 @@ public class TestElmInteractive
             elementSelector: s => s.testReport);
 
     static public InteractiveScenarioTestReport TestElmInteractiveScenario(
-        Composition.TreeWithStringPath scenarioTree,
+        TreeNodeWithStringPath scenarioTree,
         ElmEngineType implementationType)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -83,20 +83,21 @@ public class TestElmInteractive
                 {
                     try
                     {
-                        var evalResult =
-                            interactiveSession.Submit(sessionStep.submission);
+                        var evalResult = interactiveSession.Submit(sessionStep.submission);
 
-                        Assert.IsNull(evalResult.Err, "Submission result has error: " + evalResult.Err);
+                        var evalOk =
+                        evalResult
+                        .extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
 
                         if (sessionStep.expectedResponse != null)
                         {
-                            if (sessionStep.expectedResponse != evalResult.Ok?.interactiveResponse?.displayText)
+                            if (sessionStep.expectedResponse != evalOk.interactiveResponse?.displayText)
                             {
                                 var errorText =
                                 "Response from interactive does not match expected value. Expected:\n" +
                                 sessionStep.expectedResponse +
                                 "\nBut got this response:\n" +
-                                evalResult.Ok?.interactiveResponse?.displayText;
+                                evalOk.interactiveResponse?.displayText;
 
                                 return Result<InteractiveScenarioTestStepFailure, object>.err(
                                     new InteractiveScenarioTestStepFailure(

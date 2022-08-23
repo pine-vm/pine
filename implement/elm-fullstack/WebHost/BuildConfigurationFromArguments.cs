@@ -8,27 +8,23 @@ namespace ElmFullstack.WebHost;
 static public class BuildConfigurationFromArguments
 {
     static public
-        (Composition.TreeWithStringPath sourceTree,
+        (TreeNodeWithStringPath sourceTree,
         string filteredSourceCompositionId,
         byte[] configZipArchive)
         BuildConfigurationZipArchiveFromPath(string sourcePath)
     {
         var loadCompositionResult =
             LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
-            .LogToActions(Console.WriteLine);
+            .LogToActions(Console.WriteLine)
+            .extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
-        if (loadCompositionResult?.Ok == null)
-        {
-            throw new Exception("Failed to load from path '" + sourcePath + "': " + loadCompositionResult?.Err);
-        }
-
-        var sourceTree = loadCompositionResult.Ok.Value.tree;
+        var sourceTree = loadCompositionResult.tree;
 
         /*
         TODO: Provide a better way to avoid unnecessary files ending up in the config: Get the source files from git.
         */
         var filteredSourceTree =
-            loadCompositionResult.Ok.Value.origin?.FromLocalFileSystem != null
+            loadCompositionResult.origin?.FromLocalFileSystem is not null
             ?
             RemoveNoiseFromTreeComingFromLocalFileSystem(sourceTree)
             :
@@ -46,18 +42,18 @@ static public class BuildConfigurationFromArguments
         return (sourceTree, filteredSourceCompositionId, configZipArchive);
     }
 
-    static public Composition.TreeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
-        Composition.TreeWithStringPath originalTree)
+    static public TreeNodeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
+        TreeNodeWithStringPath originalTree)
     {
         if (originalTree.TreeContent == null)
             return originalTree;
 
-        Composition.TreeWithStringPath getComponentFromStringName(string name) =>
+        TreeNodeWithStringPath getComponentFromStringName(string name) =>
             originalTree.TreeContent.FirstOrDefault(c => c.name == name).component;
 
         var elmJson = getComponentFromStringName("elm.json");
 
-        bool keepNode((string name, Composition.TreeWithStringPath component) node)
+        bool keepNode((string name, TreeNodeWithStringPath component) node)
         {
             if (elmJson != null && node.name == "elm-stuff")
                 return false;
@@ -65,22 +61,20 @@ static public class BuildConfigurationFromArguments
             return true;
         }
 
-        return Composition.TreeWithStringPath.SortedTree(
+        return TreeNodeWithStringPath.SortedTree(
             treeContent:
                 originalTree.TreeContent
                 .Where(keepNode)
                 .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList());
     }
 
-    static public byte[] BuildConfigurationZipArchive(Composition.Component sourceComposition)
+    static public byte[] BuildConfigurationZipArchive(PineValue sourceComposition)
     {
-        var parseSourceAsTree = Composition.ParseAsTreeWithStringPath(sourceComposition);
+        var parseSourceAsTree =
+            Composition.ParseAsTreeWithStringPath(sourceComposition)
+            .extract(error => throw new Exception("Failed to map source to tree."));
 
-        if (parseSourceAsTree.Ok == null)
-            throw new Exception("Failed to map source to tree.");
-
-        var sourceFiles =
-            Composition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree.Ok);
+        var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
 
         return ZipArchive.ZipArchiveFromEntries(sourceFiles);
     }

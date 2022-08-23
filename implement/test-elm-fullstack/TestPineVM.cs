@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine;
 using System.Collections.Immutable;
 
 namespace test_elm_fullstack;
@@ -13,44 +14,32 @@ public class TestPineVM
         {
             new
             {
-                expression = new Pine.Expression
-                {
-                    LiteralExpression= Pine.Composition.Component.Blob(new byte[]{1,4,7})
-                },
-                expected = Pine.Result<string, Pine.Composition.Component>.ok(
-                    Pine.Composition.Component.Blob(new byte[]{1,4,7}))
+                expression = (PineVM.Expression)new PineVM.Expression.LiteralExpression(PineValue.Blob(new byte[]{1,4,7})),
+                expected = Result<string, PineValue>.ok(
+                    PineValue.Blob(new byte[]{1,4,7}))
             },
             new
             {
-                expression = new Pine.Expression
-                {
-                    ListExpression = ImmutableArray<Pine.Expression>.Empty
-                },
-                expected = Pine.Result<string, Pine.Composition.Component>.ok(
-                    Pine.Composition.Component.List(ImmutableList<Pine.Composition.Component>.Empty))
+                expression = (PineVM.Expression)new PineVM.Expression.ListExpression(ImmutableArray<PineVM.Expression>.Empty),
+                expected = Result<string, PineValue>.ok(
+                    PineValue.List(ImmutableList<PineValue>.Empty))
             },
             new
             {
-                expression = new Pine.Expression
-                {
-                    KernelApplicationExpression = new Pine.KernelApplicationExpressionStructure
-                    (
-                        functionName : "concat",
-                        argument : new Pine.Expression
-                        {
-                            ListExpression = ImmutableArray<Pine.Expression>.Empty
-                        }
-                    )
-                },
-                expected = Pine.Result<string, Pine.Composition.Component>.ok(
-                    Pine.Composition.Component.List(ImmutableList<Pine.Composition.Component>.Empty))
+                expression = (PineVM.Expression)new PineVM.Expression.KernelApplicationExpression
+                (
+                    functionName : "concat",
+                    argument : new PineVM.Expression.ListExpression(ImmutableArray<PineVM.Expression>.Empty)
+                ),
+                expected = Result<string, PineValue>.ok(
+                    PineValue.List(ImmutableList<PineValue>.Empty))
             }
         };
 
         foreach (var testCase in testCases)
         {
-            var evaluated = Pine.PineVM.EvaluateExpression(
-                Pine.Composition.Component.List(ImmutableList<Pine.Composition.Component>.Empty),
+            var evaluated = PineVM.EvaluateExpression(
+                PineValue.List(ImmutableList<PineValue>.Empty),
                 testCase.expression);
 
             Assert.AreEqual(testCase.expected, evaluated);

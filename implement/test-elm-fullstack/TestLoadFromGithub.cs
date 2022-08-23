@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
@@ -28,12 +27,11 @@ public class TestLoadFromGithub
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app");
-
-        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
+                "https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app")
+            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
-            loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateBlobsTransitive()
             .Select(blobPathAndContent => (
                 fileName: string.Join("/", blobPathAndContent.path),
                 fileContent: blobPathAndContent.blobContent))
@@ -63,12 +61,11 @@ public class TestLoadFromGithub
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/");
-
-        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
+                "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
+            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
-            loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateBlobsTransitive()
             .Select(blobPathAndContent => (
                 fileName: string.Join("/", blobPathAndContent.path),
                 fileContent: blobPathAndContent.blobContent))
@@ -98,11 +95,10 @@ public class TestLoadFromGithub
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md");
+                "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md")
+            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
-
-        var blobContent = loadFromGithubResult.Ok.tree.BlobContent;
+        var blobContent = loadFromGithubResult.tree.BlobContent;
 
         Assert.IsNotNull(blobContent, "Found blobContent.");
 
@@ -117,27 +113,26 @@ public class TestLoadFromGithub
     {
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications");
-
-        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
+                "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications")
+            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         Assert.AreEqual(
             "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications",
-            loadFromGithubResult.Ok.urlInCommit);
+            loadFromGithubResult.urlInCommit);
 
         Assert.AreEqual(
             "https://github.com/Viir/bots/tree/1f915f4583cde98e0491e66bc73d7df0e92d1aac/implement/applications",
-            loadFromGithubResult.Ok.urlInFirstParentCommitWithSameValueAtThisPath);
+            loadFromGithubResult.urlInFirstParentCommitWithSameValueAtThisPath);
 
-        Assert.AreEqual("6c5442434768625a4df9d0dfd2f54d61d9d1f61e", loadFromGithubResult.Ok.rootCommit.hash);
-        Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.Ok.rootCommit.content.message);
-        Assert.AreEqual("Michael Rätzel", loadFromGithubResult.Ok.rootCommit.content.author.name);
-        Assert.AreEqual("viir@viir.de", loadFromGithubResult.Ok.rootCommit.content.author.email);
+        Assert.AreEqual("6c5442434768625a4df9d0dfd2f54d61d9d1f61e", loadFromGithubResult.rootCommit.hash);
+        Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.rootCommit.content.message);
+        Assert.AreEqual("Michael Rätzel", loadFromGithubResult.rootCommit.content.author.name);
+        Assert.AreEqual("viir@viir.de", loadFromGithubResult.rootCommit.content.author.email);
 
-        Assert.AreEqual("1f915f4583cde98e0491e66bc73d7df0e92d1aac", loadFromGithubResult.Ok.firstParentCommitWithSameTree.hash);
-        Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.Ok.firstParentCommitWithSameTree.content.message);
-        Assert.AreEqual("John", loadFromGithubResult.Ok.firstParentCommitWithSameTree.content.author.name);
-        Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.Ok.firstParentCommitWithSameTree.content.author.email);
+        Assert.AreEqual("1f915f4583cde98e0491e66bc73d7df0e92d1aac", loadFromGithubResult.firstParentCommitWithSameTree.hash);
+        Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.firstParentCommitWithSameTree.content.message);
+        Assert.AreEqual("John", loadFromGithubResult.firstParentCommitWithSameTree.content.author.name);
+        Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.firstParentCommitWithSameTree.content.author.email);
     }
 
 
@@ -146,12 +141,11 @@ public class TestLoadFromGithub
     {
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-fullstack/elm-fullstack");
-
-        Assert.IsNotNull(loadFromGithubResult.Ok, "Failed to load from GitHub: " + loadFromGithubResult.Err);
+                "https://github.com/elm-fullstack/elm-fullstack")
+            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesPathsAndContents =
-            loadFromGithubResult.Ok.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateBlobsTransitive()
             .Select(blobPathAndContent => (
                 filePath: string.Join("/", blobPathAndContent.path),
                 fileContent: blobPathAndContent.blobContent))
@@ -159,7 +153,7 @@ public class TestLoadFromGithub
 
         var readmeFile =
             loadedFilesPathsAndContents
-            .FirstOrDefault(c => c.filePath.Equals("readme.md", System.StringComparison.InvariantCultureIgnoreCase));
+            .FirstOrDefault(c => c.filePath.Equals("readme.md", StringComparison.InvariantCultureIgnoreCase));
 
         Assert.IsNotNull(readmeFile.fileContent, "Loaded files contain readme.md");
     }
@@ -206,11 +200,10 @@ public class TestLoadFromGithub
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                         sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
                         getRepositoryFilesPartialForCommit:
-                        consultServer);
+                        consultServer)
+                    .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-                Assert.IsNotNull(loadFromGitHubResult.Ok, "Failed to load from GitHub: " + loadFromGitHubResult.Err);
-
-                var blobContent = loadFromGitHubResult.Ok.tree.BlobContent;
+                var blobContent = loadFromGitHubResult.tree.BlobContent;
 
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
@@ -227,11 +220,10 @@ public class TestLoadFromGithub
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                         sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
                         getRepositoryFilesPartialForCommit:
-                        consultServer);
+                        consultServer)
+                    .extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-                Assert.IsNotNull(loadFromGitHubResult.Ok, "Failed to load from GitHub: " + loadFromGitHubResult.Err);
-
-                var blobContent = loadFromGitHubResult.Ok.tree.BlobContent;
+                var blobContent = loadFromGitHubResult.tree.BlobContent;
 
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 

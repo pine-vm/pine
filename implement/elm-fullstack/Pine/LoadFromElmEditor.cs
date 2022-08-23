@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
@@ -109,7 +108,7 @@ namespace Pine
 
         public record LoadFromUrlSuccess(
             ParseUrlResult parsedUrl,
-            Composition.TreeWithStringPath tree);
+            TreeNodeWithStringPath tree);
 
         /// <summary>
         /// Sample addresses:
@@ -160,21 +159,15 @@ namespace Pine
             if (parsedUrl == null)
                 return Result<string, LoadFromUrlSuccess>.err("Failed to parse string '" + sourceUrl + "' as Elm Editor URL.");
 
-            LoadFromUrlSuccess returnValueFromTree(Composition.TreeWithStringPath tree) =>
+            LoadFromUrlSuccess returnValueFromTree(TreeNodeWithStringPath tree) =>
                 new(parsedUrl: parsedUrl, tree: tree);
 
             if (LoadFromGitHubOrGitLab.ParseUrl(parsedUrl.projectStateString) != null)
             {
-                var loadFromGitHost =
-                    LoadFromGitHubOrGitLab.LoadFromUrl(parsedUrl.projectStateString);
-
-                if (loadFromGitHost?.Ok == null)
-                {
-                    return Result<string, LoadFromUrlSuccess>.err(
-                        "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
-                }
-
-                return loadFromGitHost.map(loadFromGitHostSuccess => returnValueFromTree(loadFromGitHostSuccess.tree));
+                return
+                    LoadFromGitHubOrGitLab.LoadFromUrl(parsedUrl.projectStateString)
+                    .mapError(error => "Failed to load from Git host: " + error)
+                    .map(loadFromGitHostSuccess => returnValueFromTree(loadFromGitHostSuccess.tree));
             }
 
             // Support parsing tuples: https://github.com/arogozine/TupleAsJsonArray/tree/e59f8c4edee070b096220b6cab77eba997b19d3a
@@ -201,21 +194,21 @@ namespace Pine
             return Result<string, LoadFromUrlSuccess>.err("Project state has an unexpected shape: " + parsedUrl.projectStateString);
         }
 
-        static public Result<string, Composition.TreeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
+        static public Result<string, TreeNodeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
         {
-            Composition.TreeWithStringPath? baseComposition = null;
+            TreeNodeWithStringPath? baseComposition = null;
 
             if (projectState.@base != null)
             {
                 var loadFromGitHost = LoadFromGitHubOrGitLab.LoadFromUrl(projectState.@base);
 
-                if (loadFromGitHost?.Ok == null)
+                if (loadFromGitHost is Result<string, LoadFromGitHubOrGitLab.LoadFromUrlSuccess>.Err loadFromGitHostError)
                 {
-                    return Result<string, Composition.TreeWithStringPath>.err(
-                        "Failed to load from Git host: " + loadFromGitHost?.Err?.ToString());
+                    return Result<string, TreeNodeWithStringPath>.err(
+                        "Failed to load from Git host: " + loadFromGitHostError);
                 }
 
-                baseComposition = loadFromGitHost.Ok.tree;
+                baseComposition = loadFromGitHost.map(loaded => loaded.tree).extract(error => throw new Exception(error));
             }
 
             return
@@ -228,15 +221,15 @@ namespace Pine
         /// 
         /// applyProjectStateDifference_2021_01 : ProjectState_2021_01.ProjectStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
         /// </summary>
-        static public Result<string, Composition.TreeWithStringPath> ApplyProjectStateDifference_2021_01(
+        static public Result<string, TreeNodeWithStringPath> ApplyProjectStateDifference_2021_01(
             ProjectState_2021_01.ProjectStateDifference differenceFromBase,
-            Composition.TreeWithStringPath? baseComposition)
+            TreeNodeWithStringPath? baseComposition)
         {
             var compositionAfterRemovals =
                 differenceFromBase.removeNodes.Aggregate(
                     seed: baseComposition,
                     (previousComposition, nodePath) => previousComposition?.RemoveNodeAtPath(nodePath))
-                ?? Composition.TreeWithStringPath.EmptyTree;
+                ?? TreeNodeWithStringPath.EmptyTree;
 
             var projectStateAfterChangeBlobs =
                 differenceFromBase.changeBlobs.Aggregate(
@@ -248,10 +241,10 @@ namespace Pine
                         var changedBlobValue = ProjectState_2021_01.ProjectStateDifference.ApplyBlobChanges(
                             blobChange.Item2, blobValueBefore);
 
-                        return previousComposition.SetNodeAtPathSorted(blobChange.Item1, Composition.TreeWithStringPath.Blob(changedBlobValue));
+                        return previousComposition.SetNodeAtPathSorted(blobChange.Item1, TreeNodeWithStringPath.Blob(changedBlobValue));
                     });
 
-            return Result<string, Composition.TreeWithStringPath>.ok(projectStateAfterChangeBlobs);
+            return Result<string, TreeNodeWithStringPath>.ok(projectStateAfterChangeBlobs);
         }
     }
 }

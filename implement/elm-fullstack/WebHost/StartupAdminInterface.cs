@@ -175,7 +175,9 @@ public class StartupAdminInterface
                     PersistentProcess.ProcessAppConfig processAppConfig,
                     IReadOnlyList<string> publicWebHostUrls)
                 {
-                    var appConfigTree = Composition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent).Ok!;
+                    var appConfigTree =
+                        Composition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
+                        .extract(error => throw new Exception(error.ToString()));
 
                     var appConfigFilesNamesAndContents =
                         appConfigTree.EnumerateBlobsTransitive();
@@ -370,14 +372,15 @@ public class StartupAdminInterface
 
                             var appConfigHashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfig));
 
-                            var appConfigTree = Composition.ParseAsTreeWithStringPath(appConfig).Ok;
-
-                            if (appConfigTree == null)
-                                throw   new Exception("Failed to parse as tree with string path");
+                            var appConfigTreeResult = Composition.ParseAsTreeWithStringPath(appConfig);
 
                             var appConfigZipArchive =
+                            appConfigTreeResult
+                            .unpack(
+                                fromErr: error => throw   new Exception("Failed to parse as tree with string path"),
+                                fromOk: appConfigTree =>
                                 ZipArchive.ZipArchiveFromEntries(
-                                    Composition.TreeToFlatDictionaryWithPathComparer(appConfigTree));
+                                    Composition.TreeToFlatDictionaryWithPathComparer(appConfigTree)));
 
                             context.Response.StatusCode = 200;
                             context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
@@ -402,7 +405,7 @@ public class StartupAdminInterface
 
                             var processLiveRepresentation = publicAppHost?.processLiveRepresentation;
 
-                            var components = new List<Composition.Component>();
+                            var components = new List<PineValue>();
 
                             var storeWriter = new DelegatingProcessStoreWriter
                             (
@@ -426,7 +429,7 @@ public class StartupAdminInterface
                             var elmAppStateReductionComponent =
                                 components.First(c => CommonConversion.StringBase16(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
 
-                            if(elmAppStateReductionComponent is not Composition.BlobComponent elmAppStateReductionComponentBlob)
+                            if(elmAppStateReductionComponent is not PineValue.BlobValue elmAppStateReductionComponentBlob)
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");
 
                             var elmAppStateReductionString =
@@ -447,7 +450,7 @@ public class StartupAdminInterface
 
                             var elmAppStateToSet = new StreamReader(context.Request.Body, Encoding.UTF8).ReadToEndAsync().Result;
 
-                            var elmAppStateComponent = Composition.Component.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
+                            var elmAppStateComponent = PineValue.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
 
                             var appConfigValueInFile =
                                 new ValueInFileStructure
@@ -848,32 +851,35 @@ public class StartupAdminInterface
             originalFileStore: processStoreFileStore,
             compositionLogEvent: compositionLogEvent);
 
-        if (testContinueResult.Ok?.projectedFiles == null)
-        {
-            return (statusCode: 400, new AttemptContinueWithCompositionEventReport
-            (
-                beginTime: beginTime,
-                compositionEvent: compositionLogEvent,
-                storeReductionReport: null,
-                storeReductionTimeSpentMilli: null,
-                totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
-                result: Result<string, string>.err(testContinueResult.Err!)
-            ));
-        }
+        return
+            testContinueResult
+            .unpack(
+                fromErr: error =>
+                (statusCode: 400, new AttemptContinueWithCompositionEventReport
+                (
+                    beginTime: beginTime,
+                    compositionEvent: compositionLogEvent,
+                    storeReductionReport: null,
+                    storeReductionTimeSpentMilli: null,
+                    totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                    result: Result<string, string>.err(error)
+                )),
+                fromOk: testContinueOk =>
+                {
+                    foreach (var projectedFilePathAndContent in testContinueOk.projectedFiles)
+                        processStoreFileStore.SetFileContent(
+                            projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
 
-        foreach (var projectedFilePathAndContent in testContinueResult.Ok.projectedFiles)
-            processStoreFileStore.SetFileContent(
-                projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
-
-        return (statusCode: 200, new AttemptContinueWithCompositionEventReport
-        (
-            beginTime: beginTime,
-            compositionEvent: compositionLogEvent,
-            storeReductionReport: null,
-            storeReductionTimeSpentMilli: null,
-            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
-            result: Result<string, string>.ok("Successfully applied this composition event to the process.")
-        ));
+                    return (statusCode: 200, new AttemptContinueWithCompositionEventReport
+                    (
+                        beginTime: beginTime,
+                        compositionEvent: compositionLogEvent,
+                        storeReductionReport: null,
+                        storeReductionTimeSpentMilli: null,
+                        totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                        result: Result<string, string>.ok("Successfully applied this composition event to the process.")
+                    ));
+                });
     }
 }
 

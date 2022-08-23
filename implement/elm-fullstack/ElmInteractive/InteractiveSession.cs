@@ -12,7 +12,7 @@ public interface IInteractiveSession : IDisposable
 
     static ElmEngineType DefaultImplementation => ElmEngineType.JavaScript;
 
-    static IInteractiveSession Create(TreeWithStringPath? appCodeTree, ElmEngineType engineType) =>
+    static IInteractiveSession Create(TreeNodeWithStringPath? appCodeTree, ElmEngineType engineType) =>
         engineType switch
         {
             ElmEngineType.JavaScript => new InteractiveSessionJavaScript(appCodeTree),
@@ -29,14 +29,14 @@ public enum ElmEngineType
 
 public class InteractiveSessionJavaScript : IInteractiveSession
 {
-    readonly TreeWithStringPath? appCodeTree;
+    readonly TreeNodeWithStringPath? appCodeTree;
 
     readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
         new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
     readonly IList<string> previousSubmissions = new List<string>();
 
-    public InteractiveSessionJavaScript(TreeWithStringPath? appCodeTree)
+    public InteractiveSessionJavaScript(TreeNodeWithStringPath? appCodeTree)
     {
         this.appCodeTree = appCodeTree;
     }
@@ -66,11 +66,11 @@ public class InteractiveSessionPine : IInteractiveSession
 {
     readonly object submissionLock = new();
 
-    private System.Threading.Tasks.Task<Result<string, Component>> buildPineEvalContextTask;
+    private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
 
     readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
-    public InteractiveSessionPine(TreeWithStringPath? appCodeTree)
+    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
             ElmInteractive.CompileEvalContextForElmInteractive(
@@ -101,79 +101,76 @@ public class InteractiveSessionPine : IInteractiveSession
 
             var buildPineEvalContextResult = buildPineEvalContextTask.Result;
 
-            if (buildPineEvalContextResult.Ok == null)
-            {
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Failed to build initial Pine eval context: " + buildPineEvalContextResult.Err);
-            }
+            return
+                buildPineEvalContextTask.Result
+                .mapError(error => "Failed to build initial Pine eval context: " + error)
+                .andThen(buildPineEvalContextOk =>
+                {
+                    clock.Restart();
 
-            clock.Restart();
+                    var compileSubmissionResult =
+                        ElmInteractive.CompileInteractiveSubmission(
+                            evalElmPreparedJsEngine.Value,
+                            environment: buildPineEvalContextOk,
+                            submission: submission,
+                            addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry));
 
-            var compileSubmissionResult =
-                ElmInteractive.CompileInteractiveSubmission(
-                    evalElmPreparedJsEngine.Value,
-                    environment: buildPineEvalContextResult.Ok,
-                    submission: submission,
-                    addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry));
+                    logDuration("compile");
 
-            logDuration("compile");
+                    return
+                    compileSubmissionResult
+                    .mapError(error => "Failed to parse submission: " + error)
+                    .andThen(compileSubmissionOk =>
+                    {
+                        return
+                        PineVM.DecodeExpressionFromValue(compileSubmissionOk)
+                        .mapError(error => "Failed to decode expression: " + error)
+                        .andThen(decodeExpressionOk =>
+                        {
+                            clock.Restart();
 
-            if (compileSubmissionResult.Ok == null)
-            {
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Failed to parse submission: " + compileSubmissionResult.Err);
-            }
+                            var evalResult = PineVM.EvaluateExpression(buildPineEvalContextOk, decodeExpressionOk);
 
-            var decodeExpressionResult = PineVM.DecodeExpressionFromValue(compileSubmissionResult.Ok);
+                            logDuration("eval");
 
-            if (decodeExpressionResult.Ok == null)
-            {
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Failed to decode expression: " + decodeExpressionResult.Err);
-            }
+                            return
+                            evalResult
+                            .mapError(error => "Failed to evaluate expression in PineVM: " + error)
+                            .andThen(evalOk =>
+                            {
+                                if (evalOk is not PineValue.ListValue evalResultListComponent)
+                                {
+                                    return Result<string, ElmInteractive.EvaluatedSctructure>.err(
+                                        "Type mismatch: Pine expression evaluated to a blob");
+                                }
 
-            clock.Restart();
+                                if (evalResultListComponent.ListContent.Count != 2)
+                                {
+                                    return Result<string, ElmInteractive.EvaluatedSctructure>.err(
+                                        "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
+                                        evalResultListComponent.ListContent.Count +
+                                        " instead of 2");
+                                }
 
-            var evalResult = PineVM.EvaluateExpression(buildPineEvalContextResult.Ok, decodeExpressionResult.Ok);
+                                buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
+                                    Result<string, PineValue>.ok(evalResultListComponent.ListContent[0]));
 
-            logDuration("eval");
+                                clock.Restart();
 
-            if (evalResult.Ok == null)
-            {
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Failed to evaluate expression in PineVM: " + evalResult.Err);
-            }
+                                var parseSubmissionResponseResult =
+                                    ElmInteractive.SubmissionResponseFromResponsePineValue(
+                                        evalElmPreparedJsEngine.Value,
+                                        response: evalResultListComponent.ListContent[1]);
 
-            if (evalResult.Ok is not ListComponent evalResultListComponent)
-            {
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Type mismatch: Pine expression evaluated to a blob");
-            }
+                                logDuration("parse-result");
 
-            if (evalResultListComponent.ListContent.Count != 2)
-            {
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                    evalResultListComponent.ListContent.Count +
-                    " instead of 2");
-            }
-
-            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(Result<string, Component>.ok(evalResultListComponent.ListContent[0]));
-
-            clock.Restart();
-
-            var parseSubmissionResponseResult =
-                ElmInteractive.SubmissionResponseFromResponsePineValue(
-                    evalElmPreparedJsEngine.Value,
-                    response: evalResultListComponent.ListContent[1]);
-
-            logDuration("parse-result");
-
-            if (parseSubmissionResponseResult.Ok == null)
-                return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                    "Failed to parse submission response: " + parseSubmissionResponseResult.Err);
-
-            return parseSubmissionResponseResult!;
+                                return
+                                parseSubmissionResponseResult
+                                .mapError(error => "Failed to parse submission response: " + error);
+                            });
+                        });
+                    });
+                });
         }
     }
 

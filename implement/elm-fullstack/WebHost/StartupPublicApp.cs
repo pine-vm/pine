@@ -433,7 +433,7 @@ public class StartupPublicApp
 
             if (matchFromSourceComposition != null)
             {
-                if (matchFromSourceComposition is not Composition.BlobComponent matchFromSourceCompositionBlobs)
+                if (matchFromSourceComposition is not PineValue.BlobValue matchFromSourceCompositionBlobs)
                     throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
 
                 return matchFromSourceCompositionBlobs.BlobContent.ToArray();
@@ -497,5 +497,5 @@ public class StartupPublicApp
 public record WebAppAndElmAppConfig(
     WebAppConfigurationJsonStructure? WebAppConfiguration,
     Func<string, string> ProcessEventInElmApp,
-    Composition.Component SourceComposition,
+    PineValue SourceComposition,
     InterfaceToHost.AppEventResponseStructure? InitOrMigrateCmds);

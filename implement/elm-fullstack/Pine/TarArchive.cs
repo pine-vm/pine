@@ -8,14 +8,14 @@ namespace Pine;
 
 static public class TarArchive
 {
-    static public Composition.TreeWithStringPath TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
+    static public TreeNodeWithStringPath TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
     {
         using var archiveReader = SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(tarArchive.ToArray()));
 
         return TreeWithStringPathFromTarArchiveEntries(archiveReader.Entries);
     }
 
-    static public Composition.TreeWithStringPath TreeWithStringPathFromTarArchiveEntries(
+    static public TreeNodeWithStringPath TreeWithStringPathFromTarArchiveEntries(
         IEnumerable<SharpCompress.Archives.Tar.TarArchiveEntry> entries)
     {
         var treeEntries =
@@ -29,9 +29,9 @@ static public class TarArchive
 
                 var componentBytes = memoryStream.ToArray();
 
-                return (name: tarEntry.Key, component: Composition.TreeWithStringPath.Blob(componentBytes));
+                return (name: tarEntry.Key, component: TreeNodeWithStringPath.Blob(componentBytes));
             }).ToImmutableList();
 
-        return Composition.TreeWithStringPath.SortedTree(treeEntries);
+        return TreeNodeWithStringPath.SortedTree(treeEntries);
     }
 }

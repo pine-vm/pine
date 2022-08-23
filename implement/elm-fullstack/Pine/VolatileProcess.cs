@@ -86,7 +86,7 @@ public class VolatileProcess
                                     {
                                         var referenceResolution =
                                             metadataResolver.ResolutionsFromAssemblyReference(referenceCandidate)?.ToImmutableList() ??
-                                            ImmutableList<(string url, IEnumerable<Composition.TreeWithStringPath>? loadedTrees)>.Empty;
+                                            ImmutableList<(string url, IEnumerable<TreeNodeWithStringPath>? loadedTrees)>.Empty;
 
                                         return string.Join("\n",
                                             "Found " + referenceResolution.Count + " hint URLS for reference " + referenceCandidate + ":",
@@ -126,13 +126,13 @@ public class VolatileProcess
     }
 
     static string DescribeAssemblyResolutionForErrorMessage(
-        IEnumerable<(string url, IEnumerable<Composition.TreeWithStringPath>? loadedTrees)> resolution)
+        IEnumerable<(string url, IEnumerable<TreeNodeWithStringPath>? loadedTrees)> resolution)
     {
         return string.Join("\n",
             resolution.Select(urlAndLoadedTrees =>
                 {
                     var loadedTrees =
-                        urlAndLoadedTrees.loadedTrees?.ToImmutableList() ?? ImmutableList<Composition.TreeWithStringPath>.Empty;
+                        urlAndLoadedTrees.loadedTrees?.ToImmutableList() ?? ImmutableList<TreeNodeWithStringPath>.Empty;
 
                     return
                         string.Join("\n",
@@ -141,7 +141,7 @@ public class VolatileProcess
                 }));
     }
 
-    static string DescribeTreeContentsForErrorMessage(Composition.TreeWithStringPath tree)
+    static string DescribeTreeContentsForErrorMessage(TreeNodeWithStringPath tree)
     {
         return string.Join("\n",
             tree.EnumerateBlobsTransitive().Select(blobAtPath =>
@@ -176,12 +176,12 @@ public class VolatileProcess
 
         readonly ConcurrentDictionary<string, IEnumerable<string>> hintUrlsFromAssemblyReference = new();
 
-        readonly ConcurrentDictionary<string, IEnumerable<Composition.TreeWithStringPath>> loadedTreesFromUrl = new();
+        readonly ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl = new();
 
         static readonly ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>> resolveReferenceCache =
             new(new ResolveReferenceRequestEqualityComparer());
 
-        public IEnumerable<(string url, IEnumerable<Composition.TreeWithStringPath>? loadedTrees)>? ResolutionsFromAssemblyReference(string assemblyReference)
+        public IEnumerable<(string url, IEnumerable<TreeNodeWithStringPath>? loadedTrees)>? ResolutionsFromAssemblyReference(string assemblyReference)
         {
             hintUrlsFromAssemblyReference.TryGetValue(assemblyReference, out var hintUrls);
 
@@ -328,7 +328,7 @@ public class VolatileProcess
                     if (assembly == null)
                         return new ImmutableArray<PortableExecutableReference>();
 
-                    if (!Composition.GetHash(Composition.Component.Blob(assembly)).Span.SequenceEqual(hash) &&
+                    if (!Composition.GetHash(PineValue.Blob(assembly)).Span.SequenceEqual(hash) &&
                         !CommonConversion.HashSHA256(assembly).Span.SequenceEqual(hash))
                         return new ImmutableArray<PortableExecutableReference>();
 
@@ -399,7 +399,7 @@ public class VolatileProcess
                             }
                             catch { }
 
-                            return ImmutableList<Composition.TreeWithStringPath>.Empty;
+                            return ImmutableList<TreeNodeWithStringPath>.Empty;
                         });
 
                 if (hintUrlTrees == null)

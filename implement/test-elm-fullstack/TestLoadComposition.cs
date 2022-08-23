@@ -43,11 +43,12 @@ public class TestLoadComposition
                 var loadCompositionResult =
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(testCase.input).LogToList();
 
-                if (loadCompositionResult.result.Ok?.tree == null)
-                    throw new Exception("Failed to load from path: " + loadCompositionResult.result.Err);
+                var loaded =
+                    loadCompositionResult
+                    .result.extract(error => throw new Exception("Failed to load from path: " + error));
 
                 var inspectComposition =
-                    loadCompositionResult.result.Ok.Value.tree.EnumerateBlobsTransitive()
+                    loaded.tree.EnumerateBlobsTransitive()
                     .Select(blobAtPath =>
                     {
                         string? utf8 = null;
@@ -68,7 +69,7 @@ public class TestLoadComposition
                     })
                     .ToImmutableList();
 
-                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.result.Ok.Value.tree)!;
+                var composition = Composition.FromTreeWithStringPath(loaded.tree);
                 var compositionId = CommonConversion.StringBase16(Composition.GetHash(composition));
 
                 Assert.AreEqual(testCase.expectedCompositionId, compositionId);

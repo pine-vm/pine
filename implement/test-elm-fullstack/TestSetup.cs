@@ -13,7 +13,7 @@ public class TestSetup
 {
     static public string PathToExampleElmApps => "./../../../example-elm-apps";
 
-    static public Composition.Component AppConfigComponentFromFiles(
+    static public PineValue AppConfigComponentFromFiles(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> appFiles) =>
         Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
 
@@ -93,12 +93,10 @@ public class TestSetup
         var compilationResult =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: originalAppFiles,
-                ElmAppInterfaceConfig.Default);
+                ElmAppInterfaceConfig.Default)
+            .extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
-        if (compilationResult.Ok == null)
-            throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err));
-
-        return compilationResult.Ok.compiledAppFiles;
+        return compilationResult.compiledAppFiles;
     }
 
     static public IProcessStoreReader EmptyProcessStoreReader() =>

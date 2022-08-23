@@ -198,104 +198,104 @@ static public class LoadFromGitHubOrGitLab
             var findGitObjectResult =
                 FindGitObjectAtPath(startCommit.Tree, pathNodesNames);
 
-            var linkedObject = findGitObjectResult?.Ok;
-
-            if (linkedObject == null)
-                return Result<string, LoadFromUrlSuccess>.err(
-                    "I did not find an object at path '" + parsedUrlPath + "' in " + startCommit.Sha);
-
-            IEnumerable<Commit> traceBackTreeParents()
-            {
-                var queue = new Queue<Commit>();
-
-                queue.Enqueue(startCommit);
-
-                while (queue.TryDequeue(out var currentCommit))
+            return
+                findGitObjectResult
+                .mapError(_ => "I did not find an object at path '" + parsedUrlPath + "' in " + startCommit.Sha)
+                .andThen(linkedObject =>
                 {
-                    yield return currentCommit;
-
-                    foreach (var parent in currentCommit.Parents)
+                    IEnumerable<Commit> traceBackTreeParents()
                     {
-                        if (FindGitObjectAtPath(parent.Tree, pathNodesNames)?.Ok?.Sha != linkedObject?.Sha)
-                            continue;
+                        var queue = new Queue<Commit>();
 
-                        queue.Enqueue(parent);
+                        queue.Enqueue(startCommit);
+
+                        while (queue.TryDequeue(out var currentCommit))
+                        {
+                            yield return currentCommit;
+
+                            foreach (var parent in currentCommit.Parents)
+                            {
+                                if (FindGitObjectAtPath(parent.Tree, pathNodesNames).map(find => find.Sha).withDefault(() => null) != linkedObject?.Sha)
+                                    continue;
+
+                                queue.Enqueue(parent);
+                            }
+                        }
                     }
-                }
-            }
 
-            var firstParentCommitWithSameTreeRef =
-                traceBackTreeParents().OrderBy(commit => commit.Author.When).First();
+                    var firstParentCommitWithSameTreeRef =
+                        traceBackTreeParents().OrderBy(commit => commit.Author.When).First();
 
-            var firstParentCommitWithSameTree =
-                GetCommitHashAndContent(firstParentCommitWithSameTreeRef);
+                    var firstParentCommitWithSameTree =
+                        GetCommitHashAndContent(firstParentCommitWithSameTreeRef);
 
-            var urlInFirstParentCommitWithSameValueAtThisPath =
-                BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTreeRef) });
+                    var urlInFirstParentCommitWithSameValueAtThisPath =
+                        BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTreeRef) });
 
-            static Composition.TreeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
-            {
-                if (gitObject is Tree gitTree)
-                {
-                    return Composition.TreeWithStringPath.SortedTree(
-                        treeContent:
-                            gitTree.Select(treeEntry =>
-                                (treeEntry.Name,
-                                convertToLiteralNodeObjectRecursive(treeEntry.Target)))
-                            .ToImmutableList());
-                }
+                    static TreeNodeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
+                    {
+                        if (gitObject is Tree gitTree)
+                        {
+                            return TreeNodeWithStringPath.SortedTree(
+                                treeContent:
+                                    gitTree.Select(treeEntry =>
+                                        (treeEntry.Name,
+                                        convertToLiteralNodeObjectRecursive(treeEntry.Target)))
+                                    .ToImmutableList());
+                        }
 
-                if (gitObject is Blob gitBlob)
-                {
-                    var memoryStream = new MemoryStream();
+                        if (gitObject is Blob gitBlob)
+                        {
+                            var memoryStream = new MemoryStream();
 
-                    var gitBlobContentStream = gitBlob.GetContentStream();
+                            var gitBlobContentStream = gitBlob.GetContentStream();
 
-                    if (gitBlobContentStream == null)
-                        throw new Exception("Failed to get content of git blob");
+                            if (gitBlobContentStream == null)
+                                throw new Exception("Failed to get content of git blob");
 
-                    gitBlobContentStream.CopyTo(memoryStream);
+                            gitBlobContentStream.CopyTo(memoryStream);
 
-                    var blobContent = memoryStream.ToArray();
+                            var blobContent = memoryStream.ToArray();
 
-                    var expectedSHA = gitBlob.Sha.ToLowerInvariant();
+                            var expectedSHA = gitBlob.Sha.ToLowerInvariant();
 
-                    //  This will change with the introduction of the new hash in git.
-                    //  We could branch on the length of 'gitBlob.Sha' to choose between old and new hash.
-                    //  (https://github.com/git/git/blob/74583d89127e21255c12dd3c8a3bf60b497d7d03/Documentation/technical/hash-function-transition.txt)
-                    //  (https://www.youtube.com/watch?v=qHERDFUSa14)
-                    var loadedBlobSHA1Base16Lower =
-                        BitConverter.ToString(GitBlobSHAFromBlobContent(blobContent)).Replace("-", "")
-                        .ToLowerInvariant();
+                            //  This will change with the introduction of the new hash in git.
+                            //  We could branch on the length of 'gitBlob.Sha' to choose between old and new hash.
+                            //  (https://github.com/git/git/blob/74583d89127e21255c12dd3c8a3bf60b497d7d03/Documentation/technical/hash-function-transition.txt)
+                            //  (https://www.youtube.com/watch?v=qHERDFUSa14)
+                            var loadedBlobSHA1Base16Lower =
+                                BitConverter.ToString(GitBlobSHAFromBlobContent(blobContent)).Replace("-", "")
+                                .ToLowerInvariant();
 
-                    if (loadedBlobSHA1Base16Lower != expectedSHA)
-                        throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
+                            if (loadedBlobSHA1Base16Lower != expectedSHA)
+                                throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                    return Composition.TreeWithStringPath.Blob(memoryStream.ToArray());
-                }
+                            return TreeNodeWithStringPath.Blob(memoryStream.ToArray());
+                        }
 
-                throw new Exception("Unexpected kind of git object: " + gitObject.GetType() + ", " + gitObject.Id);
-            }
+                        throw new Exception("Unexpected kind of git object: " + gitObject.GetType() + ", " + gitObject.Id);
+                    }
 
-            try
-            {
-                var literalNodeObject = convertToLiteralNodeObjectRecursive(linkedObject);
+                    try
+                    {
+                        var literalNodeObject = convertToLiteralNodeObjectRecursive(linkedObject);
 
-                return Result<string, LoadFromUrlSuccess>.ok(
-                    new LoadFromUrlSuccess
-                    (
-                        tree: literalNodeObject,
-                        urlInCommit: urlInCommit,
-                        urlInFirstParentCommitWithSameValueAtThisPath: urlInFirstParentCommitWithSameValueAtThisPath,
-                        rootCommit: rootCommit.Value,
-                        firstParentCommitWithSameTree: firstParentCommitWithSameTree
-                    )
-                );
-            }
-            catch (Exception e)
-            {
-                return Result<string, LoadFromUrlSuccess>.err("Failed to convert from git object:\n" + e.ToString());
-            }
+                        return Result<string, LoadFromUrlSuccess>.ok(
+                            new LoadFromUrlSuccess
+                            (
+                                tree: literalNodeObject,
+                                urlInCommit: urlInCommit,
+                                urlInFirstParentCommitWithSameValueAtThisPath: urlInFirstParentCommitWithSameValueAtThisPath,
+                                rootCommit: rootCommit.Value,
+                                firstParentCommitWithSameTree: firstParentCommitWithSameTree
+                            )
+                        );
+                    }
+                    catch (Exception e)
+                    {
+                        return Result<string, LoadFromUrlSuccess>.err("Failed to convert from git object:\n" + e.ToString());
+                    }
+                });
         }
         finally
         {
@@ -535,7 +535,7 @@ static public class LoadFromGitHubOrGitLab
     }
 
     public record LoadFromUrlSuccess(
-        Composition.TreeWithStringPath tree,
+        TreeNodeWithStringPath tree,
         string urlInCommit,
         string urlInFirstParentCommitWithSameValueAtThisPath,
         (string hash, CommitContent content) rootCommit,

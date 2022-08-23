@@ -52,9 +52,10 @@ static public class ProcessWithLogExtension
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>> andThen) =>
         orig.Continue(previousResult =>
-        previousResult.Ok == null ?
-        new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: Result<ErrT, NewOkT>.err(previousResult.Err!)) :
-        andThen(previousResult.Ok));
+        previousResult
+        .unpack(
+            fromErr: error => new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: Result<ErrT, NewOkT>.err(error)),
+            fromOk: ok => andThen(ok)));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,

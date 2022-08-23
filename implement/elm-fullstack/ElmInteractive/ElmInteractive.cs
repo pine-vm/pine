@@ -17,7 +17,7 @@ public class ElmInteractive
 
     static public Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-        TreeWithStringPath? appCodeTree,
+        TreeNodeWithStringPath? appCodeTree,
         string submission,
         IReadOnlyList<string>? previousLocalSubmissions = null)
     {
@@ -48,9 +48,9 @@ public class ElmInteractive
             responseStructure.DecodedArguments.Evaluated);
     }
 
-    static public Result<string, Component> CompileEvalContextForElmInteractive(
+    static public Result<string, PineValue> CompileEvalContextForElmInteractive(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-        TreeWithStringPath? appCodeTree)
+        TreeNodeWithStringPath? appCodeTree)
     {
         var modulesTexts = ModulesTextsFromAppCodeTree(appCodeTree);
 
@@ -70,9 +70,9 @@ public class ElmInteractive
             .map(fromJson => ParsePineComponentFromJson(fromJson!));
     }
 
-    static public Result<string?, Component?> CompileInteractiveSubmission(
+    static public Result<string, PineValue> CompileInteractiveSubmission(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-        Component environment,
+        PineValue environment,
         string submission,
         Action<string>? addInspectionLogEntry)
     {
@@ -114,7 +114,7 @@ public class ElmInteractive
         var response =
             responseStructure
             .AsResult()
-            .map(fromJson => (Component?)ParsePineComponentFromJson(fromJson!));
+            .map(fromJson => (PineValue?)ParsePineComponentFromJson(fromJson!));
 
         logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineComponentFromJson));
 
@@ -127,7 +127,7 @@ public class ElmInteractive
 
     static public Result<string?, EvaluatedSctructure?> SubmissionResponseFromResponsePineValue(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-        Component response)
+        PineValue response)
     {
         var responseJson =
             evalElmPreparedJsEngine.CallFunction(
@@ -175,7 +175,7 @@ public class ElmInteractive
         private record ComponentMappedForTransport(
             string? ListAsString,
             IReadOnlyList<ComponentMappedForTransport>? List,
-            Component origin)
+            PineValue origin)
             : IEquatable<ComponentMappedForTransport>
         {
             public virtual bool Equals(ComponentMappedForTransport? other) =>
@@ -203,14 +203,12 @@ public class ElmInteractive
                 return left.origin.Equals(right.origin);
             }
 
-            static public ComponentMappedForTransport FromComponent(Component component)
+            static public ComponentMappedForTransport FromComponent(PineValue component)
             {
-                var asStringResult = StringFromComponent(component);
+                if (StringFromComponent(component) is Result<string, string>.Ok asString)
+                    return new ComponentMappedForTransport(ListAsString: asString.Success, List: null, origin: component);
 
-                if (asStringResult.Ok is string asString)
-                    return new ComponentMappedForTransport(ListAsString: asString, List: null, origin: component);
-
-                if (component is ListComponent listComponent)
+                if (component is PineValue.ListValue listComponent)
                     return new ComponentMappedForTransport(
                         ListAsString: null,
                         List: listComponent.ListContent.Select(FromComponent).ToList(),
@@ -220,7 +218,7 @@ public class ElmInteractive
             }
         }
 
-        static public PineValueFromJson FromComponentBuildingDictionary(Component component)
+        static public PineValueFromJson FromComponentBuildingDictionary(PineValue component)
         {
             var intermediate = ComponentMappedForTransport.FromComponent(component);
 
@@ -295,7 +293,7 @@ public class ElmInteractive
             return componentForJson;
         }
 
-        static public PineValueFromJson FromComponentWithoutBuildingDictionary(Component component) =>
+        static public PineValueFromJson FromComponentWithoutBuildingDictionary(PineValue component) =>
             FromComponentWithoutBuildingDictionary(ComponentMappedForTransport.FromComponent(component));
 
         static PineValueFromJson FromComponentWithoutBuildingDictionary(
@@ -317,20 +315,20 @@ public class ElmInteractive
                 };
             }
 
-            if (component.origin is BlobComponent blobComponent)
+            if (component.origin is PineValue.BlobValue blobComponent)
                 return new PineValueFromJson { Blob = blobComponent.BlobContent.ToArray().Select(b => (int)b).ToImmutableArray() };
 
             throw new NotImplementedException("Unexpected shape");
         }
     }
 
-    static Component ParsePineComponentFromJson(PineValueFromJson fromJson)
+    static PineValue ParsePineComponentFromJson(PineValueFromJson fromJson)
     {
         if (fromJson.List != null)
-            return Component.List(fromJson.List.Select(ParsePineComponentFromJson).ToImmutableList());
+            return PineValue.List(fromJson.List.Select(ParsePineComponentFromJson).ToImmutableList());
 
         if (fromJson.Blob != null)
-            return Component.Blob(fromJson.Blob.Select(b => (byte)b).ToArray());
+            return PineValue.Blob(fromJson.Blob.Select(b => (byte)b).ToArray());
 
         if (fromJson.ListAsString != null)
             return ComponentFromString(fromJson.ListAsString);
@@ -338,7 +336,7 @@ public class ElmInteractive
         throw new NotImplementedException("Unexpected shape of Pine value from JSON");
     }
 
-    static IReadOnlyCollection<string>? ModulesTextsFromAppCodeTree(TreeWithStringPath? appCodeTree) =>
+    static IReadOnlyCollection<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
         appCodeTree == null ? null
         :
         TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree)!)
@@ -346,7 +344,7 @@ public class ElmInteractive
         .WhereNotNull()
         .ToImmutableList();
 
-    static TreeWithStringPath? compileTree(TreeWithStringPath? sourceTree)
+    static TreeNodeWithStringPath? compileTree(TreeNodeWithStringPath? sourceTree)
     {
         if (sourceTree == null)
             return null;
@@ -355,16 +353,18 @@ public class ElmInteractive
             sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
             ElmAppInterfaceConfig.Default);
 
-        if (compilationResult.Ok == null)
-        {
-            var errorMessage = "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationResult.Err) + "\n";
+        return
+            compilationResult
+            .unpack(
+                fromErr: compilationError =>
+                {
+                    var errorMessage = "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
 
-            Console.WriteLine(errorMessage);
+                    Console.WriteLine(errorMessage);
 
-            throw new Exception(errorMessage);
-        }
-
-        return SortedTreeFromSetOfBlobsWithStringPath(compilationResult.Ok.compiledAppFiles);
+                    throw new Exception(errorMessage);
+                },
+                fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.compiledAppFiles));
     }
 
     static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToEvaluateElm()
@@ -423,7 +423,8 @@ public class ElmInteractive
                 ImmutableList.Create("src", "Main.elm")
             },
             resourceNameCommonPrefix: "elm_fullstack.ElmInteractive.interpret_elm_program.",
-            assembly: typeof(ElmInteractive).Assembly).Ok!;
+            assembly: typeof(ElmInteractive).Assembly)
+        .extract(error => throw new NotImplementedException(nameof(ParseElmSyntaxAppCodeFiles) + ": " + error));
 
     record EvaluateSubmissionResponseStructure
         (string? FailedToDecodeArguments = null,

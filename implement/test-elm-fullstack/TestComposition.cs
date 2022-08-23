@@ -17,36 +17,36 @@ public class TestComposition
         {
             new
             {
-                input = Composition.TreeWithStringPath.Blob(new byte[]{0,1,2}),
-                expectedOutput = Composition.Component.Blob(new byte[]{0,1,2})
+                input = TreeNodeWithStringPath.Blob(new byte[]{0,1,2}),
+                expectedOutput = PineValue.Blob(new byte[]{0,1,2})
             },
             new
             {
-                input = Composition.TreeWithStringPath.SortedTree(
+                input = TreeNodeWithStringPath.SortedTree(
                     new []
                     {
                         (name: "ABC ä 😀",
-                        component: Composition.TreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
+                        component: TreeNodeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
                     }.ToImmutableList()),
-                expectedOutput = Composition.Component.List(
+                expectedOutput = PineValue.List(
                     new[]
                     {
-                        Composition.Component.List(
+                        PineValue.List(
                             new[]
                             {
-                                Composition.Component.List(
+                                PineValue.List(
                                     new[]
                                     {
-                                        Composition.Component.Blob(new byte[]{ 65 }),
-                                        Composition.Component.Blob(new byte[]{ 66 }),
-                                        Composition.Component.Blob(new byte[]{ 67 }),
-                                        Composition.Component.Blob(new byte[]{ 32 }),
-                                        Composition.Component.Blob(new byte[]{ 228 }),
-                                        Composition.Component.Blob(new byte[]{ 32 }),
-                                        Composition.Component.Blob(new byte[]{ 1,246,0 }),
+                                        PineValue.Blob(new byte[]{ 65 }),
+                                        PineValue.Blob(new byte[]{ 66 }),
+                                        PineValue.Blob(new byte[]{ 67 }),
+                                        PineValue.Blob(new byte[]{ 32 }),
+                                        PineValue.Blob(new byte[]{ 228 }),
+                                        PineValue.Blob(new byte[]{ 32 }),
+                                        PineValue.Blob(new byte[]{ 1,246,0 }),
                                     }.ToImmutableList()
                                 ),
-                                Composition.Component.Blob(new byte[]{0,1,2,3 } )
+                                PineValue.Blob(new byte[]{0,1,2,3 } )
                             }.ToImmutableList()
                         )
                     }.ToImmutableList())
@@ -68,40 +68,40 @@ public class TestComposition
         {
             new
             {
-                input = Composition.Component.Blob(new byte[]{0,1,2}),
-                expectedOutput = Composition.ParseAsTreeWithStringPathResult.ok(
-                    Composition.TreeWithStringPath.Blob(new byte[]{0,1,2}))
+                input = PineValue.Blob(new byte[]{0,1,2}),
+                expectedOutput = Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.ok(
+                    TreeNodeWithStringPath.Blob(new byte[]{0,1,2}))
             },
             new
             {
-                input = Composition.Component.List(
+                input = PineValue.List(
                     listContent:
                     new[]
                     {
-                        Composition.Component.List(
+                        PineValue.List(
                             listContent:
                             new[]
                             {
-                                Composition.Component.List(
+                                PineValue.List(
                                     listContent:
                                     new []
                                     {
-                                        Composition.Component.Blob(new byte[] { 68 }),
-                                        Composition.Component.Blob(new byte[] { 69 }),
-                                        Composition.Component.Blob(new byte[] { 70 }),
-                                        Composition.Component.Blob(new byte[] { 32 }),
-                                        Composition.Component.Blob(new byte[]{ 1,243,50 }),
+                                        PineValue.Blob(new byte[] { 68 }),
+                                        PineValue.Blob(new byte[] { 69 }),
+                                        PineValue.Blob(new byte[] { 70 }),
+                                        PineValue.Blob(new byte[] { 32 }),
+                                        PineValue.Blob(new byte[]{ 1,243,50 }),
                                     }.ToImmutableList()),
-                                Composition.Component.Blob(new byte[]{0,1,2,3}),
+                                PineValue.Blob(new byte[]{0,1,2,3}),
                             }.ToImmutableList())
                     }.ToImmutableList()),
-                expectedOutput = Composition.ParseAsTreeWithStringPathResult.ok(
-                    Composition.TreeWithStringPath.SortedTree(
+                expectedOutput = Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.ok(
+                    TreeNodeWithStringPath.SortedTree(
                         treeContent:
                         new []
                         {
                             (name: "DEF 🌲",
-                            component: Composition.TreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
+                            component: TreeNodeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
                         }.ToImmutableList())
                 )
             },
@@ -128,63 +128,63 @@ public class TestComposition
                     (filePath: "b/c", fileContent: new byte[]{3,4,5,6}),
                     (filePath: "b/d", fileContent: new byte[]{7,8}),
                 },
-                expectedOutput = Composition.Component.List(
+                expectedOutput = PineValue.List(
                     listContent:
                     new []
                     {
-                        Composition.Component.List(
+                        PineValue.List(
                             listContent:
                             new []
                             {
-                                Composition.Component.List(
+                                PineValue.List(
                                     listContent:
                                     new []
                                     {
-                                        Composition.Component.Blob(new byte[] { 97 }),
+                                        PineValue.Blob(new byte[] { 97 }),
                                     }.ToImmutableList()),
-                                Composition.Component.Blob(new byte[]{0,1,2}),
+                                PineValue.Blob(new byte[]{0,1,2}),
                             }.ToImmutableList()),
-                        Composition.Component.List(
+                        PineValue.List(
                             listContent:
                             new []
                             {
-                                Composition.Component.List(
+                                PineValue.List(
                                     listContent:
                                     new []
                                     {
-                                        Composition.Component.Blob(new byte[] { 98 }),
+                                        PineValue.Blob(new byte[] { 98 }),
                                     }.ToImmutableList()
                                 ),
-                                Composition.Component.List(
+                                PineValue.List(
                                     listContent:
                                     new []
                                     {
-                                        Composition.Component.List(
+                                        PineValue.List(
                                             listContent:
                                             new []
                                             {
-                                                Composition.Component.List(
+                                                PineValue.List(
                                                     listContent:
                                                     new []
                                                     {
-                                                        Composition.Component.Blob(new byte[] { 99 }),
+                                                        PineValue.Blob(new byte[] { 99 }),
                                                     }.ToImmutableList()
                                                 ),
-                                                Composition.Component.Blob(new byte[]{3,4,5,6}),
+                                                PineValue.Blob(new byte[]{3,4,5,6}),
                                             }.ToImmutableList()
                                         ),
-                                        Composition.Component.List(
+                                        PineValue.List(
                                             listContent:
                                             new []
                                             {
-                                                Composition.Component.List(
+                                                PineValue.List(
                                                     listContent:
                                                     new []
                                                     {
-                                                        Composition.Component.Blob(new byte[] { 100 }),
+                                                        PineValue.Blob(new byte[] { 100 }),
                                                     }.ToImmutableList()
                                                 ),
-                                                Composition.Component.Blob(new byte[]{7,8}),
+                                                PineValue.Blob(new byte[]{7,8}),
                                             }.ToImmutableList()
                                         ),
                                     }.ToImmutableList()
@@ -211,7 +211,7 @@ public class TestComposition
         {
             new
             {
-                input = Composition.Component.Blob(new byte[]{0,1,2}),
+                input = PineValue.Blob(new byte[]{0,1,2}),
                 expectedHashBase16 = CommonConversion.StringBase16(
                     CommonConversion.HashSHA256(Encoding.ASCII.GetBytes("blob 3\0").Concat(new byte[]{0,1,2}).ToArray()))
             },
@@ -238,14 +238,13 @@ public class TestComposition
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                Composition.ComponentFromString(testCase)!;
+                Composition.ComponentFromString(testCase);
 
             var toStringResult =
-                Composition.StringFromComponent(asPineValue);
+                Composition.StringFromComponent(asPineValue)
+                .extract(error => throw new Exception(error));
 
-            Assert.IsNull(toStringResult.Err);
-
-            Assert.AreEqual(testCase, toStringResult.Ok);
+            Assert.AreEqual(testCase, toStringResult);
         }
     }
 
@@ -263,11 +262,10 @@ public class TestComposition
                 Composition.ComponentFromSignedInteger(testCase);
 
             var toIntegerResult =
-                Composition.SignedIntegerFromComponent(asPineValue);
+                Composition.SignedIntegerFromComponent(asPineValue)
+                .extract(error => throw new Exception(error));
 
-            Assert.IsNull(toIntegerResult.Err);
-
-            Assert.AreEqual(testCase, toIntegerResult.Ok);
+            Assert.AreEqual(testCase, toIntegerResult);
         }
     }
 
@@ -282,19 +280,17 @@ public class TestComposition
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                Composition.ComponentFromUnsignedInteger(testCase);
-
-            Assert.IsNotNull(asPineValue.Ok);
+                Composition.ComponentFromUnsignedInteger(testCase)
+                .extract(error => throw new Exception(error));
 
             var toIntegerResult =
-                Composition.UnsignedIntegerFromComponent(asPineValue.Ok);
+                Composition.UnsignedIntegerFromComponent(asPineValue)
+                .extract(error => throw new Exception(error));
 
-            Assert.IsNull(toIntegerResult.Err);
-
-            Assert.AreEqual(testCase, toIntegerResult.Ok);
+            Assert.AreEqual(testCase, toIntegerResult);
         }
 
-        Assert.IsNotNull(Composition.ComponentFromUnsignedInteger(-1).Err);
+        Assert.IsTrue(Composition.ComponentFromUnsignedInteger(-1) is Result<string, PineValue>.Err);
     }
 
     [TestMethod]
@@ -304,50 +300,50 @@ public class TestComposition
         {
             new
             {
-                input = Composition.TreeWithStringPath.NonSortedTree(
+                input = TreeNodeWithStringPath.NonSortedTree(
                     treeContent:
                     ImmutableList.Create(
-                        ("ba-", Composition.TreeWithStringPath.Blob(new byte[]{ 0 })),
-                        ("ba", Composition.TreeWithStringPath.Blob(new byte[] { 1 })),
-                        ("bb", Composition.TreeWithStringPath.Blob(new byte[] { 2 })),
-                        ("a", Composition.TreeWithStringPath.Blob(new byte[] { 3 })),
-                        ("test😃", Composition.TreeWithStringPath.Blob(new byte[] { 4 })),
-                        ("testa", Composition.TreeWithStringPath.Blob(new byte[] { 5 })),
-                        ("tesz", Composition.TreeWithStringPath.Blob(new byte[] { 6 })),
-                        ("", Composition.TreeWithStringPath.Blob(new byte[] { 7 })),
-                        ("🌿", Composition.TreeWithStringPath.Blob(new byte[] { 8 })),
-                        ("🌲", Composition.TreeWithStringPath.Blob(new byte[] { 9 })),
-                        ("c", Composition.TreeWithStringPath.NonSortedTree(
+                        ("ba-", TreeNodeWithStringPath.Blob(new byte[]{ 0 })),
+                        ("ba", TreeNodeWithStringPath.Blob(new byte[] { 1 })),
+                        ("bb", TreeNodeWithStringPath.Blob(new byte[] { 2 })),
+                        ("a", TreeNodeWithStringPath.Blob(new byte[] { 3 })),
+                        ("test😃", TreeNodeWithStringPath.Blob(new byte[] { 4 })),
+                        ("testa", TreeNodeWithStringPath.Blob(new byte[] { 5 })),
+                        ("tesz", TreeNodeWithStringPath.Blob(new byte[] { 6 })),
+                        ("", TreeNodeWithStringPath.Blob(new byte[] { 7 })),
+                        ("🌿", TreeNodeWithStringPath.Blob(new byte[] { 8 })),
+                        ("🌲", TreeNodeWithStringPath.Blob(new byte[] { 9 })),
+                        ("c", TreeNodeWithStringPath.NonSortedTree(
                             treeContent:
                             ImmutableList.Create(
-                                ("gamma", Composition.TreeWithStringPath.Blob(new byte[] { 10 })),
-                                ("alpha", Composition.TreeWithStringPath.Blob(new byte[] { 11 }))
+                                ("gamma", TreeNodeWithStringPath.Blob(new byte[] { 10 })),
+                                ("alpha", TreeNodeWithStringPath.Blob(new byte[] { 11 }))
                                 )
                         )),
-                        ("bA", Composition.TreeWithStringPath.Blob(new byte[] { 12 }))
+                        ("bA", TreeNodeWithStringPath.Blob(new byte[] { 12 }))
                         )
                 ),
-                expected = Composition.TreeWithStringPath.NonSortedTree(
+                expected = TreeNodeWithStringPath.NonSortedTree(
                     treeContent:
                     ImmutableList.Create(
-                        ("", Composition.TreeWithStringPath.Blob(new byte[] { 7 })),
-                        ("a", Composition.TreeWithStringPath.Blob(new byte[] { 3 })),
-                        ("bA", Composition.TreeWithStringPath.Blob(new byte[] { 12 })),
-                        ("ba", Composition.TreeWithStringPath.Blob(new byte[] { 1 })),
-                        ("ba-", Composition.TreeWithStringPath.Blob(new byte[] { 0 })),
-                        ("bb", Composition.TreeWithStringPath.Blob(new byte[] { 2 })),
-                        ("c", Composition.TreeWithStringPath.NonSortedTree(
+                        ("", TreeNodeWithStringPath.Blob(new byte[] { 7 })),
+                        ("a", TreeNodeWithStringPath.Blob(new byte[] { 3 })),
+                        ("bA", TreeNodeWithStringPath.Blob(new byte[] { 12 })),
+                        ("ba", TreeNodeWithStringPath.Blob(new byte[] { 1 })),
+                        ("ba-", TreeNodeWithStringPath.Blob(new byte[] { 0 })),
+                        ("bb", TreeNodeWithStringPath.Blob(new byte[] { 2 })),
+                        ("c", TreeNodeWithStringPath.NonSortedTree(
                             treeContent:
                             ImmutableList.Create(
-                                ("alpha", Composition.TreeWithStringPath.Blob(new byte[] { 11 })),
-                                ("gamma", Composition.TreeWithStringPath.Blob(new byte[] { 10 }))
+                                ("alpha", TreeNodeWithStringPath.Blob(new byte[] { 11 })),
+                                ("gamma", TreeNodeWithStringPath.Blob(new byte[] { 10 }))
                                 )
                         )),
-                        ("testa", Composition.TreeWithStringPath.Blob(new byte[] { 5 })),
-                        ("test😃", Composition.TreeWithStringPath.Blob(new byte[] { 4 })),
-                        ("tesz", Composition.TreeWithStringPath.Blob(new byte[] { 6 })),
-                        ("🌲", Composition.TreeWithStringPath.Blob(new byte[] { 9 })),
-                        ("🌿", Composition.TreeWithStringPath.Blob(new byte[] { 8 }))
+                        ("testa", TreeNodeWithStringPath.Blob(new byte[] { 5 })),
+                        ("test😃", TreeNodeWithStringPath.Blob(new byte[] { 4 })),
+                        ("tesz", TreeNodeWithStringPath.Blob(new byte[] { 6 })),
+                        ("🌲", TreeNodeWithStringPath.Blob(new byte[] { 9 })),
+                        ("🌿", TreeNodeWithStringPath.Blob(new byte[] { 8 }))
                         )
                 ),
             }

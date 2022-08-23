@@ -19,7 +19,7 @@ public interface IProcessStoreWriter
 
     void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction);
 
-    void StoreComponent(Composition.Component component);
+    void StoreComponent(PineValue component);
 }
 
 public interface IProcessStoreReader
@@ -28,7 +28,7 @@ public interface IProcessStoreReader
 
     ProvisionalReductionRecordInFile? LoadProvisionalReduction(string reducedCompositionLogRecordHash);
 
-    Composition.Component? LoadComponent(string componentHash);
+    PineValue? LoadComponent(string componentHash);
 
     static public FileStoreReaderProjectionResult
         ProjectFileStoreReaderForAppendedCompositionLogEvent(
@@ -102,13 +102,13 @@ public interface IProcessStoreReader
 
 record DelegatingProcessStoreReader(
     Func<IEnumerable<byte[]>> EnumerateSerializedCompositionLogRecordsReverseDelegate,
-    Func<string, Composition.Component?> LoadComponentDelegate,
+    Func<string, PineValue?> LoadComponentDelegate,
     Func<string, ProvisionalReductionRecordInFile?> LoadProvisionalReductionDelegate) : IProcessStoreReader
 {
     public IEnumerable<byte[]> EnumerateSerializedCompositionLogRecordsReverse() =>
         EnumerateSerializedCompositionLogRecordsReverseDelegate();
 
-    public Composition.Component? LoadComponent(string componentHash) =>
+    public PineValue? LoadComponent(string componentHash) =>
         LoadComponentDelegate(componentHash);
 
     public ProvisionalReductionRecordInFile? LoadProvisionalReduction(string reducedCompositionLogRecordHash) =>
@@ -117,13 +117,13 @@ record DelegatingProcessStoreReader(
 
 public record DelegatingProcessStoreWriter(
     Func<CompositionLogRecordInFile.CompositionEvent, (ReadOnlyMemory<byte> recordHash, string recordHashBase16)> AppendCompositionLogRecordDelegate,
-    Action<Composition.Component> StoreComponentDelegate,
+    Action<PineValue> StoreComponentDelegate,
     Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate) : IProcessStoreWriter
 {
     public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
         AppendCompositionLogRecordDelegate(compositionEvent);
 
-    public void StoreComponent(Composition.Component component) =>
+    public void StoreComponent(PineValue component) =>
         StoreComponentDelegate(component);
 
     public void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction) =>
@@ -144,7 +144,7 @@ public record CompositionLogRecordInFile(
         CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
 
     static public ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
-        Composition.GetHash(Composition.Component.Blob(compositionRecord));
+        Composition.GetHash(PineValue.Blob(compositionRecord));
 
     public record CompositionEvent(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -268,23 +268,24 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         return originalFile!.ToArray();
     }
 
-    public Composition.Component? LoadComponent(string componentHashBase16)
+    public PineValue? LoadComponent(string componentHashBase16)
     {
         var fromComponentStore = LoadComponentSerialRepresentationForHash(componentHashBase16);
 
         if (fromComponentStore == null)
             return null;
 
-        var loadComponentResult =
-            Composition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash);
+        return
+            Composition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
+            .unpack(
+                fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
+                fromOk: loadComponentResult =>
+                {
+                    if (CommonConversion.StringBase16(Composition.GetHash(loadComponentResult)) != componentHashBase16)
+                        throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
-        if (loadComponentResult.Ok == null)
-            throw new Exception("Failed to load component " + componentHashBase16 + ": " + loadComponentResult.Err);
-
-        if (CommonConversion.StringBase16(Composition.GetHash(loadComponentResult.Ok)) != componentHashBase16)
-            throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
-
-        return loadComponentResult.Ok;
+                    return loadComponentResult;
+                });
     }
 
     public ProvisionalReductionRecordInFile? LoadProvisionalReduction(string reducedCompositionHash)
@@ -428,7 +429,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             if (compositionRecordComponent == null)
                 throw new Exception("Failed to load composition record component " + nextHashBase16);
 
-            if (compositionRecordComponent is not Composition.BlobComponent compositionRecordComponentBlob)
+            if (compositionRecordComponent is not PineValue.BlobValue compositionRecordComponentBlob)
                 throw new Exception("Unexpected content for composition record component " + nextHashBase16);
 
             var compositionRecordBytes = compositionRecordComponentBlob.BlobContent;
@@ -549,12 +550,12 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(reductionRecord, recordSerializationSettings)));
     }
 
-    public void StoreComponent(Composition.Component component)
+    public void StoreComponent(PineValue component)
     {
         StoreComponentAndGetHash(component);
     }
 
-    (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(Composition.Component component)
+    (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(PineValue component)
     {
         var (serialRepresentation, dependencies) = Composition.GetSerialRepresentationAndDependencies(component);
 

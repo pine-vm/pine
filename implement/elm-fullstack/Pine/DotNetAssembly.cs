@@ -23,32 +23,20 @@ public class DotNetAssembly
             .Aggregate(
                 seed: seed,
                 func: (aggregate, filePath) =>
-                {
-                    if (aggregate.Ok == null)
-                        return aggregate;
+                aggregate.andThen(
+                    dict =>
+                    {
+                        var resourceName = resourceNameCommonPrefix + string.Join(".", filePath);
 
-                    var resourceName = resourceNameCommonPrefix + string.Join(".", filePath);
+                        var fileContent = GetManifestResourceStreamContentAsBytes(assembly, resourceName);
 
-                    var fileContent = GetManifestResourceStreamContentAsBytes(assembly, resourceName);
+                        if (fileContent == null)
+                            return Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.err(
+                                "Failed to get content for resource: " + resourceName);
 
-                    if (fileContent == null)
-                        return Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.err(
-                            "Failed to get content for resource: " + resourceName);
-
-                    return
-                        aggregate.map(dict => dict.SetItem(filePath.ToImmutableList(), fileContent.Value));
-                });
-    }
-
-    static IImmutableDictionary<KeyT, ValueT>? SetItemOrReturnNull<KeyT, ValueT>(
-        IImmutableDictionary<KeyT, ValueT>? dict,
-        KeyT key,
-        ValueT? value)
-    {
-        if (dict == null || value == null)
-            return null;
-
-        return dict.SetItem(key, value);
+                        return Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.ok(
+                            dict.SetItem(filePath.ToImmutableList(), fileContent.Value));
+                    }));
     }
 
     static public ReadOnlyMemory<byte>? GetManifestResourceStreamContentAsBytes(Assembly assembly, string name)

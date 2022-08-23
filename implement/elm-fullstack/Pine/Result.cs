@@ -6,112 +6,99 @@ using System.Text.Json;
 
 namespace Pine;
 
+[JsonConverter(typeof(JsonConverterForResult))]
 /// <summary>
 /// Generic DU type to describe the outcome of an operation with an overall classification into either failure ('Err') or success ('Ok').
-/// Supports only nullable types (class or Nullable<T>) as type arguments.
 /// </summary>
-public record Result<ErrT, OkT>
+public abstract record Result<ErrT, OkT>
 {
-    /// <summary>
-    /// A non-null value represents an error.
-    /// </summary>
-    public ErrT? Err { private init; get; }
-
-    /// <summary>
-    /// A non-null value represents a success.
-    /// </summary>
-    public OkT? Ok { private init; get; }
-
     /// <summary>
     /// Constructor for the 'Err' case.
     /// </summary>
-    static public Result<ErrT, OkT> err(ErrT err) =>
-        new(Err: err);
+    static public Result<ErrT, OkT> err(ErrT err) => new Err(err);
 
     /// <summary>
     /// Constructor for the 'Ok' case.
     /// </summary>
-    static public Result<ErrT, OkT> ok(OkT ok) =>
-        new(Ok: ok);
+    static public Result<ErrT, OkT> ok(OkT ok) => new Ok(ok);
 
     /// <summary>
     /// Returns whether this value represents an error case.
     /// </summary>
-    public bool IsErr() => Err != null;
+    public bool IsErr() =>
+        this switch
+        {
+            Err _ => true,
+            _ => false
+        };
 
     /// <summary>
     /// Returns whether this value represents a success case.
     /// </summary>
-    public bool IsOk() => Ok != null;
+    public bool IsOk() =>
+        this switch
+        {
+            Ok _ => true,
+            _ => false
+        };
 
+    /// <summary>
+    /// A <see cref="Result{ErrT, OkT}"/> that is an error.
+    /// </summary>
+    public record Err(ErrT Error) : Result<ErrT, OkT>;
+
+    /// <summary>
+    /// A <see cref="Result{ErrT, OkT}"/> that is a success.
+    /// </summary>
+    public record Ok(OkT Success) : Result<ErrT, OkT>;
 
     /// <summary>
     /// Maps the value of the 'Ok' case.
     /// </summary>
-    public Result<ErrT, MappedOkT> map<MappedOkT>(Func<OkT, MappedOkT> okMap)
-    {
-        if (Ok == null)
-            return Result<ErrT, MappedOkT>.err(Err!);
-
-        return Result<ErrT, MappedOkT>.ok(okMap(Ok));
-    }
+    public Result<ErrT, MappedOkT> map<MappedOkT>(Func<OkT, MappedOkT> okMap) =>
+        this switch
+        {
+            Ok ok => new Result<ErrT, MappedOkT>.Ok(okMap(ok.Success)),
+            Err err => new Result<ErrT, MappedOkT>.Err(err.Error),
+            _ => throw new NotImplementedException()
+        };
 
     /// <summary>
     /// Maps the value of the 'Err' case.
     /// </summary>
-    public Result<MappedErrT, OkT> mapError<MappedErrT>(Func<ErrT, MappedErrT> errMap)
-    {
-        if (Ok == null)
-            return Result<MappedErrT, OkT>.err(errMap(Err!));
-
-        return Result<MappedErrT, OkT>.ok(Ok);
-    }
+    public Result<MappedErrT, OkT> mapError<MappedErrT>(Func<ErrT, MappedErrT> errMap) =>
+        this switch
+        {
+            Ok ok => new Result<MappedErrT, OkT>.Ok(ok.Success),
+            Err err => new Result<MappedErrT, OkT>.Err(errMap(err.Error)),
+            _ => throw new NotImplementedException()
+        };
 
     /// <summary>
     /// Map for the 'Ok' case that may fail.
     /// Used for chaining together a sequence of computations that may fail.
     /// </summary>
-    public Result<ErrT, MappedOkT> andThen<MappedOkT>(Func<OkT, Result<ErrT, MappedOkT>> okMap)
-    {
-        if (Ok == null)
-            return Result<ErrT, MappedOkT>.err(Err!);
+    public Result<ErrT, MappedOkT> andThen<MappedOkT>(Func<OkT, Result<ErrT, MappedOkT>> okMap) =>
+        this switch
+        {
+            Ok ok => okMap(ok.Success),
+            Err err => new Result<ErrT, MappedOkT>.Err(err.Error),
+            _ => throw new NotImplementedException()
+        };
 
-        return okMap(Ok);
-    }
+    public OkT withDefault(Func<OkT> getDefault) =>
+        unpack(fromErr: _ => getDefault(), fromOk: ok => ok);
 
-    /// <summary>
-    /// Prevent construction of invalid values: Make the default constructor private to force using the explicit construction methods.
-    /// </summary>
-    internal Result(ErrT? Err = default, OkT? Ok = default)
-    {
-        if (Err != null && Ok != null)
-            throw new ArgumentException("Both Err and Ok are not null.");
+    public OkT extract(Func<ErrT, OkT> fromErr) =>
+        unpack(fromErr: fromErr, fromOk: ok => ok);
 
-        if (Err == null && Ok == null)
-            throw new ArgumentException("Both Err and Ok are null.");
-
-        this.Err = Err;
-        this.Ok = Ok;
-    }
-
-    static Result()
-    {
-        /*
-         * Adapt to default(T?) not working.
-         * https://stackoverflow.com/questions/72170047/why-doesnt-return-defaultt-give-a-null-when-t-is-constrained-to-enum
-         * */
-
-        string composeErrorMessage(Type type) =>
-            "Problem with type arguments in instance " + typeof(Result<ErrT, OkT>).FullName + ": " +
-            "Only use types with a default value of null for the type argument " + type.FullName +
-              ". For value types, use Nullable<T> for wrapping.";
-
-        if (!(default(ErrT) == null))
-            throw new InvalidOperationException(composeErrorMessage(typeof(ErrT)));
-
-        if (!(default(OkT) == null))
-            throw new InvalidOperationException(composeErrorMessage(typeof(OkT)));
-    }
+    public T unpack<T>(Func<ErrT, T> fromErr, Func<OkT, T> fromOk) =>
+        this switch
+        {
+            Ok ok => fromOk(ok.Success),
+            Err err => fromErr(err.Error),
+            _ => throw new NotImplementedException()
+        };
 }
 
 public class JsonConverterForResult : JsonConverterFactory
@@ -199,10 +186,11 @@ public class JsonConverterForResult<ErrT, OkT> : JsonConverter<Result<ErrT, OkT>
 
         writer.WriteStartArray();
 
-        if (value.IsOk())
-            JsonSerializer.Serialize(writer, value.Ok, options);
-        else
-            JsonSerializer.Serialize(writer, value.Err, options);
+        if (value is Result<ErrT, OkT>.Ok okResult)
+            JsonSerializer.Serialize(writer, okResult.Success, options);
+
+        if (value is Result<ErrT, OkT>.Err errResult)
+            JsonSerializer.Serialize(writer, errResult.Error, options);
 
         writer.WriteEndArray();
 

@@ -8,16 +8,16 @@ namespace test_elm_fullstack;
 [TestClass]
 public class TestElmWebAppHttpServer
 {
-    static public Composition.Component CounterWebApp =>
+    static public PineValue CounterWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
 
-    static public Composition.Component StringBuilderWebApp =>
+    static public PineValue StringBuilderWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.StringBuilderElmWebApp);
 
-    static public Composition.Component CrossPropagateHttpHeadersToAndFromBody =>
+    static public PineValue CrossPropagateHttpHeadersToAndFromBody =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
 
-    static public Composition.Component HttpProxyWebApp =>
+    static public PineValue HttpProxyWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.HttpProxyWebApp);
 
     [TestMethod]

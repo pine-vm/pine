@@ -59,7 +59,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         Func<DateTimeOffset>? persistentProcessHostDateTime = null,
         string? adminPassword = null,
         IFileStore? fileStore = null,
-        Composition.Component? deployAppConfigAndInitElmState = null) =>
+        PineValue? deployAppConfigAndInitElmState = null) =>
         Setup(
             adminPassword: adminPassword,
             fileStore: fileStore,
@@ -71,7 +71,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
         string? adminPassword = null,
         IFileStore? fileStore = null,
-        Composition.Component? deployAppConfigAndInitElmState = null,
+        PineValue? deployAppConfigAndInitElmState = null,
         string? adminWebHostUrlOverride = null,
         string? publicWebHostUrlOverride = null,
         Func<DateTimeOffset>? persistentProcessHostDateTime = null)
@@ -134,7 +134,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         string testDirectory,
         string? adminPassword,
         IFileStore? fileStore,
-        Composition.Component? deployAppConfigAndInitElmState,
+        PineValue? deployAppConfigAndInitElmState,
         Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
         string? adminWebHostUrlOverride,
         string? publicWebHostUrlOverride,
@@ -190,14 +190,14 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             var component =
                 logEntry.LiteralStringUtf8 != null
                 ?
-                Composition.Component.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
+                PineValue.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
                 :
                 processStoreReader.LoadComponent(logEntry.HashBase16!);
 
             if (component is null)
                 throw new Exception("component is null");
 
-            if (component is not Composition.BlobComponent blobComponent)
+            if (component is not PineValue.BlobValue blobComponent)
                 throw new Exception("component is not a blob");
 
             var eventString = Encoding.UTF8.GetString(blobComponent.BlobContent.Span);

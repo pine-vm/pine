@@ -44,7 +44,7 @@ public class BlobLibrary
             if (blobCandidate == null)
                 return null;
 
-            if (!(Composition.GetHash(Composition.Component.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
+            if (!(Composition.GetHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
                 System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
                 return null;
 
@@ -204,14 +204,14 @@ public class BlobLibrary
 
     static public Func<ReadOnlyMemory<byte>, bool> BlobHasSHA256(ReadOnlyMemory<byte> sha256) =>
         blobCandidate =>
-        Composition.GetHash(Composition.Component.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
+        Composition.GetHash(PineValue.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
         System.Security.Cryptography.SHA256.HashData(blobCandidate.Span).AsSpan().SequenceEqual(sha256.Span);
 
     static public IEnumerable<ReadOnlyMemory<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
         DownloadFromUrlAndExtractTrees(sourceUrl)
         .SelectMany(tree => tree.EnumerateBlobsTransitive().Select(blob => blob.blobContent));
 
-    static public IEnumerable<Composition.TreeWithStringPath> DownloadFromUrlAndExtractTrees(string sourceUrl)
+    static public IEnumerable<TreeNodeWithStringPath> DownloadFromUrlAndExtractTrees(string sourceUrl)
     {
         var httpResponse = DownloadViaHttp(sourceUrl);
 
@@ -225,7 +225,7 @@ public class BlobLibrary
         if (responseContent == null)
             yield break;
 
-        yield return Composition.TreeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
+        yield return TreeNodeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
 
         var blobName = sourceUrl.Split('/', '\\').Last();
 
@@ -233,10 +233,10 @@ public class BlobLibrary
             yield return extracted;
     }
 
-    static public IEnumerable<Composition.TreeWithStringPath> ExtractTreesFromNamedBlob(string blobName, ReadOnlyMemory<byte> blobContent)
+    static public IEnumerable<TreeNodeWithStringPath> ExtractTreesFromNamedBlob(string blobName, ReadOnlyMemory<byte> blobContent)
     {
         {
-            Composition.TreeWithStringPath? fromZipArchive = null;
+            TreeNodeWithStringPath? fromZipArchive = null;
 
             try
             {
@@ -252,7 +252,7 @@ public class BlobLibrary
 
         if (blobName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || blobName.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
         {
-            Composition.TreeWithStringPath? fromTarArchive = null;
+            TreeNodeWithStringPath? fromTarArchive = null;
 
             try
             {
@@ -273,8 +273,8 @@ public class BlobLibrary
             }
             catch { }
 
-            if (fromGzip != null)
-                yield return Composition.TreeWithStringPath.Blob((ReadOnlyMemory<byte>)fromGzip);
+            if (fromGzip is not null)
+                yield return TreeNodeWithStringPath.Blob(fromGzip.Value);
         }
     }
 }

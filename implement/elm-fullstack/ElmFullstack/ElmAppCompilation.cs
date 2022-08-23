@@ -66,7 +66,7 @@ namespace ElmFullstack
             (Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
                 Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>? previousEntryCompilationResult)
             {
-                if (previousEntryCompilationResult?.Ok != null)
+                if (previousEntryCompilationResult is Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.Ok ok)
                     return (previousEntryCompilationResult, cacheItemTimeSource.Elapsed);
 
                 return (compileNew(), cacheItemTimeSource.Elapsed);
@@ -116,8 +116,12 @@ namespace ElmFullstack
                 stack.SelectMany(frame => frame.discoveredDependencies)
                 .ToImmutableList();
 
+            var compilerElmProgramCodeFiles =
+                CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value
+                .extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmFullstackBackend) + ": " + error));
+
             var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
-                compilerElmProgramCodeFiles: CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value.Ok!,
+                compilerElmProgramCodeFiles: compilerElmProgramCodeFiles,
                 sourceFiles: sourceFiles,
                 rootModuleName: rootModuleName,
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
@@ -201,7 +205,7 @@ namespace ElmFullstack
 
                     if (elmMakeRequest != null)
                     {
-                        Result<string, ReadOnlyMemory<byte>?> buildResultValue()
+                        Result<string, ReadOnlyMemory<byte>> buildResultValue()
                         {
                             try
                             {
@@ -218,11 +222,11 @@ namespace ElmFullstack
                                     makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
                                     enableDebug: elmMakeRequest.enableDebug);
 
-                                return Result<string, ReadOnlyMemory<byte>?>.ok(value);
+                                return Result<string, ReadOnlyMemory<byte>>.ok(value);
                             }
                             catch (Exception e)
                             {
-                                return Result<string, ReadOnlyMemory<byte>?>.err("Failed with runtime exception: " + e.ToString());
+                                return Result<string, ReadOnlyMemory<byte>>.err("Failed with runtime exception: " + e.ToString());
                             }
                         }
 
@@ -243,7 +247,7 @@ namespace ElmFullstack
                 };
 
             var newDependenciesWithError =
-                newDependencies.Where(dep => dep.Item1.result.Ok == null).ToImmutableList();
+                newDependencies.Where(dep => !dep.Item1.result.IsOk()).ToImmutableList();
 
             /*
              * TODO: Instead of returning here, probably forward the result back into the compiler for packaging, for example adding location info.
@@ -254,14 +258,19 @@ namespace ElmFullstack
                 return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
                     newDependenciesWithError.Select(dep => new LocatedCompilationError(
                         location: null,
-                        error: new CompilationError(DependencyError: dep.Item2.report.dependencyKeySummary + " " + dep.Item1.result.Err)))
+                        error: new CompilationError(
+                            DependencyError:
+                            dep.Item2.report.dependencyKeySummary + " " +
+                            dep.Item1.result.unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException()))))
                     .ToImmutableList());
             }
 
             var newStackFrame =
                 new StackFrame(
-                    newDependencies.Select(depAndReport => (depAndReport.Item1.key, depAndReport.Item1.result.Ok!.Value)).ToImmutableList(),
-                    currentIterationReport);
+                    discoveredDependencies:
+                    newDependencies.Select(depAndReport =>
+                    (depAndReport.Item1.key, depAndReport.Item1.result.extract(error => throw new Exception(error)))).ToImmutableList(),
+                    iterationReport: currentIterationReport);
 
             return AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
@@ -469,17 +478,6 @@ namespace ElmFullstack
                 resourceNameCommonPrefix: "elm_fullstack.ElmFullstack.compile_elm_program.",
                 assembly: typeof(ElmAppCompilation).Assembly);
 
-        static IImmutableDictionary<KeyT, ValueT>? SetItemOrReturnNull<KeyT, ValueT>(
-            IImmutableDictionary<KeyT, ValueT>? dict,
-            KeyT key,
-            ValueT? value)
-        {
-            if (dict == null || value == null)
-                return null;
-
-            return dict.SetItem(key, value);
-        }
-
         static IReadOnlyList<byte>? GetManifestResourceStreamContent(string name)
         {
             using var stream = typeof(ElmAppCompilation).Assembly.GetManifestResourceStream(name);
@@ -559,8 +557,9 @@ namespace ElmFullstack
             compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
 
         static long EstimateCacheItemSizeInMemory(Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> item) =>
-            (item.Err?.Sum(err => EstimateCacheItemSizeInMemory(err)) ?? 0) +
-            (item.Ok != null ? EstimateCacheItemSizeInMemory(item.Ok) : 0);
+            item.unpack(
+                fromErr: errors => errors.Sum(EstimateCacheItemSizeInMemory),
+                fromOk: EstimateCacheItemSizeInMemory);
 
         static long EstimateCacheItemSizeInMemory(CompilationSuccess compilationSuccess) =>
             EstimateCacheItemSizeInMemory(compilationSuccess.compiledAppFiles);

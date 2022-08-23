@@ -73,7 +73,8 @@ public class TestElmInteractive
             foreach (var failedStep in failedScenario.Value)
             {
                 console.WriteLine(
-                    "Failed step '" + failedStep.step.name + "':\n" + failedStep.step.result?.Err?.errorAsText!,
+                    "Failed step '" + failedStep.step.name + "':\n" +
+                    failedStep.step.result.unpack(fromErr: err => err, fromOk: _ => throw new NotImplementedException()).errorAsText,
                     color: IConsole.TextColor.Red);
             }
         }
