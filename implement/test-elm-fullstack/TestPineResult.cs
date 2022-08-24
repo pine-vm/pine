@@ -12,15 +12,15 @@ public class TestPineResult
     {
         var testCases = new[]
         {
-            Result<string, int?>.err("Error string"),
-            Result<string, int?>.ok(4567),
+            Result<string, int>.err("Error string"),
+            Result<string, int>.ok(4567),
         };
 
         foreach (var testCase in testCases)
         {
             var serialized = JsonSerializer.Serialize(testCase);
 
-            var deserialized = JsonSerializer.Deserialize<Result<string, int?>>(serialized);
+            var deserialized = JsonSerializer.Deserialize<Result<string, int>>(serialized);
 
             Assert.AreEqual(testCase, deserialized);
         }
@@ -35,19 +35,39 @@ public class TestPineResult
          * */
 
         Assert.AreEqual(
-            Result<string, int?>.err("some text"),
-            JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Err":["some text"]}"""));
+            Result<string, int>.err("some text"),
+            JsonSerializer.Deserialize<Result<string, int>>($$"""{"Err":["some text"]}"""));
 
         Assert.AreEqual(
-            Result<string, int?>.ok(34),
-            JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[34]}"""));
+            Result<string, int>.ok(34),
+            JsonSerializer.Deserialize<Result<string, int>>($$"""{"Ok":[34]}"""));
 
         Assert.AreEqual(
-            $$"""{"Err":["the error"]}""",
-            JsonSerializer.Serialize(Result<string, int?>.err("the error")));
+            Result<string, int?>.ok(67),
+            JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[67]}"""));
+
+        Assert.AreEqual(
+            Result<string?, int>.err(null),
+            JsonSerializer.Deserialize<Result<string?, int>>($$"""{"Err":[null]}"""));
+
+        Assert.AreEqual(
+            Result<string, int?>.ok(null),
+            JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[null]}"""));
+
+        Assert.AreEqual(
+            $$"""{"Err":["error message"]}""",
+            JsonSerializer.Serialize(Result<string, int>.err("error message")));
 
         Assert.AreEqual(
             $$"""{"Ok":[87]}""",
-            JsonSerializer.Serialize(Result<string, int?>.ok(87)));
+            JsonSerializer.Serialize(Result<string, int>.ok(87)));
+
+        Assert.AreEqual(
+            $$"""{"Err":[null]}""",
+            JsonSerializer.Serialize(Result<string?, int>.err(null)));
+
+        Assert.AreEqual(
+            $$"""{"Ok":[null]}""",
+            JsonSerializer.Serialize(Result<string, int?>.ok(null)));
     }
 }
