@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -12,8 +13,8 @@ namespace test_elm_fullstack
     [TestClass]
     public class TestElmEditor
     {
-        static string? NormalizeStringTestingElmFormat(string? originalString) =>
-            originalString?.Trim()?.Replace("\n\r", "\n")?.Replace("\r\n", "\n");
+        static string NormalizeStringTestingElmFormat(string originalString) =>
+            originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
 
         [Ignore("TODO: Enable after adapting example app.")]
         [TestMethod]
@@ -83,8 +84,9 @@ a =
             Assert.AreEqual(
                 NormalizeStringTestingElmFormat(expectedElmModuleTextAfterFormatting),
                 NormalizeStringTestingElmFormat(responseStructure
-                    ?.FormatElmModuleTextResponse?.FirstOrDefault()
-                    ?.formattedText.Just?.FirstOrDefault()),
+                    ?.FormatElmModuleTextResponse
+                    ?.FirstOrDefault()?.formattedText
+                    .withDefault(() => throw new ArgumentNullException())!),
                 "Response content");
         }
     }
@@ -99,7 +101,7 @@ a =
             IReadOnlyList<string>? ErrorResponse = default);
 
         public record FormatElmModuleTextResponseStructure(
-            ElmFullstack.ElmValueCommonJson.Maybe<string> formattedText,
+            Maybe<string> formattedText,
             ExecutableFile.ProcessOutput processOutput);
     }
 }

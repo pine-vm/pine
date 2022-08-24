@@ -127,8 +127,6 @@ namespace ElmFullstack
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                 dependencies: dependencies);
 
-            var compilationSuccess = compilationResult.Ok?.FirstOrDefault();
-
             var currentIterationReport = new CompilationIterationReport
             (
                 compilation: compilationReport,
@@ -136,150 +134,149 @@ namespace ElmFullstack
                 totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
             );
 
-            if (compilationSuccess != null)
-            {
-                return
-                    Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.ok(
-                        new CompilationSuccess(compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport)));
-            }
-
-            var compilationErrors =
-                compilationResult.Err?.FirstOrDefault();
-
-            if (compilationErrors == null)
-                throw new Exception("Failed compilation: Protocol error: Missing error descriptions.");
-
-            var compilationErrorsMissingElmMakeDependencies =
-                compilationErrors
-                .SelectMany(error =>
-                {
-                    var dependencyKey = error.error?.MissingDependencyError?.FirstOrDefault();
-
-                    if (dependencyKey != null)
-                        return ImmutableList.Create((error, dependencyKey));
-
-                    return ImmutableList<(CompilerSerialInterface.LocatedCompilationError error, CompilerSerialInterface.DependencyKey dependencyKey)>.Empty;
-                })
-                .ToImmutableList();
-
-            var otherErrors =
-                compilationErrors.Except(compilationErrorsMissingElmMakeDependencies.Select(e => e.error))
-                .ToImmutableList();
-
-            if (0 < otherErrors.Count)
-            {
-                return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
-                    otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
-            }
-
-            byte[] ElmMake(
-                IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
-                IImmutableList<string> pathToFileWithElmEntryPoint,
-                bool makeJavascript,
-                bool enableDebug)
-            {
-                var elmMakeCommandAppendix =
-                    enableDebug ? "--debug" : null;
-
-                var fileAsString = ProcessFromElm019Code.CompileElm(
-                    elmCodeFiles,
-                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                    outputFileName: "output." + (makeJavascript ? "js" : "html"),
-                    elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                return Encoding.UTF8.GetBytes(fileAsString);
-            }
-
-            var newDependencies =
-                compilationErrorsMissingElmMakeDependencies
-                .Select(error =>
-                {
-                    var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
-                        new(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
-
-                    var dependencyKey = error.dependencyKey;
-
-                    var elmMakeRequest = dependencyKey.ElmMakeDependency?.FirstOrDefault();
-
-                    if (elmMakeRequest != null)
+            return
+                compilationResult
+                .unpack(
+                    fromOk: compilationSuccess =>
                     {
-                        Result<string, ReadOnlyMemory<byte>> buildResultValue()
+                        return
+                            Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.ok(
+                                new CompilationSuccess(compilationSuccess, stack.Select(frame => frame.iterationReport).ToImmutableList().Add(currentIterationReport)));
+                    },
+                    fromErr: compilationErrors =>
+                    {
+                        var compilationErrorsMissingElmMakeDependencies =
+                            compilationErrors
+                            .SelectMany(error =>
+                            {
+                                var dependencyKey = error.error?.MissingDependencyError?.FirstOrDefault();
+
+                                if (dependencyKey != null)
+                                    return ImmutableList.Create((error, dependencyKey));
+
+                                return ImmutableList<(CompilerSerialInterface.LocatedCompilationError error, CompilerSerialInterface.DependencyKey dependencyKey)>.Empty;
+                            })
+                            .ToImmutableList();
+
+                        var otherErrors =
+                            compilationErrors.Except(compilationErrorsMissingElmMakeDependencies.Select(e => e.error))
+                            .ToImmutableList();
+
+                        if (0 < otherErrors.Count)
                         {
-                            try
-                            {
-                                var elmMakeRequestFiles =
-                                    elmMakeRequest.files
-                                    .ToImmutableDictionary(
-                                        entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                                        entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                                    .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
-
-                                var value = ElmMake(
-                                    elmCodeFiles: elmMakeRequestFiles,
-                                    pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
-                                    makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
-                                    enableDebug: elmMakeRequest.enableDebug);
-
-                                return Result<string, ReadOnlyMemory<byte>>.ok(value);
-                            }
-                            catch (Exception e)
-                            {
-                                return Result<string, ReadOnlyMemory<byte>>.err("Failed with runtime exception: " + e.ToString());
-                            }
+                            return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
+                                otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
                         }
 
-                        return (
-                            (key: dependencyKey, result: buildResultValue()),
-                            completeDependencyReport(new CompilationIterationDependencyReport(dependencyKeySummary: "ElmMake")));
-                    }
+                        byte[] ElmMake(
+                            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+                            IImmutableList<string> pathToFileWithElmEntryPoint,
+                            bool makeJavascript,
+                            bool enableDebug)
+                        {
+                            var elmMakeCommandAppendix =
+                                enableDebug ? "--debug" : null;
 
-                    throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
-                })
-                .ToImmutableList();
+                            var fileAsString = ProcessFromElm019Code.CompileElm(
+                                elmCodeFiles,
+                                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                                outputFileName: "output." + (makeJavascript ? "js" : "html"),
+                                elmMakeCommandAppendix: elmMakeCommandAppendix);
 
-            currentIterationReport =
-                currentIterationReport with
-                {
-                    dependenciesReports = newDependencies.Select(depAndReport => depAndReport.Item2).ToImmutableList(),
-                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
-                };
+                            return Encoding.UTF8.GetBytes(fileAsString);
+                        }
 
-            var newDependenciesWithError =
-                newDependencies.Where(dep => !dep.Item1.result.IsOk()).ToImmutableList();
+                        var newDependencies =
+                            compilationErrorsMissingElmMakeDependencies
+                            .Select(error =>
+                            {
+                                var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            /*
-             * TODO: Instead of returning here, probably forward the result back into the compiler for packaging, for example adding location info.
-             * This implies expansion of the dependencies API to model the error cases.
-             * */
-            if (0 < newDependenciesWithError.Count)
-            {
-                return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
-                    newDependenciesWithError.Select(dep => new LocatedCompilationError(
-                        location: null,
-                        error: new CompilationError(
-                            DependencyError:
-                            dep.Item2.report.dependencyKeySummary + " " +
-                            dep.Item1.result.unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException()))))
-                    .ToImmutableList());
-            }
+                                TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
+                                    new(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
 
-            var newStackFrame =
-                new StackFrame(
-                    discoveredDependencies:
-                    newDependencies.Select(depAndReport =>
-                    (depAndReport.Item1.key, depAndReport.Item1.result.extract(error => throw new Exception(error)))).ToImmutableList(),
-                    iterationReport: currentIterationReport);
+                                var dependencyKey = error.dependencyKey;
 
-            return AsCompletelyLoweredElmApp(
-                sourceFiles: sourceFiles,
-                rootModuleName,
-                interfaceToHostRootModuleName,
-                stack: stack.Push(newStackFrame));
+                                var elmMakeRequest = dependencyKey.ElmMakeDependency?.FirstOrDefault();
+
+                                if (elmMakeRequest != null)
+                                {
+                                    Result<string, ReadOnlyMemory<byte>> buildResultValue()
+                                    {
+                                        try
+                                        {
+                                            var elmMakeRequestFiles =
+                                                elmMakeRequest.files
+                                                .ToImmutableDictionary(
+                                                    entry => (IImmutableList<string>)entry.path.ToImmutableList(),
+                                                    entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64))
+                                                .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+
+                                            var value = ElmMake(
+                                                elmCodeFiles: elmMakeRequestFiles,
+                                                pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
+                                                makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
+                                                enableDebug: elmMakeRequest.enableDebug);
+
+                                            return Result<string, ReadOnlyMemory<byte>>.ok(value);
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            return Result<string, ReadOnlyMemory<byte>>.err("Failed with runtime exception: " + e.ToString());
+                                        }
+                                    }
+
+                                    return (
+                                        (key: dependencyKey, result: buildResultValue()),
+                                        completeDependencyReport(new CompilationIterationDependencyReport(dependencyKeySummary: "ElmMake")));
+                                }
+
+                                throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
+                            })
+                            .ToImmutableList();
+
+                        currentIterationReport =
+                            currentIterationReport with
+                            {
+                                dependenciesReports = newDependencies.Select(depAndReport => depAndReport.Item2).ToImmutableList(),
+                                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+                            };
+
+                        var newDependenciesWithError =
+                            newDependencies.Where(dep => !dep.Item1.result.IsOk()).ToImmutableList();
+
+                        /*
+                         * TODO: Instead of returning here, probably forward the result back into the compiler for packaging, for example adding location info.
+                         * This implies expansion of the dependencies API to model the error cases.
+                         * */
+                        if (0 < newDependenciesWithError.Count)
+                        {
+                            return Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess>.err(
+                                newDependenciesWithError.Select(dep => new LocatedCompilationError(
+                                    location: null,
+                                    error: new CompilationError(
+                                        DependencyError:
+                                        dep.Item2.report.dependencyKeySummary + " " +
+                                        dep.Item1.result.unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException()))))
+                                .ToImmutableList());
+                        }
+
+                        var newStackFrame =
+                            new StackFrame(
+                                discoveredDependencies:
+                                newDependencies.Select(depAndReport =>
+                                (depAndReport.Item1.key, depAndReport.Item1.result.extract(error => throw new Exception(error)))).ToImmutableList(),
+                                iterationReport: currentIterationReport);
+
+                        return AsCompletelyLoweredElmApp(
+                            sourceFiles: sourceFiles,
+                            rootModuleName,
+                            interfaceToHostRootModuleName,
+                            stack: stack.Push(newStackFrame));
+                    });
         }
 
-        static readonly ConcurrentDictionary<string, (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache = new();
+        static readonly ConcurrentDictionary<string, (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache = new();
 
         static void ElmAppCompilationIterationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -288,7 +285,7 @@ namespace ElmFullstack
                 item => item.Value.lastUseTime,
                 retainedSizeLimit);
 
-        static (ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
+        static (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
             IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
             IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> sourceFiles,
             IImmutableList<string> rootModuleName,
@@ -337,7 +334,7 @@ namespace ElmFullstack
             System.Diagnostics.Stopwatch? inJsEngineStopwatch = null;
             System.Diagnostics.Stopwatch? deserializeStopwatch = null;
 
-            ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> compileNew()
+            Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> compileNew()
             {
                 prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -357,16 +354,15 @@ namespace ElmFullstack
 
                 var compilationResponse =
                     System.Text.Json.JsonSerializer.Deserialize<
-                        ElmValueCommonJson.Result<
+                        Result<
                             string,
-                            ElmValueCommonJson.Result<
+                            Result<
                                 IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
                                 IReadOnlyList<CompilerSerialInterface.AppCodeEntry>>>>(responseJson)!;
 
-                var compilationResponseOk = compilationResponse.Ok?.FirstOrDefault();
-
-                if (compilationResponseOk == null)
-                    throw new Exception("Protocol error: " + compilationResponse.Err);
+                var compilationResponseOk =
+                    compilationResponse
+                    .extract(error => throw new Exception("Protocol error: " + error));
 
                 var mappedResult =
                     compilationResponseOk.map(files =>
@@ -546,9 +542,12 @@ namespace ElmFullstack
                     });
         }
 
-        static long EstimateCacheItemSizeInMemory(ElmValueCommonJson.Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> item) =>
-               (item.Err?.Sum(err => err.Sum(EstimateCacheItemSizeInMemory)) ?? 0) +
-               (item.Ok?.Sum(EstimateCacheItemSizeInMemory) ?? 0);
+        static long EstimateCacheItemSizeInMemory(
+            Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
+                ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> item) =>
+            item.unpack(
+                fromErr: err => err.Sum(EstimateCacheItemSizeInMemory),
+                fromOk: EstimateCacheItemSizeInMemory);
 
         static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.LocatedCompilationError compilationError) =>
             100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) + EstimateCacheItemSizeInMemory(compilationError.error);
