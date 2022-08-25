@@ -2869,7 +2869,20 @@ compileInteractiveSubmission environment submission =
                                 Err error ->
                                     Err ("Failed to compile Elm function declaration: " ++ error)
 
-                                Ok ( declaredName, ( declaredFunctionExpression, _ ) ) ->
+                                Ok ( declaredName, ( declaredFunctionExpression, compiledFunctionDependencies ) ) ->
+                                    let
+                                        functionDeclarationWithDeps =
+                                            ( declaredName
+                                            , { expression = declaredFunctionExpression
+                                              , referencedLocalNames = compiledFunctionDependencies.referencedNames
+                                              }
+                                            )
+
+                                        declarationValue =
+                                            buildDeclarationValue
+                                                (Dict.fromList [ functionDeclarationWithDeps ])
+                                                functionDeclarationWithDeps
+                                    in
                                     Ok
                                         (buildExpressionForNewStateAndResponse
                                             { newStateExpression =
@@ -2881,7 +2894,7 @@ compileInteractiveSubmission environment submission =
                                                                 [ Pine.LiteralExpression
                                                                     (Pine.valueFromContextExpansionWithName
                                                                         ( declaredName
-                                                                        , Pine.encodeExpressionAsValue declaredFunctionExpression
+                                                                        , declarationValue
                                                                         )
                                                                     )
                                                                 ]
