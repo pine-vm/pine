@@ -13,11 +13,11 @@ namespace Pine;
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
-    static public PineValue Blob(ReadOnlyMemory<byte> blobContent) =>
-        new BlobValue(blobContent);
+    static public PineValue Blob(ReadOnlyMemory<byte> bytes) =>
+        new BlobValue(bytes);
 
-    static public PineValue List(IReadOnlyList<PineValue> listContent) =>
-        new ListValue(listContent);
+    static public PineValue List(IReadOnlyList<PineValue> elements) =>
+        new ListValue(elements);
 
     static public readonly PineValue EmptyList = List(ImmutableList<PineValue>.Empty);
 
@@ -28,15 +28,15 @@ public abstract record PineValue : IEquatable<PineValue>
     {
         readonly int slimHashCode;
 
-        public IReadOnlyList<PineValue> ListContent { private init; get; }
+        public IReadOnlyList<PineValue> Elements { private init; get; }
 
-        public ListValue(IReadOnlyList<PineValue> ListContent)
+        public ListValue(IReadOnlyList<PineValue> elements)
         {
-            this.ListContent = ListContent;
+            Elements = elements;
 
             var hash = new HashCode();
 
-            foreach (var item in ListContent)
+            foreach (var item in elements)
             {
                 hash.Add(item.GetHashCode());
             }
@@ -51,8 +51,8 @@ public abstract record PineValue : IEquatable<PineValue>
 
             return
                 slimHashCode == other.slimHashCode &&
-                ListContent.Count == other.ListContent.Count &&
-                ListContent.SequenceEqual(other.ListContent);
+                Elements.Count == other.Elements.Count &&
+                Elements.SequenceEqual(other.Elements);
         }
 
         public override int GetHashCode() => slimHashCode;
@@ -65,15 +65,15 @@ public abstract record PineValue : IEquatable<PineValue>
     {
         readonly int slimHashCode;
 
-        public ReadOnlyMemory<byte> BlobContent { private init; get; }
+        public ReadOnlyMemory<byte> Bytes { private init; get; }
 
-        public BlobValue(ReadOnlyMemory<byte> BlobContent)
+        public BlobValue(ReadOnlyMemory<byte> bytes)
         {
-            this.BlobContent = BlobContent;
+            Bytes = bytes;
 
             var hash = new HashCode();
 
-            hash.AddBytes(BlobContent.Span);
+            hash.AddBytes(bytes.Span);
 
             slimHashCode = hash.ToHashCode();
         }
@@ -85,7 +85,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
             return
                 slimHashCode == other.slimHashCode &&
-                BlobContent.Span.SequenceEqual(other.BlobContent.Span);
+                Bytes.Span.SequenceEqual(other.Bytes.Span);
         }
 
         public override int GetHashCode() => slimHashCode;

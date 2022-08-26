@@ -87,7 +87,7 @@ public class TestElmInteractive
 
                         var evalOk =
                         evalResult
-                        .extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
+                        .Extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
 
                         if (sessionStep.expectedResponse != null)
                         {

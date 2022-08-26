@@ -66,7 +66,7 @@ public class ElmInteractive
         return
             responseStructure
             .AsResult()
-            .map(fromJson => ParsePineComponentFromJson(fromJson!));
+            .Map(fromJson => ParsePineComponentFromJson(fromJson!));
     }
 
     static internal Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
@@ -117,11 +117,11 @@ public class ElmInteractive
         var response =
             responseStructure
             .AsResult()
-            .map(fromJson => ParsePineComponentFromJson(fromJson));
+            .Map(fromJson => ParsePineComponentFromJson(fromJson));
 
         logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineComponentFromJson));
 
-        return response.map(value => (value, compilationCacheTask.Result));
+        return response.Map(value => (value, compilationCacheTask.Result));
     }
 
     internal record CompilationCache(
@@ -228,12 +228,12 @@ public class ElmInteractive
                 IDictionary<PineValue, ComponentMappedForTransport>? cache)
             {
                 if (StringFromComponent(component) is Result<string, string>.Ok asString)
-                    return new ComponentMappedForTransport(ListAsString: asString.Success, List: null, origin: component);
+                    return new ComponentMappedForTransport(ListAsString: asString.Value, List: null, origin: component);
 
                 if (component is PineValue.ListValue listComponent)
                     return new ComponentMappedForTransport(
                         ListAsString: null,
-                        List: listComponent.ListContent.Select(item => FromComponent(item, cache)).ToList(),
+                        List: listComponent.Elements.Select(item => FromComponent(item, cache)).ToList(),
                         origin: component);
 
                 return new ComponentMappedForTransport(ListAsString: null, List: null, origin: component);
@@ -351,7 +351,7 @@ public class ElmInteractive
             }
 
             if (component.origin is PineValue.BlobValue blobComponent)
-                return new PineValueFromJson { Blob = blobComponent.BlobContent.ToArray().Select(b => (int)b).ToImmutableArray() };
+                return new PineValueFromJson { Blob = blobComponent.Bytes.ToArray().Select(b => (int)b).ToImmutableArray() };
 
             throw new NotImplementedException("Unexpected shape");
         }
@@ -390,7 +390,7 @@ public class ElmInteractive
 
         return
             compilationResult
-            .unpack(
+            .Unpack(
                 fromErr: compilationError =>
                 {
                     var errorMessage = "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
@@ -459,7 +459,7 @@ public class ElmInteractive
             },
             resourceNameCommonPrefix: "elm_fullstack.ElmInteractive.interpret_elm_program.",
             assembly: typeof(ElmInteractive).Assembly)
-        .extract(error => throw new NotImplementedException(nameof(ParseElmSyntaxAppCodeFiles) + ": " + error));
+        .Extract(error => throw new NotImplementedException(nameof(ParseElmSyntaxAppCodeFiles) + ": " + error));
 
     record EvaluateSubmissionResponseStructure
         (string? FailedToDecodeArguments = null,

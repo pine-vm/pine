@@ -74,7 +74,7 @@ public class TestElmInteractive
             {
                 console.WriteLine(
                     "Failed step '" + failedStep.step.name + "':\n" +
-                    failedStep.step.result.unpack(fromErr: err => err, fromOk: _ => throw new NotImplementedException()).errorAsText,
+                    failedStep.step.result.Unpack(fromErr: err => err, fromOk: _ => throw new NotImplementedException()).errorAsText,
                     color: IConsole.TextColor.Red);
             }
         }

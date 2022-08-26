@@ -23,7 +23,7 @@ public class DotNetAssembly
             .Aggregate(
                 seed: seed,
                 func: (aggregate, filePath) =>
-                aggregate.andThen(
+                aggregate.AndThen(
                     dict =>
                     {
                         var resourceName = resourceNameCommonPrefix + string.Join(".", filePath);

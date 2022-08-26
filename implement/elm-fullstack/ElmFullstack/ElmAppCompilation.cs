@@ -118,7 +118,7 @@ namespace ElmFullstack
 
             var compilerElmProgramCodeFiles =
                 CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value
-                .extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmFullstackBackend) + ": " + error));
+                .Extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmFullstackBackend) + ": " + error));
 
             var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
                 compilerElmProgramCodeFiles: compilerElmProgramCodeFiles,
@@ -136,7 +136,7 @@ namespace ElmFullstack
 
             return
                 compilationResult
-                .unpack(
+                .Unpack(
                     fromOk: compilationSuccess =>
                     {
                         return
@@ -257,7 +257,7 @@ namespace ElmFullstack
                                     error: new CompilationError(
                                         DependencyError:
                                         dep.Item2.report.dependencyKeySummary + " " +
-                                        dep.Item1.result.unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException()))))
+                                        dep.Item1.result.Unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException()))))
                                 .ToImmutableList());
                         }
 
@@ -265,7 +265,7 @@ namespace ElmFullstack
                             new StackFrame(
                                 discoveredDependencies:
                                 newDependencies.Select(depAndReport =>
-                                (depAndReport.Item1.key, depAndReport.Item1.result.extract(error => throw new Exception(error)))).ToImmutableList(),
+                                (depAndReport.Item1.key, depAndReport.Item1.result.Extract(error => throw new Exception(error)))).ToImmutableList(),
                                 iterationReport: currentIterationReport);
 
                         return AsCompletelyLoweredElmApp(
@@ -362,10 +362,10 @@ namespace ElmFullstack
 
                 var compilationResponseOk =
                     compilationResponse
-                    .extract(error => throw new Exception("Protocol error: " + error));
+                    .Extract(error => throw new Exception("Protocol error: " + error));
 
                 var mappedResult =
-                    compilationResponseOk.map(files =>
+                    compilationResponseOk.Map(files =>
                         files.ToImmutableDictionary(
                             entry => (IImmutableList<string>)entry.path.ToImmutableList(),
                             entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64))
@@ -545,7 +545,7 @@ namespace ElmFullstack
         static long EstimateCacheItemSizeInMemory(
             Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
                 ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> item) =>
-            item.unpack(
+            item.Unpack(
                 fromErr: err => err.Sum(EstimateCacheItemSizeInMemory),
                 fromOk: EstimateCacheItemSizeInMemory);
 
@@ -556,7 +556,7 @@ namespace ElmFullstack
             compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
 
         static long EstimateCacheItemSizeInMemory(Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> item) =>
-            item.unpack(
+            item.Unpack(
                 fromErr: errors => errors.Sum(EstimateCacheItemSizeInMemory),
                 fromOk: EstimateCacheItemSizeInMemory);
 

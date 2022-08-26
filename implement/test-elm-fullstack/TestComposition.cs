@@ -75,15 +75,15 @@ public class TestComposition
             new
             {
                 input = PineValue.List(
-                    listContent:
+                    elements:
                     new[]
                     {
                         PineValue.List(
-                            listContent:
+                            elements:
                             new[]
                             {
                                 PineValue.List(
-                                    listContent:
+                                    elements:
                                     new []
                                     {
                                         PineValue.Blob(new byte[] { 68 }),
@@ -129,15 +129,15 @@ public class TestComposition
                     (filePath: "b/d", fileContent: new byte[]{7,8}),
                 },
                 expectedOutput = PineValue.List(
-                    listContent:
+                    elements:
                     new []
                     {
                         PineValue.List(
-                            listContent:
+                            elements:
                             new []
                             {
                                 PineValue.List(
-                                    listContent:
+                                    elements:
                                     new []
                                     {
                                         PineValue.Blob(new byte[] { 97 }),
@@ -145,26 +145,26 @@ public class TestComposition
                                 PineValue.Blob(new byte[]{0,1,2}),
                             }.ToImmutableList()),
                         PineValue.List(
-                            listContent:
+                            elements:
                             new []
                             {
                                 PineValue.List(
-                                    listContent:
+                                    elements:
                                     new []
                                     {
                                         PineValue.Blob(new byte[] { 98 }),
                                     }.ToImmutableList()
                                 ),
                                 PineValue.List(
-                                    listContent:
+                                    elements:
                                     new []
                                     {
                                         PineValue.List(
-                                            listContent:
+                                            elements:
                                             new []
                                             {
                                                 PineValue.List(
-                                                    listContent:
+                                                    elements:
                                                     new []
                                                     {
                                                         PineValue.Blob(new byte[] { 99 }),
@@ -174,11 +174,11 @@ public class TestComposition
                                             }.ToImmutableList()
                                         ),
                                         PineValue.List(
-                                            listContent:
+                                            elements:
                                             new []
                                             {
                                                 PineValue.List(
-                                                    listContent:
+                                                    elements:
                                                     new []
                                                     {
                                                         PineValue.Blob(new byte[] { 100 }),
@@ -242,7 +242,7 @@ public class TestComposition
 
             var toStringResult =
                 Composition.StringFromComponent(asPineValue)
-                .extract(error => throw new Exception(error));
+                .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toStringResult);
         }
@@ -263,7 +263,7 @@ public class TestComposition
 
             var toIntegerResult =
                 Composition.SignedIntegerFromComponent(asPineValue)
-                .extract(error => throw new Exception(error));
+                .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);
         }
@@ -281,11 +281,11 @@ public class TestComposition
         {
             var asPineValue =
                 Composition.ComponentFromUnsignedInteger(testCase)
-                .extract(error => throw new Exception(error));
+                .Extract(error => throw new Exception(error));
 
             var toIntegerResult =
                 Composition.UnsignedIntegerFromComponent(asPineValue)
-                .extract(error => throw new Exception(error));
+                .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);
         }

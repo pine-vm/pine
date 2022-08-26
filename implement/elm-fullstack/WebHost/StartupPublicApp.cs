@@ -436,7 +436,7 @@ public class StartupPublicApp
                 if (matchFromSourceComposition is not PineValue.BlobValue matchFromSourceCompositionBlobs)
                     throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
 
-                return matchFromSourceCompositionBlobs.BlobContent.ToArray();
+                return matchFromSourceCompositionBlobs.Bytes.ToArray();
             }
 
             return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();

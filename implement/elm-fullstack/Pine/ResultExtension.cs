@@ -12,12 +12,12 @@ public static class ResultExtension
         foreach (var item in list)
         {
             if (item is Result<ErrT, OkT>.Err error)
-                return new Result<ErrT, IReadOnlyList<OkT>>.Err(error.Error);
+                return new Result<ErrT, IReadOnlyList<OkT>>.Err(error.Value);
 
             if (item is not Result<ErrT, OkT>.Ok ok)
                 throw new NotImplementedException();
 
-            okList.Add(ok.Success);
+            okList.Add(ok.Value);
         }
 
         return new Result<ErrT, IReadOnlyList<OkT>>.Ok(okList);

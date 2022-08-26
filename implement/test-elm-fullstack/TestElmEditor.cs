@@ -86,7 +86,7 @@ a =
                 NormalizeStringTestingElmFormat(responseStructure
                     ?.FormatElmModuleTextResponse
                     ?.FirstOrDefault()?.formattedText
-                    .withDefault(() => throw new ArgumentNullException())!),
+                    .WithDefault(() => throw new ArgumentNullException())!),
                 "Response content");
         }
     }

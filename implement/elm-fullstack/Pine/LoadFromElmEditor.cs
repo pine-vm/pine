@@ -166,8 +166,8 @@ namespace Pine
             {
                 return
                     LoadFromGitHubOrGitLab.LoadFromUrl(parsedUrl.projectStateString)
-                    .mapError(error => "Failed to load from Git host: " + error)
-                    .map(loadFromGitHostSuccess => returnValueFromTree(loadFromGitHostSuccess.tree));
+                    .MapError(error => "Failed to load from Git host: " + error)
+                    .Map(loadFromGitHostSuccess => returnValueFromTree(loadFromGitHostSuccess.tree));
             }
 
             // Support parsing tuples: https://github.com/arogozine/TupleAsJsonArray/tree/e59f8c4edee070b096220b6cab77eba997b19d3a
@@ -188,7 +188,7 @@ namespace Pine
             {
                 return
                     LoadProjectState(projectState.version_2021_01)
-                    .map(returnValueFromTree);
+                    .Map(returnValueFromTree);
             }
 
             return Result<string, LoadFromUrlSuccess>.err("Project state has an unexpected shape: " + parsedUrl.projectStateString);
@@ -208,12 +208,12 @@ namespace Pine
                         "Failed to load from Git host: " + loadFromGitHostError);
                 }
 
-                baseComposition = loadFromGitHost.map(loaded => loaded.tree).extract(error => throw new Exception(error));
+                baseComposition = loadFromGitHost.Map(loaded => loaded.tree).Extract(error => throw new Exception(error));
             }
 
             return
                 ApplyProjectStateDifference_2021_01(projectState.differenceFromBase, baseComposition)
-                .mapError(error => "Failed to apply difference: " + error);
+                .MapError(error => "Failed to apply difference: " + error);
         }
 
         /// <summary>

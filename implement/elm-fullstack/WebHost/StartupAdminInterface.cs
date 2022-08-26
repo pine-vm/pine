@@ -177,7 +177,7 @@ public class StartupAdminInterface
                 {
                     var appConfigTree =
                         Composition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
-                        .extract(error => throw new Exception(error.ToString()));
+                        .Extract(error => throw new Exception(error.ToString()));
 
                     var appConfigFilesNamesAndContents =
                         appConfigTree.EnumerateBlobsTransitive();
@@ -376,7 +376,7 @@ public class StartupAdminInterface
 
                             var appConfigZipArchive =
                             appConfigTreeResult
-                            .unpack(
+                            .Unpack(
                                 fromErr: error => throw   new Exception("Failed to parse as tree with string path"),
                                 fromOk: appConfigTree =>
                                 ZipArchive.ZipArchiveFromEntries(
@@ -433,7 +433,7 @@ public class StartupAdminInterface
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");
 
                             var elmAppStateReductionString =
-                                Encoding.UTF8.GetString(elmAppStateReductionComponentBlob.BlobContent.Span);
+                                Encoding.UTF8.GetString(elmAppStateReductionComponentBlob.Bytes.Span);
 
                             context.Response.StatusCode = 200;
                             context.Response.ContentType = "application/json";
@@ -853,7 +853,7 @@ public class StartupAdminInterface
 
         return
             testContinueResult
-            .unpack(
+            .Unpack(
                 fromErr: error =>
                 (statusCode: 400, new AttemptContinueWithCompositionEventReport
                 (

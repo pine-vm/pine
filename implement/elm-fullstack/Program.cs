@@ -375,7 +375,7 @@ public class Program
                     var testDeployResult = ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                         compositionLogEvent: compositionLogEvent,
                         fileStoreReader: processStoreFileStore)
-                    .extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
+                    .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
 
                     foreach (var (filePath, fileContent) in testDeployResult.projectedFiles)
                         processStoreFileStore.SetFileContent(filePath, fileContent);
@@ -696,7 +696,7 @@ public class Program
         var loadCompositionResult =
             LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
             .LogToActions(Console.WriteLine)
-            .extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
+            .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
         var (sourceCompositionId, sourceSummary) = CompileSourceSummary(loadCompositionResult.tree);
 
@@ -721,7 +721,7 @@ public class Program
 
             return
                 compilationResult
-                .unpack(
+                .Unpack(
                     fromErr: compilationErrors =>
                     {
                         Console.WriteLine("\n" + ElmFullstack.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationErrors) + "\n");
@@ -858,7 +858,7 @@ public class Program
                                     "\n",
                                         "Failed to load from " + failedLoad.Key + ":",
                                         string.Join("\n", failedLoad.Value.log),
-                                        failedLoad.Value.result.unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException())),
+                                        failedLoad.Value.result.Unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException())),
                                 color: Pine.IConsole.TextColor.Red);
 
                             return;
@@ -868,10 +868,10 @@ public class Program
                             scenarioLoadResults
                             .Select(scenarioLoadResult =>
                             (name: scenarioLoadResult.Key.Split('/', '\\').Last(),
-                            component: scenarioLoadResult.Value.result.extract(error => throw new Exception(error)).tree))
+                            component: scenarioLoadResult.Value.result.Extract(error => throw new Exception(error)).tree))
                             .Concat(scenariosLoadResults.SelectMany(scenariosComposition =>
                             {
-                                var asTree = scenariosComposition.Value.result.extract(error => throw new Exception(error)).tree.TreeContent;
+                                var asTree = scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree.TreeContent;
 
                                 if (asTree == null)
                                     return ImmutableList<(string, TreeNodeWithStringPath)>.Empty;
@@ -970,7 +970,7 @@ public class Program
                             {
                                 console.WriteLine(
                                     "Failed step '" + failedStep.step.name + "':\n" +
-                                    failedStep.step.result.unpack(fromErr: error => error, fromOk: _ => throw new Exception()).errorAsText,
+                                    failedStep.step.result.Unpack(fromErr: error => error, fromOk: _ => throw new Exception()).errorAsText,
                                     color: Pine.IConsole.TextColor.Red);
                             }
                         }
@@ -993,8 +993,8 @@ public class Program
                     not null =>
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
                         .LogToActions(Console.WriteLine)
-                        .map(loaded => loaded.tree)
-                        .unpack(
+                        .Map(loaded => loaded.tree)
+                        .Unpack(
                         fromErr: error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
                         fromOk: tree =>
                         {
@@ -1022,7 +1022,7 @@ public class Program
 
                     return
                     evalResult
-                    .unpack(
+                    .Unpack(
                         fromErr: error =>
                         {
                             Console.WriteLine("Failed to evaluate: " + error);
@@ -1088,7 +1088,7 @@ public class Program
                 var loadCompositionResult =
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
                     .LogToActions(Console.WriteLine)
-                    .extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
+                    .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
                 var composition = Composition.FromTreeWithStringPath(loadCompositionResult.tree);
 

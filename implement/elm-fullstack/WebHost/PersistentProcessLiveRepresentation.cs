@@ -65,7 +65,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: sourceFiles,
             ElmAppInterfaceConfig.Default)
-            .extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
+            .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
         var (loweredAppFiles, _) = compilationResult;
 
@@ -145,7 +145,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     {
                         var appConfigAsTree =
                         Composition.ParseAsTreeWithStringPath(appConfigComponent)
-                        .extract(error => throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree."));
+                        .Extract(error => throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree."));
 
                         if (elmAppStateComponent is not PineValue.BlobValue elmAppStateComponentBlob)
                         {
@@ -156,7 +156,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         (
                             appConfig: appConfigComponent,
                             appConfigAsTree: appConfigAsTree,
-                            elmAppState: elmAppStateComponentBlob.BlobContent
+                            elmAppState: elmAppStateComponentBlob.Bytes
                         );
                     }
                 }
@@ -244,7 +244,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         AttemptProcessEvent(
                             newElmAppProcess,
                             new InterfaceToHost.AppEventStructure { SetStateEvent = elmAppStateAsString })
-                        .extract(error => throw new Exception("Failed to set state: " + error));
+                        .Extract(error => throw new Exception("Failed to set state: " + error));
 
                     processRepresentationDuringRestore.lastElmAppVolatileProcess?.Dispose();
 
@@ -274,7 +274,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         compositionLogRecord.composition!.Value,
                         processRepresentationDuringRestore,
                         overrideElmAppInterfaceConfig)
-                    .extract(error => throw new Exception("Failed to apply composition event: " + error));
+                    .Extract(error => throw new Exception("Failed to apply composition event: " + error));
             }
             finally
             {
@@ -329,8 +329,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return
                 AttemptProcessEvent(processBefore.lastElmAppVolatileProcess, new InterfaceToHost.AppEventStructure { SetStateEvent = projectedElmAppState })
-                .mapError(error => "Set state function in the hosted app returned an error: " + error)
-                .map(_ => processBefore);
+                .MapError(error => "Set state function in the hosted app returned an error: " + error)
+                .Map(_ => processBefore);
         }
 
         if (compositionEvent.DeployAppConfigAndMigrateElmAppState is TreeNodeWithStringPath deployAppConfigAndMigrateElmAppState)
@@ -346,8 +346,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return
                 migrateEventResult
-                .mapError(error => "Failed to process the event in the hosted app: " + error)
-                .andThen(migrateEventOk =>
+                .MapError(error => "Failed to process the event in the hosted app: " + error)
+                .AndThen(migrateEventOk =>
                 {
                     if (migrateEventOk.migrateResult?.Just == null)
                     {
@@ -387,8 +387,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return
                 initEventResult
-                .mapError(error => "Failed to process the event in the hosted app: " + error)
-                .map(initEventOk =>
+                .MapError(error => "Failed to process the event in the hosted app: " + error)
+                .Map(initEventOk =>
                 {
                     processBefore.lastElmAppVolatileProcess?.Dispose();
 
@@ -456,7 +456,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             if (component is not PineValue.BlobValue blobComponent)
                 throw new Exception("Failed to load component " + componentHash + " as blob: This is not a blob.");
 
-            return blobComponent.BlobContent;
+            return blobComponent.Bytes;
         }
 
         TreeNodeWithStringPath loadComponentFromStoreAndAssertIsTree(string componentHash)
@@ -468,7 +468,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return
                 Composition.ParseAsTreeWithStringPath(component)
-                .extract(error => throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree."));
+                .Extract(error => throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree."));
         }
 
         if (compositionEvent.UpdateElmAppStateForEvent != null)

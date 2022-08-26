@@ -200,7 +200,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             if (component is not PineValue.BlobValue blobComponent)
                 throw new Exception("component is not a blob");
 
-            var eventString = Encoding.UTF8.GetString(blobComponent.BlobContent.Span);
+            var eventString = Encoding.UTF8.GetString(blobComponent.Bytes.Span);
 
             return JsonSerializer.Deserialize<ElmFullstack.WebHost.InterfaceToHost.AppEventStructure>(eventString)!;
         }

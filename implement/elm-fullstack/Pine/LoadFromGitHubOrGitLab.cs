@@ -200,8 +200,8 @@ static public class LoadFromGitHubOrGitLab
 
             return
                 findGitObjectResult
-                .mapError(_ => "I did not find an object at path '" + parsedUrlPath + "' in " + startCommit.Sha)
-                .andThen(linkedObject =>
+                .MapError(_ => "I did not find an object at path '" + parsedUrlPath + "' in " + startCommit.Sha)
+                .AndThen(linkedObject =>
                 {
                     IEnumerable<Commit> traceBackTreeParents()
                     {
@@ -215,7 +215,7 @@ static public class LoadFromGitHubOrGitLab
 
                             foreach (var parent in currentCommit.Parents)
                             {
-                                if (FindGitObjectAtPath(parent.Tree, pathNodesNames).map(find => find.Sha).withDefault(() => null) != linkedObject?.Sha)
+                                if (FindGitObjectAtPath(parent.Tree, pathNodesNames).Map(find => find.Sha).WithDefault(() => null) != linkedObject?.Sha)
                                     continue;
 
                                 queue.Enqueue(parent);

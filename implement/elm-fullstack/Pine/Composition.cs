@@ -15,7 +15,7 @@ public static class Composition
         ToCodePoints(str)!
         .Select(charAsInteger => new System.Numerics.BigInteger(charAsInteger))
         .Select(ComponentFromUnsignedInteger)
-        .Select(charResult => charResult.extract(error => throw new Exception(error)))
+        .Select(charResult => charResult.Extract(error => throw new Exception(error)))
         .ToImmutableList();
 
 
@@ -42,19 +42,19 @@ public static class Composition
             return Result<string, string>.err("Only a ListValue can represent a string.");
 
         var charsIntegersResults =
-            list.ListContent
+            list.Elements
             .Select(UnsignedIntegerFromComponent)
             .ToImmutableList();
 
         return
             charsIntegersResults
             .ListCombine()
-            .map(charsIntegersResults => string.Join("", charsIntegersResults.Select(toIntResult => char.ConvertFromUtf32((int)toIntResult))));
+            .Map(charsIntegersResults => string.Join("", charsIntegersResults.Select(toIntResult => char.ConvertFromUtf32((int)toIntResult))));
     }
 
     static public Result<string, PineValue> ComponentFromUnsignedInteger(System.Numerics.BigInteger integer) =>
         BlobValueFromUnsignedInteger(integer)
-        .map(blob => PineValue.Blob(blob!.Value));
+        .Map(blob => PineValue.Blob(blob!.Value));
 
     static public Result<string, ReadOnlyMemory<byte>?> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
     {
@@ -92,7 +92,7 @@ public static class Composition
             return Result<string, System.Numerics.BigInteger>.err(
                 "Only a BlobValue can represent an integer.");
 
-        return SignedIntegerFromBlobValue(blob.BlobContent.Span);
+        return SignedIntegerFromBlobValue(blob.Bytes.Span);
     }
 
     static public Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
@@ -119,7 +119,7 @@ public static class Composition
     static public Result<string, System.Numerics.BigInteger> UnsignedIntegerFromComponent(PineValue component) =>
         component switch
         {
-            PineValue.BlobValue blob => Result<string, System.Numerics.BigInteger>.ok(UnsignedIntegerFromBlobValue(blob.BlobContent.Span)),
+            PineValue.BlobValue blob => Result<string, System.Numerics.BigInteger>.ok(UnsignedIntegerFromBlobValue(blob.Bytes.Span)),
             _ => Result<string, System.Numerics.BigInteger>.err("Only a BlobValue can represent an integer.")
         };
 
@@ -131,34 +131,34 @@ public static class Composition
         static Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath> continueForListComposition(PineValue.ListValue compositionAsList)
         {
             var compositionResults =
-                compositionAsList.ListContent
+                compositionAsList.Elements
                 .Select((component, componentIndex) =>
                 {
-                    if (component is not PineValue.ListValue componentAsList || componentAsList.ListContent.Count != 2)
+                    if (component is not PineValue.ListValue componentAsList || componentAsList.Elements.Count != 2)
                     {
                         return Result<IImmutableList<(int index, string name)>, (string name, TreeNodeWithStringPath component)>.err(
                             ImmutableList<(int index, string name)>.Empty);
                     }
 
-                    if (StringFromComponent(componentAsList.ListContent.ElementAt(0)) is not Result<string, string>.Ok nameOk)
+                    if (StringFromComponent(componentAsList.Elements.ElementAt(0)) is not Result<string, string>.Ok nameOk)
                     {
                         return Result<IImmutableList<(int index, string name)>, (string name, TreeNodeWithStringPath component)>.err(
                             ImmutableList<(int index, string name)>.Empty);
                     }
 
                     var currentIndexAndName =
-                        (index: componentIndex, name: nameOk.Success);
+                        (index: componentIndex, name: nameOk.Value);
 
                     return
-                        ParseAsTreeWithStringPath(componentAsList.ListContent.ElementAt(1)) switch
+                        ParseAsTreeWithStringPath(componentAsList.Elements.ElementAt(1)) switch
                         {
                             Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.Err err =>
                             Result<IImmutableList<(int index, string name)>, (string name, TreeNodeWithStringPath component)>.err(
-                                ImmutableList.Create(currentIndexAndName).AddRange(err.Error)),
+                                ImmutableList.Create(currentIndexAndName).AddRange(err.Value)),
 
                             Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.Ok ok =>
                             Result<IImmutableList<(int index, string name)>, (string name, TreeNodeWithStringPath component)>.ok(
-                                (name: currentIndexAndName.name, ok.Success)),
+                                (name: currentIndexAndName.name, ok.Value)),
 
                             _ => throw new NotImplementedException()
                         };
@@ -168,14 +168,14 @@ public static class Composition
             return
                 compositionResults
                 .ListCombine()
-                .map(compositionOk => TreeNodeWithStringPath.SortedTree(compositionOk.ToImmutableList()));
+                .Map(compositionOk => TreeNodeWithStringPath.SortedTree(compositionOk.ToImmutableList()));
         }
         return
             composition switch
             {
                 PineValue.BlobValue compositionAsBlob =>
                 Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.ok(
-                    TreeNodeWithStringPath.Blob(compositionAsBlob.BlobContent)),
+                    TreeNodeWithStringPath.Blob(compositionAsBlob.Bytes)),
                 
                 PineValue.ListValue compositionAsList =>
                 continueForListComposition(compositionAsList),
@@ -365,12 +365,12 @@ public static class Composition
                 return Result<string, PineValue>.err(
                     "Failed to load element " +
                     CommonConversion.StringBase16(firstFailed.elementHash) + ": " +
-                    (firstFailed.loadResult as Result<string, PineValue>.Err)!.Error);
+                    (firstFailed.loadResult as Result<string, PineValue>.Err)!.Value);
 
             return Result<string, PineValue>.ok(
                 PineValue.List(
                     loadElementsResults
-                    .Select(elementResult => elementResult.loadResult.extract(error => throw new Exception(error))).ToImmutableList()));
+                    .Select(elementResult => elementResult.loadResult.Extract(error => throw new Exception(error))).ToImmutableList()));
         }
 
         return Result<string, PineValue>.err("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
@@ -384,11 +384,11 @@ public static class Composition
     {
         if (component is PineValue.BlobValue blobComponent)
         {
-            var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + blobComponent.BlobContent.Length.ToString() + "\0");
+            var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + blobComponent.Bytes.Length.ToString() + "\0");
 
-            var serialRepresentation = new byte[prefix.Length + blobComponent.BlobContent.Length];
+            var serialRepresentation = new byte[prefix.Length + blobComponent.Bytes.Length];
 
-            var componentBlobContentArray = blobComponent.BlobContent.ToArray();
+            var componentBlobContentArray = blobComponent.Bytes.ToArray();
 
             Buffer.BlockCopy(prefix, 0, serialRepresentation, 0, prefix.Length);
             Buffer.BlockCopy(componentBlobContentArray, 0, serialRepresentation, prefix.Length, componentBlobContentArray.Length);
@@ -399,13 +399,13 @@ public static class Composition
         if (component is PineValue.ListValue listComponent)
         {
             var componentsHashes =
-                listComponent.ListContent.Select(GetHash).ToList();
+                listComponent.Elements.Select(GetHash).ToList();
 
             var prefix = System.Text.Encoding.ASCII.GetBytes("list " + componentsHashes.Count.ToString() + "\0");
 
             return
                 (serialRepresentation: CommonConversion.Concat(new[] { (ReadOnlyMemory<byte>)prefix }.Concat(componentsHashes).ToList()).ToArray(),
-                dependencies: listComponent.ListContent);
+                dependencies: listComponent.Elements);
         }
 
         throw new System.Exception("Incomplete match on sum type.");
@@ -432,7 +432,7 @@ public static class Composition
 
         if (component is PineValue.ListValue listComponent)
         {
-            foreach (var item in listComponent.ListContent)
+            foreach (var item in listComponent.Elements)
             {
                 var matchInItem = FindComponentByHash(item, hash);
 

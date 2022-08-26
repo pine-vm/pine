@@ -45,7 +45,7 @@ public class TestLoadComposition
 
                 var loaded =
                     loadCompositionResult
-                    .result.extract(error => throw new Exception("Failed to load from path: " + error));
+                    .result.Extract(error => throw new Exception("Failed to load from path: " + error));
 
                 var inspectComposition =
                     loaded.tree.EnumerateBlobsTransitive()

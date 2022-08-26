@@ -16,7 +16,7 @@ static public class BuildConfigurationFromArguments
         var loadCompositionResult =
             LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
             .LogToActions(Console.WriteLine)
-            .extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
+            .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
         var sourceTree = loadCompositionResult.tree;
 
@@ -72,7 +72,7 @@ static public class BuildConfigurationFromArguments
     {
         var parseSourceAsTree =
             Composition.ParseAsTreeWithStringPath(sourceComposition)
-            .extract(error => throw new Exception("Failed to map source to tree."));
+            .Extract(error => throw new Exception("Failed to map source to tree."));
 
         var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
 

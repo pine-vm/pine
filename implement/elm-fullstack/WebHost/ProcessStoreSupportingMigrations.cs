@@ -277,7 +277,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
         return
             Composition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
-            .unpack(
+            .Unpack(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
                 {
@@ -432,7 +432,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             if (compositionRecordComponent is not PineValue.BlobValue compositionRecordComponentBlob)
                 throw new Exception("Unexpected content for composition record component " + nextHashBase16);
 
-            var compositionRecordBytes = compositionRecordComponentBlob.BlobContent;
+            var compositionRecordBytes = compositionRecordComponentBlob.Bytes;
 
             yield return compositionRecordBytes;
 

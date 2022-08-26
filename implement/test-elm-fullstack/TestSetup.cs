@@ -94,7 +94,7 @@ public class TestSetup
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: originalAppFiles,
                 ElmAppInterfaceConfig.Default)
-            .extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
+            .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
         return compilationResult.compiledAppFiles;
     }

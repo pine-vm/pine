@@ -28,7 +28,7 @@ public class TestLoadFromGithub
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app")
-            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+            .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
             loadFromGithubResult.tree.EnumerateBlobsTransitive()
@@ -62,7 +62,7 @@ public class TestLoadFromGithub
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
-            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+            .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
             loadFromGithubResult.tree.EnumerateBlobsTransitive()
@@ -96,7 +96,7 @@ public class TestLoadFromGithub
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md")
-            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+            .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var blobContent = loadFromGithubResult.tree.BlobContent;
 
@@ -114,7 +114,7 @@ public class TestLoadFromGithub
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications")
-            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+            .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         Assert.AreEqual(
             "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications",
@@ -142,7 +142,7 @@ public class TestLoadFromGithub
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                 "https://github.com/elm-fullstack/elm-fullstack")
-            .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+            .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesPathsAndContents =
             loadFromGithubResult.tree.EnumerateBlobsTransitive()
@@ -201,7 +201,7 @@ public class TestLoadFromGithub
                         sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
                         getRepositoryFilesPartialForCommit:
                         consultServer)
-                    .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+                    .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
                 var blobContent = loadFromGitHubResult.tree.BlobContent;
 
@@ -221,7 +221,7 @@ public class TestLoadFromGithub
                         sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
                         getRepositoryFilesPartialForCommit:
                         consultServer)
-                    .extract(error => throw new Exception("Failed to load from GitHub: " + error));
+                    .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
                 var blobContent = loadFromGitHubResult.tree.BlobContent;
 
