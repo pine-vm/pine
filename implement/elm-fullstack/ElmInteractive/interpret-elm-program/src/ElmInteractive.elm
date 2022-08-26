@@ -519,7 +519,10 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
         declarationsOfOtherModules =
             availableModules
                 |> Dict.toList
-                |> List.map (Tuple.mapSecond CompiledDeclaration >> Tuple.mapFirst (String.join "."))
+                |> List.map
+                    (Tuple.mapSecond (CompiledDeclaration { dependsOnEnvironment = False })
+                        >> Tuple.mapFirst (String.join ".")
+                    )
                 |> Dict.fromList
     in
     let
@@ -566,7 +569,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             , availableDeclarations =
                 declarationsOfOtherModules
                     |> Dict.union (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
-                    |> Dict.union (declarationsFromCustomTypes |> Dict.map (always CompiledDeclaration))
+                    |> Dict.union (declarationsFromCustomTypes |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False })))
             , inliningParentDeclarations = Set.empty
             }
 
@@ -684,6 +687,7 @@ buildDeclarationValue availableDeclarations ( declarationName, declaration ) =
                 |> List.map (Tuple.mapSecond .expression)
     in
     buildClosureExpression
+        { forwardEnvironment = False }
         closureDeclarations
         declaration.expression
         |> Pine.encodeExpressionAsValue
@@ -1551,7 +1555,7 @@ addInliningParentDeclaration name compilation =
 
 
 type InternalDeclaration
-    = CompiledDeclaration Pine.Value
+    = CompiledDeclaration { dependsOnEnvironment : Bool } Pine.Value
     | ElmFunctionDeclaration ElmFunctionDeclarationStruct
 
 
@@ -1853,6 +1857,7 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                 Ok ( expressionInExpandedContext, expressionInExpandedContextDeps ) ->
                     Ok
                         ( buildClosureExpression
+                            { forwardEnvironment = True }
                             (List.concat (List.map Tuple.first declarations))
                             expressionInExpandedContext
                         , expressionInExpandedContextDeps
@@ -1911,49 +1916,71 @@ compileElmSyntaxFunctionWithoutName :
     CompilationStack
     -> ElmFunctionDeclarationStruct
     -> Result String ( Pine.Expression, CompiledExpressionDependencies )
-compileElmSyntaxFunctionWithoutName stack function =
-    case compileElmSyntaxExpression stack function.expression of
+compileElmSyntaxFunctionWithoutName stackBefore function =
+    case
+        function.arguments
+            |> List.map
+                (\pattern ->
+                    declarationsFromPattern pattern
+                        |> Result.map (\deconstruct -> ( deconstruct, inspectionSymbolFromPattern pattern ))
+                )
+            |> Result.Extra.combine
+    of
         Err error ->
-            Err ("Failed to compile expression in let function: " ++ error)
+            Err ("Failed to compile function argument pattern: " ++ error)
 
-        Ok ( functionBodyExpression, functionBodyExpressionDeps ) ->
-            case
-                function.arguments
-                    |> List.map
-                        (\pattern ->
-                            declarationsFromPattern pattern
-                                |> Result.map (\deconstruct -> ( deconstruct, inspectionSymbolFromPattern pattern ))
-                        )
-                    |> Result.Extra.combine
-            of
+        Ok argumentsDeconstructDeclarationsBuilders ->
+            let
+                functionId =
+                    function.expression
+                        |> Elm.Syntax.Expression.encode
+                        |> Json.Encode.encode 0
+                        |> SHA256.fromString
+                        |> SHA256.toHex
+                        |> String.left 8
+
+                argumentsDeconstructionDeclarations =
+                    argumentsDeconstructDeclarationsBuilders
+                        |> List.indexedMap
+                            (\argIndex ( deconstruction, inspectionSymbol ) ->
+                                let
+                                    argumentNameBeforeDeconstruct =
+                                        String.join "_" [ "fun", functionId, "arg", String.fromInt argIndex, inspectionSymbol ]
+                                in
+                                ( argumentNameBeforeDeconstruct
+                                , deconstruction (expressionToLookupNameInEnvironment argumentNameBeforeDeconstruct)
+                                )
+                            )
+
+                {-
+                   TODO: Investigate why using the expanded compilation stack here breaks some interactive scenarios.
+
+                   newAvailableDeclarations =
+                       argumentsDeconstructionDeclarations
+                           |> List.concatMap Tuple.second
+                           |> List.map
+                               (Tuple.mapSecond
+                                   (Pine.encodeExpressionAsValue >> CompiledDeclaration { dependsOnEnvironment = True })
+                               )
+                           |> Dict.fromList
+
+                   stack =
+                       { stackBefore
+                           | availableDeclarations =
+                               stackBefore.availableDeclarations
+                                   |> Dict.union newAvailableDeclarations
+                       }
+                -}
+            in
+            case compileElmSyntaxExpression stackBefore function.expression of
                 Err error ->
-                    Err ("Failed to compile function argument pattern: " ++ error)
+                    Err ("Failed to compile expression in function: " ++ error)
 
-                Ok argumentsDeconstructDeclarationsBuilders ->
+                Ok ( functionBodyExpression, functionBodyExpressionDeps ) ->
                     let
-                        functionId =
-                            function.expression
-                                |> Elm.Syntax.Expression.encode
-                                |> Json.Encode.encode 0
-                                |> SHA256.fromString
-                                |> SHA256.toHex
-                                |> String.left 8
-
-                        argumentsDeconstructionDeclarations =
-                            argumentsDeconstructDeclarationsBuilders
-                                |> List.indexedMap
-                                    (\argIndex ( deconstruction, inspectionSymbol ) ->
-                                        let
-                                            argumentNameBeforeDeconstruct =
-                                                String.join "_" [ "function", functionId, "argument", String.fromInt argIndex, inspectionSymbol ]
-                                        in
-                                        ( argumentNameBeforeDeconstruct
-                                        , deconstruction (expressionToLookupNameInEnvironment argumentNameBeforeDeconstruct)
-                                        )
-                                    )
-
                         letBlockExpression =
                             buildClosureExpression
+                                { forwardEnvironment = True }
                                 (List.concatMap Tuple.second argumentsDeconstructionDeclarations)
                                 functionBodyExpression
                     in
@@ -2094,27 +2121,42 @@ buildPositionalApplicationExpression { function, argument } =
         }
 
 
-buildClosureExpression : List ( String, Pine.Expression ) -> Pine.Expression -> Pine.Expression
-buildClosureExpression environment expression =
-    let
-        declarationsValues =
-            environment
-                |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
-                |> List.map Pine.valueFromContextExpansionWithName
-    in
-    Pine.ApplicationExpression
-        { function =
-            expression
-                |> Pine.encodeExpressionAsValue
-                |> Pine.LiteralExpression
-        , argument =
-            pineKernel_ListConcat
-                (Pine.ListExpression
-                    [ declarationsValues |> Pine.ListValue |> Pine.LiteralExpression
-                    , Pine.ApplicationArgumentExpression
-                    ]
-                )
-        }
+buildClosureExpression :
+    { forwardEnvironment : Bool }
+    -> List ( String, Pine.Expression )
+    -> Pine.Expression
+    -> Pine.Expression
+buildClosureExpression config environment expression =
+    if environment == [] then
+        expression
+
+    else
+        let
+            declarationsValues =
+                environment
+                    |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
+                    |> List.map Pine.valueFromContextExpansionWithName
+
+            declarationsValuesExpression =
+                declarationsValues |> Pine.ListValue |> Pine.LiteralExpression
+        in
+        Pine.ApplicationExpression
+            { function =
+                expression
+                    |> Pine.encodeExpressionAsValue
+                    |> Pine.LiteralExpression
+            , argument =
+                if config.forwardEnvironment then
+                    pineKernel_ListConcat
+                        (Pine.ListExpression
+                            [ declarationsValuesExpression
+                            , Pine.ApplicationArgumentExpression
+                            ]
+                        )
+
+                else
+                    declarationsValuesExpression
+            }
 
 
 compileElmSyntaxValueConstructor : Elm.Syntax.Type.ValueConstructor -> ( String, Pine.Expression )
@@ -2195,6 +2237,7 @@ compileElmSyntaxCaseBlock stack caseBlock =
                                 { condition = deconstructedCase.conditionExpression
                                 , ifTrue =
                                     buildClosureExpression
+                                        { forwardEnvironment = True }
                                         deconstructedCase.declarations
                                         (Tuple.first deconstructedCase.thenExpression)
                                 , ifFalse = nextBlockExpression
@@ -2590,11 +2633,16 @@ compileElmFunctionOrValueLookup name compilation =
                     elmFunctionDeclaration
                     |> Result.mapError ((++) ("Failed to inline function '" ++ name ++ "': "))
 
-        Just (CompiledDeclaration compiledDeclaration) ->
+        Just (CompiledDeclaration config compiledDeclaration) ->
             Ok
                 ( Pine.ApplicationExpression
                     { function = Pine.LiteralExpression compiledDeclaration
-                    , argument = Pine.ListExpression []
+                    , argument =
+                        if config.dependsOnEnvironment then
+                            Pine.ApplicationArgumentExpression
+
+                        else
+                            Pine.ListExpression []
                     }
                 , noDependencies
                 )
@@ -2639,7 +2687,7 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
         Just (ElmFunctionDeclaration _) ->
             Err ("Got function declaration for module '" ++ String.join "." canonicalModuleName ++ "'")
 
-        Just (CompiledDeclaration moduleValue) ->
+        Just (CompiledDeclaration _ moduleValue) ->
             let
                 nameInModuleAsValue =
                     Pine.valueFromString nameInModule
@@ -2848,7 +2896,7 @@ compileInteractiveSubmission environment submission =
 
                 initialStack =
                     { moduleAliases = Dict.empty
-                    , availableDeclarations = environmentDeclarations |> Dict.map (always CompiledDeclaration)
+                    , availableDeclarations = environmentDeclarations |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False }))
                     , inliningParentDeclarations = Set.empty
                     }
             in
