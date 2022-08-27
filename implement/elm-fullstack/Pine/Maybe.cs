@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Pine;
 
-[JsonConverter(typeof(Json.JsonConverterForMaybe))]
+[JsonConverter(typeof(Json.JsonConverterForDiscriminatedUnionType))]
 /// <summary>
 /// A discriminated union type that represents values that may or may not exist.
 /// The only two possible variants are <see cref="Nothing"/> and <see cref="Just"/>.
@@ -64,4 +64,3 @@ public abstract record Maybe<JustT>
             _ => getDefault()
         };
 }
-

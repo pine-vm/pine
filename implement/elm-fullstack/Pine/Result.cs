@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Pine;
 
-[JsonConverter(typeof(Json.JsonConverterForResult))]
+[JsonConverter(typeof(Json.JsonConverterForDiscriminatedUnionType))]
 /// <summary>
 /// Generic DU type to describe the outcome of an operation with an overall classification into either failure ('Err') or success ('Ok').
 /// </summary>
