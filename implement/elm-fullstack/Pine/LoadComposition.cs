@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using static Pine.Composition;
 
 namespace Pine;
 
@@ -42,7 +41,7 @@ static public class LoadComposition
                 .WithLogEntryAdded("Loading via HTTP...")
                 .MapResult(BlobLibrary.DownloadBlobViaHttpGetResponseBody)
                 .ResultMap(loadFromHttpGet =>
-                (TreeNodeWithStringPath.Blob(loadFromHttpGet!.Value), new LoadCompositionOrigin(FromHttp: new object())));
+                (TreeNodeWithStringPath.Blob(loadFromHttpGet), new LoadCompositionOrigin(FromHttp: new object())));
         }
 
         return

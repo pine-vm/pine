@@ -38,10 +38,10 @@ static public class ProcessWithLogExtension
         Func<OkT, Result<ErrT, NewOkT>> andThen) =>
         orig.MapResult(previousResult => previousResult.AndThen(andThen));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT?>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
+    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, NewOkT> map) =>
-        orig.ResultAndThenMap(previousResult => Result<ErrT, NewOkT?>.ok(map(previousResult)));
+        orig.ResultAndThenMap(previousResult => Result<ErrT, NewOkT>.ok(map(previousResult)));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMapContinue<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,

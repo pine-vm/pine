@@ -54,16 +54,16 @@ public static class Composition
 
     static public Result<string, PineValue> ComponentFromUnsignedInteger(System.Numerics.BigInteger integer) =>
         BlobValueFromUnsignedInteger(integer)
-        .Map(blob => PineValue.Blob(blob!.Value));
+        .Map(PineValue.Blob);
 
-    static public Result<string, ReadOnlyMemory<byte>?> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
+    static public Result<string, ReadOnlyMemory<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
     {
         var signedBlobValue = BlobValueFromSignedInteger(integer);
 
         if (signedBlobValue.Span[0] != 4)
-            return Result<string, ReadOnlyMemory<byte>?>.err("Argument is a negative integer.");
+            return Result<string, ReadOnlyMemory<byte>>.err("Argument is a negative integer.");
 
-        return Result<string, ReadOnlyMemory<byte>?>.ok(signedBlobValue[1..]);
+        return Result<string, ReadOnlyMemory<byte>>.ok(signedBlobValue[1..]);
     }
 
     static public PineValue ComponentFromSignedInteger(System.Numerics.BigInteger integer) =>

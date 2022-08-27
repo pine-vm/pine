@@ -148,10 +148,10 @@ public class BlobLibrary
         return tryUpdateCacheAndContinueFromHttpResponse(httpResponse);
     }
 
-    static public Result<string, ReadOnlyMemory<byte>?> DownloadBlobViaHttpGetResponseBody(string sourceUrl) =>
+    static public Result<string, ReadOnlyMemory<byte>> DownloadBlobViaHttpGetResponseBody(string sourceUrl) =>
         DownloadBlobViaHttpGetResponseBodyAsync(sourceUrl).Result;
 
-    static public async Task<Result<string, ReadOnlyMemory<byte>?>> DownloadBlobViaHttpGetResponseBodyAsync(string sourceUrl)
+    static public async Task<Result<string, ReadOnlyMemory<byte>>> DownloadBlobViaHttpGetResponseBodyAsync(string sourceUrl)
     {
         try
         {
@@ -159,17 +159,17 @@ public class BlobLibrary
 
             if (!httpResponse.IsSuccessStatusCode)
             {
-                return Result<string, ReadOnlyMemory<byte>?>.err(
+                return Result<string, ReadOnlyMemory<byte>>.err(
                     "Unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" + httpResponse.StatusCode + ")");
             }
 
             var responseContent = await httpResponse.Content.ReadAsByteArrayAsync();
 
-            return Result<string, ReadOnlyMemory<byte>?>.ok(responseContent);
+            return Result<string, ReadOnlyMemory<byte>>.ok(responseContent);
         }
         catch (Exception e)
         {
-            return Result<string, ReadOnlyMemory<byte>?>.err("Runtime exception: " + e.ToString());
+            return Result<string, ReadOnlyMemory<byte>>.err("Runtime exception: " + e.ToString());
         }
     }
 

@@ -348,28 +348,24 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 migrateEventResult
                 .MapError(error => "Failed to process the event in the hosted app: " + error)
                 .AndThen(migrateEventOk =>
+                migrateEventOk.migrateResult
+                .AsPineMaybe()
+                .Map(migrationAttempted =>
+                migrationAttempted
+                .AsPineResult()
+                .MapError(error => "Migration function in the hosted app returned an error: " + error)
+                .Map(migrationOk =>
                 {
-                    if (migrateEventOk.migrateResult?.Just == null)
-                    {
-                        return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
-                            "Unexpected shape of response: migrateResult is Nothing");
-                    }
-
-                    if (migrateEventOk.migrateResult?.Just?.Ok == null)
-                    {
-                        return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
-                            "Migration function in the hosted app returned an error: " + migrateEventOk.migrateResult?.Just?.Err);
-                    }
-
                     processBefore.lastElmAppVolatileProcess?.Dispose();
 
-                    return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(
-                        new PersistentProcessLiveRepresentationDuringRestore(
+                    return new PersistentProcessLiveRepresentationDuringRestore(
                             lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(deployAppConfigAndMigrateElmAppState), buildArtifacts),
                             lastElmAppVolatileProcess: newElmAppProcess,
-                            initOrMigrateCmds: migrateEventOk));
-                }
-                );
+                            initOrMigrateCmds: migrateEventOk);
+                }))
+                .WithDefault(() => Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
+                    "Unexpected shape of response: migrateResult is Nothing")
+                ));
         }
 
         if (compositionEvent.DeployAppConfigAndInitElmAppState != null)

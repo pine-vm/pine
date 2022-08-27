@@ -42,20 +42,28 @@ public record NotifyWhenPosixTimeHasArrivedRequestStructure(long minimumPosixTim
 
 public record Result<ErrT, OkT>(ErrT? Err = default, OkT? Ok = default)
 {
-    public Result<ErrT, NewOkT> map<NewOkT>(Func<OkT, NewOkT> mapOk) =>
-        Ok != null ?
-        new Result<ErrT, NewOkT> { Ok = mapOk(Ok) }
-        :
-        new Result<ErrT, NewOkT> { Err = Err };
+    public Pine.Result<ErrT, OkT> AsPineResult()
+    {
+        if (Ok is OkT ok)
+            return Pine.Result<ErrT, OkT>.ok(ok);
 
-    public Result<NewErrT, OkT> mapErr<NewErrT>(Func<ErrT, NewErrT> mapError) =>
-        Ok != null ?
-        new Result<NewErrT, OkT> { Ok = Ok }
-        :
-        new Result<NewErrT, OkT> { Err = mapError(Err!) };
+        if (Err is ErrT err)
+            return Pine.Result<ErrT, OkT>.err(err);
+
+        throw new NotImplementedException();
+    }
 }
 
-public record Maybe<JustT>(object? Nothing = default, JustT? Just = default);
+public record Maybe<JustT>(object? Nothing = default, JustT? Just = default)
+{
+    public Pine.Maybe<JustT> AsPineMaybe()
+    {
+        if (Just is JustT just)
+            return Pine.Maybe<JustT>.just(just);
+
+        return Pine.Maybe<JustT>.nothing();
+    }
+}
 
 public record ResultFromTaskWithId(string taskId, TaskResult taskResult);
 

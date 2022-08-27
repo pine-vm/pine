@@ -59,13 +59,12 @@ public class ElmInteractive
             evalElmPreparedJsEngine.CallFunction("compileEvalContextForElmInteractive", argumentsJson).ToString()!;
 
         var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string, PineValueFromJson>>(
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueFromJson>>(
                 responseJson,
                 new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
 
         return
             responseStructure
-            .AsResult()
             .Map(fromJson => ParsePineComponentFromJson(fromJson!));
     }
 
@@ -110,13 +109,12 @@ public class ElmInteractive
         clock.Restart();
 
         var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string, PineValueFromJson>>(
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueFromJson>>(
                 responseJson,
                 options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
 
         var response =
             responseStructure
-            .AsResult()
             .Map(fromJson => ParsePineComponentFromJson(fromJson));
 
         logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineComponentFromJson));
@@ -131,7 +129,7 @@ public class ElmInteractive
         PineValueFromJson environment,
         string submission);
 
-    static public Result<string?, EvaluatedSctructure?> SubmissionResponseFromResponsePineValue(
+    static public Result<string, EvaluatedSctructure> SubmissionResponseFromResponsePineValue(
         JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
         PineValue response)
     {
@@ -141,27 +139,9 @@ public class ElmInteractive
                 System.Text.Json.JsonSerializer.Serialize(PineValueFromJson.FromComponentWithoutBuildingDictionary(response))).ToString()!;
 
         var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<ResultFromJsonResult<string?, EvaluatedSctructure?>>(responseJson)!;
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, EvaluatedSctructure>>(responseJson)!;
 
-        return responseStructure.AsResult();
-    }
-
-    public record ResultFromJsonResult<ErrT, OkT>
-    {
-        public IReadOnlyList<ErrT>? Err { set; get; }
-
-        public IReadOnlyList<OkT>? Ok { set; get; }
-
-        public Result<ErrT, OkT> AsResult()
-        {
-            if (Err?.Count == 1 && (Ok?.Count ?? 0) == 0)
-                return Result<ErrT, OkT>.err(Err.Single());
-
-            if ((Err?.Count ?? 0) == 0 && Ok?.Count == 1)
-                return Result<ErrT, OkT>.ok(Ok.Single());
-
-            throw new Exception("Unexpected shape: Err: " + Err?.Count + ", OK: " + Ok?.Count);
-        }
+        return responseStructure;
     }
 
     internal record PineValueFromJson

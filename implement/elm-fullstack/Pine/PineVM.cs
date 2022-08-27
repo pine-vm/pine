@@ -115,14 +115,14 @@ public static class PineVM
 
     static readonly PineValue FalseValue = TagValue("False", ImmutableArray<PineValue>.Empty);
 
-    static public Result<string, bool?> DecodeBoolFromValue(PineValue value) =>
+    static public Result<string, bool> DecodeBoolFromValue(PineValue value) =>
         value == TrueValue
         ?
-        Result<string, bool?>.ok(true)
+        Result<string, bool>.ok(true)
         :
-        (value == FalseValue ? Result<string, bool?>.ok(false)
+        (value == FalseValue ? Result<string, bool>.ok(false)
         :
-        Result<string, bool?>.err("Value is neither True nor False"));
+        Result<string, bool>.err("Value is neither True nor False"));
 
     static PineValue TagValue(string tagName, IImmutableList<PineValue> tagArguments) =>
         PineValue.List(
@@ -254,8 +254,8 @@ public static class PineVM
             DecodePineListValue(listElement)
             .AndThen(DecodeListWithExactlyTwoElements)
             .AndThen(fieldNameValueAndValue =>
-            Composition.StringFromComponent(fieldNameValueAndValue!.Value.Item1)
-            .Map(fieldName => recordFields.SetItem(fieldName, fieldNameValueAndValue.Value.Item2))))));
+            Composition.StringFromComponent(fieldNameValueAndValue.Item1)
+            .Map(fieldName => recordFields.SetItem(fieldName, fieldNameValueAndValue.Item2))))));
 
     static public Result<string, T> DecodeUnionFromPineValue<T>(
         IImmutableDictionary<string, Func<PineValue, Result<string, T>>> variants,
@@ -263,14 +263,14 @@ public static class PineVM
         DecodePineListValue(value)
         .AndThen(DecodeListWithExactlyTwoElements)
         .AndThen(tagNameValueAndValue =>
-        Composition.StringFromComponent(tagNameValueAndValue!.Value.Item1)
+        Composition.StringFromComponent(tagNameValueAndValue.Item1)
         .MapError(error => "Failed to decode union tag name: " + error)
         .AndThen(tagName =>
         {
             if (!variants.TryGetValue(tagName, out var variant))
                 return Result<string, T>.err("Unexpected tag name: " + tagName);
 
-            return variant(tagNameValueAndValue!.Value.Item2)!;
+            return variant(tagNameValueAndValue.Item2)!;
         }));
 
     static public Result<string, IImmutableList<PineValue>> DecodePineListValue(PineValue value)
@@ -282,12 +282,12 @@ public static class PineVM
             listComponent.Elements as IImmutableList<PineValue> ?? listComponent.Elements.ToImmutableList());
     }
 
-    static public Result<string, (T, T)?> DecodeListWithExactlyTwoElements<T>(IImmutableList<T> list)
+    static public Result<string, (T, T)> DecodeListWithExactlyTwoElements<T>(IImmutableList<T> list)
     {
         if (list.Count != 2)
-            return Result<string, (T, T)?>.err("Unexpected number of elements in list: Not 2 but " + list.Count);
+            return Result<string, (T, T)>.err("Unexpected number of elements in list: Not 2 but " + list.Count);
 
-        return Result<string, (T, T)?>.ok((list[0], list[1]));
+        return Result<string, (T, T)>.ok((list[0], list[1]));
     }
 
 
@@ -305,7 +305,7 @@ public static class PineVM
 
         static public Result<string, PineValue> logical_not(PineValue value) =>
             DecodeBoolFromValue(value)
-            .Map(b => ValueFromBool(!b!.Value));
+            .Map(ValueFromBool);
 
         static public Result<string, PineValue> logical_and(PineValue value) =>
             KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: true, func: (a, b) => a && b), value);
@@ -489,18 +489,18 @@ public static class PineVM
             value => DecodePineListValue(value)
             .AndThen(DecodeListWithExactlyTwoElements)
             .AndThen(argsValues =>
-            decodeArgA(argsValues!.Value.Item1)
+            decodeArgA(argsValues.Item1)
             .AndThen(argA =>
-            decodeArgB(argsValues.Value.Item2)
+            decodeArgB(argsValues.Item2)
             .AndThen(argB => compose(argA, argB))));
 
         static Result<string, PineValue> KernelFunctionExpectingListOfTypeBool(
-            Func<IReadOnlyList<bool>, bool?> compose,
+            Func<IReadOnlyList<bool>, bool> compose,
             PineValue value) =>
             DecodePineListValue(value)
             .AndThen(list => ResultListMapCombine(list, DecodeBoolFromValue))
-            .Map(bools => compose(bools.Select(b => b!.Value).ToImmutableList()))
-            .Map(b => ValueFromBool(b!.Value));
+            .Map(compose)
+            .Map(ValueFromBool);
     }
 
 
