@@ -610,43 +610,5 @@ evolutionStagesToMakeElmFunction =
                             }
                         )
                     )
-    , Test.test "Complete make function" <|
-        \_ ->
-            Pine.LiteralExpression (Pine.valueFromString "Not really a function")
-                |> ElmInteractive.makeElmFunction "argument_name"
-                |> Pine.evaluateExpression
-                    (Pine.emptyEvalContext
-                        |> Pine.addToContextAppArgument
-                            [ Pine.valueFromContextExpansionWithName
-                                ( "delta", Pine.valueFromBigInt (BigInt.fromInt 567) )
-                            ]
-                    )
-                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
-                |> Expect.equal
-                    (Ok
-                        (Pine.ApplicationExpression
-                            { function = Pine.LiteralExpression (Pine.valueFromString "Not really a function")
-                            , argument =
-                                Pine.KernelApplicationExpression
-                                    { functionName = "concat"
-                                    , argument =
-                                        Pine.ListExpression
-                                            [ Pine.ListExpression
-                                                [ Pine.ListExpression
-                                                    [ Pine.LiteralExpression (Pine.valueFromString "argument_name")
-                                                    , Pine.ApplicationArgumentExpression
-                                                    ]
-                                                ]
-                                            , Pine.LiteralExpression
-                                                (Pine.ListValue
-                                                    [ Pine.valueFromContextExpansionWithName
-                                                        ( "delta", Pine.valueFromBigInt (BigInt.fromInt 567) )
-                                                    ]
-                                                )
-                                            ]
-                                    }
-                            }
-                        )
-                    )
     ]
         |> Test.describe "Make Elm Function"

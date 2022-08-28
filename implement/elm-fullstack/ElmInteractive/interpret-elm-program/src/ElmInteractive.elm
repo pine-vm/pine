@@ -20,7 +20,6 @@ import Maybe.Extra
 import Parser
 import Pine
 import Result.Extra
-import SHA256
 import Set
 
 
@@ -571,6 +570,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     |> Dict.union (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
                     |> Dict.union (declarationsFromCustomTypes |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False })))
             , inliningParentDeclarations = Set.empty
+            , dependenciesDependencies = Dict.empty
             }
 
         redirectsForInfix : Dict.Dict String String
@@ -608,7 +608,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                                 (Tuple.mapSecond
                                     (\( expression, dependencies ) ->
                                         { expression = expression
-                                        , referencedLocalNames = dependencies.referencedNames
+                                        , referencedLocalNames = dependencies.runtimeDependencies
                                         }
                                     )
                                 )
@@ -1544,6 +1544,7 @@ type alias CompilationStack =
     { moduleAliases : Dict.Dict (List String) (List String)
     , availableDeclarations : Dict.Dict String InternalDeclaration
     , inliningParentDeclarations : Set.Set String
+    , dependenciesDependencies : Dict.Dict String (Set.Set String)
     }
 
 
@@ -1566,17 +1567,17 @@ type alias ElmFunctionDeclarationStruct =
 
 
 type alias CompiledExpressionDependencies =
-    { referencedNames : Set.Set String }
+    { runtimeDependencies : Set.Set String }
 
 
 concatDependencies : List CompiledExpressionDependencies -> CompiledExpressionDependencies
 concatDependencies dependencies =
-    { referencedNames = dependencies |> List.concatMap (.referencedNames >> Set.toList) |> Set.fromList }
+    { runtimeDependencies = dependencies |> List.concatMap (.runtimeDependencies >> Set.toList) |> Set.fromList }
 
 
 noDependencies : CompiledExpressionDependencies
 noDependencies =
-    { referencedNames = Set.empty }
+    { runtimeDependencies = Set.empty }
 
 
 compileElmSyntaxExpression :
@@ -1588,25 +1589,25 @@ compileElmSyntaxExpression stack elmExpression =
         Elm.Syntax.Expression.Literal literal ->
             Ok
                 ( Pine.LiteralExpression (valueFromString literal)
-                , { referencedNames = Set.empty }
+                , { runtimeDependencies = Set.empty }
                 )
 
         Elm.Syntax.Expression.CharLiteral char ->
             Ok
                 ( Pine.LiteralExpression (Pine.valueFromChar char)
-                , { referencedNames = Set.empty }
+                , { runtimeDependencies = Set.empty }
                 )
 
         Elm.Syntax.Expression.Integer integer ->
             Ok
                 ( Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer))
-                , { referencedNames = Set.empty }
+                , { runtimeDependencies = Set.empty }
                 )
 
         Elm.Syntax.Expression.Hex integer ->
             Ok
                 ( Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer))
-                , { referencedNames = Set.empty }
+                , { runtimeDependencies = Set.empty }
                 )
 
         Elm.Syntax.Expression.Negation negatedElmExpression ->
@@ -1836,9 +1837,7 @@ compileElmSyntaxLetBlock stackBefore letBlock =
 
         stack =
             { stackBefore
-                | availableDeclarations =
-                    stackBefore.availableDeclarations
-                        |> Dict.union newAvailableDeclarations
+                | availableDeclarations = stackBefore.availableDeclarations |> Dict.union newAvailableDeclarations
             }
 
         declarationsResults =
@@ -1850,19 +1849,44 @@ compileElmSyntaxLetBlock stackBefore letBlock =
             Err ("Failed to compile declaration in let block: " ++ error)
 
         Ok declarations ->
-            case compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression) of
+            let
+                newDependenciesDependencies =
+                    declarations
+                        |> List.concatMap
+                            (\( deconstructions, dependencies ) ->
+                                deconstructions
+                                    |> List.map (Tuple.first >> (\name -> ( name, dependencies.runtimeDependencies )))
+                            )
+                        |> Dict.fromList
+
+                stackForExpression =
+                    { stack
+                        | dependenciesDependencies =
+                            stackBefore.dependenciesDependencies |> Dict.union newDependenciesDependencies
+                    }
+            in
+            case compileElmSyntaxExpression stackForExpression (Elm.Syntax.Node.value letBlock.expression) of
                 Err error ->
                     Err ("Failed to compile expression in let block: " ++ error)
 
                 Ok ( expressionInExpandedContext, expressionInExpandedContextDeps ) ->
+                    let
+                        innerDependencies =
+                            expressionInExpandedContextDeps
+                                :: List.map Tuple.second declarations
+                                |> concatDependencies
+
+                        outerDependencies =
+                            declarations
+                                |> List.concatMap (Tuple.first >> List.map Tuple.first)
+                                |> List.foldl Set.remove innerDependencies.runtimeDependencies
+                    in
                     Ok
                         ( buildClosureExpression
                             { forwardEnvironment = True }
                             (List.concat (List.map Tuple.first declarations))
                             expressionInExpandedContext
-                        , expressionInExpandedContextDeps
-                            :: List.map Tuple.second declarations
-                            |> concatDependencies
+                        , { runtimeDependencies = outerDependencies }
                         )
 
 
@@ -1890,7 +1914,10 @@ compileElmSyntaxLetDeclaration stack declaration =
                             Err ("Failed to compile expression: " ++ error)
 
                         Ok ( pineExpression, pineExpressionDeps ) ->
-                            Ok ( deconstruct pineExpression, pineExpressionDeps )
+                            Ok
+                                ( deconstruct |> List.map (Tuple.mapSecond ((|>) pineExpression))
+                                , pineExpressionDeps
+                                )
             )
                 |> Result.mapError ((++) "Failed destructuring in let block: ")
 
@@ -1930,66 +1957,74 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
             Err ("Failed to compile function argument pattern: " ++ error)
 
         Ok argumentsDeconstructDeclarationsBuilders ->
-            let
-                functionId =
-                    function.expression
-                        |> Elm.Syntax.Expression.encode
-                        |> Json.Encode.encode 0
-                        |> SHA256.fromString
-                        |> SHA256.toHex
-                        |> String.left 8
+            {-
+                      TODO: Investigate why using the expanded compilation stack here breaks some interactive scenarios.
 
-                argumentsDeconstructionDeclarations =
-                    argumentsDeconstructDeclarationsBuilders
-                        |> List.indexedMap
-                            (\argIndex ( deconstruction, inspectionSymbol ) ->
-                                let
-                                    argumentNameBeforeDeconstruct =
-                                        String.join "_" [ "fun", functionId, "arg", String.fromInt argIndex, inspectionSymbol ]
-                                in
-                                ( argumentNameBeforeDeconstruct
-                                , deconstruction (expressionToLookupNameInEnvironment argumentNameBeforeDeconstruct)
-                                )
-                            )
+               let
+                      newAvailableDeclarations =
+                          argumentsDeconstructionDeclarations
+                              |> List.concatMap Tuple.second
+                              |> List.map
+                                  (Tuple.mapSecond
+                                      (Pine.encodeExpressionAsValue >> CompiledDeclaration { dependsOnEnvironment = True })
+                                  )
+                              |> Dict.fromList
 
-                {-
-                   TODO: Investigate why using the expanded compilation stack here breaks some interactive scenarios.
-
-                   newAvailableDeclarations =
-                       argumentsDeconstructionDeclarations
-                           |> List.concatMap Tuple.second
-                           |> List.map
-                               (Tuple.mapSecond
-                                   (Pine.encodeExpressionAsValue >> CompiledDeclaration { dependsOnEnvironment = True })
-                               )
-                           |> Dict.fromList
-
-                   stack =
-                       { stackBefore
-                           | availableDeclarations =
-                               stackBefore.availableDeclarations
-                                   |> Dict.union newAvailableDeclarations
-                       }
-                -}
-            in
+                      stack =
+                          { stackBefore
+                              | availableDeclarations =
+                                  stackBefore.availableDeclarations
+                                      |> Dict.union newAvailableDeclarations
+                          }
+               in
+            -}
             case compileElmSyntaxExpression stackBefore function.expression of
                 Err error ->
                     Err ("Failed to compile expression in function: " ++ error)
 
                 Ok ( functionBodyExpression, functionBodyExpressionDeps ) ->
                     let
-                        letBlockExpression =
-                            buildClosureExpression
-                                { forwardEnvironment = True }
-                                (List.concatMap Tuple.second argumentsDeconstructionDeclarations)
-                                functionBodyExpression
+                        innerDependencies =
+                            getTransitiveDependencies stackBefore.dependenciesDependencies functionBodyExpressionDeps.runtimeDependencies
                     in
-                    Ok
-                        ( functionExpressionFromArgumentsNamesAndExpression
-                            (argumentsDeconstructionDeclarations |> List.map Tuple.first)
-                            letBlockExpression
-                        , functionBodyExpressionDeps
+                    functionExpressionFromArgumentsNamesAndExpression
+                        (List.map Tuple.first argumentsDeconstructDeclarationsBuilders)
+                        ( functionBodyExpression
+                        , { dependencies = innerDependencies }
                         )
+                        |> Tuple.mapSecond
+                            (\{ dependencies } ->
+                                { functionBodyExpressionDeps
+                                    | runtimeDependencies = dependencies
+                                }
+                            )
+                        |> Ok
+
+
+getTransitiveDependencies : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
+getTransitiveDependencies dependenciesDependencies roots =
+    let
+        recursive current =
+            let
+                stepResult =
+                    current
+                        |> Set.toList
+                        |> List.concatMap
+                            (Dict.get
+                                >> (|>) dependenciesDependencies
+                                >> Maybe.withDefault Set.empty
+                                >> Set.toList
+                            )
+                        |> Set.fromList
+                        |> Set.union current
+            in
+            if stepResult == current then
+                stepResult
+
+            else
+                recursive stepResult
+    in
+    recursive roots
 
 
 inspectionSymbolFromPattern : Elm.Syntax.Pattern.Pattern -> String
@@ -2005,14 +2040,16 @@ inspectionSymbolFromPattern pattern =
             "other_pattern"
 
 
-declarationsFromPattern : Elm.Syntax.Pattern.Pattern -> Result String (Pine.Expression -> List ( String, Pine.Expression ))
+declarationsFromPattern :
+    Elm.Syntax.Pattern.Pattern
+    -> Result String (List ( String, Pine.Expression -> Pine.Expression ))
 declarationsFromPattern pattern =
     case pattern of
         Elm.Syntax.Pattern.VarPattern varName ->
-            Ok (\deconstructedExpression -> [ ( varName, deconstructedExpression ) ])
+            Ok [ ( varName, \deconstructedExpression -> deconstructedExpression ) ]
 
         Elm.Syntax.Pattern.AllPattern ->
-            Ok (always [])
+            Ok []
 
         Elm.Syntax.Pattern.TuplePattern tupleElements ->
             let
@@ -2029,45 +2066,70 @@ declarationsFromPattern pattern =
                     Err ("Failed to compile tuple element: " ++ error)
 
                 Ok tupleElementsDeconstructions ->
-                    Ok
-                        (\deconstructedExpression ->
-                            tupleElementsDeconstructions
-                                |> List.indexedMap
-                                    (\tupleElementIndex tupleElement ->
-                                        tupleElement (getTupleElementExpression tupleElementIndex deconstructedExpression)
-                                    )
-                                |> List.concat
-                        )
+                    tupleElementsDeconstructions
+                        |> List.indexedMap
+                            (\tupleElementIndex tupleElement ->
+                                tupleElement
+                                    |> List.map
+                                        (Tuple.mapSecond
+                                            (\deconstruct -> getTupleElementExpression tupleElementIndex >> deconstruct)
+                                        )
+                            )
+                        |> List.concat
+                        |> Ok
 
         Elm.Syntax.Pattern.RecordPattern fieldsElements ->
-            (\recordExpression ->
-                fieldsElements
-                    |> List.map Elm.Syntax.Node.value
-                    |> List.map (\fieldName -> ( fieldName, pineExpressionForRecordAccess fieldName recordExpression ))
-            )
+            fieldsElements
+                |> List.map Elm.Syntax.Node.value
+                |> List.map (\fieldName -> ( fieldName, pineExpressionForRecordAccess fieldName ))
                 |> Ok
 
         _ ->
             Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
 
 
-functionExpressionFromArgumentsNamesAndExpression : List String -> Pine.Expression -> Pine.Expression
-functionExpressionFromArgumentsNamesAndExpression argumentsNames expression =
-    argumentsNames
-        |> List.foldr (\argumentName prevExpression -> buildFunctionBindingArgumentToName argumentName prevExpression)
-            expression
+functionExpressionFromArgumentsNamesAndExpression :
+    List (List ( String, Pine.Expression -> Pine.Expression ))
+    -> ( Pine.Expression, { dependencies : Set.Set String } )
+    -> ( Pine.Expression, { dependencies : Set.Set String } )
+functionExpressionFromArgumentsNamesAndExpression argumentsDeconstructions ( functionExpression, innerDependencies ) =
+    argumentsDeconstructions
+        |> List.foldr
+            (\argumentDeconstructions ( prevExpression, previousDependencies ) ->
+                let
+                    dependencies =
+                        argumentDeconstructions
+                            |> List.map Tuple.first
+                            |> List.foldl Set.remove previousDependencies
+                in
+                ( buildFunctionBindingArgumentToName
+                    argumentDeconstructions
+                    ( prevExpression, { dependencies = dependencies } )
+                , dependencies
+                )
+            )
+            ( functionExpression, innerDependencies.dependencies )
+        |> Tuple.mapSecond (\dependencies -> { dependencies = dependencies })
 
 
-buildFunctionBindingArgumentToName : String -> Pine.Expression -> Pine.Expression
-buildFunctionBindingArgumentToName argumentName function =
-    makeElmFunction argumentName (Pine.LiteralExpression (Pine.encodeExpressionAsValue function))
+buildFunctionBindingArgumentToName :
+    List ( String, Pine.Expression -> Pine.Expression )
+    -> ( Pine.Expression, { dependencies : Set.Set String } )
+    -> Pine.Expression
+buildFunctionBindingArgumentToName argumentDeconstructions ( functionExpression, dependencies ) =
+    makeElmFunction
+        argumentDeconstructions
+        ( Pine.LiteralExpression (Pine.encodeExpressionAsValue functionExpression), dependencies )
 
 
-{-| Builds an expression that maps the current application argument into a literal and wraps that in a function application expression that will bind the next application argument to the given name, together with the earlier captured context.
-In other words, it captures the current environment together with the function to enable transport to and reuse in other places.
+{-| Builds an expression that captures parts of the current application argument into a literal and wraps that in a function application expression that will bind the next application argument to the given name, together with the earlier captured context.
+In other words, it captures dependencies from the current environment and combines them with the function to enable transport to and reuse in other places.
 -}
-makeElmFunction : String -> Pine.Expression -> Pine.Expression
-makeElmFunction argumentName functionExpression =
+makeElmFunction :
+    List ( String, Pine.Expression -> Pine.Expression )
+    -> ( Pine.Expression, { dependencies : Set.Set String } )
+    -> Pine.Expression
+makeElmFunction argumentDeconstructions ( functionExpression, { dependencies } ) =
     Pine.ListExpression
         [ Pine.LiteralExpression (Pine.valueFromString "Application")
         , Pine.ListExpression
@@ -2089,19 +2151,34 @@ makeElmFunction argumentName functionExpression =
                             , Pine.ListExpression
                                 [ Pine.LiteralExpression (Pine.valueFromString "List")
                                 , Pine.ListExpression
-                                    [ Pine.ListExpression
-                                        [ Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString argumentName)
-                                            , Pine.ApplicationArgumentExpression
-                                            ]
-                                        ]
+                                    [ argumentDeconstructions
+                                        |> List.map
+                                            (\( deconstructedName, deconstructExpression ) ->
+                                                Pine.ListExpression
+                                                    [ Pine.LiteralExpression (Pine.valueFromString deconstructedName)
+                                                    , Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        , deconstructExpression Pine.ApplicationArgumentExpression
+                                                        ]
+                                                    ]
+                                            )
+                                        |> Pine.ListExpression
                                         |> Pine.encodeExpressionAsValue
                                         |> Pine.LiteralExpression
                                     , Pine.ListExpression
                                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
 
                                         -- Below is the part we cannot express using a literal.
-                                        , Pine.ApplicationArgumentExpression
+                                        , dependencies
+                                            |> Set.toList
+                                            |> List.map
+                                                (\dependency ->
+                                                    Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString dependency)
+                                                        , expressionToLookupNameInEnvironment dependency
+                                                        ]
+                                                )
+                                            |> Pine.ListExpression
                                         ]
                                     ]
                                 ]
@@ -2224,7 +2301,7 @@ compileElmSyntaxCaseBlock stack caseBlock =
         Ok ( expression, conditionDependencies ) ->
             case
                 caseBlock.cases
-                    |> List.map (compileElmSyntaxCaseBlockCase stack expression)
+                    |> List.map (compileElmSyntaxCaseBlockCase stack conditionDependencies expression)
                     |> Result.Extra.combine
             of
                 Err error ->
@@ -2244,21 +2321,38 @@ compileElmSyntaxCaseBlock stack caseBlock =
                                 }
 
                         casesDependencies =
-                            cases |> List.map (.thenExpression >> Tuple.second)
+                            cases
+                                |> List.map
+                                    (\compiledCase ->
+                                        { runtimeDependencies =
+                                            compiledCase.declarations
+                                                |> List.map Tuple.first
+                                                |> List.foldl
+                                                    Set.remove
+                                                    (compiledCase.thenExpression
+                                                        |> Tuple.second
+                                                        |> .runtimeDependencies
+                                                    )
+                                        }
+                                    )
+
+                        outerDependencies =
+                            conditionDependencies
+                                :: casesDependencies
+                                |> concatDependencies
                     in
                     Ok
                         ( List.foldr
                             conditionalFromCase
                             (Pine.LiteralExpression (Pine.valueFromString "Error in mapping of case-of block: No matching branch."))
                             cases
-                        , conditionDependencies
-                            :: casesDependencies
-                            |> concatDependencies
+                        , outerDependencies
                         )
 
 
 compileElmSyntaxCaseBlockCase :
     CompilationStack
+    -> CompiledExpressionDependencies
     -> Pine.Expression
     -> Elm.Syntax.Expression.Case
     ->
@@ -2268,20 +2362,35 @@ compileElmSyntaxCaseBlockCase :
             , declarations : List ( String, Pine.Expression )
             , thenExpression : ( Pine.Expression, CompiledExpressionDependencies )
             }
-compileElmSyntaxCaseBlockCase stack caseBlockValueExpression ( elmPattern, elmExpression ) =
-    case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmExpression) of
+compileElmSyntaxCaseBlockCase stackBefore dependenciesForAllDeconstructions caseBlockValueExpression ( elmPattern, elmExpression ) =
+    case compileElmSyntaxPattern stackBefore caseBlockValueExpression elmPattern of
         Err error ->
-            Err ("Failed to compile case expression: " ++ error)
+            Err error
 
-        Ok caseValueExpression ->
-            compileElmSyntaxPattern stack caseBlockValueExpression elmPattern
-                |> Result.map
-                    (\deconstruction ->
+        Ok deconstruction ->
+            let
+                newDependenciesDependencies =
+                    deconstruction.declarations
+                        |> List.map Tuple.first
+                        |> List.map (Tuple.pair >> (|>) dependenciesForAllDeconstructions.runtimeDependencies)
+                        |> Dict.fromList
+
+                stack =
+                    { stackBefore
+                        | dependenciesDependencies =
+                            stackBefore.dependenciesDependencies |> Dict.union newDependenciesDependencies
+                    }
+            in
+            case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmExpression) of
+                Err error ->
+                    Err ("Failed to compile case expression: " ++ error)
+
+                Ok caseValueExpression ->
+                    Ok
                         { conditionExpression = deconstruction.conditionExpression
                         , declarations = deconstruction.declarations
                         , thenExpression = caseValueExpression
                         }
-                    )
 
 
 compileElmSyntaxPattern :
@@ -2657,7 +2766,7 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
                     { function = expressionToLookupNameInEnvironment name
                     , argument = Pine.ApplicationArgumentExpression
                     }
-                , { referencedNames = Set.singleton name }
+                , { runtimeDependencies = Set.singleton name }
                 )
 
         Just ( moduleName, nameInModule ) ->
@@ -2898,6 +3007,7 @@ compileInteractiveSubmission environment submission =
                     { moduleAliases = Dict.empty
                     , availableDeclarations = environmentDeclarations |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False }))
                     , inliningParentDeclarations = Set.empty
+                    , dependenciesDependencies = Dict.empty
                     }
             in
             case parseInteractiveSubmissionFromString submission of
@@ -2922,7 +3032,7 @@ compileInteractiveSubmission environment submission =
                                         functionDeclarationWithDeps =
                                             ( declaredName
                                             , { expression = declaredFunctionExpression
-                                              , referencedLocalNames = compiledFunctionDependencies.referencedNames
+                                              , referencedLocalNames = compiledFunctionDependencies.runtimeDependencies
                                               }
                                             )
 
