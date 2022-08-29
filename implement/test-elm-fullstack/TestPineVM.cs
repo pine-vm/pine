@@ -38,7 +38,9 @@ public class TestPineVM
 
         foreach (var testCase in testCases)
         {
-            var evaluated = PineVM.EvaluateExpression(
+            var pineVM = new PineVM();
+
+            var evaluated = pineVM.EvaluateExpression(
                 PineValue.List(ImmutableList<PineValue>.Empty),
                 testCase.expression);
 

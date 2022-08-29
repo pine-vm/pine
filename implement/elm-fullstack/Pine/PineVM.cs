@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -6,9 +7,17 @@ using System.Numerics;
 
 namespace Pine;
 
-public static class PineVM
+public class PineVM
 {
-    static public Result<string, PineValue> EvaluateExpression(
+    readonly ConcurrentDictionary<(PineValue, PineValue), PineValue> FunctionApplicationCache = new();
+
+    public long FunctionApplicationCacheSize => FunctionApplicationCache.Count;
+
+    public long FunctionApplicationCacheLookupCount { private set; get; }
+
+    public long FunctionApplicationMaxEnvSize { private set; get; }
+
+    public Result<string, PineValue> EvaluateExpression(
         PineValue environment,
         Expression expression)
     {
@@ -57,18 +66,41 @@ public static class PineVM
         throw new NotImplementedException("Unexpected shape of expression");
     }
 
-    static public Result<string, PineValue> EvaluateApplicationExpression(
+    public Result<string, PineValue> EvaluateApplicationExpression(
         PineValue environment,
         Expression.ApplicationExpression application) =>
         EvaluateExpression(environment, application.function)
         .MapError(error => "Failed to evaluate function: " + error)
         .AndThen(functionValue => DecodeExpressionFromValue(functionValue)
-        .MapError(error => "Failed to decode expression from function value: " + error))
+        .MapError(error => "Failed to decode expression from function value: " + error)
         .AndThen(functionExpression => EvaluateExpression(environment, application.argument)
         .MapError(error => "Failed to evaluate argument: " + error)
-        .AndThen(argumentValue => EvaluateExpression(environment: argumentValue, expression: functionExpression)));
+        .AndThen(argumentValue =>
+        {
+            ++FunctionApplicationCacheLookupCount;
 
-    static public Result<string, PineValue> EvaluateKernelApplicationExpression(
+            if (FunctionApplicationCache.TryGetValue((functionValue, argumentValue), out var cachedResult))
+                return Result<string, PineValue>.ok(cachedResult);
+
+            if (argumentValue is PineValue.ListValue list)
+            {
+                FunctionApplicationMaxEnvSize =
+                FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
+            }
+
+            var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var evalResult = EvaluateExpression(environment: argumentValue, expression: functionExpression);
+
+            if (4 <= evalStopwatch.ElapsedMilliseconds && evalResult is Result<string, PineValue>.Ok evalOk)
+            {
+                FunctionApplicationCache[(functionValue, argumentValue)] = evalOk.Value;
+            }
+
+            return evalResult;
+        })));
+
+    public Result<string, PineValue> EvaluateKernelApplicationExpression(
         PineValue environment,
         Expression.KernelApplicationExpression application) =>
         EvaluateExpression(environment, application.argument)
@@ -81,7 +113,7 @@ public static class PineVM
             return function(argument);
         });
 
-    static public Result<string, PineValue> EvaluateConditionalExpression(
+    public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
         Expression.ConditionalExpression conditional) =>
         EvaluateExpression(environment, conditional.condition)

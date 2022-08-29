@@ -7,7 +7,7 @@ namespace ElmFullstack.ElmInteractive;
 
 public interface IInteractiveSession : IDisposable
 {
-    Pine.Result<string, SubmissionResponse> Submit(string submission);
+    Result<string, SubmissionResponse> Submit(string submission);
 
     static ElmEngineType DefaultImplementation => ElmEngineType.JavaScript;
 
@@ -71,6 +71,8 @@ public class InteractiveSessionPine : IInteractiveSession
 
     ElmInteractive.CompilationCache? lastSubmissionCompilationCache;
 
+    readonly PineVM pineVM = new();
+
     public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
@@ -133,7 +135,7 @@ public class InteractiveSessionPine : IInteractiveSession
                         {
                             clock.Restart();
 
-                            var evalResult = PineVM.EvaluateExpression(buildPineEvalContextOk, decodeExpressionOk);
+                            var evalResult = pineVM.EvaluateExpression(buildPineEvalContextOk, decodeExpressionOk);
 
                             logDuration("eval");
 
