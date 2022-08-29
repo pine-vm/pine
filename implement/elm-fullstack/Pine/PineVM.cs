@@ -305,7 +305,7 @@ public static class PineVM
 
         static public Result<string, PineValue> logical_not(PineValue value) =>
             DecodeBoolFromValue(value)
-            .Map(ValueFromBool);
+            .Map(b => ValueFromBool(!b));
 
         static public Result<string, PineValue> logical_and(PineValue value) =>
             KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: true, func: (a, b) => a && b), value);

@@ -1,1 +1,1 @@
-(String.length >> String.fromInt) "compose to the right"
+(String.length >> (\length -> [ length, length ])) "compose to the right"
