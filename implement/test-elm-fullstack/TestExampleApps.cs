@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 using System.Net;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestExampleApps

@@ -5,7 +5,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestLoadFromGithub

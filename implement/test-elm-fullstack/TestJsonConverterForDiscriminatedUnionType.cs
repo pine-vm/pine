@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestJsonConverterForDiscriminatedUnionType

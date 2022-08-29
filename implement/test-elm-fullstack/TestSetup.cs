@@ -7,7 +7,7 @@ using ElmFullstack;
 using ElmFullstack.ProcessStore;
 using Pine;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 public class TestSetup
 {

@@ -2,9 +2,8 @@ using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using static Pine.Composition;
 
-namespace elm_fullstack.ElmInteractive;
+namespace ElmFullstack.ElmInteractive;
 
 public interface IInteractiveSession : IDisposable
 {

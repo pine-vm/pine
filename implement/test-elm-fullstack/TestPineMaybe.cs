@@ -2,7 +2,7 @@
 using Pine;
 using System.Text.Json;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestPineMaybe

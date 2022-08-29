@@ -11,7 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Pine;
 using static ElmFullstack.WebHost.Configuration;
 
-namespace elm_fullstack;
+namespace ElmFullstack;
 
 public class Program
 {

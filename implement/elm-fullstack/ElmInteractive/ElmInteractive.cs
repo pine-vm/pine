@@ -4,11 +4,10 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
-using ElmFullstack;
 using Pine;
 using static Pine.Composition;
 
-namespace elm_fullstack.ElmInteractive;
+namespace ElmFullstack.ElmInteractive;
 
 public class ElmInteractive
 {
@@ -437,7 +436,7 @@ public class ElmInteractive
                 ImmutableList.Create("src", "ElmInteractive.elm"),
                 ImmutableList.Create("src", "Main.elm")
             },
-            resourceNameCommonPrefix: "elm_fullstack.ElmInteractive.interpret_elm_program.",
+            resourceNameCommonPrefix: "ElmFullstack.ElmInteractive.interpret_elm_program.",
             assembly: typeof(ElmInteractive).Assembly)
         .Extract(error => throw new NotImplementedException(nameof(ParseElmSyntaxAppCodeFiles) + ": " + error));
 

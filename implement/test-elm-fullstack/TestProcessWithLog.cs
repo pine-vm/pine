@@ -3,7 +3,7 @@ using Pine;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestProcessWithLog

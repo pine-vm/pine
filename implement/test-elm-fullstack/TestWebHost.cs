@@ -16,7 +16,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static MoreLinq.Extensions.BatchExtension;
 using Pine;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestWebHost
@@ -1018,7 +1018,7 @@ public class TestWebHost
 
             using var replicaHost = replicaSetup.StartWebHost();
 
-            elm_fullstack.Program.ReplicateProcessAndLogToConsole(
+            ElmFullstack.Program.ReplicateProcessAndLogToConsole(
                 site: replicaAdminInterfaceUrl,
                 sitePassword: replicaAdminPassword,
                 sourcePath: testSetup.AdminWebHostUrl,
@@ -1322,7 +1322,7 @@ public class TestWebHost
     {
         var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        var deployReport = elm_fullstack.Program.DeployApp(
+        var deployReport = ElmFullstack.Program.DeployApp(
             sourcePath: "./../../../../example-apps/docker-image-default-app",
             site: testDirectory,
             siteDefaultPassword: null,

@@ -2,7 +2,7 @@
 using Pine;
 using System.Collections.Immutable;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestPineVM

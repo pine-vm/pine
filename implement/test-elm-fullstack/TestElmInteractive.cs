@@ -5,7 +5,7 @@ using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestElmInteractive
@@ -34,10 +34,10 @@ public class TestElmInteractive
             .ToImmutableList();
 
         var scenariosResults =
-            elm_fullstack.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
+            ElmFullstack.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                 scenarios,
                 scenario => LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!,
-                elm_fullstack.ElmInteractive.ElmEngineType.JavaScript);
+                ElmFullstack.ElmInteractive.ElmEngineType.JavaScript);
 
         var allSteps =
             scenariosResults

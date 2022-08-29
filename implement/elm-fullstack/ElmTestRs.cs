@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace elm_fullstack;
+namespace ElmFullstack;
 
 public record ElmTestRsReportJsonEntry(
     string @event,

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using Pine;
 
-namespace elm_fullstack;
+namespace ElmFullstack;
 
 static public class UserSecrets
 {

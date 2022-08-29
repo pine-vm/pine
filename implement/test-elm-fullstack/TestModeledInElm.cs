@@ -7,7 +7,7 @@ using ElmFullstack;
 using JavaScriptEngineSwitcher.V8;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 [TestClass]
 public class TestModeledInElm

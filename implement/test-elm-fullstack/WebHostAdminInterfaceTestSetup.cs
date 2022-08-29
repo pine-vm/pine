@@ -9,7 +9,7 @@ using ElmFullstack.WebHost;
 using Microsoft.AspNetCore.Hosting;
 using Pine;
 
-namespace test_elm_fullstack;
+namespace TestElmFullstack;
 
 public class WebHostAdminInterfaceTestSetup : IDisposable
 {

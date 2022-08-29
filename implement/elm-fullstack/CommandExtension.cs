@@ -1,7 +1,7 @@
 ﻿using McMaster.Extensions.CommandLineUtils;
 using System.Linq;
 
-namespace elm_fullstack;
+namespace ElmFullstack;
 
 static public class CommandExtension
 {

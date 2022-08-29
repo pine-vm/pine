@@ -471,7 +471,7 @@ namespace ElmFullstack
                         ImmutableList.Create("src", "CompileFullstackApp.elm"),
                         ImmutableList.Create("src", "Main.elm")
                     },
-                resourceNameCommonPrefix: "elm_fullstack.ElmFullstack.compile_elm_program.",
+                resourceNameCommonPrefix: "ElmFullstack.ElmFullstack.compile_elm_program.",
                 assembly: typeof(ElmAppCompilation).Assembly);
 
         static IReadOnlyList<byte>? GetManifestResourceStreamContent(string name)

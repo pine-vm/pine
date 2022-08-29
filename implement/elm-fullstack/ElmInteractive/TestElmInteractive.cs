@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-namespace elm_fullstack.ElmInteractive;
+namespace ElmFullstack.ElmInteractive;
 
 public class TestElmInteractive
 {
