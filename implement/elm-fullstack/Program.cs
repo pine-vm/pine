@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-08-29";
+    static public string AppVersionId => "2022-08-30";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -935,12 +935,17 @@ public class Program
                         var failedSteps =
                             allSteps.Where(step => !step.step.result.IsOk()).ToImmutableList();
 
+                        var aggregateDuration =
+                            scenariosResults
+                            .Select(scenario => scenario.Value.elapsedTime)
+                            .Aggregate(seed: TimeSpan.Zero, func: (aggregate, scenarioTime) => aggregate + scenarioTime);
+
                         var overallStats = new[]
                         {
                             (label : "Failed", value : failedSteps.Count.ToString()),
                             (label : "Passed", value : passedSteps.Count.ToString()),
                             (label : "Total", value : allSteps.Count.ToString()),
-                            (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay(exceptLoadingStopwatch.ElapsedMilliseconds) + " ms"),
+                            (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay((long)aggregateDuration.TotalMilliseconds) + " ms"),
                         };
 
                         console.WriteLine(

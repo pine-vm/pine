@@ -27,7 +27,7 @@ public class TestElmInteractive
         ElmEngineType implementationType) where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
-        .WithDegreeOfParallelism(4)
+        .WithDegreeOfParallelism(3)
         .Select(scenarioContainer =>
         (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer), implementationType)))
         .ToImmutableDictionary(
