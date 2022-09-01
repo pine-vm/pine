@@ -1,5 +1,6 @@
 using Pine;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
@@ -76,9 +77,33 @@ public class InteractiveSessionPine : IInteractiveSession
     public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
-            ElmInteractive.CompileEvalContextForElmInteractive(
+            CompileEvalContextForElmInteractive(appCodeTree: appCodeTree));
+    }
+
+    static private readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
+
+    private Result<string, PineValue> CompileEvalContextForElmInteractive(TreeNodeWithStringPath? appCodeTree)
+    {
+        var appCodeTreeHash =
+            appCodeTree switch
+            {
+                null => "",
+                not null => CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(appCodeTree)))
+            };
+
+        try
+        {
+            return compileEvalContextCache.GetOrAdd(
+                key: appCodeTreeHash,
+                valueFactory: _ => ElmInteractive.CompileEvalContextForElmInteractive(
                 evalElmPreparedJsEngine.Value,
                 appCodeTree: appCodeTree));
+        }
+        finally
+        {
+            // Build JS engine and warm-up anyway.
+            System.Threading.Tasks.Task.Run(() => evalElmPreparedJsEngine.Value.Evaluate(""));
+        }
     }
 
     public Result<string, SubmissionResponse> Submit(string submission)
