@@ -62,12 +62,9 @@ public class TestElmInteractive
             {
                 var stepName = sessionStep.name;
 
-                var submission =
-                    Encoding.UTF8.GetString(sessionStep.component.GetBlobAtPath(new[] { "submission" })!.Value.Span);
-
-                var expectedValueFile = sessionStep.component.GetBlobAtPath(new[] { "expected-value" });
-
-                var expectedResponse = expectedValueFile is null ? null : Encoding.UTF8.GetString(expectedValueFile.Value.Span);
+                var (submission, expectedResponse) =
+                ParseStep(sessionStep.component)
+                .Extract(fromErr: error => throw new Exception(error));
 
                 return new
                 {
@@ -124,5 +121,23 @@ public class TestElmInteractive
         return new InteractiveScenarioTestReport(
             stepsReports: stepsReports,
             elapsedTime: totalStopwatch.Elapsed);
+    }
+
+    static public Result<string, (string submission, string? expectedResponse)> ParseStep(TreeNodeWithStringPath sessionStep)
+    {
+        var expectedResponse =
+            sessionStep.GetBlobAtPath(new[] { "expected-value" }) is ReadOnlyMemory<byte> expectedValueFile
+            ?
+            Encoding.UTF8.GetString(expectedValueFile.Span)
+            :
+            null;
+
+        return
+            (sessionStep.GetBlobAtPath(new[] { "submission" }) switch
+            {
+                null => Result<string, string>.err("Missing submission"),
+                ReadOnlyMemory<byte> submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Span))
+            })
+            .Map(submission => (submission, expectedResponse));
     }
 }

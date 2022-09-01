@@ -774,6 +774,13 @@ public class Program
                     description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
                     optionType: CommandOptionType.SingleValue);
 
+            var initStepsOption =
+                interactiveCmd
+                .Option(
+                    template: "--init-steps",
+                    description: "Path to a list of submissions to start the session with.",
+                    optionType: CommandOptionType.SingleValue);
+
             var enableInspectionOption =
                 interactiveCmd
                 .Option(
@@ -991,15 +998,17 @@ public class Program
 
                 var contextAppPath = contextAppOption.Value();
 
+                var initStepsPath = initStepsOption.Value();
+
                 TreeNodeWithStringPath? contextAppCodeTree =
                 contextAppPath switch
                 {
                     null => null,
                     not null =>
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
-                        .LogToActions(Console.WriteLine)
-                        .Map(loaded => loaded.tree)
-                        .Unpack(
+                    .LogToActions(Console.WriteLine)
+                    .Map(loaded => loaded.tree)
+                    .Unpack(
                         fromErr: error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
                         fromOk: tree =>
                         {
@@ -1007,6 +1016,30 @@ public class Program
                                 throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
 
                             return tree;
+                        })
+                };
+
+                var initStepsSubmission =
+                initStepsPath switch
+                {
+                    null => ImmutableList<string>.Empty,
+                    not null =>
+                    LoadComposition.LoadFromPathResolvingNetworkDependencies(initStepsPath)
+                    .LogToActions(Console.WriteLine)
+                    .Map(loaded => loaded.tree)
+                    .Unpack(
+                        fromErr: error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
+                        fromOk: tree =>
+                        {
+                            if (!tree.EnumerateBlobsTransitive().Take(1).Any())
+                                throw new Exception("Found no files under context app path '" + initStepsPath + "'.");
+
+                            return
+                            tree
+                            .TreeContent!.Select(stepDirectory =>
+                            ElmInteractive.TestElmInteractive.ParseStep(stepDirectory.component)
+                            .Extract(fromErr: error => throw new Exception(error)).submission)
+                            .ToImmutableList();
                         })
                 };
 
@@ -1054,7 +1087,17 @@ public class Program
 
                 var promptPrefix = "> ";
 
-                foreach (var submission in submitOption.Values.EmptyIfNull().WhereNotNull())
+                var allSubmissionsFromArguments =
+                initStepsSubmission
+                .Concat(submitOption.Values.EmptyIfNull()).WhereNotNull()
+                .ToImmutableList();
+
+                if (0 < allSubmissionsFromArguments.Count)
+                {
+                    Console.WriteLine(allSubmissionsFromArguments.Count + " initial submission(s) from arguments in total...");
+                }
+
+                foreach (var submission in allSubmissionsFromArguments)
                 {
                     Console.WriteLine(promptPrefix + submission);
 
