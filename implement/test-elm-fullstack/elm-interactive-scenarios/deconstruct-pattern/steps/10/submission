@@ -1,5 +1,5 @@
 let
-    returnField { field_a } =
-        field_a
+    c (a, b) =
+        a
 in
-returnField { field_a = "literal in field" }
+c ("alpha", "beta")

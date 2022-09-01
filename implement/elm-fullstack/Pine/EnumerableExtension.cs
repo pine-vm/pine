@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Pine;
 
@@ -88,5 +89,22 @@ static public class EnumerableExtension
         {
             return IEnumerableComparer<T>.Compare(x, (IEnumerable<IComparable>?)y);
         }
+    }
+
+    static public IEnumerable<string> OrderByNatural(this IEnumerable<string> items, StringComparer? stringComparer = null) =>
+        OrderByNatural(items, s => s, stringComparer);
+
+    static public IEnumerable<T> OrderByNatural<T>(this IEnumerable<T> items, Func<T, string> selector, StringComparer? stringComparer = null)
+    {
+        var regex = new Regex(@"\d+", RegexOptions.Compiled);
+
+        int maxDigits =
+            items
+            .SelectMany(i => regex.Matches(selector(i)).Cast<Match>().Select(digitChunk => (int?)digitChunk.Value.Length))
+            .Max() ?? 0;
+
+        return
+            items
+            .OrderBy(i => regex.Replace(selector(i), match => match.Value.PadLeft(maxDigits, '0')), stringComparer ?? StringComparer.CurrentCulture);
     }
 }

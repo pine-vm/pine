@@ -1,1 +1,1 @@
-String.dropLeft 2 "The Lone Gunmen"
+String.reverse "stressed"

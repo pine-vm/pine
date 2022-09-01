@@ -1,1 +1,1 @@
-String.left 2 "Mulder"
+[ String.isEmpty "", String.isEmpty "test" ]

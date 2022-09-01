@@ -1,11 +1,3 @@
-[ String.toInt ""
-, String.toInt " 0"
-, String.toInt "0 "
-, String.toInt "- 0"
-, String.toInt "0"
-, String.toInt "-0"
-, String.toInt "+1"
-, String.toInt "-2"
-, String.toInt "12345"
-, String.toInt "-56789"
+[ String.startsWith "the" "theory"
+, String.startsWith "ory" "theory"
 ]

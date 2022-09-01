@@ -1,1 +1,5 @@
-List.repeat 3 "text"
+let
+    concat a b =
+        a ++ b
+in
+List.foldr concat "_init_" [ "a", "b", "c" ]

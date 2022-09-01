@@ -1,5 +1,0 @@
-let
-    c (a, b) =
-        a
-in
-c ("alpha", "beta")

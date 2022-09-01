@@ -1,0 +1,9 @@
+let
+    deconsList list =
+        case list of
+        [] -> [ 100 ]
+        [ ea ] -> [ 101, ea ]
+        [ eb, ec ] -> [ 102, eb, ec ]
+        _ -> [ 199 ]
+in
+[ deconsList [], deconsList [ 123 ], deconsList [ 234, 345 ], deconsList [ 0, 0, 0, 0 ] ]

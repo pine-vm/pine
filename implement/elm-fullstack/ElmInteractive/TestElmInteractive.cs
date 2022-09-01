@@ -56,6 +56,11 @@ public class TestElmInteractive
 
         var testScenarioSteps = stepsDirectory.TreeContent;
 
+        var stepsNames = testScenarioSteps.Select(s => s.name).ToImmutableList();
+
+        if (!stepsNames.Order().SequenceEqual(stepsNames.OrderByNatural()))
+            throw new Exception("Ambiguous sort order of steps (" + string.Join(", ", stepsNames) + "). Rename these steps to make the ordering obvious");
+
         var stepsReports =
             testScenarioSteps
             .Select(sessionStep =>

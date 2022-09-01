@@ -1,5 +1,0 @@
-let
-    concat a b =
-        a ++ b
-in
-List.foldl concat "_init_" [ "a", "b", "c" ]

@@ -1,0 +1,7 @@
+[ String.fromInt 0
+, String.fromInt -1
+, String.fromInt 1
+, String.fromInt 123
+, String.fromInt -456
+, String.fromInt 34567834567
+]

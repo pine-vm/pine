@@ -1,1 +1,1 @@
-String.right 2 "Scully"
+[ String.length "", String.length "test", String.length "😀" ]
