@@ -751,42 +751,42 @@ type String
 
 eq : a -> a -> Bool
 eq a b =
-    PineKernel.equal [ a, b ]
+    Pine_kernel.equal [ a, b ]
 
 
 neq : a -> a -> Bool
 neq a b =
-    PineKernel.logical_not (PineKernel.equal [ a, b ])
+    Pine_kernel.logical_not (Pine_kernel.equal [ a, b ])
 
 
 add : number -> number -> number
 add a b =
-    PineKernel.add_int [ a, b ]
+    Pine_kernel.add_int [ a, b ]
 
 
 sub : number -> number -> number
 sub a b =
-    PineKernel.sub_int [ a, b ]
+    Pine_kernel.sub_int [ a, b ]
 
 
 mul : number -> number -> number
 mul a b =
-    PineKernel.mul_int [ a, b ]
+    Pine_kernel.mul_int [ a, b ]
 
 
 idiv : number -> number -> number
 idiv a b =
-    PineKernel.div_int [ a, b ]
+    Pine_kernel.div_int [ a, b ]
 
 
 and : Bool -> Bool -> Bool
 and a b =
-    PineKernel.logical_and [ a, b ]
+    Pine_kernel.logical_and [ a, b ]
 
 
 or : Bool -> Bool -> Bool
 or a b =
-    PineKernel.logical_or [ a, b ]
+    Pine_kernel.logical_or [ a, b ]
 
 
 append : appendable -> appendable -> appendable
@@ -795,35 +795,35 @@ append a b =
     String stringA ->
         case b of
         String stringB ->
-            String (PineKernel.concat [stringA, stringB])
-        _ -> PineKernel.concat [a, b]
-    _ -> PineKernel.concat [a, b]
+            String (Pine_kernel.concat [stringA, stringB])
+        _ -> Pine_kernel.concat [a, b]
+    _ -> Pine_kernel.concat [a, b]
 
 
 lt : comparable -> comparable -> Bool
 lt a b =
-    PineKernel.logical_and
+    Pine_kernel.logical_and
     [ (le a b)
-    , PineKernel.logical_not (PineKernel.equal [a, b])
+    , Pine_kernel.logical_not (Pine_kernel.equal [a, b])
     ]
 
 
 gt : comparable -> comparable -> Bool
 gt a b =
-    PineKernel.logical_and
+    Pine_kernel.logical_and
     [ (ge a b)
-    , PineKernel.logical_not (PineKernel.equal [a, b])
+    , Pine_kernel.logical_not (Pine_kernel.equal [a, b])
     ]
 
 
 le : comparable -> comparable -> Bool
 le a b =
-    PineKernel.equal [ PineKernel.sort_int [a, b], [a, b] ]
+    Pine_kernel.equal [ Pine_kernel.sort_int [a, b], [a, b] ]
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    PineKernel.equal [ PineKernel.sort_int [b, a], [b, a] ]
+    Pine_kernel.equal [ Pine_kernel.sort_int [b, a], [b, a] ]
 
 
 apR : a -> (a -> b) -> b
@@ -858,7 +858,7 @@ always a _ =
 
 not : Bool -> Bool
 not bool =
-    if PineKernel.equal [ bool, True ] then
+    if Pine_kernel.equal [ bool, True ] then
         False
     else
         True
@@ -947,7 +947,7 @@ rangeHelp lo hi list =
 
 cons : a -> List a -> List a
 cons element list =
-    PineKernel.concat [ [ element ], list ]
+    Pine_kernel.concat [ [ element ], list ]
 
 
 map : (a -> b) -> List a -> List b
@@ -977,12 +977,12 @@ filter isGood list =
 
 length : List a -> Int
 length list =
-    PineKernel.length list
+    Pine_kernel.length list
 
 
 reverse : List a -> List a
 reverse list =
-    PineKernel.reverse list
+    Pine_kernel.reverse list
 
 
 member : a -> List a -> Bool
@@ -1011,7 +1011,7 @@ append xs ys =
 
 concat : List (List a) -> List a
 concat lists =
-    PineKernel.concat lists
+    Pine_kernel.concat lists
 
 
 isEmpty : List a -> Bool
@@ -1046,12 +1046,12 @@ tail list =
 
 take : Int -> List a -> List a
 take n list =
-    PineKernel.take [ n, list ]
+    Pine_kernel.take [ n, list ]
 
 
 drop : Int -> List a -> List a
 drop n list =
-    PineKernel.skip [ n, list ]
+    Pine_kernel.skip [ n, list ]
 
 
 """
@@ -1068,7 +1068,7 @@ type alias Char = Int
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    PineKernel.concat [ PineKernel.take [ 1, 0 ], char ]
+    Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
 
 """
     , """
@@ -1164,7 +1164,7 @@ replace before after string =
 
 append : String -> String -> String
 append a b =
-    PineKernel.concat [ toList a, toList b ]
+    Pine_kernel.concat [ toList a, toList b ]
 
 
 concat : List String -> String
@@ -1396,7 +1396,7 @@ type Bytes
 width : Bytes -> Int
 width bytes =
     case bytes of
-    Bytes list -> PineKernel.length list
+    Bytes list -> Pine_kernel.length list
 
 
 type Endianness = LE | BE
@@ -1426,28 +1426,28 @@ encodeBlob : Encoder -> List Int
 encodeBlob builder =
   case builder of
     U8    n ->
-        PineKernel.take [ 1, (PineKernel.reverse n) ]
+        Pine_kernel.take [ 1, (Pine_kernel.reverse n) ]
 
     U16 e n ->
         let
             littleEndian =
-                PineKernel.take [ 2, (PineKernel.reverse (PineKernel.skip [ 1, n ])) ]
+                Pine_kernel.take [ 2, (Pine_kernel.reverse (Pine_kernel.skip [ 1, n ])) ]
         in
         if (e == Bytes.LE)
         then littleEndian
-        else PineKernel.reverse littleEndian
+        else Pine_kernel.reverse littleEndian
 
     U32 e n ->
         let
             littleEndian =
-                PineKernel.take [ 4, (PineKernel.reverse (PineKernel.skip [ 1, n ])) ]
+                Pine_kernel.take [ 4, (Pine_kernel.reverse (Pine_kernel.skip [ 1, n ])) ]
         in
         if (e == Bytes.LE)
         then littleEndian
-        else PineKernel.reverse littleEndian
+        else Pine_kernel.reverse littleEndian
 
     SequenceEncoder bs ->
-        PineKernel.concat (List.map encodeBlob bs)
+        Pine_kernel.concat (List.map encodeBlob bs)
 
     BytesEncoder bs ->
         case bs of
@@ -2961,7 +2961,7 @@ valueFromString =
 
 pineKernelModuleName : String
 pineKernelModuleName =
-    "PineKernel"
+    "Pine_kernel"
 
 
 elmStringTypeTagName : String
