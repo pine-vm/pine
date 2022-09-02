@@ -138,7 +138,7 @@ public class PineVM
         .SetItem(nameof(KernelFunction.sub_int), KernelFunction.sub_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.div_int), KernelFunction.div_int)
-        .SetItem(nameof(KernelFunction.sort_int), KernelFunction.sort_int)
+        .SetItem(nameof(KernelFunction.sort_int), value => Result<string, PineValue>.ok(KernelFunction.sort_int(value)))
         .SetItem(nameof(KernelFunction.look_up_name_in_ListValue), KernelFunction.look_up_name_in_ListValue);
 
     static public PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
@@ -332,8 +332,8 @@ public class PineVM
             ?
             true
             :
-            (bool?)list.All(e => e.Equals(list[0])))
-            .Map(b => ValueFromBool(b!.Value));
+            list.All(e => e.Equals(list[0])))
+            .Map(b => ValueFromBool(b));
 
         static public Result<string, PineValue> logical_not(PineValue value) =>
             DecodeBoolFromValue(value)
@@ -446,11 +446,48 @@ public class PineVM
                 (firstInt, otherInts) => otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next),
                 value);
 
-        static public Result<string, PineValue> sort_int(PineValue value) =>
-            KernelFunctionExpectingListOfBigInt(
-                ints => Result<string, PineValue>.ok(
-                    PineValue.List(ints.OrderBy(i => i).Select(Composition.ComponentFromSignedInteger).ToImmutableList())),
-                value);
+        static public PineValue sort_int(PineValue value) =>
+            value switch
+            {
+                PineValue.ListValue list =>
+                new PineValue.ListValue(
+                    list.Elements
+                    .Select(sort_int)
+                    .Order(valueComparerInt)
+                    .ToImmutableList()),
+
+                _ => value,
+            };
+
+        static readonly BlobValueIntComparer valueComparerInt = new();
+
+        class BlobValueIntComparer : IComparer<PineValue>
+        {
+            public int Compare(PineValue? x, PineValue? y) =>
+                (x, y) switch
+                {
+                    (PineValue.BlobValue blobX, PineValue.BlobValue blobY) =>
+                    (Composition.SignedIntegerFromBlobValue(blobX.Bytes.Span),
+                    Composition.SignedIntegerFromBlobValue(blobY.Bytes.Span)) switch
+                    {
+                        (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
+                        BigInteger.Compare(intX.Value, intY.Value),
+
+                        (Result<string, BigInteger>.Ok _, _) => -1,
+                        (_, Result<string, BigInteger>.Ok _) => 1,
+                        _ => 0
+                    },
+
+                    (PineValue.ListValue listX, PineValue.ListValue listY) =>
+                    listX.Elements.Count - listY.Elements.Count,
+
+                    (PineValue.ListValue _, _) => -1,
+
+                    (_, PineValue.ListValue _) => 1,
+
+                    _ => 0
+                };
+        }
 
         static public Result<string, PineValue> look_up_name_in_ListValue(PineValue value) =>
             KernelFunctionExpectingExactlyTwoArguments(

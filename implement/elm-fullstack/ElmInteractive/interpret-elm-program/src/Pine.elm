@@ -317,8 +317,7 @@ kernelFunctions =
       , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.div b a))
       )
     , ( "sort_int"
-      , kernelFunctionExpectingListOfBigInt
-            (List.sortWith BigInt.compare >> List.map valueFromBigInt >> ListValue >> Ok)
+      , sort_int >> Ok
       )
     , ( "look_up_name_in_ListValue"
       , kernelFunctionExpectingExactlyTwoArguments
@@ -332,6 +331,46 @@ kernelFunctions =
       )
     ]
         |> Dict.fromList
+
+
+sort_int : Value -> Value
+sort_int value =
+    case value of
+        BlobValue _ ->
+            value
+
+        ListValue list ->
+            list
+                |> List.map sort_int
+                |> List.sortWith sort_int_order
+                |> ListValue
+
+
+sort_int_order : Value -> Value -> Order
+sort_int_order x y =
+    case ( x, y ) of
+        ( BlobValue blobX, BlobValue blobY ) ->
+            case ( bigIntFromBlobValue blobX, bigIntFromBlobValue blobY ) of
+                ( Ok intX, Ok intY ) ->
+                    BigInt.compare intX intY
+
+                ( Ok _, Err _ ) ->
+                    LT
+
+                ( Err _, Ok _ ) ->
+                    GT
+
+                ( Err _, Err _ ) ->
+                    EQ
+
+        ( ListValue listX, ListValue listY ) ->
+            compare (List.length listX) (List.length listY)
+
+        ( ListValue _, BlobValue _ ) ->
+            LT
+
+        ( BlobValue _, ListValue _ ) ->
+            GT
 
 
 mapFromListValueOrBlobValue : { fromList : List Value -> a, fromBlob : List Int -> a } -> Value -> a
