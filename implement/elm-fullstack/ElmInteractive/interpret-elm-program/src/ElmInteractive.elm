@@ -3316,44 +3316,153 @@ stringStartsWithUpper =
     String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False
 
 
-json_encode_pineValue : Pine.Value -> Json.Encode.Value
-json_encode_pineValue value =
+json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value
+json_encode_pineValue dictionary value =
+    let
+        blobDict =
+            dictionary
+                |> Dict.toList
+                |> List.filterMap
+                    (\( entryName, entryValue ) ->
+                        case entryValue of
+                            Pine.BlobValue blob ->
+                                Just ( blob, entryName )
+
+                            _ ->
+                                Nothing
+                    )
+                |> Dict.fromList
+
+        listDict =
+            dictionary
+                |> Dict.toList
+                |> List.filterMap
+                    (\( entryName, entryValue ) ->
+                        case entryValue of
+                            Pine.ListValue list ->
+                                Just ( list, entryName )
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.foldl
+                    (\( nextList, nextName ) intermediateDict ->
+                        let
+                            hash =
+                                pineListValueFastHash nextList
+
+                            assocList =
+                                intermediateDict
+                                    |> Dict.get hash
+                                    |> Maybe.withDefault []
+                                    |> (::) ( nextList, nextName )
+                        in
+                        intermediateDict
+                            |> Dict.insert hash assocList
+                    )
+                    Dict.empty
+    in
+    json_encode_pineValue_Internal
+        { blobDict = blobDict, listDict = listDict }
+        value
+
+
+json_encode_pineValue_Internal :
+    { blobDict : Dict.Dict (List Int) String
+    , listDict : Dict.Dict Int (List ( List Pine.Value, String ))
+    }
+    -> Pine.Value
+    -> Json.Encode.Value
+json_encode_pineValue_Internal dictionary value =
     case value of
         Pine.ListValue list ->
-            let
-                defaultListEncoding =
+            case
+                dictionary.listDict
+                    |> Dict.get (pineListValueFastHash list)
+                    |> Maybe.andThen (List.Extra.find (Tuple.first >> (==) list))
+                    |> Maybe.map Tuple.second
+            of
+                Just reference ->
                     Json.Encode.object
-                        [ ( "List", Json.Encode.list json_encode_pineValue list ) ]
-            in
-            case Pine.stringFromListValue list of
-                Err _ ->
-                    defaultListEncoding
+                        [ ( "Reference", Json.Encode.string reference ) ]
 
-                Ok asString ->
-                    Json.Encode.object
-                        [ ( "ListAsString", Json.Encode.string asString ) ]
+                Nothing ->
+                    let
+                        defaultListEncoding _ =
+                            Json.Encode.object
+                                [ ( "List", Json.Encode.list (json_encode_pineValue_Internal dictionary) list ) ]
+                    in
+                    case Pine.stringFromListValue list of
+                        Err _ ->
+                            defaultListEncoding ()
+
+                        Ok asString ->
+                            Json.Encode.object
+                                [ ( "ListAsString", Json.Encode.string asString ) ]
 
         Pine.BlobValue blob ->
-            Json.Encode.object
-                [ ( "Blob", Json.Encode.list Json.Encode.int blob ) ]
+            case dictionary.blobDict |> Dict.get blob of
+                Just reference ->
+                    Json.Encode.object
+                        [ ( "Reference", Json.Encode.string reference ) ]
+
+                Nothing ->
+                    Json.Encode.object
+                        [ ( "Blob", Json.Encode.list Json.Encode.int blob ) ]
 
 
-json_decode_pineValue : Json.Decode.Decoder Pine.Value
+json_decode_pineValue : Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
 json_decode_pineValue =
     json_decode_pineValueWithDictionary Dict.empty
 
 
-json_decode_pineValueWithDictionary : Dict.Dict String PineValueSupportingReference -> Json.Decode.Decoder Pine.Value
-json_decode_pineValueWithDictionary dictionary =
+json_decode_pineValueWithDictionary :
+    Dict.Dict String Pine.Value
+    -> Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
+json_decode_pineValueWithDictionary parentDictionary =
     json_decode_optionalNullableField "Dictionary" json_decode_pineValueDictionary
-        |> Json.Decode.map (Maybe.withDefault Dict.empty >> (Dict.union >> (|>) dictionary))
-        |> Json.Decode.andThen json_decode_pineValueApplyingDictionary
+        |> Json.Decode.andThen
+            (Maybe.map
+                (Dict.union (Dict.map (always LiteralValue) parentDictionary)
+                    >> resolveDictionaryToLiteralValues
+                    >> Result.Extra.unpack Json.Decode.fail Json.Decode.succeed
+                )
+                >> Maybe.withDefault (Json.Decode.succeed parentDictionary)
+            )
+        |> Json.Decode.andThen
+            (\mergedDictionary ->
+                json_decode_pineValueApplyingDictionary mergedDictionary
+                    |> Json.Decode.map (Tuple.pair >> (|>) mergedDictionary)
+            )
 
 
 json_decode_pineValueDictionary : Json.Decode.Decoder (Dict.Dict String PineValueSupportingReference)
 json_decode_pineValueDictionary =
     Json.Decode.list json_decode_pineValueDictionaryEntry
         |> Json.Decode.map Dict.fromList
+
+
+resolveDictionaryToLiteralValues : Dict.Dict String PineValueSupportingReference -> Result String (Dict.Dict String Pine.Value)
+resolveDictionaryToLiteralValues dictionary =
+    dictionary
+        |> Dict.toList
+        |> List.map
+            (\( entryName, entryValue ) ->
+                resolvePineValueReferenceToLiteralRecursive Set.empty dictionary entryValue
+                    |> Result.map (Tuple.pair entryName)
+                    |> Result.mapError
+                        (\( errorStack, errorMessage ) ->
+                            "Failed to resolve entry '"
+                                ++ entryName
+                                ++ "': "
+                                ++ errorMessage
+                                ++ " ("
+                                ++ String.join ", " errorStack
+                                ++ ")"
+                        )
+            )
+        |> Result.Extra.combine
+        |> Result.map Dict.fromList
 
 
 resolvePineValueReferenceToLiteralRecursive :
@@ -3410,28 +3519,20 @@ json_decode_pineValueDictionaryEntry =
         (Json.Decode.field "value" json_decode_pineValueSupportingReference)
 
 
-json_decode_pineValueApplyingDictionary : Dict.Dict String PineValueSupportingReference -> Json.Decode.Decoder Pine.Value
+json_decode_pineValueApplyingDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder Pine.Value
 json_decode_pineValueApplyingDictionary dictionary =
     json_decode_pineValueGeneric
         { decodeListElement =
-            Json.Decode.lazy (\_ -> json_decode_pineValueWithDictionary dictionary)
+            Json.Decode.lazy (\_ -> json_decode_pineValueWithDictionary dictionary |> Json.Decode.map Tuple.first)
         , consList = Pine.ListValue
         , decodeReference =
             \reference ->
-                resolvePineValueReferenceToLiteralRecursive Set.empty dictionary (ReferenceValue reference)
-                    |> Result.Extra.unpack
-                        (\( errorStack, errorMessage ) ->
-                            Json.Decode.fail
-                                ("Failed to resolve entry '"
-                                    ++ reference
-                                    ++ "': "
-                                    ++ errorMessage
-                                    ++ " ("
-                                    ++ String.join ", " errorStack
-                                    ++ ")"
-                                )
-                        )
-                        Json.Decode.succeed
+                case Dict.get reference dictionary of
+                    Nothing ->
+                        Json.Decode.fail ("Did not find declaration for reference '" ++ reference ++ "'")
+
+                    Just resolvedValue ->
+                        Json.Decode.succeed resolvedValue
         , consLiteral = identity
         }
 
@@ -3474,6 +3575,24 @@ json_decode_pineValueGeneric config =
                 |> Json.Decode.andThen config.decodeReference
             )
         ]
+
+
+pineListValueFastHash : List Pine.Value -> Int
+pineListValueFastHash list =
+    list
+        |> List.indexedMap
+            (\index entry ->
+                (case entry of
+                    Pine.BlobValue blob ->
+                        71 * List.length blob
+
+                    Pine.ListValue innerList ->
+                        7919 * List.length innerList
+                )
+                    * (index + 1)
+            )
+        |> List.sum
+        |> (+) (List.length list)
 
 
 json_decode_optionalNullableField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)

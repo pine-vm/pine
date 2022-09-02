@@ -2,6 +2,7 @@ module Main exposing (..)
 
 import Base64
 import Bytes
+import Dict
 import Elm.Syntax.File
 import ElmInteractive
 import Json.Decode
@@ -69,7 +70,7 @@ compileEvalContextForElmInteractive =
                     (ElmInteractive.InitContextFromApp { modulesTexts = modulesTexts })
                     |> Result.mapError ((++) "Failed to prepare the initial context: ")
             )
-        >> json_encode_Result Json.Encode.string (.applicationArgument >> json_encode_pineValue)
+        >> json_encode_Result Json.Encode.string (.applicationArgument >> json_encode_pineValue Dict.empty)
         >> Json.Encode.encode 0
 
 
@@ -79,11 +80,12 @@ compileInteractiveSubmission requestJson =
         |> Json.Decode.decodeString json_Decode_compileInteractiveSubmission
         |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode request: ")
         |> Result.andThen
-            (\( environment, submission ) ->
+            (\( ( environment, environmentDict ), submission ) ->
                 ElmInteractive.compileInteractiveSubmission environment submission
                     |> Result.map Pine.encodeExpressionAsValue
+                    |> Result.map (json_encode_pineValue environmentDict)
             )
-        |> json_encode_Result Json.Encode.string json_encode_pineValue
+        |> json_encode_Result Json.Encode.string identity
         |> Json.Encode.encode 0
 
 
@@ -92,7 +94,7 @@ submissionResponseFromResponsePineValue response =
     response
         |> Json.Decode.decodeString json_decode_pineValue
         |> Result.mapError Json.Decode.errorToString
-        |> Result.andThen ElmInteractive.submissionResponseFromResponsePineValue
+        |> Result.andThen (Tuple.first >> ElmInteractive.submissionResponseFromResponsePineValue)
         |> json_encode_Result Json.Encode.string jsonEncodeSubmissionResponse
         |> Json.Encode.encode 0
 
@@ -114,7 +116,7 @@ jsonDecodeEvaluateSubmissionArguments =
         (Json.Decode.field "previousLocalSubmissions" (Json.Decode.list Json.Decode.string))
 
 
-json_Decode_compileInteractiveSubmission : Json.Decode.Decoder ( Pine.Value, String )
+json_Decode_compileInteractiveSubmission : Json.Decode.Decoder ( ( Pine.Value, Dict.Dict String Pine.Value ), String )
 json_Decode_compileInteractiveSubmission =
     Json.Decode.map2
         (\environment submission -> ( environment, submission ))
@@ -122,12 +124,12 @@ json_Decode_compileInteractiveSubmission =
         (Json.Decode.field "submission" Json.Decode.string)
 
 
-json_encode_pineValue : Pine.Value -> Json.Encode.Value
+json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value
 json_encode_pineValue =
     ElmInteractive.json_encode_pineValue
 
 
-json_decode_pineValue : Json.Decode.Decoder Pine.Value
+json_decode_pineValue : Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
 json_decode_pineValue =
     ElmInteractive.json_decode_pineValue
 

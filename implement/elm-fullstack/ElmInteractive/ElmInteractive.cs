@@ -64,7 +64,7 @@ public class ElmInteractive
 
         return
             responseStructure
-            .Map(fromJson => ParsePineValueFromJson(fromJson!));
+            .Map(fromJson => ParsePineValueFromJson(fromJson!, dictionary: null));
     }
 
     static internal Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
@@ -87,7 +87,7 @@ public class ElmInteractive
             System.Text.Json.JsonSerializer.Serialize(
                 new CompileInteractiveSubmissionRequest
                 (
-                    environment: environmentJson,
+                    environment: environmentJson.json,
                     submission: submission
                 ),
                 options: new System.Text.Json.JsonSerializerOptions
@@ -114,7 +114,7 @@ public class ElmInteractive
 
         var response =
             responseStructure
-            .Map(fromJson => ParsePineValueFromJson(fromJson));
+            .Map(fromJson => ParsePineValueFromJson(fromJson, dictionary: environmentJson.dictionary));
 
         logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineValueFromJson));
 
@@ -123,7 +123,7 @@ public class ElmInteractive
 
     internal record CompilationCache(
         IImmutableDictionary<PineValue, PineValueJson.PineValueMappedForTransport> valueMappedForTransportCache,
-        IImmutableDictionary<PineValue, PineValueJson> valueJsonCache);
+        IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> valueJsonCache);
 
     record CompileInteractiveSubmissionRequest(
         PineValueJson environment,
@@ -220,7 +220,8 @@ public class ElmInteractive
             }
         }
 
-        static public (PineValueJson, System.Threading.Tasks.Task<CompilationCache>) FromPineValueBuildingDictionary(
+        static public ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
+            FromPineValueBuildingDictionary(
             PineValue pineValue,
             CompilationCache? compilationCache)
         {
@@ -303,13 +304,21 @@ public class ElmInteractive
                 with
             { Dictionary = dictionaryForSerial };
 
+            var decodeResponseDictionary =
+                dictionary
+                .ToImmutableDictionary(
+                    keySelector: entry => entry.Value,
+                    elementSelector: entry => entry.Key.origin);
+
+            var cacheEntry = (json: pineValueJson, dictionary: decodeResponseDictionary);
+
             var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
             {
-                var valueJsonCache = new Dictionary<PineValue, PineValueJson>(
+                var valueJsonCache = new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
                     compilationCache?.valueJsonCache ??
-                    ImmutableDictionary<PineValue, PineValueJson>.Empty)
+                    ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty)
                 {
-                    [pineValue] = pineValueJson
+                    [pineValue] = cacheEntry
                 };
 
                 return new CompilationCache(
@@ -317,7 +326,7 @@ public class ElmInteractive
                     valueJsonCache: valueJsonCache.ToImmutableDictionary());
             });
 
-            return (pineValueJson, compilationCacheTask);
+            return (cacheEntry, compilationCacheTask);
         }
 
         static public PineValueJson FromPineValueWithoutBuildingDictionary(PineValue pineValue) =>
@@ -349,16 +358,26 @@ public class ElmInteractive
         }
     }
 
-    static PineValue ParsePineValueFromJson(PineValueJson fromJson)
+    static PineValue ParsePineValueFromJson(PineValueJson fromJson, IReadOnlyDictionary<string, PineValue>? dictionary)
     {
-        if (fromJson.List != null)
-            return PineValue.List(fromJson.List.Select(ParsePineValueFromJson).ToImmutableList());
+        if (fromJson.List is IReadOnlyList<PineValueJson> list)
+            return PineValue.List(list.Select(item => ParsePineValueFromJson(item, dictionary)).ToImmutableList());
 
-        if (fromJson.Blob != null)
-            return PineValue.Blob(fromJson.Blob.Select(b => (byte)b).ToArray());
+        if (fromJson.Blob is IReadOnlyList<int> blob)
+            return PineValue.Blob(blob.Select(b => (byte)b).ToArray());
 
-        if (fromJson.ListAsString != null)
-            return ComponentFromString(fromJson.ListAsString);
+        if (fromJson.ListAsString is string listAsString)
+            return ComponentFromString(listAsString);
+
+        if (fromJson.Reference is string reference)
+        {
+            return
+                dictionary switch
+                {
+                    null => throw new Exception("Cannot resolve reference '" + reference + "' because dictionary is null"),
+                    not null => dictionary[reference]
+                };
+        }
 
         throw new NotImplementedException("Unexpected shape of Pine value from JSON");
     }
