@@ -98,12 +98,14 @@ public class TestLoadFromGithub
                 "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md")
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-        var blobContent = loadFromGithubResult.tree.BlobContent;
+        var blobContent =
+            loadFromGithubResult.tree
+            .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
 
         Assert.IsNotNull(blobContent, "Found blobContent.");
 
         Assert.AreEqual(expectedFileHash,
-            Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Value.Span))
+            Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
             .ToLowerInvariant(),
             "Loaded blob content hash equals expected hash.");
     }
@@ -203,12 +205,14 @@ public class TestLoadFromGithub
                         consultServer)
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-                var blobContent = loadFromGitHubResult.tree.BlobContent;
+                var blobContent =
+                    loadFromGitHubResult.tree
+                    .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
 
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
-                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Value.Span))
+                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
             }
@@ -223,12 +227,14 @@ public class TestLoadFromGithub
                         consultServer)
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-                var blobContent = loadFromGitHubResult.tree.BlobContent;
+                var blobContent =
+                    loadFromGitHubResult.tree
+                    .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
 
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
-                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Value.Span))
+                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
 

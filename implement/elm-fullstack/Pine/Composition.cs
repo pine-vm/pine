@@ -176,7 +176,7 @@ public static class Composition
                 PineValue.BlobValue compositionAsBlob =>
                 Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.ok(
                     TreeNodeWithStringPath.Blob(compositionAsBlob.Bytes)),
-                
+
                 PineValue.ListValue compositionAsList =>
                 continueForListComposition(compositionAsList),
 
@@ -184,28 +184,24 @@ public static class Composition
             };
     }
 
-    static public PineValue FromTreeWithStringPath(TreeNodeWithStringPath tree)
-    {
-        if (tree.BlobContent != null)
-            return PineValue.Blob(tree.BlobContent.Value);
-
-        if (tree.TreeContent != null)
+    static public PineValue FromTreeWithStringPath(TreeNodeWithStringPath node) =>
+        node switch
         {
-            var listContent =
-                tree.TreeContent
+            TreeNodeWithStringPath.BlobNode blob => PineValue.Blob(blob.Bytes),
+
+            TreeNodeWithStringPath.TreeNode tree =>
+            PineValue.List(
+                tree.Elements
                 .Select(treeComponent =>
                     PineValue.List(
                         ImmutableList.Create(
                             ComponentFromString(treeComponent.name),
                             FromTreeWithStringPath(treeComponent.component))
                     ))
-                .ToImmutableList();
+                .ToImmutableList()),
 
-            return PineValue.List(listContent);
-        }
-
-        throw new Exception("Incomplete match on sum type.");
-    }
+            _ => throw new NotImplementedException("Incomplete match on sum type.")
+        };
 
     static public TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
         IEnumerable<(string path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
@@ -238,54 +234,14 @@ public static class Composition
             blobsWithPath.Select(pathAndBlobContent => (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
     static public TreeNodeWithStringPath SortedTreeFromTree(
-        TreeNodeWithStringPath tree) =>
-        tree.BlobContent != null
-        ?
-        tree
-        :
-        SortedTreeFromSetOfBlobs(tree.EnumerateBlobsTransitive());
+        TreeNodeWithStringPath tree) => TreeNodeWithStringPath.Sort(tree);
 
     static public TreeNodeWithStringPath SortedTreeFromSetOfBlobs(
         IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
-        TreeNodeWithStringPath.SortedTree(treeContent: SortedTreeContentFromSetOfBlobs(blobsWithPath));
-
-    static public IImmutableList<(string name, TreeNodeWithStringPath obj)> SortedTreeContentFromSetOfBlobs(
-        IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
-        blobsWithPath
-        .Aggregate(
-            (IImmutableList<(string name, TreeNodeWithStringPath obj)>)
-            ImmutableList<(string name, TreeNodeWithStringPath obj)>.Empty,
-            (intermediateResult, nextBlob) => SetBlobAtPathSorted(intermediateResult, nextBlob.path, nextBlob.blobContent));
-
-    static public IImmutableList<(string name, TreeNodeWithStringPath obj)> SetBlobAtPathSorted(
-        IImmutableList<(string name, TreeNodeWithStringPath obj)> treeContentBefore,
-        IImmutableList<string> path,
-        ReadOnlyMemory<byte> blobContent)
-    {
-        var pathFirstElement = path.First();
-
-        var componentBefore =
-            treeContentBefore.FirstOrDefault(c => c.name.SequenceEqual(pathFirstElement)).obj;
-
-        var component =
-            path.Count < 2
-            ?
-            TreeNodeWithStringPath.Blob(blobContent: blobContent)
-            :
-            TreeNodeWithStringPath.SortedTree(
-                treeContent:
-                    SetBlobAtPathSorted(
-                        componentBefore?.TreeContent ?? ImmutableList<(string name, TreeNodeWithStringPath obj)>.Empty,
-                        path.RemoveAt(0),
-                        blobContent));
-
-        return
-            treeContentBefore
-            .RemoveAll(c => c.name == pathFirstElement)
-            .Add((pathFirstElement, component))
-            .OrderBy(c => c.name, TreeNodeWithStringPath.TreeEntryNameComparer)
-            .ToImmutableList();
-    }
+        blobsWithPath.Aggregate(
+            seed: TreeNodeWithStringPath.EmptyTree,
+            func: (tree, blobPathAndContent) =>
+            tree.SetNodeAtPathSorted(blobPathAndContent.path, TreeNodeWithStringPath.Blob(blobPathAndContent.blobContent)));
 
     static public Result<string, PineValue> Deserialize(
         ReadOnlyMemory<byte> serializedComponent,

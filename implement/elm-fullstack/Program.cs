@@ -878,12 +878,19 @@ public class Program
                             component: scenarioLoadResult.Value.result.Extract(error => throw new Exception(error)).tree))
                             .Concat(scenariosLoadResults.SelectMany(scenariosComposition =>
                             {
-                                var asTree = scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree.TreeContent;
+                                var asTree =
+                                scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree switch
+                                {
+                                    TreeNodeWithStringPath.TreeNode tree => tree,
+                                    _ => null
+                                };
 
-                                if (asTree == null)
+                                if (asTree is null)
                                     return ImmutableList<(string, TreeNodeWithStringPath)>.Empty;
 
-                                return asTree.Where(entry => entry.component.TreeContent != null);
+                                return
+                                asTree.Elements
+                                .Where(entry => entry.component is TreeNodeWithStringPath.TreeNode scenarioTree);
                             }))
                             .Select(loadedScenario =>
                             {
@@ -1029,17 +1036,20 @@ public class Program
                     .Map(loaded => loaded.tree)
                     .Unpack(
                         fromErr: error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
-                        fromOk: tree =>
+                        fromOk: treeNode =>
                         {
-                            if (!tree.EnumerateBlobsTransitive().Take(1).Any())
+                            if (!treeNode.EnumerateBlobsTransitive().Take(1).Any())
                                 throw new Exception("Found no files under context app path '" + initStepsPath + "'.");
 
                             return
-                            tree
-                            .TreeContent!.Select(stepDirectory =>
-                            ElmInteractive.TestElmInteractive.ParseStep(stepDirectory.component)
-                            .Extract(fromErr: error => throw new Exception(error)).submission)
-                            .ToImmutableList();
+                            treeNode
+                            .Map(
+                                fromBlob: _ => throw new Exception("Unexpected blob"),
+                                fromTree: tree =>
+                                tree.Select(stepDirectory =>
+                                ElmInteractive.TestElmInteractive.ParseStep(stepDirectory.itemValue)
+                                .Extract(fromErr: error => throw new Exception(error)).submission))
+                                .ToImmutableList();
                         })
                 };
 
@@ -1163,7 +1173,7 @@ public class Program
         bool listBlobs,
         string? extractBlobName)
     {
-        if (composition.BlobContent == null)
+        if (composition is TreeNodeWithStringPath.TreeNode tree)
         {
             var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
 
@@ -1184,24 +1194,27 @@ public class Program
             yield break;
         }
 
-        yield return "a blob containing " + composition.BlobContent.Value.Length + " bytes";
-
-        if (extractBlobName != null)
+        if (composition is TreeNodeWithStringPath.BlobNode blob)
         {
-            foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, composition.BlobContent.Value))
+            yield return "a blob containing " + blob.Bytes.Length + " bytes";
+
+            if (extractBlobName != null)
             {
-                var extractedTreeCompositionId =
-                    CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(extractedTree)));
+                foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, blob.Bytes))
+                {
+                    var extractedTreeCompositionId =
+                        CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(extractedTree)));
 
-                var compositionDescription =
-                    string.Join(
-                        "\n",
-                        DescribeCompositionForHumans(
-                            extractedTree,
-                            listBlobs: listBlobs,
-                            extractBlobName: null));
+                    var compositionDescription =
+                        string.Join(
+                            "\n",
+                            DescribeCompositionForHumans(
+                                extractedTree,
+                                listBlobs: listBlobs,
+                                extractBlobName: null));
 
-                yield return "Extracted composition " + extractedTreeCompositionId + ", which is " + compositionDescription;
+                    yield return "Extracted composition " + extractedTreeCompositionId + ", which is " + compositionDescription;
+                }
             }
         }
     }

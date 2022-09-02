@@ -541,7 +541,12 @@ static public class LoadFromGitHubOrGitLab
         (string hash, CommitContent content) rootCommit,
         (string hash, CommitContent content) firstParentCommitWithSameTree)
     {
-        public ReadOnlyMemory<byte>? AsBlob => tree.BlobContent;
+        public ReadOnlyMemory<byte>? AsBlob =>
+            tree switch
+            {
+                TreeNodeWithStringPath.BlobNode blob => blob.Bytes,
+                _ => null
+            };
     }
 
     public record CommitContent(

@@ -45,11 +45,11 @@ static public class BuildConfigurationFromArguments
     static public TreeNodeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
         TreeNodeWithStringPath originalTree)
     {
-        if (originalTree.TreeContent == null)
+        if (originalTree is not TreeNodeWithStringPath.TreeNode tree)
             return originalTree;
 
         TreeNodeWithStringPath getComponentFromStringName(string name) =>
-            originalTree.TreeContent.FirstOrDefault(c => c.name == name).component;
+            tree.Elements.FirstOrDefault(c => c.name == name).component;
 
         var elmJson = getComponentFromStringName("elm.json");
 
@@ -63,7 +63,7 @@ static public class BuildConfigurationFromArguments
 
         return TreeNodeWithStringPath.SortedTree(
             treeContent:
-                originalTree.TreeContent
+                tree.Elements
                 .Where(keepNode)
                 .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList());
     }

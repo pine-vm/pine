@@ -46,17 +46,23 @@ public class TestElmInteractive
         var stepsDirectory =
             scenarioTree.GetNodeAtPath(new[] { "steps" });
 
-        if (stepsDirectory?.TreeContent == null)
-            throw new Exception(nameof(stepsDirectory) + " is null");
-
-        if (!stepsDirectory.TreeContent.Any())
-            throw new Exception("Found no stepsDirectories");
+        var testScenarioSteps =
+            stepsDirectory switch
+            {
+                null => throw new Exception(nameof(stepsDirectory) + " is null"),
+                not null => stepsDirectory.Map(
+                    fromBlob: _ => throw new Exception(nameof(stepsDirectory) + " is blob"),
+                    fromTree: tree =>
+                    0 < tree.Count
+                    ?
+                    tree
+                    :
+                    throw new Exception("Found no stepsDirectories"))
+            };
 
         using var interactiveSession = IInteractiveSession.Create(appCodeTree: appCodeTree, implementationType);
 
-        var testScenarioSteps = stepsDirectory.TreeContent;
-
-        var stepsNames = testScenarioSteps.Select(s => s.name).ToImmutableList();
+        var stepsNames = testScenarioSteps.Select(s => s.itemName).ToImmutableList();
 
         if (!stepsNames.Order().SequenceEqual(stepsNames.OrderByNatural()))
             throw new Exception("Ambiguous sort order of steps (" + string.Join(", ", stepsNames) + "). Rename these steps to make the ordering obvious");
@@ -65,10 +71,10 @@ public class TestElmInteractive
             testScenarioSteps
             .Select(sessionStep =>
             {
-                var stepName = sessionStep.name;
+                var stepName = sessionStep.itemName;
 
                 var (submission, expectedResponse) =
-                ParseStep(sessionStep.component)
+                ParseStep(sessionStep.itemValue)
                 .Extract(fromErr: error => throw new Exception(error));
 
                 return new
@@ -131,17 +137,17 @@ public class TestElmInteractive
     static public Result<string, (string submission, string? expectedResponse)> ParseStep(TreeNodeWithStringPath sessionStep)
     {
         var expectedResponse =
-            sessionStep.GetBlobAtPath(new[] { "expected-value" }) is ReadOnlyMemory<byte> expectedValueFile
+            sessionStep.GetNodeAtPath(new[] { "expected-value" }) is TreeNodeWithStringPath.BlobNode expectedValueBlob
             ?
-            Encoding.UTF8.GetString(expectedValueFile.Span)
+            Encoding.UTF8.GetString(expectedValueBlob.Bytes.Span)
             :
             null;
 
         return
-            (sessionStep.GetBlobAtPath(new[] { "submission" }) switch
+            (sessionStep.GetNodeAtPath(new[] { "submission" }) switch
             {
-                null => Result<string, string>.err("Missing submission"),
-                ReadOnlyMemory<byte> submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Span))
+                TreeNodeWithStringPath.BlobNode submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
+                _ => Result<string, string>.err("Missing submission"),
             })
             .Map(submission => (submission, expectedResponse));
     }

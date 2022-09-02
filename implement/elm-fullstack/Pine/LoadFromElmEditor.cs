@@ -236,7 +236,12 @@ namespace Pine
                     seed: compositionAfterRemovals,
                     (previousComposition, blobChange) =>
                     {
-                        var blobValueBefore = compositionAfterRemovals.GetBlobAtPath(blobChange.Item1);
+                        var blobValueBefore =
+                        compositionAfterRemovals.GetNodeAtPath(blobChange.Item1) switch
+                        {
+                            TreeNodeWithStringPath.BlobNode blob => blob.Bytes,
+                            _ => null
+                        };
 
                         var changedBlobValue = ProjectState_2021_01.ProjectStateDifference.ApplyBlobChanges(
                             blobChange.Item2, blobValueBefore);
