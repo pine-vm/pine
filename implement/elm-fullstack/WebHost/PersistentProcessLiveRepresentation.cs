@@ -87,11 +87,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         this.lastElmAppVolatileProcess = lastElmAppVolatileProcess;
     }
 
-    static public (IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16)
+    static public (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16)
         GetFilesForRestoreProcess(
         IFileStoreReader fileStoreReader)
     {
-        var filesForProcessRestore = new ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+        var filesForProcessRestore = new ConcurrentDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         var recordingReader = new DelegatingFileStoreReader
         (
@@ -114,7 +114,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             .ToImmutableList();
 
         return (
-            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<IImmutableList<string>>()),
+            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
             lastCompositionLogRecordHashBase16: compositionLogRecords.LastOrDefault().compositionRecordHashBase16);
     }
 

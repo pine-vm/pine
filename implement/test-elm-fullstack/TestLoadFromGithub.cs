@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
@@ -174,7 +175,7 @@ public class TestLoadFromGithub
                 gitCloneUrlPrefixes: ImmutableList.Create("https://github.com/elm-fullstack/"),
                 fileCacheDirectory: System.IO.Path.Combine(tempWorkingDirectory, "server-cache"));
 
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> consultServer(
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> consultServer(
                 Pine.LoadFromGitHubOrGitLab.GetRepositoryFilesPartialForCommitRequest request)
             {
                 using var httpClient = new HttpClient();

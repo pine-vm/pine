@@ -109,7 +109,7 @@ static public class LoadFromGitHubOrGitLab
 
     static public Result<string, LoadFromUrlSuccess> LoadFromUrl(
         string sourceUrl,
-        Func<GetRepositoryFilesPartialForCommitRequest, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> getRepositoryFilesPartialForCommit)
+        Func<GetRepositoryFilesPartialForCommitRequest, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> getRepositoryFilesPartialForCommit)
     {
         var parsedUrl = ParseUrl(sourceUrl);
 
@@ -314,7 +314,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitDefault(GetRepositoryFilesPartialForCommitRequest request)
+    static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitDefault(GetRepositoryFilesPartialForCommitRequest request)
     {
         var getNew = () =>
         {
@@ -347,7 +347,7 @@ static public class LoadFromGitHubOrGitLab
         return getNew();
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
         string cloneUrl,
         string commit)
     {
@@ -381,7 +381,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
         string cloneUrl,
         string commit)
     {
@@ -448,7 +448,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
         string cloneUrl,
         string? branchName)
     {

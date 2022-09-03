@@ -14,7 +14,7 @@ public class TestSetup
     static public string PathToExampleElmApps => "./../../../example-elm-apps";
 
     static public PineValue AppConfigComponentFromFiles(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> appFiles) =>
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appFiles) =>
         Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
 
     static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
@@ -42,23 +42,23 @@ public class TestSetup
         return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =
         GetElmAppFromExampleName("counter-webapp");
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =
         GetElmAppFromExampleName("read-source-file-webapp");
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =
         GetElmAppFromExampleName("string-builder-webapp");
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
        GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
        GetElmAppFromExampleName("http-proxy");
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> WithElmFullstackJson(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> originalWebAppConfig,
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithElmFullstackJson(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalWebAppConfig,
         WebAppConfigurationJsonStructure jsonStructure)
     {
         var filePath = ElmFullstack.WebHost.StartupAdminInterface.JsonFilePath;
@@ -71,24 +71,24 @@ public class TestSetup
             .SetItem(filePath, System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
         string exampleName) => GetElmAppFromDirectoryPath(Path.Combine(PathToExampleElmApps, exampleName));
 
     static string FilePathStringFromPath(IImmutableList<string> path) =>
         Path.Combine(path.ToArray());
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>
         GetElmAppFromDirectoryPath(FilePathStringFromPath(directoryPath));
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
         string directoryPath) =>
             Composition.ToFlatDictionaryWithPathComparer(
                 Filesystem.GetAllFilesFromDirectory(directoryPath)
                 .OrderBy(file => string.Join('/', file.path)));
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> originalAppFiles)
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalAppFiles)
     {
         var compilationResult =
             ElmAppCompilation.AsCompletelyLoweredElmApp(

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Text;
 using ElmFullstack;
 using JavaScriptEngineSwitcher.V8;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -18,7 +19,7 @@ public class TestModeledInElm
     static string FilePathStringFromPath(IImmutableList<string> path) =>
         Path.Combine(path.ToArray());
 
-    static IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
+    static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>
         TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromDirectoryPath(directoryPath));
 
@@ -26,23 +27,27 @@ public class TestModeledInElm
     Get the value from `tests` in the Elm module `Main`.
     */
     static string? GetTestsValueFromModuleMain(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmAppFiles)
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmAppFiles)
     {
-        var javascriptFromElmMake = ProcessFromElm019Code.CompileElmToJavascript(
+        var elmMakeResult = Elm019Binaries.ElmMakeToJavascript(
             elmAppFiles,
             ImmutableList.Create("src", "Main.elm"));
 
-        var javascriptEngine = new V8JsEngine(
-            new V8Settings
-            {
-            }
-        );
+        var javascriptFromElmMake =
+            Encoding.UTF8.GetString(
+                elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
 
         var javascriptPreparedToRun =
             ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
                 ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake),
                 new[]
                 {(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)});
+
+        var javascriptEngine = new V8JsEngine(
+            new V8Settings
+            {
+            }
+        );
 
         javascriptEngine.Evaluate(javascriptPreparedToRun);
 

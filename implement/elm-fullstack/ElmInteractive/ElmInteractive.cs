@@ -426,10 +426,14 @@ public class ElmInteractive
     {
         var parseElmAppCodeFiles = ParseElmSyntaxAppCodeFiles();
 
-        var javascriptFromElmMake =
-            ProcessFromElm019Code.CompileElmToJavascript(
+        var elmMakeResult =
+            Elm019Binaries.ElmMakeToJavascript(
                 parseElmAppCodeFiles,
                 ImmutableList.Create("src", "Main.elm"));
+
+        var javascriptFromElmMake =
+            Encoding.UTF8.GetString(
+                elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
 
         var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
 
@@ -459,7 +463,7 @@ public class ElmInteractive
                 listFunctionToPublish);
     }
 
-    static public IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> ParseElmSyntaxAppCodeFiles() =>
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ParseElmSyntaxAppCodeFiles() =>
         DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
             filePaths: new[]
             {

@@ -15,13 +15,13 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-09-02";
+    static public string AppVersionId => "2022-09-03";
 
     static int AdminInterfaceDefaultPort => 4000;
 
     static int Main(string[] args)
     {
-        ElmFullstack.ProcessFromElm019Code.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
+        Elm019Binaries.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
 
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
             new CacheByFileName(CacheDirectory: Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip"));
@@ -329,7 +329,7 @@ public class Program
                             sourcePassword: null);
 
                     foreach (var file in copyFiles)
-                        processStoreFileStore.SetFileContent(file.Key, file.Value.ToArray());
+                        processStoreFileStore.SetFileContent(file.Key.ToImmutableList(), file.Value.ToArray());
                 }
 
                 var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
@@ -648,7 +648,7 @@ public class Program
             });
         });
 
-    static (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
+    static (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileAppAndSaveCompositionToZipArchive(string sourcePath)
     {
         var compileResult = CompileApp(sourcePath);
@@ -673,7 +673,7 @@ public class Program
         return compileResult;
     }
 
-    static public (CompileAppReport report, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
+    static public (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileApp(string sourcePath)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1854,7 +1854,7 @@ public class Program
         );
     }
 
-    static (IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
+    static (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
         string sourceAdminInterface,
         string? sourceAdminPassword)
     {
@@ -1884,7 +1884,7 @@ public class Program
             GetFileContentDelegate: filePath =>
             {
                 var httpRequestPath =
-                    ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                    WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
                     string.Join("/", filePath);
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
@@ -1899,10 +1899,10 @@ public class Program
             }
         );
 
-        return ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
+        return WebHost.PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }
 
-    static IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
+    static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
         string sourcePath, string? sourcePassword)
     {
         if (!LooksLikeLocalSite(sourcePath))

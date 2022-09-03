@@ -98,7 +98,7 @@ public class ElmTestRs
     static public ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
 
     static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmProjectFiles)
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmProjectFiles)
     {
         var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
 
@@ -114,8 +114,8 @@ public class ElmTestRs
             .SetItem("deno", DenoExecutableFileForCurrentOs()!.Value);
 
         var environmentFilesExecutable =
-            ImmutableDictionary.Create<IImmutableList<string>, ReadOnlyMemory<byte>>()
-            .SetItem(ImmutableList.Create(elmExecutableFileName), ElmFullstack.ProcessFromElm019Code.GetElmExecutableFile);
+            ImmutableDictionary.Create<IReadOnlyList<string>, ReadOnlyMemory<byte>>()
+            .SetItem(ImmutableList.Create(elmExecutableFileName), Elm019Binaries.GetElmExecutableFile);
 
         var executeElmTestResult =
             ExecutableFile.ExecuteFileWithArguments(

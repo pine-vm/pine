@@ -43,7 +43,7 @@ namespace ElmFullstack
                 retainedSizeLimit);
 
         static public Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
             ElmAppInterfaceConfig interfaceConfig)
         {
             var sourceFilesHash =
@@ -84,7 +84,7 @@ namespace ElmFullstack
         }
 
         public record CompilationSuccess(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compiledAppFiles,
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compiledAppFiles,
             IImmutableList<CompilationIterationReport> iterationsReports);
 
         public record StackFrame(
@@ -92,9 +92,9 @@ namespace ElmFullstack
             CompilationIterationReport iterationReport);
 
         static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IImmutableList<string> rootModuleName,
-            IImmutableList<string> interfaceToHostRootModuleName) =>
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> rootModuleName,
+            IReadOnlyList<string> interfaceToHostRootModuleName) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
                 rootModuleName,
@@ -102,9 +102,9 @@ namespace ElmFullstack
                 ImmutableStack<StackFrame>.Empty);
 
         static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IImmutableList<string> rootModuleName,
-            IImmutableList<string> interfaceToHostRootModuleName,
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> rootModuleName,
+            IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack)
         {
             if (10 < stack.Count())
@@ -276,7 +276,7 @@ namespace ElmFullstack
                     });
         }
 
-        static readonly ConcurrentDictionary<string, (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache = new();
+        static readonly ConcurrentDictionary<string, (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache = new();
 
         static void ElmAppCompilationIterationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -285,12 +285,12 @@ namespace ElmFullstack
                 item => item.Value.lastUseTime,
                 retainedSizeLimit);
 
-        static (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IImmutableList<string> rootModuleName,
-            IImmutableList<string> interfaceToHostRootModuleName,
-            ImmutableList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies)
+        static (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> rootModuleName,
+            IReadOnlyList<string> interfaceToHostRootModuleName,
+            IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -334,7 +334,7 @@ namespace ElmFullstack
             System.Diagnostics.Stopwatch? inJsEngineStopwatch = null;
             System.Diagnostics.Stopwatch? deserializeStopwatch = null;
 
-            Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> compileNew()
+            Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> compileNew()
             {
                 prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -367,9 +367,9 @@ namespace ElmFullstack
                 var mappedResult =
                     compilationResponseOk.Map(files =>
                         files.ToImmutableDictionary(
-                            entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                            entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                        .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>()));
+                            entry => entry.path,
+                            entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64),
+                            keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
 
                 return mappedResult;
             }
@@ -408,7 +408,7 @@ namespace ElmFullstack
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine CachedJsEngineToCompileFileTree(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var compilerId =
                 CommonConversion.StringBase16(
@@ -424,7 +424,7 @@ namespace ElmFullstack
         static readonly ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine> FileTreeCompilerJsEngineCache = new();
 
         static public JavaScriptEngineSwitcher.Core.IJsEngine CreateJsEngineToCompileFileTree(
-            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var javascript = BuildJavascriptToCompileFileTree(compilerElmProgramCodeFiles);
 
@@ -435,12 +435,17 @@ namespace ElmFullstack
             return javascriptEngine;
         }
 
-        static string BuildJavascriptToCompileFileTree(IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
+        static string BuildJavascriptToCompileFileTree(
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
-            var javascriptFromElmMake =
-                ProcessFromElm019Code.CompileElmToJavascript(
+            var elmMakeResult =
+                Elm019Binaries.ElmMakeToJavascript(
                     compilerElmProgramCodeFiles,
                     ImmutableList.Create("src", "Main.elm"));
+
+            var javascriptFromElmMake =
+                Encoding.UTF8.GetString(
+                    elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
 
             var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
 
@@ -458,10 +463,10 @@ namespace ElmFullstack
                     listFunctionToPublish);
         }
 
-        static readonly public Lazy<Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
+        static readonly public Lazy<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
             new(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
 
-        static public Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
+        static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
             DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
                 filePaths:
                     new[]
@@ -544,7 +549,7 @@ namespace ElmFullstack
 
         static long EstimateCacheItemSizeInMemory(
             Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
-                ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> item) =>
+                ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> item) =>
             item.Unpack(
                 fromErr: err => err.Sum(EstimateCacheItemSizeInMemory),
                 fromOk: EstimateCacheItemSizeInMemory);
@@ -563,7 +568,7 @@ namespace ElmFullstack
         static long EstimateCacheItemSizeInMemory(CompilationSuccess compilationSuccess) =>
             EstimateCacheItemSizeInMemory(compilationSuccess.compiledAppFiles);
 
-        static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> item) =>
+        static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> item) =>
             (item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Length)) ?? 0;
 
         static long EstimateCacheItemSizeInMemory(LocatedCompilationError compilationError) =>

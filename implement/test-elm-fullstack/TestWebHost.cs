@@ -193,7 +193,8 @@ public class TestWebHost
                 ));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
+            deployAppConfigAndInitElmState:
+            Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
             persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>

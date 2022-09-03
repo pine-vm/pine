@@ -8,15 +8,15 @@ namespace Pine;
 
 public class DotNetAssembly
 {
-    static public Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>> LoadFromAssemblyManifestResourceStreamContents(
+    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadFromAssemblyManifestResourceStreamContents(
         IReadOnlyList<IReadOnlyList<string>> filePaths,
         string resourceNameCommonPrefix,
         Assembly assembly)
     {
         var seed =
-            Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.ok(
-                ImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>.Empty
-                .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>()));
+            Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
+                ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>.Empty
+                .WithComparers(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
 
         return
             filePaths
@@ -31,10 +31,10 @@ public class DotNetAssembly
                         var fileContent = GetManifestResourceStreamContentAsBytes(assembly, resourceName);
 
                         if (fileContent == null)
-                            return Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.err(
+                            return Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.err(
                                 "Failed to get content for resource: " + resourceName);
 
-                        return Result<string, IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>>.ok(
+                        return Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
                             dict.SetItem(filePath.ToImmutableList(), fileContent.Value));
                     }));
     }

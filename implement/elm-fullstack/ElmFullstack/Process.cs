@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ElmFullstack.CompilerSerialInterface;
 using JavaScriptEngineSwitcher.Core;
 using JavaScriptEngineSwitcher.V8;
 using Pine;
@@ -115,21 +114,25 @@ public class ProcessFromElm019Code
     static public (IDisposableProcessWithStringInterface process,
         (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
         ProcessFromElmCodeFiles(
-        IReadOnlyCollection<(IImmutableList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
+        IReadOnlyCollection<(IReadOnlyList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null) =>
         ProcessFromElmCodeFiles(Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
 
     static public (IDisposableProcessWithStringInterface process,
         (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
         ProcessFromElmCodeFiles(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
         var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
-        var javascriptFromElmMake = CompileElmToJavascript(
+        var elmMakeResult = Elm019Binaries.ElmMakeToJavascript(
             elmCodeFiles,
             ElmAppCompilation.FilePathFromModuleName(ElmAppCompilation.InterfaceToHostRootModuleName));
+
+        var javascriptFromElmMake =
+            Encoding.UTF8.GetString(
+                elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
 
         var pathToFunctionCommonStart = ElmAppCompilation.InterfaceToHostRootModuleName + ".";
 
@@ -146,145 +149,45 @@ public class ProcessFromElm019Code
             (javascriptFromElmMake, javascriptPreparedToRun));
     }
 
+    [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
     static public string CompileElmToJavascript(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
-        CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
+        ExtractFileAsStringFromElmMakeResult(
+            Elm019Binaries.ElmMakeToJavascript(
+                elmCodeFiles.ToImmutableDictionary(e => (IReadOnlyList<string>)e.Key, e => e.Value),
+                pathToFileWithElmEntryPoint,
+                elmMakeCommandAppendix));
 
+    [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
     static public string CompileElmToHtml(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
-        CompileElm(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
+        ExtractFileAsStringFromElmMakeResult(
+            Elm019Binaries.ElmMakeToHtml(
+                elmCodeFiles.ToImmutableDictionary(e => (IReadOnlyList<string>)e.Key, e => e.Value),
+                pathToFileWithElmEntryPoint,
+                elmMakeCommandAppendix));
 
-    /*
-    2019-12-14: Switch to modeling file paths as a list of string instead of a string, to avoid that problem reported earlier and described below:
+    static string ExtractFileAsStringFromElmMakeResult(Result<string, Elm019Binaries.ElmMakeOk> result) =>
+        Encoding.UTF8.GetString(
+            result.Extract(err => throw new Exception(err)).producedFile.Span);
 
-    Unify directory separator symbols in file names to avoid this problem observed 2019-07-31:
-    I had built web-app-config.zip on a Windows system. Starting the webserver with this worked as expected in Windows. But in a Docker container it failed, with an error as below:
-    ----
-    Output file not found. Maybe the output from the Elm make process helps to find the cause:
-    Exit Code: 1
-    Standard Output:
-    ''
-    Standard Error:
-    '-- BAD JSON ----------------------------------------------------------- elm.json
-
-    The "source-directories" in your elm.json lists the following directory:
-
-        src
-
-    I cannot find that directory though! Is it missing? Is there a typo?
-    [...]
-    */
+    /// <inheritdoc cref="Elm019Binaries.ElmMake"/>
+    [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
     static public string CompileElm(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
-        string? elmMakeCommandAppendix = null)
-    {
-        /*
-        2020-04-01: Avoid the sporadic failures as reported at
-        https://github.com/elm-fullstack/elm-fullstack/blob/a206b8095e9f2300f413ef381342db1dca790542/explore/2020-04-01.automate-testing/2020-04-01.automate-testing.md
-        Retry for these class of errors.
-        */
-        var maxRetryCount = 2;
-
-        var command = "make " + Filesystem.MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
-
-        var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> resultingFiles)>();
-
-        do
-        {
-            var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                environmentFilesNotExecutable: elmCodeFiles,
-                GetElmExecutableFile,
-                command,
-                new Dictionary<string, string>()
-                {
-                    //  Avoid elm make failing on `getAppUserDataDirectory`.
-                    /* Also, work around problems with elm make like this:
-                    -- HTTP PROBLEM ----------------------------------------------------------------
-
-                    The following HTTP request failed:
-                        <https://github.com/elm/core/zipball/1.0.0/>
-
-                    Here is the error message I was able to extract:
-
-                    HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
-                    requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
-                    path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
-                    Nothing rawBody = False redirectCount = 10 responseTimeout =
-                    ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
-                    (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
-                    Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
-                    [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
-                    GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
-                    Too Many
-                    Requests"),("Retry-After","120")
-
-                    To avoid elm make failing with this error, break isolation here and reuse elm home directory.
-                    An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
-                    */
-                    {"ELM_HOME", GetElmHomeDirectory()},
-                });
-
-            attemptsResults.Add(commandResults);
-
-            var newFiles =
-                commandResults.resultingFiles
-                .Where(file => !elmCodeFiles.ContainsKey(file.path))
-                .ToImmutableList();
-
-            var outputFiles =
-                newFiles
-                .Where(resultFile => resultFile.path.SequenceEqual(ImmutableList.Create(outputFileName)))
-                .ToImmutableList();
-
-            if (1 <= outputFiles.Count)
-            {
-                return Encoding.UTF8.GetString(outputFiles.First().content.Span);
-            }
-
-            var errorQualifiesForRetry =
-                commandResults.processOutput.StandardError?.Contains("openBinaryFile: resource busy (file is locked)") ?? false;
-
-            if (!errorQualifiesForRetry)
-                break;
-
-        } while (attemptsResults.Count <= maxRetryCount);
-
-        var lastAttemptResults = attemptsResults.Last();
-
-        throw new NotImplementedException(
-            "Failed for " + attemptsResults.Count.ToString() + " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
-            "\nExit Code: " + lastAttemptResults.processOutput.ExitCode +
-            "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
-            "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
-    }
-
-    static public ReadOnlyMemory<byte> GetElmExecutableFile =>
-        BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!.Value;
-
-    static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmExecutableFileByOs =
-        ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
-        .Add(
-            /*
-            Loaded 2022-02-01 🐯 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
-            */
-            OSPlatform.Linux,
-            ("f8f12a61a61f64ac71a85d57284cc4d14fb81f1cbebb8b150839d9731034092e",
-            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz"))
-        .Add(
-            /*
-            Loaded 2022-02-01 🐯 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
-            */
-            OSPlatform.Windows,
-            ("821e61ee150b660ca173584b66d1784b7be08b7107e7aa4977135686dc9d2fb2",
-            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz"));
+        string? elmMakeCommandAppendix = null) =>
+        ExtractFileAsStringFromElmMakeResult(
+            Elm019Binaries.ElmMake(
+                elmCodeFiles: elmCodeFiles.ToImmutableDictionary(e => (IReadOnlyList<string>)e.Key, e => e.Value),
+                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                outputFileName: outputFileName,
+                elmMakeCommandAppendix: elmMakeCommandAppendix));
 
     public const string appStateJsVarName = "app_state";
 
@@ -445,19 +348,4 @@ public class ProcessFromElm019Code
 
     static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
         "$author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
-
-    static public string? overrideElmMakeHomeDirectory = null;
-
-    static string? elmHomeDirectory;
-
-    static public string GetElmHomeDirectory()
-    {
-        elmHomeDirectory =
-            overrideElmMakeHomeDirectory ??
-            elmHomeDirectory ??
-            Path.Combine(Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
-
-        Directory.CreateDirectory(elmHomeDirectory);
-        return elmHomeDirectory;
-    }
 }

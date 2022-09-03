@@ -615,7 +615,7 @@ public class StartupAdminInterface
                             PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
                                 processStoreFileStore).files
                             .Select(filePathAndContent => filePathAndContent.Key)
-                            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+                            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
                         getFilesForRestoreStopwatch.Stop();
 

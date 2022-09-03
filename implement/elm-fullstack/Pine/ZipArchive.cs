@@ -24,7 +24,7 @@ static public class ZipArchive
             compressionLevel);
 
     static public byte[] ZipArchiveFromEntries(
-        IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> entries,
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> entries,
         System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
         ZipArchiveFromEntries(
             entries.Select(entry => (name: string.Join("/", entry.Key), content: entry.Value)),
