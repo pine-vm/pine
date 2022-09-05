@@ -50,4 +50,24 @@ public class TestPineMaybe
             Maybe<int?>.just(null),
             JsonSerializer.Deserialize<Maybe<int?>>($$"""{"Just":[null]}"""));
     }
+
+    [TestMethod]
+    public void Maybe_Nothing_from_null()
+    {
+        Assert.AreEqual(
+            Maybe<int>.just(123),
+            Maybe.NothingFromNull<int>(123));
+
+        Assert.AreEqual(
+            Maybe<int>.nothing(),
+            Maybe.NothingFromNull<int>(null));
+
+        Assert.AreEqual(
+            Maybe<string>.just("hello"),
+            Maybe.NothingFromNull("hello"));
+
+        Assert.AreEqual(
+            Maybe<string>.nothing(),
+            Maybe.NothingFromNull<string>(null));
+    }
 }

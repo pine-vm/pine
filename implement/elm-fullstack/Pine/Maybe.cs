@@ -57,10 +57,21 @@ public abstract record Maybe<JustT>
     /// <summary>
     /// Provide a default value, turning an optional value into a normal value.
     /// </summary>
-    public JustT WithDefault(Func<JustT> getDefault) =>
+    public JustT WithDefault(Func<JustT> buildDefault) =>
         this switch
         {
             Just just => just.Value,
-            _ => getDefault()
+            _ => buildDefault()
         };
+}
+
+public static class Maybe
+{
+    static public Maybe<ClassJustT> NothingFromNull<ClassJustT>(ClassJustT? maybeNull)
+        where ClassJustT : class =>
+        maybeNull is ClassJustT notNull ? Maybe<ClassJustT>.just(notNull) : Maybe<ClassJustT>.nothing();
+
+    static public Maybe<StructJustT> NothingFromNull<StructJustT>(StructJustT? maybeNull)
+        where StructJustT : struct =>
+        maybeNull is StructJustT notNull ? Maybe<StructJustT>.just(notNull) : Maybe<StructJustT>.nothing();
 }
