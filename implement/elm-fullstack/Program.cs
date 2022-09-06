@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-09-05";
+    static public string AppVersionId => "2022-09-06";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -61,6 +61,7 @@ public class Program
         var enterInteractiveCmd = AddInteractiveCmd(app);
         var describeCmd = AddDescribeCmd(app);
         var elmTestRsCmd = AddElmTestRsCmd(app);
+        var makeCmd = AddMakeCmd(app);
 
         var runCacheServerCmd = AddRunCacheServerCmd(app);
 
@@ -139,6 +140,7 @@ public class Program
                             enterInteractiveCmd,
                             describeCmd,
                             elmTestRsCmd,
+                            makeCmd,
                         }
                     },
             }
@@ -1167,6 +1169,121 @@ public class Program
                 return 0;
             });
         });
+
+    static CommandLineApplication AddMakeCmd(CommandLineApplication app) =>
+        app.Command("make", makeCmd =>
+        {
+            makeCmd.Description = "The `make` command compiles Elm code into JS or HTML.";
+            makeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var pathToElmFileArgument =
+            makeCmd.Argument("path-to-elm-file", "path to the Elm module file to compile")
+            .IsRequired(allowEmptyStrings: false);
+
+            var outputOption =
+            makeCmd.Option(
+                "--output",
+                "Specify the name of the resulting HTML or JS file.",
+                CommandOptionType.SingleValue);
+
+            var inputDirectoryOption =
+            makeCmd.Option(
+                "--input-directory",
+                "Specify the input directory containing the Elm files. Defaults to the current working directory.",
+                CommandOptionType.SingleValue);
+
+            var debugOption =
+            makeCmd.Option(
+                "--debug",
+                description: "Turn on the time-travelling debugger.",
+                CommandOptionType.NoValue);
+
+            var optimizeOption =
+            makeCmd.Option(
+                "--optimize",
+                description: "Turn on optimizations to make code smaller and faster.",
+                CommandOptionType.NoValue);
+
+            makeCmd.OnExecute(() =>
+            {
+                var inputDirectory = inputDirectoryOption.Value() ?? Environment.CurrentDirectory;
+
+                var outputPath = outputOption.Value() ?? "make-default-output.html";
+
+                var loadInputDirectoryResult =
+                    LoadComposition.LoadFromPathResolvingNetworkDependencies(inputDirectory)
+                    .LogToActions(Console.WriteLine);
+
+                var elmMakeCommandOptions =
+                    new[] { debugOption, optimizeOption }
+                    .SelectMany(optionToForward =>
+                    optionToForward.HasValue() ?
+                    new[] { "--" + optionToForward.LongName } :
+                    Array.Empty<string>())
+                    .ToImmutableList();
+
+                var elmMakeCommandAppendix = string.Join(" ", elmMakeCommandOptions);
+
+                return
+                loadInputDirectoryResult
+                .Unpack(
+                    fromErr: error =>
+                    {
+                        DotNetConsoleWriteProblemCausingAbort("Failed to load from path '" + inputDirectory + "': " + error);
+                        return 10;
+                    },
+                    fromOk: loadInputOk =>
+                    {
+                        var inputHash = CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(loadInputOk.tree)));
+
+                        Console.WriteLine(
+                            "Loaded " + inputHash[..10] + " as input: " +
+                            string.Join("\n", DescribeCompositionForHumans(loadInputOk.tree, listBlobs: false, extractBlobName: null)));
+
+                        return
+                        Make(sourceFiles: Composition.TreeToFlatDictionaryWithPathComparer(loadInputOk.tree),
+                        pathToFileWithElmEntryPoint: pathToElmFileArgument.Value!.Replace("\\", "/").Split('/'),
+                        outputFileName: outputPath,
+                        elmMakeCommandAppendix: elmMakeCommandAppendix)
+                        .Unpack(
+                            fromErr: error =>
+                            {
+                                DotNetConsoleWriteProblemCausingAbort("Failed to make " + pathToElmFileArgument.Value + ":\n" + error);
+                                return 20;
+                            },
+                            fromOk: makeOk =>
+                            {
+                                File.WriteAllBytes(outputPath, makeOk.producedFile.ToArray());
+                                Console.WriteLine("Saved the output to " + outputPath);
+
+                                return 0;
+                            });
+                    });
+            });
+        });
+
+    /// <summary>
+    /// Compiles Elm code as offered with the 'make' command on the CLI.
+    /// </summary>
+    static public Result<string, Elm019Binaries.ElmMakeOk> Make(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+        IReadOnlyList<string> pathToFileWithElmEntryPoint,
+        string outputFileName,
+        string? elmMakeCommandAppendix)
+    {
+        return
+            ElmAppCompilation.AsCompletelyLoweredElmApp(
+                sourceFiles: sourceFiles.ToImmutableDictionary(),
+                ElmAppInterfaceConfig.Default)
+            .MapError(err =>
+            "Failed lowering Elm code with " + err.Count + " error(s):\n" +
+            ElmAppCompilation.CompileCompilationErrorsDisplayText(err))
+            .AndThen(loweringOk => Elm019Binaries.ElmMake(
+                loweringOk.compiledAppFiles.ToImmutableDictionary(),
+                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint.ToImmutableList(),
+                outputFileName: outputFileName,
+                elmMakeCommandAppendix: elmMakeCommandAppendix));
+    }
 
     static public IEnumerable<string> DescribeCompositionForHumans(
         TreeNodeWithStringPath composition,
