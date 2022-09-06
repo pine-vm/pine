@@ -1281,7 +1281,7 @@ public class Program
             .AndThen(loweringOk => Elm019Binaries.ElmMake(
                 loweringOk.compiledAppFiles.ToImmutableDictionary(),
                 pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint.ToImmutableList(),
-                outputFileName: outputFileName,
+                outputFileName: outputFileName.Replace('\\', '/').Split('/').Last(),
                 elmMakeCommandAppendix: elmMakeCommandAppendix));
     }
 
