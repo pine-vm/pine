@@ -1266,7 +1266,7 @@ public class Program
     /// Compiles Elm code as offered with the 'make' command on the CLI.
     /// </summary>
     static public Result<string, Elm019Binaries.ElmMakeOk> Make(
-        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
         string? elmMakeCommandAppendix)
