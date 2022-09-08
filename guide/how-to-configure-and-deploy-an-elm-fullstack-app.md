@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-07-03/elm-fullstack-bin-82e85c75fd1551716c231cd300f91601064d64db-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-07-03/elm-fullstack-bin-82e85c75fd1551716c231cd300f91601064d64db-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-09-06/elm-fullstack-bin-8ce169c776160db7a035a8d3a7845341af11f871-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-09-06/elm-fullstack-bin-8ce169c776160db7a035a8d3a7845341af11f871-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -18,7 +18,7 @@ To register the elm-fs executable on your system, run the `elm-fs  install` comm
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-30f16796f49d9c86b2975b145b188c5abfd4f7ca-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-8ce169c776160db7a035a8d3a7845341af11f871-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
@@ -32,12 +32,12 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 As part of a deployment, Elm Fullstack compiles the app program code.
 The compiler requires the program code to contain the entry point for a back-end app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app
+elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -46,8 +46,9 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 30f16796f49d9c86b2975b145b188c5abfd4f7ca
-Loaded source composition fe9b6872328a845ef50c7953bf969e9df773b8fd4b6abe24ba032f72501d021f from 'https://github.com/elm-fullstack/elm-fullstack/tree/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app'.
+This path points to commit 8ce169c776160db7a035a8d3a7845341af11f871
+The first parent commit with same tree is https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
+Loaded source composition fe9b6872328a845ef50c7953bf969e9df773b8fd4b6abe24ba032f72501d021f from 'https://github.com/elm-fullstack/elm-fullstack/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Begin to build the process live representation.
@@ -56,7 +57,7 @@ info: ElmFullstack.WebHost.StartupAdminInterface[0]
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Restored the process state in 6 seconds.
+      Restored the process state in 4 seconds.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Completed building the process live representation.
 info: ElmFullstack.WebHost.StartupPublicApp[0]
@@ -287,8 +288,6 @@ info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Found no composition record, default to initial state.
 info: ElmFullstack.WebHost.StartupAdminInterface[0]
       Completed building the process live representation.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
-      Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
 
@@ -305,7 +304,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2022-02-09.
+Welcome to the Elm Fullstack admin interface version 2022-09-06.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -318,7 +317,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
