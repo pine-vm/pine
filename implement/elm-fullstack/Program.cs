@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-09-06";
+    static public string AppVersionId => "2022-09-10";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -1141,6 +1141,11 @@ public class Program
             var listBlobsOption =
                 describeCmd.Option("--list-blobs", "List blobs in the artifact", CommandOptionType.NoValue);
 
+            var compileZipArchiveOption =
+            describeCmd.Option(
+                "--compile-zip-archive", "Bundle the composition into a zip-archive.",
+                CommandOptionType.SingleOrNoValue);
+
             describeCmd.OnExecute(() =>
             {
                 var sourcePath = sourcePathParameter.Value!;
@@ -1165,6 +1170,23 @@ public class Program
                             extractBlobName: sourcePath.Split('\\', '/').Last()));
 
                 Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
+
+                if (compileZipArchiveOption.HasValue())
+                {
+                    var asZipArchive = ZipArchive.ZipArchiveFromEntries(
+                        loadCompositionResult.tree.EnumerateBlobsTransitive()
+                        .Select(entry => (string.Join("/", entry.path), entry.blobContent)));
+
+                    var defaultFileName = compositionId + ".zip";
+
+                    var destinationPath = compileZipArchiveOption.Value() ?? defaultFileName;
+
+                    if (Directory.Exists(destinationPath))
+                        destinationPath = Path.Combine(destinationPath, defaultFileName);
+
+                    File.WriteAllBytes(destinationPath, asZipArchive);
+                    Console.WriteLine("Saved " + compositionId[..10] + " to " + destinationPath);
+                }
 
                 return 0;
             });
