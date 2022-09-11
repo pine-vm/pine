@@ -1,16 +1,15 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Json;
-using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace TestElmFullstack;
 
 [TestClass]
-public class TestJsonConverterForDiscriminatedUnionType
+public class TestJsonConverterForChoiceType
 {
-    [JsonConverter(typeof(JsonConverterForDiscriminatedUnionType))]
+    [JsonConverter(typeof(JsonConverterForChoiceType))]
     abstract record SimpleClass
     {
         public record Alfa() : SimpleClass;
@@ -38,7 +37,7 @@ public class TestJsonConverterForDiscriminatedUnionType
             JsonSerializer.Serialize<SimpleClass>(new SimpleClass.Beta()));
     }
 
-    [JsonConverter(typeof(JsonConverterForDiscriminatedUnionType))]
+    [JsonConverter(typeof(JsonConverterForChoiceType))]
     abstract record MixedClass<T0>
     {
         public record VariantWithoutArgs() : MixedClass<T0>;
@@ -102,7 +101,7 @@ public class TestJsonConverterForDiscriminatedUnionType
     }
 
 
-    [JsonConverter(typeof(JsonConverterForDiscriminatedUnionType))]
+    [JsonConverter(typeof(JsonConverterForChoiceType))]
     abstract record WithResults<T0>
     {
         public record DiverseResults(

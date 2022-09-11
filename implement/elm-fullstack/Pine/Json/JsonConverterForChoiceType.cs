@@ -9,7 +9,7 @@ using System.Collections.Concurrent;
 
 namespace Pine.Json;
 
-public class JsonConverterForDiscriminatedUnionType : JsonConverterFactory
+public class JsonConverterForChoiceType : JsonConverterFactory
 {
     public record ParsedType(IReadOnlyList<ParsedType.Variant> Variants)
     {
@@ -24,7 +24,7 @@ public class JsonConverterForDiscriminatedUnionType : JsonConverterFactory
         Type typeToConvert, JsonSerializerOptions options)
     {
         JsonConverter converter = (JsonConverter)Activator.CreateInstance(
-            typeof(JsonConverterForDiscriminatedUnionType<>)
+            typeof(JsonConverterForChoiceType<>)
             .MakeGenericType(typeToConvert),
             BindingFlags.Instance | BindingFlags.Public,
             binder: null,
@@ -119,10 +119,10 @@ public class JsonConverterForDiscriminatedUnionType : JsonConverterFactory
     }
 }
 
-public class JsonConverterForDiscriminatedUnionType<T> : JsonConverter<T>
+public class JsonConverterForChoiceType<T> : JsonConverter<T>
 {
-    readonly static JsonConverterForDiscriminatedUnionType.ParsedType ParsedType =
-        JsonConverterForDiscriminatedUnionType.CachedParseTypeToConvert(typeof(T)).Extract(error => throw new Exception(error));
+    readonly static JsonConverterForChoiceType.ParsedType ParsedType =
+        JsonConverterForChoiceType.CachedParseTypeToConvert(typeof(T)).Extract(error => throw new Exception(error));
 
     public override T Read(
         ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

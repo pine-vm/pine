@@ -7,7 +7,7 @@ namespace Pine;
 
 /// <summary>
 /// This type describes values processes by Pine programs.
-/// It is a discriminated union type with two cases, <see cref="ListValue"/> and <see cref="BlobValue"/>.
+/// It is a choice type with two cases, <see cref="ListValue"/> and <see cref="BlobValue"/>.
 /// Other kinds of data, like text or a file system directory, are encoded based on these primitives.
 /// For the encoding of expressions and programs as Pine values, see <see cref="PineVM"/>.
 /// </summary>

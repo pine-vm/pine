@@ -3,9 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace Pine;
 
-[JsonConverter(typeof(Json.JsonConverterForDiscriminatedUnionType))]
+[JsonConverter(typeof(Json.JsonConverterForChoiceType))]
 /// <summary>
-/// A discriminated union type that represents values that may or may not exist.
+/// A choice type that represents values that may or may not exist.
 /// The only two possible variants are <see cref="Nothing"/> and <see cref="Just"/>.
 /// </summary>
 public abstract record Maybe<JustT>

@@ -3,9 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace Pine;
 
-[JsonConverter(typeof(Json.JsonConverterForDiscriminatedUnionType))]
+[JsonConverter(typeof(Json.JsonConverterForChoiceType))]
 /// <summary>
-/// Generic DU type to describe the outcome of an operation with an overall classification into either failure ('Err') or success ('Ok').
+/// Generic choice type to describe the outcome of an operation with an overall classification into either failure ('Err') or success ('Ok').
 /// </summary>
 public abstract record Result<ErrT, OkT>
 {

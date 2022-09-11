@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System.Text.Json;
 
@@ -30,8 +30,8 @@ public class TestPineMaybe
     public void Maybe_JSON_coding_diverse()
     {
         /*
-         * We reuse the common generic representation of DU types for `Maybe`:
-         * Each tag of a DU type can have a list of parameters, and we encode this list as a JSON array.
+         * We reuse the common generic representation of choice types for `Maybe`:
+         * Each tag of a choice type can have a list of parameters, and we encode this list as a JSON array.
          * */
 
         Assert.AreEqual(
