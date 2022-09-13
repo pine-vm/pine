@@ -3005,7 +3005,9 @@ compileInteractiveSubmission environment submission =
 
                 initialStack =
                     { moduleAliases = Dict.empty
-                    , availableDeclarations = environmentDeclarations |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False }))
+                    , availableDeclarations =
+                        environmentDeclarations
+                            |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False }))
                     , inliningParentDeclarations = Set.empty
                     , dependenciesDependencies = Dict.empty
                     }
@@ -3023,7 +3025,17 @@ compileInteractiveSubmission environment submission =
                 Ok (DeclarationSubmission elmDeclaration) ->
                     case elmDeclaration of
                         Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                            case compileElmSyntaxFunction initialStack functionDeclaration of
+                            let
+                                compilationStack =
+                                    { initialStack
+                                        | availableDeclarations =
+                                            initialStack.availableDeclarations
+                                                |> Dict.insert
+                                                    (Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name)
+                                                    (internalDeclarationFromFunction functionDeclaration)
+                                    }
+                            in
+                            case compileElmSyntaxFunction compilationStack functionDeclaration of
                                 Err error ->
                                     Err ("Failed to compile Elm function declaration: " ++ error)
 
