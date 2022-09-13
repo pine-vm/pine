@@ -83,7 +83,10 @@ public abstract record Result<ErrT, OkT>
             _ => throw new NotImplementedException()
         };
 
-    public OkT WithDefault(Func<OkT> getDefault) =>
+    public OkT WithDefault(OkT defaultIfErr) =>
+        Unpack(fromErr: _ => defaultIfErr, fromOk: ok => ok);
+
+    public OkT WithDefaultBuilder(Func<OkT> getDefault) =>
         Unpack(fromErr: _ => getDefault(), fromOk: ok => ok);
 
     public OkT Extract(Func<ErrT, OkT> fromErr) =>

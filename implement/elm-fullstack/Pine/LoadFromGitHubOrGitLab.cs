@@ -215,7 +215,7 @@ static public class LoadFromGitHubOrGitLab
 
                             foreach (var parent in currentCommit.Parents)
                             {
-                                if (FindGitObjectAtPath(parent.Tree, pathNodesNames).Map(find => find.Sha).WithDefault(() => null) != linkedObject?.Sha)
+                                if (FindGitObjectAtPath(parent.Tree, pathNodesNames).Map(find => find.Sha).WithDefault(null) != linkedObject?.Sha)
                                     continue;
 
                                 queue.Enqueue(parent);

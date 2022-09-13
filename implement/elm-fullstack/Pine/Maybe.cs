@@ -57,7 +57,13 @@ public abstract record Maybe<JustT>
     /// <summary>
     /// Provide a default value, turning an optional value into a normal value.
     /// </summary>
-    public JustT WithDefault(Func<JustT> buildDefault) =>
+    public JustT WithDefault(JustT defaultIfNothing) =>
+        WithDefaultBuilder(() => defaultIfNothing);
+
+    /// <summary>
+    /// Provide a default value, turning an optional value into a normal value.
+    /// </summary>
+    public JustT WithDefaultBuilder(Func<JustT> buildDefault) =>
         this switch
         {
             Just just => just.Value,

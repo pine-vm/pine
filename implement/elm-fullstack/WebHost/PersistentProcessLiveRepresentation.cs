@@ -363,7 +363,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                             lastElmAppVolatileProcess: newElmAppProcess,
                             initOrMigrateCmds: migrateEventOk);
                 }))
-                .WithDefault(() => Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
+                .WithDefault(Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Unexpected shape of response: migrateResult is Nothing")
                 ));
         }

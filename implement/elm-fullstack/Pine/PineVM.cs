@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -516,7 +516,7 @@ public class PineVM
                          return Result<string, PineValue>.ok(namedEntry.named);
                  }
 
-                 var nameAsString = Composition.StringFromComponent(nameValue).WithDefault(() => "name_is_not_a_string");
+                 var nameAsString = Composition.StringFromComponent(nameValue).WithDefault("name_is_not_a_string");
 
                  var names =
                  listNamedEntries
