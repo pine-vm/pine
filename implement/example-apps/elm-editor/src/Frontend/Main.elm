@@ -1999,18 +1999,17 @@ view state =
                         |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
 
                 WorkspaceErr projectStateError ->
-                    [ [ ("Failed to load project state: " ++ (projectStateError |> String.left 500))
-                            |> Element.text
-                      ]
-                        |> Element.paragraph
-                            [ Element.Font.color errorTextColor
-                            , Element.padding defaultFontSize
+                    [ ("Failed to load project state: " ++ String.left 1000 projectStateError)
+                        |> dialogErrorElementFromDescription
+                        |> Element.el
+                            [ Element.padding defaultFontSize
                             , Element.width Element.fill
+                            , Element.height Element.fill
+                            , Element.scrollbarY
                             ]
                     ]
                         |> Element.column
-                            [ Element.spacing (defaultFontSize // 2)
-                            , Element.width (Element.fillPortion 4)
+                            [ Element.width Element.fill
                             , Element.height Element.fill
                             ]
 
