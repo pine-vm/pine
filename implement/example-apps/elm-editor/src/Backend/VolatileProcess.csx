@@ -9,9 +9,9 @@
 #r "System.Runtime.InteropServices.RuntimeInformation"
 #r "System.Text.Json"
 
-// https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-07-03/elm-fullstack-separate-assemblies-82e85c75fd1551716c231cd300f91601064d64db-linux-x64.zip
-#r "sha256:da32023e1810b2af498908ccc124e1b9c53ebf7502df29d73fb08646343cfd8f"
+#r "elm-fs"
 
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -157,97 +157,100 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
             };
         }
 
-        var loadFromGitResult = Pine.LoadFromGitHubOrGitLab.LoadFromUrl(sourcePath);
+        var loadFromGitResult = LoadFromGitHubOrGitLab.LoadFromUrl(sourcePath);
 
-        if (loadFromGitResult?.Ok == null)
-        {
-            return new ResponseStructure
-            {
-                ErrorResponse = ImmutableList.Create(
-                    "Failed to load from path '" + sourcePath + "': " + loadFromGitResult?.Err)
-            };
-        }
-
-        if (loadFromGitResult?.Ok?.tree == null)
-        {
-            return new ResponseStructure
-            {
-                ErrorResponse = ImmutableList.Create("Did not find a tree object at '" + sourcePath + "'")
-            };
-        }
-
-        var composition = Pine.Composition.FromTreeWithStringPath(loadFromGitResult.Ok.tree);
-
-        var compositionId = Pine.CommonConversion.StringBase16(Pine.Composition.GetHash(composition));
-
-        var blobs =
-            loadFromGitResult.Ok.tree.EnumerateBlobsTransitive()
-            .ToImmutableList();
-
-        var urlInCommit = loadFromGitResult.Ok.urlInCommit;
-
-        ResponseStructure responseErrorExceedingLimit(string limitName)
-        {
-            return new ResponseStructure
-            {
-                ErrorResponse = ImmutableList.Create("Composition " + compositionId + " from " + urlInCommit + " exceeds supported limits: " + limitName)
-            };
-        }
-
-        var fileCount = blobs.Count();
-
-        if (loadCompositionLimitFileCount < fileCount)
-        {
-            return responseErrorExceedingLimit("File count: " + fileCount);
-        }
-
-        var aggregateFileSize =
-            blobs.Sum(file => file.blobContent.Length);
-
-        var filesBySize =
-            blobs.OrderByDescending(file => file.blobContent.Length).ToImmutableList();
-
-        var largestFilesToDisplay =
-            filesBySize.Take(3).ToImmutableList();
-
-        if (loadCompositionLimitAggregateFileSize < aggregateFileSize)
-        {
-            var largestFilesDescriptions =
-                largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.blobContent.Length + " bytes)");
-
-            return responseErrorExceedingLimit(
-                "Aggregate file size: " + aggregateFileSize +
-                " bytes. Following are the largest " + largestFilesToDisplay.Count +
-                " files:\n" + string.Join("\n", largestFilesDescriptions));
-        }
-
-        var maximumPathLength =
-            blobs.Max(file => file.path.Sum(pathElement => pathElement.Length));
-
-        if (loadCompositionLimitMaximumPathLength < maximumPathLength)
-        {
-            return responseErrorExceedingLimit("Maximum path length: " + maximumPathLength);
-        }
-
-        var filesAsFlatList =
-            blobs
-            .Select(file => new FileWithPath
-            {
-                path = file.path,
-                contentBase64 = Convert.ToBase64String(file.blobContent.ToArray()),
-            })
-            .ToImmutableList();
-
-        return new ResponseStructure
-        {
-            LoadCompositionResponse = ImmutableList.Create(
-                new LoadCompositionResponseStructure
+        return
+            loadFromGitResult
+            .Unpack(
+                fromErr:
+                err => new ResponseStructure
                 {
-                    compositionId = compositionId,
-                    filesAsFlatList = filesAsFlatList,
-                    urlInCommit = urlInCommit,
-                })
-        };
+                    ErrorResponse = ImmutableList.Create("Failed to load from path '" + sourcePath + "': " + err)
+                },
+                fromOk:
+                loadFromGitOk =>
+                {
+                    if (loadFromGitOk?.tree == null)
+                    {
+                        return new ResponseStructure
+                        {
+                            ErrorResponse = ImmutableList.Create("Did not find a tree object at '" + sourcePath + "'")
+                        };
+                    }
+
+                    var composition = Pine.Composition.FromTreeWithStringPath(loadFromGitOk.tree);
+
+                    var compositionId = Pine.CommonConversion.StringBase16(Pine.Composition.GetHash(composition));
+
+                    var blobs =
+                        loadFromGitOk.tree.EnumerateBlobsTransitive()
+                        .ToImmutableList();
+
+                    var urlInCommit = loadFromGitOk.urlInCommit;
+
+                    ResponseStructure responseErrorExceedingLimit(string limitName)
+                    {
+                        return new ResponseStructure
+                        {
+                            ErrorResponse = ImmutableList.Create("Composition " + compositionId + " from " + urlInCommit + " exceeds supported limits: " + limitName)
+                        };
+                    }
+
+                    var fileCount = blobs.Count();
+
+                    if (loadCompositionLimitFileCount < fileCount)
+                    {
+                        return responseErrorExceedingLimit("File count: " + fileCount);
+                    }
+
+                    var aggregateFileSize =
+                        blobs.Sum(file => file.blobContent.Length);
+
+                    var filesBySize =
+                        blobs.OrderByDescending(file => file.blobContent.Length).ToImmutableList();
+
+                    var largestFilesToDisplay =
+                        filesBySize.Take(3).ToImmutableList();
+
+                    if (loadCompositionLimitAggregateFileSize < aggregateFileSize)
+                    {
+                        var largestFilesDescriptions =
+                            largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.blobContent.Length + " bytes)");
+
+                        return responseErrorExceedingLimit(
+                            "Aggregate file size: " + aggregateFileSize +
+                            " bytes. Following are the largest " + largestFilesToDisplay.Count +
+                            " files:\n" + string.Join("\n", largestFilesDescriptions));
+                    }
+
+                    var maximumPathLength =
+                        blobs.Max(file => file.path.Sum(pathElement => pathElement.Length));
+
+                    if (loadCompositionLimitMaximumPathLength < maximumPathLength)
+                    {
+                        return responseErrorExceedingLimit("Maximum path length: " + maximumPathLength);
+                    }
+
+                    var filesAsFlatList =
+                        blobs
+                        .Select(file => new FileWithPath
+                        {
+                            path = file.path,
+                            contentBase64 = Convert.ToBase64String(file.blobContent.ToArray()),
+                        })
+                        .ToImmutableList();
+
+                    return new ResponseStructure
+                    {
+                        LoadCompositionResponse = ImmutableList.Create(
+                            new LoadCompositionResponseStructure
+                            {
+                                compositionId = compositionId,
+                                filesAsFlatList = filesAsFlatList,
+                                urlInCommit = urlInCommit,
+                            })
+                    };
+                });
     }
 
     return new ResponseStructure
@@ -261,11 +264,10 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var elmCodeFiles =
         elmMakeRequest.files
         .ToImmutableDictionary(
-            file => (IImmutableList<string>)file.path.ToImmutableList(),
-            file => (IReadOnlyList<byte>)Convert.FromBase64String(file.contentBase64));
+            file => file.path,
+            file => (ReadOnlyMemory<byte>)Convert.FromBase64String(file.contentBase64));
 
-    var environmentFiles =
-        elmCodeFiles.Select(file => (path: file.Key, content: file.Value)).ToImmutableList();
+    var environmentFiles = elmCodeFiles;
 
     var entryPointFilePathFromWorkingDirectory =
         MakePlatformSpecificPath(elmMakeRequest.entryPointFilePathFromWorkingDirectory);
@@ -277,7 +279,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var commandLineArguments = commandLineCommonArguments + " --output=" + elmMakeOutputFileName;
     var reportJsonCommandLineArguments = commandLineCommonArguments + " --report=json";
 
-    (Pine.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, IReadOnlyList<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
+    (Pine.ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) commandResultsFromArguments(string arguments)
     {
         return
             Pine.ExecutableFile.ExecuteFileWithArguments(
@@ -319,7 +321,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
 
     var newFiles =
         commandResults.resultingFiles
-        .Where(file => !environmentFiles.Any(inputFile => inputFile.Item1.SequenceEqual(file.path)))
+        .Where(file => !elmCodeFiles.ContainsKey(file.path))
         .Select(file => new FileWithPath
         {
             path = file.path,
@@ -353,7 +355,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
     var responseStructure = new ElmMakeResponseStructure
     {
         processOutput = processOutput,
-        outputFileContentBase64 = Maybe<string>.NothingFromNull(outputFileContentBase64),
+        outputFileContentBase64 = Maybe.NothingFromNull(outputFileContentBase64),
         reportJsonProcessOutput = reportJsonProcessOutput,
     };
 
@@ -408,19 +410,22 @@ static public class ElmFormat
 
         var elmFormatResult =
             Pine.ExecutableFile.ExecuteFileWithArguments(
-                ImmutableList.Create(
-                    ((IImmutableList<string>)elmModuleFilePath, (IReadOnlyList<byte>)System.Text.Encoding.UTF8.GetBytes(originalModuleText))),
+                ImmutableDictionary.Create<IReadOnlyList<string>, ReadOnlyMemory<byte>>()
+                .SetItem(elmModuleFilePath, System.Text.Encoding.UTF8.GetBytes(originalModuleText)),
                 GetElmFormatExecutableFile,
                 " " + elmModuleFileName + " --yes",
                 environmentStrings: null);
 
-        var resultingFile =
+        var resultingFiles =
             elmFormatResult.resultingFiles
-            .FirstOrDefault(file => file.path.SequenceEqual(elmModuleFilePath))
-            .content;
+            .Where(file => file.path.SequenceEqual(elmModuleFilePath))
+            .ToImmutableList();
 
         var formattedText =
-            resultingFile == null ? null : System.Text.Encoding.UTF8.GetString(resultingFile.ToArray());
+            resultingFiles.Any() ?
+            System.Text.Encoding.UTF8.GetString(resultingFiles.First().content.Span)
+            :
+            null;
 
         var processOutput = new ProcessOutput
         {
@@ -432,7 +437,7 @@ static public class ElmFormat
         return new FormatElmModuleTextResponseStructure
         {
             processOutput = processOutput,
-            formattedText = Maybe<string>.NothingFromNull(formattedText),
+            formattedText = Maybe.NothingFromNull(formattedText),
         };
     }
 
@@ -452,29 +457,6 @@ static public class ElmFormat
             @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-win-x64.zip"));
 
 }
-
-public class Maybe<JustT>
-{
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<object> Nothing { set; get; }
-
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<JustT> Just { set; get; }
-
-    static public Maybe<JustT> just(JustT j) =>
-        new Maybe<JustT> { Just = ImmutableList.Create(j) };
-
-    static public Maybe<JustT> nothing() =>
-        new Maybe<JustT> { Nothing = ImmutableList<object>.Empty };
-
-    static public Maybe<JustT> NothingFromNull(JustT maybeNull) =>
-        maybeNull == null
-        ?
-        nothing()
-        :
-        new Maybe<JustT> { Just = ImmutableList.Create(maybeNull) };
-}
-
 
 string InterfaceToHost_Request(string request)
 {
