@@ -69,7 +69,7 @@ public class FileStoreFromSystemIOFile : IFileStore
         foreach (var pathComponent in path)
         {
             if (pathComponent.Contains('\\') || pathComponent.Contains('/'))
-                throw new System.ArgumentException("Invalid character in path component '" + pathComponent + "'.");
+                throw new ArgumentException("Invalid character in path component '" + pathComponent + "'.");
         }
 
         return Path.Combine(path.Insert(0, directoryPath).ToArray());
@@ -134,7 +134,7 @@ public class FileStoreFromSystemIOFile : IFileStore
 
         return
             Directory.GetFiles(fileSystemDirectoryPath, "*", SearchOption.AllDirectories)
-            .OrderBy(filePath => filePath)
+            .Order()
             .Select(filePath => Path.GetRelativePath(fileSystemDirectoryPath, filePath).Split(Path.DirectorySeparatorChar).ToImmutableList());
     }
 

@@ -168,8 +168,8 @@ namespace ElmFullstack
                                 otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
                         }
 
-                        byte[] ElmMake(
-                            IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+                        Result<string, ReadOnlyMemory<byte>> ElmMake(
+                            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
                             IImmutableList<string> pathToFileWithElmEntryPoint,
                             bool makeJavascript,
                             bool enableDebug)
@@ -177,13 +177,13 @@ namespace ElmFullstack
                             var elmMakeCommandAppendix =
                                 enableDebug ? "--debug" : null;
 
-                            var fileAsString = ProcessFromElm019Code.CompileElm(
+                            return
+                            Elm019Binaries.ElmMake(
                                 elmCodeFiles,
                                 pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
                                 outputFileName: "output." + (makeJavascript ? "js" : "html"),
-                                elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                            return Encoding.UTF8.GetBytes(fileAsString);
+                                elmMakeCommandAppendix: elmMakeCommandAppendix)
+                            .Map(makeOk => makeOk.producedFile);
                         }
 
                         var newDependencies =
@@ -208,17 +208,16 @@ namespace ElmFullstack
                                             var elmMakeRequestFiles =
                                                 elmMakeRequest.files
                                                 .ToImmutableDictionary(
-                                                    entry => (IImmutableList<string>)entry.path.ToImmutableList(),
-                                                    entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64))
-                                                .WithComparers(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+                                                    entry => (IReadOnlyList<string>)entry.path.ToImmutableList(),
+                                                    entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64),
+                                                    keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
-                                            var value = ElmMake(
+                                            return
+                                            ElmMake(
                                                 elmCodeFiles: elmMakeRequestFiles,
                                                 pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
                                                 makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
                                                 enableDebug: elmMakeRequest.enableDebug);
-
-                                            return Result<string, ReadOnlyMemory<byte>>.ok(value);
                                         }
                                         catch (Exception e)
                                         {

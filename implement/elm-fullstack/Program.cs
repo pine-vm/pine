@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-09-15";
+    static public string AppVersionId => "2022-09-21";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -343,7 +343,7 @@ public class Program
                     Console.WriteLine("Loading app config to deploy...");
 
                     var appConfigZipArchive =
-                        ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                        WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                             sourcePath: deployOptionValue).configZipArchive;
 
                     var appConfigTree =
@@ -353,7 +353,7 @@ public class Program
                     var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
                     var processStoreWriter =
-                        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                        new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                             processStoreFileStore,
                             getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
                             processStoreFileStore);
@@ -361,7 +361,7 @@ public class Program
                     processStoreWriter.StoreComponent(appConfigComponent);
 
                     var appConfigValueInFile =
-                        new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                        new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
                             HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
                         };
@@ -370,11 +370,11 @@ public class Program
                         (deletePreviousProcessOption.HasValue() || processStorePath == null) && !copyProcessOption.HasValue();
 
                     var compositionLogEvent =
-                        ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                        WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                             appConfigValueInFile: appConfigValueInFile,
                             initElmAppState: initElmAppState);
 
-                    var testDeployResult = ElmFullstack.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
+                    var testDeployResult = WebHost.PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                         compositionLogEvent: compositionLogEvent,
                         fileStoreReader: processStoreFileStore)
                     .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
@@ -387,7 +387,7 @@ public class Program
                     Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                     .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                     .UseUrls(adminInterfaceUrls)
-                    .UseStartup<ElmFullstack.WebHost.StartupAdminInterface>()
+                    .UseStartup<WebHost.StartupAdminInterface>()
                     .WithSettingPublicWebHostUrls(publicAppUrls)
                     .WithProcessStoreFileStore(processStoreFileStore);
 
@@ -713,9 +713,9 @@ public class Program
             var sourceFiles =
                 Composition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.tree);
 
-            var compilationResult = ElmFullstack.ElmAppCompilation.AsCompletelyLoweredElmApp(
+            var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
-                ElmFullstack.ElmAppInterfaceConfig.Default);
+                ElmAppInterfaceConfig.Default);
 
             var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
 
@@ -726,7 +726,7 @@ public class Program
                 .Unpack(
                     fromErr: compilationErrors =>
                     {
-                        Console.WriteLine("\n" + ElmFullstack.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationErrors) + "\n");
+                        Console.WriteLine("\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationErrors) + "\n");
 
                         return (report with { compilationErrors = compilationErrors, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds }, null);
                     },
@@ -1451,8 +1451,8 @@ public class Program
         string sourcePath,
         string? sourceCompositionId,
         SourceSummaryStructure? sourceSummary,
-        IReadOnlyList<ElmFullstack.ElmAppCompilation.CompilationIterationReport>? compilationIterationsReports,
-        IReadOnlyList<ElmFullstack.ElmAppCompilation.LocatedCompilationError>? compilationErrors,
+        IReadOnlyList<ElmAppCompilation.CompilationIterationReport>? compilationIterationsReports,
+        IReadOnlyList<ElmAppCompilation.LocatedCompilationError>? compilationErrors,
         string? compilationException,
         int? compilationTimeSpentMilli,
         string? compiledCompositionId,
@@ -1493,7 +1493,7 @@ public class Program
         Console.WriteLine("Beginning to build configuration...");
 
         var buildResult =
-            ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+            WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                 sourcePath: sourcePath);
 
         var (sourceCompositionId, sourceSummary) = CompileSourceSummary(buildResult.sourceTree);
@@ -1523,9 +1523,9 @@ public class Program
                     (site.TrimEnd('/')) +
                     (initElmAppState
                     ?
-                    ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAndInitAppState
+                    WebHost.StartupAdminInterface.PathApiDeployAndInitAppState
                     :
-                    ElmFullstack.WebHost.StartupAdminInterface.PathApiDeployAndMigrateAppState);
+                    WebHost.StartupAdminInterface.PathApiDeployAndMigrateAppState);
 
                 Console.WriteLine("Attempting to deploy app '" + filteredSourceCompositionId + "' to '" + deployAddress + "'...");
 
@@ -1572,7 +1572,7 @@ public class Program
                 var processStoreFileStore = new FileStoreFromSystemIOFile(site);
 
                 var processStoreWriter =
-                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                    new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                         processStoreFileStore,
                         getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
                         processStoreFileStore);
@@ -1586,18 +1586,18 @@ public class Program
                 processStoreWriter.StoreComponent(appConfigComponent);
 
                 var appConfigValueInFile =
-                    new ElmFullstack.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                    new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
                         HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
                     };
 
                 var compositionLogEvent =
-                    ElmFullstack.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                    WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                         appConfigValueInFile: appConfigValueInFile,
                         initElmAppState: initElmAppState);
 
                 var (statusCode, responseReport) =
-                    ElmFullstack.WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
+                    WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
                         compositionLogEvent,
                         processStoreFileStore);
 
@@ -1873,7 +1873,7 @@ public class Program
                 return new System.Net.Http.HttpRequestMessage
                 {
                     Method = System.Net.Http.HttpMethod.Post,
-                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState),
+                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + WebHost.StartupAdminInterface.PathApiElmAppState),
                     Content = httpContent,
                 };
             },
@@ -1914,7 +1914,7 @@ public class Program
                 return new System.Net.Http.HttpRequestMessage
                 {
                     Method = System.Net.Http.HttpMethod.Get,
-                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiElmAppState),
+                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + WebHost.StartupAdminInterface.PathApiElmAppState),
                 };
             },
             defaultPassword: siteDefaultPassword,
@@ -1950,7 +1950,7 @@ public class Program
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var requestUrl =
-            site.TrimEnd('/') + ElmFullstack.WebHost.StartupAdminInterface.PathApiTruncateProcessHistory;
+            site.TrimEnd('/') + WebHost.StartupAdminInterface.PathApiTruncateProcessHistory;
 
         Console.WriteLine("Beginning to truncate process history at '" + site + "'...");
 
@@ -2008,7 +2008,7 @@ public class Program
             ListFilesInDirectoryDelegate: directoryPath =>
             {
                 var httpRequestPath =
-                    ElmFullstack.WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
+                    WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
                     string.Join("/", directoryPath);
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
@@ -2092,7 +2092,7 @@ public class Program
 
         var deployAddress =
             site.TrimEnd('/') +
-            ElmFullstack.WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
+            WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
 
         Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
 
@@ -2197,7 +2197,7 @@ public class Program
         string outputOption)
     {
         var buildResult =
-            ElmFullstack.WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+            WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                 sourcePath: sourcePath);
 
         var configZipArchive = buildResult.configZipArchive;
@@ -2264,11 +2264,11 @@ public class Program
     static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
         CompileAndElmTestRs(string source)
     {
-        var compileResult = CompileApp(source);
+        var (_, compiledAppFiles) = CompileApp(source);
 
-        if (compileResult.compiledAppFiles == null)
+        if (compiledAppFiles == null)
             throw new Exception("Compilation failed");
 
-        return ElmTestRs.Run(compileResult.compiledAppFiles);
+        return ElmTestRs.Run(compiledAppFiles);
     }
 }

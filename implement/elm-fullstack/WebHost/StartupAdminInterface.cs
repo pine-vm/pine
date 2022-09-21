@@ -271,7 +271,7 @@ public class StartupAdminInterface
                 {
                     context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
 
-                    context.Response.Headers.Add("X-Powered-By", "Elm Fullstack " + ElmFullstack.Program.AppVersionId);
+                    context.Response.Headers.Add("X-Powered-By", "Elm Fullstack " + Program.AppVersionId);
 
                     AuthenticationHeaderValue.TryParse(
                         requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
@@ -787,7 +787,7 @@ public class StartupAdminInterface
                     await context.Response.WriteAsync(
                         HtmlDocument(
                             HtmlFromLines(
-                                "Welcome to the Elm Fullstack admin interface version " + ElmFullstack.Program.AppVersionId + ".",
+                                "Welcome to the Elm Fullstack admin interface version " + Program.AppVersionId + ".",
                                 httpApiGuide,
                                 "",
                                 ApiGuide)));

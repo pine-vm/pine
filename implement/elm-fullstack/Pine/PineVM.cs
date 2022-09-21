@@ -520,7 +520,7 @@ public class PineVM
 
                  var names =
                  listNamedEntries
-                 .Select((namedEntry, _) => Composition.StringFromComponent(namedEntry.name).Unpack(fromErr: _ => null, fromOk: s => s))
+                 .Select((namedEntry, _) => Composition.StringFromComponent(namedEntry.name).Unpack(fromErr: _ => (string?)null, fromOk: s => s))
                  .WhereNotNull().ToImmutableArray();
 
                  return Result<string, PineValue>.err(

@@ -14,7 +14,7 @@ static public class ZipArchive
     /// <summary>
     /// https://github.com/dotnet/corefx/blob/a10890f4ffe0fadf090c922578ba0e606ebdd16c/src/System.IO.Compression/src/System/IO/Compression/ZipArchiveEntry.cs#L206-L234
     /// </summary>
-    static public DateTimeOffset EntryLastWriteTimeDefault => new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    static public DateTimeOffset EntryLastWriteTimeDefault => new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     static public byte[] ZipArchiveFromEntries(
         IEnumerable<(string name, ReadOnlyMemory<byte> content)> entries,

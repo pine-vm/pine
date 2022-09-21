@@ -40,7 +40,7 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter : System.Tex
 {
     public override ElmTestRsReportJsonEntryFailureReasonData Read(
         ref System.Text.Json.Utf8JsonReader reader,
-        System.Type typeToConvert,
+        Type typeToConvert,
         System.Text.Json.JsonSerializerOptions options)
     {
         try
@@ -65,7 +65,7 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter : System.Tex
         ElmTestRsReportJsonEntryFailureReasonData value,
         System.Text.Json.JsonSerializerOptions options)
     {
-        throw new System.NotImplementedException();
+        throw new NotImplementedException();
     }
 }
 
@@ -187,7 +187,7 @@ public class ElmTestRs
                     "Passed:   " + @event.passed,
                     "Failed:   " + @event.failed),
                     ElmTestRsConsoleOutputColor.DefaultColor)),
-                overallSuccess: overallSuccess);
+                overallSuccess);
         }
 
         if (@event.@event == "testsCompleted" && @event.status != "pass")
@@ -215,7 +215,7 @@ public class ElmTestRs
                 if (failureReasonData.String != null)
                     return ImmutableList.Create("", failureReasonData.String, "");
 
-                throw new System.Exception("Incomplete match on sum type.");
+                throw new Exception("Incomplete match on sum type.");
             }
 
             var textsFromFailures =
@@ -238,7 +238,7 @@ public class ElmTestRs
 
 public record ElmTestRsConsoleOutputColor(object? Default = null, object? Red = null, object? Green = null)
 {
-    static public ElmTestRsConsoleOutputColor DefaultColor => new ElmTestRsConsoleOutputColor(Default: new object());
-    static public ElmTestRsConsoleOutputColor RedColor => new ElmTestRsConsoleOutputColor(Red: new object());
-    static public ElmTestRsConsoleOutputColor GreenColor => new ElmTestRsConsoleOutputColor(Green: new object());
+    static public ElmTestRsConsoleOutputColor DefaultColor => new(Default: new object());
+    static public ElmTestRsConsoleOutputColor RedColor => new(Red: new object());
+    static public ElmTestRsConsoleOutputColor GreenColor => new(Green: new object());
 }
