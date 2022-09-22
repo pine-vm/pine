@@ -2707,18 +2707,61 @@ pineExpressionForRecordAccess fieldName recordExpression =
                 [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
                 , pineKernel_ListHead recordExpression
                 ]
-        , ifTrue =
-            Pine.StringTagExpression
-                { tag = "Completed record access: " ++ fieldName
-                , tagged = expressionToLookupNameInGivenScope fieldName recordFieldsExpression
+        , ifTrue = buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression
+        , ifFalse = Pine.ListExpression []
+        }
+
+
+buildRecursiveFunctionToLookupFieldInRecord : String -> Pine.Expression -> Pine.Expression
+buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
+    let
+        fieldNameValue =
+            Pine.valueFromString fieldName
+
+        remainingFieldsLocalExpression =
+            listItemFromIndexExpression 1 Pine.ApplicationArgumentExpression
+
+        continueWithRemainingExpression =
+            Pine.ApplicationExpression
+                { function = listItemFromIndexExpression 0 Pine.ApplicationArgumentExpression
+                , argument =
+                    Pine.ListExpression
+                        [ listItemFromIndexExpression 0 Pine.ApplicationArgumentExpression
+                        , listSkipExpression 1 remainingFieldsLocalExpression
+                        ]
                 }
-        , ifFalse =
-            Pine.StringTagExpression
-                { tag = "Failed record access: " ++ fieldName
-                , tagged =
-                    Pine.LiteralExpression
-                        (Pine.valueFromString "Error: Used record access on value which is not a record")
+
+        recursivePart =
+            Pine.ConditionalExpression
+                { condition =
+                    equalCondition
+                        [ Pine.ListExpression []
+                        , remainingFieldsLocalExpression
+                        ]
+                , ifTrue = continueWithRemainingExpression
+                , ifFalse =
+                    Pine.ConditionalExpression
+                        { condition =
+                            equalCondition
+                                [ listItemFromIndexExpression 0 (listItemFromIndexExpression 0 remainingFieldsLocalExpression)
+                                , Pine.LiteralExpression fieldNameValue
+                                ]
+                        , ifTrue =
+                            listItemFromIndexExpression 1 (listItemFromIndexExpression 0 remainingFieldsLocalExpression)
+                        , ifFalse = continueWithRemainingExpression
+                        }
                 }
+
+        expressionEncoded =
+            Pine.LiteralExpression (Pine.encodeExpressionAsValue recursivePart)
+    in
+    Pine.ApplicationExpression
+        { function = expressionEncoded
+        , argument =
+            Pine.ListExpression
+                [ expressionEncoded
+                , recordFieldsExpression
+                ]
         }
 
 
