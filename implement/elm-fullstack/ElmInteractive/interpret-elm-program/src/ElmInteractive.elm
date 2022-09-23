@@ -518,10 +518,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
         declarationsOfOtherModules =
             availableModules
                 |> Dict.toList
-                |> List.map
-                    (Tuple.mapSecond (CompiledDeclaration { dependsOnEnvironment = False })
-                        >> Tuple.mapFirst (String.join ".")
-                    )
+                |> List.map (Tuple.mapSecond CompiledDeclaration >> Tuple.mapFirst (String.join "."))
                 |> Dict.fromList
     in
     let
@@ -568,7 +565,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             , availableDeclarations =
                 declarationsOfOtherModules
                     |> Dict.union (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
-                    |> Dict.union (declarationsFromCustomTypes |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False })))
+                    |> Dict.union (declarationsFromCustomTypes |> Dict.map (always CompiledDeclaration))
             , inliningParentDeclarations = Set.empty
             , dependenciesDependencies = Dict.empty
             }
@@ -1556,7 +1553,7 @@ addInliningParentDeclaration name compilation =
 
 
 type InternalDeclaration
-    = CompiledDeclaration { dependsOnEnvironment : Bool } Pine.Value
+    = CompiledDeclaration Pine.Value
     | ElmFunctionDeclaration ElmFunctionDeclarationStruct
 
 
@@ -1957,27 +1954,6 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
             Err ("Failed to compile function argument pattern: " ++ error)
 
         Ok argumentsDeconstructDeclarationsBuilders ->
-            {-
-                      TODO: Investigate why using the expanded compilation stack here breaks some interactive scenarios.
-
-               let
-                      newAvailableDeclarations =
-                          argumentsDeconstructionDeclarations
-                              |> List.concatMap Tuple.second
-                              |> List.map
-                                  (Tuple.mapSecond
-                                      (Pine.encodeExpressionAsValue >> CompiledDeclaration { dependsOnEnvironment = True })
-                                  )
-                              |> Dict.fromList
-
-                      stack =
-                          { stackBefore
-                              | availableDeclarations =
-                                  stackBefore.availableDeclarations
-                                      |> Dict.union newAvailableDeclarations
-                          }
-               in
-            -}
             case compileElmSyntaxExpression stackBefore function.expression of
                 Err error ->
                     Err ("Failed to compile expression in function: " ++ error)
@@ -2785,16 +2761,11 @@ compileElmFunctionOrValueLookup name compilation =
                     elmFunctionDeclaration
                     |> Result.mapError ((++) ("Failed to inline function '" ++ name ++ "': "))
 
-        Just (CompiledDeclaration config compiledDeclaration) ->
+        Just (CompiledDeclaration compiledDeclaration) ->
             Ok
                 ( Pine.ApplicationExpression
                     { function = Pine.LiteralExpression compiledDeclaration
-                    , argument =
-                        if config.dependsOnEnvironment then
-                            Pine.ApplicationArgumentExpression
-
-                        else
-                            Pine.ListExpression []
+                    , argument = Pine.ListExpression []
                     }
                 , noDependencies
                 )
@@ -2839,7 +2810,7 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
         Just (ElmFunctionDeclaration _) ->
             Err ("Got function declaration for module '" ++ String.join "." canonicalModuleName ++ "'")
 
-        Just (CompiledDeclaration _ moduleValue) ->
+        Just (CompiledDeclaration moduleValue) ->
             let
                 nameInModuleAsValue =
                     Pine.valueFromString nameInModule
@@ -3048,9 +3019,7 @@ compileInteractiveSubmission environment submission =
 
                 initialStack =
                     { moduleAliases = Dict.empty
-                    , availableDeclarations =
-                        environmentDeclarations
-                            |> Dict.map (always (CompiledDeclaration { dependsOnEnvironment = False }))
+                    , availableDeclarations = environmentDeclarations |> Dict.map (always CompiledDeclaration)
                     , inliningParentDeclarations = Set.empty
                     , dependenciesDependencies = Dict.empty
                     }
