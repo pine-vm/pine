@@ -40,7 +40,7 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
         return new V8JsEngine(
             new V8Settings
             {
-                MaxStackUsage = (UIntPtr)(OverrideJsEngineSettingsMaxStackSize ?? 10_000_000),
+                MaxStackUsage = (UIntPtr)(OverrideJsEngineSettingsMaxStackSize ?? 40_000_000),
             }
         );
     }
