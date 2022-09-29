@@ -598,6 +598,10 @@ public class StartupAdminInterface
                         .Select(g => g.Select(x => x.s).ToImmutableList())
                         .ToImmutableList();
 
+                    logger.LogInformation(
+                        message: nameof(truncateProcessHistory) + ": Found {filePathCount} file paths to delete",
+                        filePathsInProcessStorePartitions.Sum(partition => partition.Count));
+
                     lock (avoidConcurrencyLock)
                     {
                         var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -608,6 +612,10 @@ public class StartupAdminInterface
                             publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                         storeReductionStopwatch.Stop();
+
+                        logger.LogInformation(
+                            message: nameof(truncateProcessHistory) + ": Stored reduction in {storeReductionDurationMs} ms",
+                            storeReductionStopwatch.ElapsedMilliseconds);
 
                         var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -621,11 +629,9 @@ public class StartupAdminInterface
 
                         var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                        var totalDeletedFilesCount =
+                        var partitionsTasks =
                             filePathsInProcessStorePartitions
-                            .AsParallel()
-                            .WithDegreeOfParallelism(numbersOfThreadsToDeleteFiles)
-                            .Select(partitionFilePaths =>
+                            .Select(partitionFilePaths => System.Threading.Tasks.Task.Run(() =>
                             {
                                 int partitionDeletedFilesCount = 0;
 
@@ -642,10 +648,17 @@ public class StartupAdminInterface
                                 }
 
                                 return partitionDeletedFilesCount;
-                            })
-                            .Sum();
+                            }))
+                            .ToImmutableList();
+
+                        var totalDeletedFilesCount = partitionsTasks.Sum(task => task.Result);
 
                         deleteFilesStopwatch.Stop();
+
+                        logger.LogInformation(
+                            message: nameof(truncateProcessHistory) + ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
+                            totalDeletedFilesCount,
+                            deleteFilesStopwatch.ElapsedMilliseconds);
 
                         return new TruncateProcessHistoryReport
                         (
