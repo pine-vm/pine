@@ -203,7 +203,7 @@ public class TestLoadFromGithub
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                         sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
                         getRepositoryFilesPartialForCommit:
-                        consultServer)
+                        request => Pine.Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
                 var blobContent =
@@ -225,7 +225,7 @@ public class TestLoadFromGithub
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                         sourceUrl: "https://github.com/elm-fullstack/elm-fullstack/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
                         getRepositoryFilesPartialForCommit:
-                        consultServer)
+                        request => Pine.Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
                 var blobContent =

@@ -4,7 +4,10 @@ namespace Pine;
 
 public record CacheByFileName(string CacheDirectory)
 {
-    public byte[] GetOrUpdate(string fileName, System.Func<byte[]> getNew)
+    public byte[] GetOrUpdate(string fileName, System.Func<byte[]> getNew) =>
+        GetOrTryAdd(fileName, getNew)!;
+
+    public byte[]? GetOrTryAdd(string fileName, System.Func<byte[]?> tryBuild)
     {
         var cacheFilePath = Path.Combine(CacheDirectory, fileName);
 
@@ -17,20 +20,23 @@ public record CacheByFileName(string CacheDirectory)
             catch { }
         }
 
-        var file = getNew();
+        var file = tryBuild();
 
-        try
+        if (file is not null)
         {
-            var directory = Path.GetDirectoryName(cacheFilePath);
+            try
+            {
+                var directory = Path.GetDirectoryName(cacheFilePath);
 
-            if (directory != null)
-                Directory.CreateDirectory(directory);
+                if (directory != null)
+                    Directory.CreateDirectory(directory);
 
-            File.WriteAllBytes(cacheFilePath, file);
-        }
-        catch (System.Exception e)
-        {
-            System.Console.WriteLine("Failed to write cache entry: " + e.ToString());
+                File.WriteAllBytes(cacheFilePath, file);
+            }
+            catch (System.Exception e)
+            {
+                System.Console.WriteLine("Failed to write cache entry: " + e.ToString());
+            }
         }
 
         return file;
