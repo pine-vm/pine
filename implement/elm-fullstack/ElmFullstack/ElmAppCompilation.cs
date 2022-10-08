@@ -466,16 +466,8 @@ namespace ElmFullstack
             new(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
 
         static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
-            DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
-                filePaths:
-                    new[]
-                    {
-                        ImmutableList.Create("elm.json"),
-                        ImmutableList.Create("src", "FileTree.elm"),
-                        ImmutableList.Create("src", "CompileFullstackApp.elm"),
-                        ImmutableList.Create("src", "Main.elm")
-                    },
-                resourceNameCommonPrefix: "ElmFullstack.ElmFullstack.compile_elm_program.",
+            DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
+                directoryPath: ImmutableList.Create("ElmFullstack", "compile-elm-program"),
                 assembly: typeof(ElmAppCompilation).Assembly);
 
         static IReadOnlyList<byte>? GetManifestResourceStreamContent(string name)

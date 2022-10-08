@@ -464,15 +464,8 @@ public class ElmInteractive
     }
 
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ParseElmSyntaxAppCodeFiles() =>
-        DotNetAssembly.LoadFromAssemblyManifestResourceStreamContents(
-            filePaths: new[]
-            {
-                ImmutableList.Create("elm.json"),
-                ImmutableList.Create("src", "Pine.elm"),
-                ImmutableList.Create("src", "ElmInteractive.elm"),
-                ImmutableList.Create("src", "Main.elm")
-            },
-            resourceNameCommonPrefix: "ElmFullstack.ElmInteractive.interpret_elm_program.",
+        DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
+            directoryPath: ImmutableList.Create("ElmInteractive", "interpret-elm-program"),
             assembly: typeof(ElmInteractive).Assembly)
         .Extract(error => throw new NotImplementedException(nameof(ParseElmSyntaxAppCodeFiles) + ": " + error));
 
