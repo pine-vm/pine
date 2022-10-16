@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -37,4 +37,14 @@ public static class ResultExtension
                             fromErr: newErr => Result<IImmutableList<ErrT>, OkT>.err(previousErrors.Add(newErr)),
                             fromOk: success => Result<IImmutableList<ErrT>, OkT>.ok(success)),
                     fromOk: _ => accumulate));
+
+    static public Result<ErrT, OkT> AggregateExitingOnFirstError<ItemT, ErrT, OkT>(
+        IEnumerable<ItemT> sequence,
+        Func<OkT, ItemT, Result<ErrT, OkT>> aggregateFunc,
+        OkT aggregateSeed) =>
+            sequence
+            .Aggregate(
+            seed: Result<ErrT, OkT>.ok(aggregateSeed),
+            func: (accumulate, item) =>
+                accumulate.AndThen(aggregateOk => aggregateFunc(aggregateOk, item)));
 }

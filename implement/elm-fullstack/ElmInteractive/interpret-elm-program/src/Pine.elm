@@ -59,6 +59,11 @@ type PathDescription a
     | DescribePathEnd a
 
 
+environmentFromDeclarations : List ( String, Value ) -> Value
+environmentFromDeclarations declarations =
+    declarations |> List.map valueFromContextExpansionWithName |> ListValue
+
+
 addToContextAppArgument : List Value -> EvalContext -> EvalContext
 addToContextAppArgument names context =
     let
@@ -68,7 +73,7 @@ addToContextAppArgument names context =
                     ListValue (names ++ applicationArgumentList)
 
                 _ ->
-                    context.applicationArgument
+                    ListValue names
     in
     { context | applicationArgument = applicationArgument }
 

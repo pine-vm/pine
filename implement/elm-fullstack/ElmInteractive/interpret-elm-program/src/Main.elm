@@ -5,6 +5,7 @@ import Bytes
 import Dict
 import Elm.Syntax.File
 import ElmInteractive
+import ElmInteractiveCoreModules
 import Json.Decode
 import Json.Encode
 import Parser
@@ -16,6 +17,12 @@ type alias EvaluateSubmissionArguments =
     { modulesTexts : List String
     , submission : String
     , previousLocalSubmissions : List String
+    }
+
+
+type alias CompileElmInteractiveEnvironmentRequest =
+    { environmentBefore : Pine.Value
+    , modulesTexts : List String
     }
 
 
@@ -60,17 +67,25 @@ evaluateSubmissionInInteractive argumentsJson =
         )
 
 
-compileEvalContextForElmInteractive : String -> String
-compileEvalContextForElmInteractive =
-    Json.Decode.decodeString (Json.Decode.list Json.Decode.string)
+getDefaultElmCoreModulesTexts : String -> String
+getDefaultElmCoreModulesTexts _ =
+    ElmInteractiveCoreModules.elmCoreModulesTexts
+        |> Json.Encode.list Json.Encode.string
+        |> Json.Encode.encode 0
+
+
+compileInteractiveEnvironment : String -> String
+compileInteractiveEnvironment =
+    Json.Decode.decodeString json_Decode_compileInteractiveEnvironment
         >> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
         >> Result.andThen
-            (\modulesTexts ->
-                ElmInteractive.compileEvalContextForElmInteractive
-                    (ElmInteractive.InitContextFromApp { modulesTexts = modulesTexts })
+            (\( environmentDict, { modulesTexts, environmentBefore } ) ->
+                ElmInteractive.expandElmInteractiveEnvironmentWithModuleTexts environmentBefore
+                    modulesTexts
                     |> Result.mapError ((++) "Failed to prepare the initial context: ")
+                    |> Result.map (.environment >> json_encode_pineValue environmentDict)
             )
-        >> json_encode_Result Json.Encode.string (.applicationArgument >> json_encode_pineValue Dict.empty)
+        >> json_encode_Result Json.Encode.string identity
         >> Json.Encode.encode 0
 
 
@@ -116,6 +131,20 @@ jsonDecodeEvaluateSubmissionArguments =
         (Json.Decode.field "previousLocalSubmissions" (Json.Decode.list Json.Decode.string))
 
 
+json_Decode_compileInteractiveEnvironment :
+    Json.Decode.Decoder
+        ( Dict.Dict String Pine.Value
+        , CompileElmInteractiveEnvironmentRequest
+        )
+json_Decode_compileInteractiveEnvironment =
+    Json.Decode.map2
+        (\( environmentBefore, environmentDictionary ) modulesTexts ->
+            ( environmentDictionary, { environmentBefore = environmentBefore, modulesTexts = modulesTexts } )
+        )
+        (Json.Decode.field "environmentBefore" json_decode_pineValue)
+        (Json.Decode.field "modulesTexts" (Json.Decode.list Json.Decode.string))
+
+
 json_Decode_compileInteractiveSubmission : Json.Decode.Decoder ( ( Pine.Value, Dict.Dict String Pine.Value ), String )
 json_Decode_compileInteractiveSubmission =
     Json.Decode.map2
@@ -145,8 +174,9 @@ main =
             \_ stateBefore ->
                 ( [ parseElmModuleTextToJson (evaluateSubmissionInInteractive "") |> always ""
                   , compileInteractiveSubmission ""
-                  , compileEvalContextForElmInteractive ""
+                  , compileInteractiveEnvironment ""
                   , submissionResponseFromResponsePineValue ""
+                  , getDefaultElmCoreModulesTexts ""
                   ]
                     |> always stateBefore
                 , Cmd.none

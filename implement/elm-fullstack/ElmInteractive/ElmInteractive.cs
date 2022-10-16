@@ -46,16 +46,128 @@ public class ElmInteractive
             responseStructure.DecodedArguments.Evaluated);
     }
 
-    static public Result<string, PineValue> CompileEvalContextForElmInteractive(
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
-        TreeNodeWithStringPath? appCodeTree)
+    static public IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
+        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine)
     {
-        var modulesTexts = ModulesTextsFromAppCodeTree(appCodeTree);
+        var responseJson =
+            evalElmPreparedJsEngine.CallFunction("getDefaultElmCoreModulesTexts", 0).ToString()!;
 
-        var argumentsJson = System.Text.Json.JsonSerializer.Serialize(modulesTexts ?? ImmutableList<string>.Empty);
+        return
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<string>>(responseJson)!;
+    }
+
+    static internal Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
+        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        TreeNodeWithStringPath? appCodeTree,
+        CompilationCache compilationCacheBefore)
+    {
+        var allModulesTexts =
+            GetDefaultElmCoreModulesTexts(evalElmPreparedJsEngine)
+            .Concat(ModulesTextsFromAppCodeTree(appCodeTree).EmptyIfNull())
+            .ToImmutableList();
+
+        return
+            CompileInteractiveEnvironmentForModulesCachingIncrements(
+                elmModulesTexts: allModulesTexts,
+                evalElmPreparedJsEngine,
+                compilationCacheBefore)
+            .Map(compileResultAndCache =>
+            (compileResult: compileResultAndCache.compileResult.environmentPineValue,
+            compileResultAndCache.compilationCache));
+    }
+
+    static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModulesCachingIncrements(
+        IReadOnlyList<string> elmModulesTexts,
+        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        CompilationCache compilationCacheBefore)
+    {
+        var baseResults =
+            compilationCacheBefore.compileInteractiveEnvironmentResults
+            .Where(cachedResult =>
+            {
+                var cachedResultAllModules = cachedResult.AllModulesTextsList;
+
+                return elmModulesTexts.Take(cachedResultAllModules.Count).SequenceEqual(cachedResultAllModules);
+            })
+            .ToImmutableList();
+
+        var closestBase =
+            baseResults
+            .OrderByDescending(c => c.AllModulesTextsList.Count)
+            .OfType<CompileInteractiveEnvironmentResult?>()
+            .FirstOrDefault();
+
+        var elmModulesTextsFromBase =
+            closestBase is null ?
+            elmModulesTexts :
+            elmModulesTexts.Skip(closestBase.AllModulesTextsList.Count).ToImmutableList();
+
+        var initResult =
+            closestBase is not null
+            ?
+            Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>.ok(
+                (closestBase, compilationCacheBefore))
+            :
+            CompileInteractiveEnvironmentForModules(
+                elmModulesTexts: ImmutableList<string>.Empty,
+                evalElmPreparedJsEngine: evalElmPreparedJsEngine,
+                parentEnvironment: null,
+                compilationCacheBefore: compilationCacheBefore);
+
+        return
+            initResult
+            .AndThen(seed =>
+            {
+                return
+                    ResultExtension.AggregateExitingOnFirstError(
+                        sequence: elmModulesTextsFromBase,
+                        aggregateFunc: (prev, elmCoreModuleText) =>
+                        {
+                            var resultBeforeCache =
+                            CompileInteractiveEnvironmentForModules(
+                                elmModulesTexts: ImmutableList.Create(elmCoreModuleText),
+                                evalElmPreparedJsEngine: evalElmPreparedJsEngine,
+                                parentEnvironment: prev.compileResult,
+                                compilationCacheBefore: prev.compilationCache);
+
+                            return
+                            resultBeforeCache
+                            .Map(beforeCache =>
+                            {
+                                var compileInteractiveEnvironmentResults =
+                                beforeCache.compilationCache.compileInteractiveEnvironmentResults.Add(beforeCache.compileResult);
+
+                                var cache = beforeCache.compilationCache
+                                with
+                                {
+                                    compileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
+                                };
+
+                                return (beforeCache.compileResult, cache);
+                            });
+                        },
+                        aggregateSeed: seed);
+            });
+    }
+
+    static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModules(
+        IReadOnlyList<string> elmModulesTexts,
+        CompileInteractiveEnvironmentResult? parentEnvironment,
+        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        CompilationCache compilationCacheBefore)
+    {
+        var environmentBefore =
+            parentEnvironment is null ? PineValueJson.FromPineValueWithoutBuildingDictionary(PineValue.EmptyList) :
+            parentEnvironment.environmentPineValueJson;
+
+        var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
+            new CompileElmInteractiveEnvironmentRequest(
+                modulesTexts: elmModulesTexts,
+                environmentBefore: environmentBefore),
+            options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 });
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("compileEvalContextForElmInteractive", argumentsJson).ToString()!;
+            evalElmPreparedJsEngine.CallFunction("compileInteractiveEnvironment", argumentsJson).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
@@ -64,7 +176,66 @@ public class ElmInteractive
 
         return
             responseStructure
-            .Map(fromJson => ParsePineValueFromJson(fromJson!, dictionary: null));
+            .Map(fromJson =>
+            {
+                var environmentPineValue = ParsePineValueFromJson(fromJson!, dictionary: parentEnvironment?.environmentDictionary);
+
+                var (environmentJson, compilationCacheTask) =
+                PineValueJson.FromPineValueBuildingDictionary(
+                    environmentPineValue, compilationCache: compilationCacheBefore);
+
+                return
+                (new CompileInteractiveEnvironmentResult(
+                    lastIncrementModulesTexts: elmModulesTexts.ToImmutableList(),
+                    environmentPineValueJson: environmentJson.json,
+                    environmentPineValue: environmentPineValue,
+                    environmentDictionary: environmentJson.dictionary,
+                    parent: parentEnvironment),
+                    compilationCacheTask.Result);
+            });
+    }
+
+    internal record CompileInteractiveEnvironmentResult(
+        IImmutableList<string> lastIncrementModulesTexts,
+        PineValueJson environmentPineValueJson,
+        PineValue environmentPineValue,
+        IReadOnlyDictionary<string, PineValue> environmentDictionary,
+        CompileInteractiveEnvironmentResult? parent) : IEquatable<CompileInteractiveEnvironmentResult>
+    {
+        public IImmutableList<string> AllModulesTextsList =>
+            parent is null ? lastIncrementModulesTexts : parent.AllModulesTextsList.AddRange(lastIncrementModulesTexts);
+
+        public ReadOnlyMemory<byte> Hash => HashCache.Value;
+
+        Lazy<ReadOnlyMemory<byte>> HashCache => new(ComputeHash);
+
+        ReadOnlyMemory<byte> ComputeHash()
+        {
+            var lastIncrementModulesBlobs =
+                lastIncrementModulesTexts.Select(Encoding.UTF8.GetBytes).ToArray();
+
+            var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(blob => PineValue.Blob(blob)).ToImmutableList());
+
+            var selfHash = GetHash(selfValue);
+
+            if (parent is null)
+                return selfHash;
+
+            return GetHash(PineValue.List(new[] { PineValue.Blob(selfHash), PineValue.Blob(parent.Hash) }));
+        }
+
+        public virtual bool Equals(CompileInteractiveEnvironmentResult? other)
+        {
+            if (other is null)
+                return false;
+
+            return Hash.Span.SequenceEqual(other.Hash.Span);
+        }
+
+        public override int GetHashCode()
+        {
+            return Hash.GetHashCode();
+        }
     }
 
     static internal Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
@@ -123,7 +294,19 @@ public class ElmInteractive
 
     internal record CompilationCache(
         IImmutableDictionary<PineValue, PineValueJson.PineValueMappedForTransport> valueMappedForTransportCache,
-        IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> valueJsonCache);
+        IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> valueJsonCache,
+        IImmutableSet<CompileInteractiveEnvironmentResult> compileInteractiveEnvironmentResults)
+    {
+        static internal CompilationCache Empty =>
+            new(
+                ImmutableDictionary<PineValue, PineValueJson.PineValueMappedForTransport>.Empty,
+                ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty,
+                ImmutableHashSet<CompileInteractiveEnvironmentResult>.Empty);
+    }
+
+    record CompileElmInteractiveEnvironmentRequest(
+        PineValueJson environmentBefore,
+        IReadOnlyList<string> modulesTexts);
 
     record CompileInteractiveSubmissionRequest(
         PineValueJson environment,
@@ -321,9 +504,13 @@ public class ElmInteractive
                     [pineValue] = cacheEntry
                 };
 
-                return new CompilationCache(
-                    valueMappedForTransportCache: valueMappedForTransportCache.ToImmutableDictionary(),
-                    valueJsonCache: valueJsonCache.ToImmutableDictionary());
+                return
+                    (compilationCache ?? CompilationCache.Empty)
+                    with
+                    {
+                        valueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
+                        valueJsonCache = valueJsonCache.ToImmutableDictionary()
+                    };
             });
 
             return (cacheEntry, compilationCacheTask);
@@ -382,7 +569,7 @@ public class ElmInteractive
         throw new NotImplementedException("Unexpected shape of Pine value from JSON");
     }
 
-    static IReadOnlyCollection<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
+    static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
         appCodeTree == null ? null
         :
         TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree)!)
@@ -444,8 +631,12 @@ public class ElmInteractive
                 publicName: "evaluateSubmissionInInteractive",
                 arity: 1),
 
-                (functionNameInElm: "Main.compileEvalContextForElmInteractive",
-                publicName: "compileEvalContextForElmInteractive",
+                (functionNameInElm: "Main.getDefaultElmCoreModulesTexts",
+                publicName: "getDefaultElmCoreModulesTexts",
+                arity: 1),
+
+                (functionNameInElm: "Main.compileInteractiveEnvironment",
+                publicName: "compileInteractiveEnvironment",
                 arity: 1),
 
                 (functionNameInElm: "Main.compileInteractiveSubmission",

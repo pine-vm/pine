@@ -14,19 +14,21 @@ public class InteractiveSessionPine : IInteractiveSession
 
     readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
-    ElmInteractive.CompilationCache? lastSubmissionCompilationCache;
+    ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
     readonly PineVM pineVM = new();
+
+    readonly static ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
 
     public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree)
     {
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
-            CompileEvalContextForElmInteractive(appCodeTree: appCodeTree));
+            CompileInteractiveEnvironment(appCodeTree: appCodeTree));
     }
 
     static private readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
 
-    private Result<string, PineValue> CompileEvalContextForElmInteractive(TreeNodeWithStringPath? appCodeTree)
+    private Result<string, PineValue> CompileInteractiveEnvironment(TreeNodeWithStringPath? appCodeTree)
     {
         var appCodeTreeHash =
             appCodeTree switch
@@ -39,14 +41,37 @@ public class InteractiveSessionPine : IInteractiveSession
         {
             return compileEvalContextCache.GetOrAdd(
                 key: appCodeTreeHash,
-                valueFactory: _ => ElmInteractive.CompileEvalContextForElmInteractive(
-                evalElmPreparedJsEngine.Value,
-                appCodeTree: appCodeTree));
+                valueFactory: _ =>
+                {
+                    var compileInteractiveEnvironmentResults =
+                    lastCompilationCache.compileInteractiveEnvironmentResults
+                    .Union(compiledEnvironmentCache.Keys);
+
+                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var resultWithCache =
+                        ElmInteractive.CompileInteractiveEnvironment(
+                            evalElmPreparedJsEngine.Value,
+                            appCodeTree: appCodeTree,
+                            lastCompilationCache with
+                            {
+                                compileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
+                            });
+
+                    lastCompilationCache = resultWithCache.Unpack(fromErr: _ => lastCompilationCache, fromOk: ok => ok.compilationCache);
+
+                    foreach (var compileEnvironmentResult in lastCompilationCache.compileInteractiveEnvironmentResults)
+                    {
+                        compiledEnvironmentCache[compileEnvironmentResult] = compileEnvironmentResult;
+                    }
+
+                    return resultWithCache.Map(withCache => withCache.compileResult);
+                });
         }
         finally
         {
             // Build JS engine and warm-up anyway.
-            System.Threading.Tasks.Task.Run(() => evalElmPreparedJsEngine.Value.Evaluate(""));
+            System.Threading.Tasks.Task.Run(() => evalElmPreparedJsEngine.Value.Evaluate("0"));
         }
     }
 
@@ -86,7 +111,7 @@ public class InteractiveSessionPine : IInteractiveSession
                             environment: buildPineEvalContextOk,
                             submission: submission,
                             addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry),
-                            compilationCacheBefore: lastSubmissionCompilationCache);
+                            compilationCacheBefore: lastCompilationCache);
 
                     logDuration("compile");
 
@@ -95,7 +120,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     .MapError(error => "Failed to parse submission: " + error)
                     .AndThen(compileSubmissionOk =>
                     {
-                        lastSubmissionCompilationCache = compileSubmissionOk.cache;
+                        lastCompilationCache = compileSubmissionOk.cache;
 
                         return
                         PineVM.DecodeExpressionFromValue(compileSubmissionOk.compiledValue)
