@@ -243,7 +243,7 @@ public class ElmInteractive
         PineValue environment,
         string submission,
         Action<string>? addInspectionLogEntry,
-        CompilationCache? compilationCacheBefore)
+        CompilationCache compilationCacheBefore)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -406,15 +406,13 @@ public class ElmInteractive
         static public ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
             FromPineValueBuildingDictionary(
             PineValue pineValue,
-            CompilationCache? compilationCache)
+            CompilationCache compilationCache)
         {
-            if (compilationCache is CompilationCache compilationCacheNotNull)
-                if (compilationCacheNotNull.valueJsonCache.TryGetValue(pineValue, out var cached))
-                    return (cached, System.Threading.Tasks.Task.FromResult(compilationCacheNotNull));
+            if (compilationCache.valueJsonCache.TryGetValue(pineValue, out var cached))
+                return (cached, System.Threading.Tasks.Task.FromResult(compilationCache));
 
             var valueMappedForTransportCache = new Dictionary<PineValue, PineValueMappedForTransport>(
-                compilationCache?.valueMappedForTransportCache ??
-                ImmutableDictionary<PineValue, PineValueMappedForTransport>.Empty);
+                compilationCache.valueMappedForTransportCache);
 
             var intermediate = PineValueMappedForTransport.FromPineValue(pineValue, cache: valueMappedForTransportCache);
 
@@ -498,14 +496,13 @@ public class ElmInteractive
             var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
             {
                 var valueJsonCache = new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
-                    compilationCache?.valueJsonCache ??
-                    ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty)
+                    compilationCache.valueJsonCache)
                 {
                     [pineValue] = cacheEntry
                 };
 
                 return
-                    (compilationCache ?? CompilationCache.Empty)
+                    compilationCache
                     with
                     {
                         valueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
