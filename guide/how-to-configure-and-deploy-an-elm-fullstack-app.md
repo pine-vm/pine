@@ -6,8 +6,8 @@ In this guide, I use the `elm-fs` command-line interface (CLI) program. You can 
 
 Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-09-06/elm-fullstack-bin-8ce169c776160db7a035a8d3a7845341af11f871-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-09-06/elm-fullstack-bin-8ce169c776160db7a035a8d3a7845341af11f871-linux-x64.zip
++ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64.zip
++ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-linux-x64.zip
 
 To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -18,7 +18,7 @@ To register the elm-fs executable on your system, run the `elm-fs  install` comm
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-8ce169c776160db7a035a8d3a7845341af11f871-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
@@ -304,7 +304,7 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2022-09-06.
+Welcome to the Elm Fullstack admin interface version 2022-10-17.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
