@@ -49,10 +49,11 @@ public abstract record PineValue : IEquatable<PineValue>
             if (other is null)
                 return false;
 
-            return
-                slimHashCode == other.slimHashCode &&
+            return ReferenceEquals(this, other)
+                ||
+                (slimHashCode == other.slimHashCode &&
                 Elements.Count == other.Elements.Count &&
-                Elements.SequenceEqual(other.Elements);
+                Elements.SequenceEqual(other.Elements));
         }
 
         public override int GetHashCode() => slimHashCode;
@@ -83,9 +84,10 @@ public abstract record PineValue : IEquatable<PineValue>
             if (other is null)
                 return false;
 
-            return
-                slimHashCode == other.slimHashCode &&
-                Bytes.Span.SequenceEqual(other.Bytes.Span);
+            return ReferenceEquals(this, other)
+                ||
+                (slimHashCode == other.slimHashCode &&
+                Bytes.Span.SequenceEqual(other.Bytes.Span));
         }
 
         public override int GetHashCode() => slimHashCode;
