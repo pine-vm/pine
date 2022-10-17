@@ -47,8 +47,6 @@ public class InteractiveSessionPine : IInteractiveSession
                     lastCompilationCache.compileInteractiveEnvironmentResults
                     .Union(compiledEnvironmentCache.Keys);
 
-                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
                     var resultWithCache =
                         ElmInteractive.CompileInteractiveEnvironment(
                             evalElmPreparedJsEngine.Value,
@@ -95,8 +93,6 @@ public class InteractiveSessionPine : IInteractiveSession
             void logDuration(string label) =>
                 addInspectionLogEntry?.Invoke(
                     label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
-
-            var buildPineEvalContextResult = buildPineEvalContextTask.Result;
 
             return
                 buildPineEvalContextTask.Result
