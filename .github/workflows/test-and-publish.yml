@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions/setup-dotnet@v2
       with:
-        dotnet-version: '7.0.100-rc.1.22431.12'
+        dotnet-version: '7.0.100-rc.2.22477.23'
         include-prerelease: true
     - name: Try use dotnet
       run: dotnet --info
