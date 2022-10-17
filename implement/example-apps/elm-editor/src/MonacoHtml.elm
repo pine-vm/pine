@@ -316,7 +316,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 { token: 'keyword', foreground: '#C586C0' },
                 { token: 'type', foreground: '#569CD6' },
                 { token: 'function.name', foreground: '#DCDCAA' },
-            ]
+            ],
+            colors: {},
         });
 
         var editor = monaco.editor.create(document.getElementById('container'), {
@@ -352,8 +353,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 set(key) {
                     // console.log("storageService.set: " + key);
                 },
-                onWillSaveState() { },
-                onDidChangeStorage() { }
+                onWillSaveState() {},
+                onDidChangeStorage() {},
+                onDidChangeValue() {},
             }
         });
 

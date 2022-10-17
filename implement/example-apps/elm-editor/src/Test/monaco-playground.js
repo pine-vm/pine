@@ -145,7 +145,8 @@ monaco.editor.defineTheme('dark-plus', {
         { token: 'keyword', foreground: '#C586C0' },
         { token: 'type', foreground: '#569CD6' },
         { token: 'function.name', foreground: '#DCDCAA' },
-    ]
+    ],
+    colors: {},
 });
 
 monaco.editor.create(document.getElementById("container"), {
