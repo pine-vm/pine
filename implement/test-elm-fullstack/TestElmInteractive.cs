@@ -37,7 +37,7 @@ public class TestElmInteractive
             ElmFullstack.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                 scenarios,
                 scenario => LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!,
-                ElmFullstack.ElmInteractive.ElmEngineType.JavaScript);
+                ElmFullstack.ElmInteractive.ElmEngineType.Pine);
 
         var allSteps =
             scenariosResults
