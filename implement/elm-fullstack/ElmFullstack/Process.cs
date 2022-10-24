@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ElmFullstack.CompilerSerialInterface;
 using JavaScriptEngineSwitcher.Core;
 using JavaScriptEngineSwitcher.V8;
 using Pine;
@@ -33,21 +32,9 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
 {
     readonly IJsEngine javascriptEngine;
 
-    static public int? OverrideJsEngineSettingsMaxStackSize = null;
-
-    static public JsEngineBase ConstructJsEngine()
-    {
-        return new V8JsEngine(
-            new V8Settings
-            {
-                MaxStackUsage = (UIntPtr)(OverrideJsEngineSettingsMaxStackSize ?? 40_000_000),
-            }
-        );
-    }
-
     public ProcessHostedWithV8(string javascriptPreparedToRun)
     {
-        javascriptEngine = ConstructJsEngine();
+        javascriptEngine = IJsEngine.DefaultBuildJsEngine();
 
         javascriptEngine.Evaluate(javascriptPreparedToRun);
 

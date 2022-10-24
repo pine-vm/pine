@@ -11,8 +11,7 @@ public class InteractiveSessionJavaScript : IInteractiveSession
 {
     readonly TreeNodeWithStringPath? appCodeTree;
 
-    readonly Lazy<JavaScriptEngineSwitcher.Core.IJsEngine> evalElmPreparedJsEngine =
-        new(ElmInteractive.PrepareJsEngineToEvaluateElm);
+    readonly Lazy<IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
 
     readonly IList<string> previousSubmissions = new List<string>();
 

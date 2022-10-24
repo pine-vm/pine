@@ -14,7 +14,7 @@ public class ElmInteractive
     static public readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavascriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
 
     static public Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        IJsEngine evalElmPreparedJsEngine,
         TreeNodeWithStringPath? appCodeTree,
         string submission,
         IReadOnlyList<string>? previousLocalSubmissions = null)
@@ -47,7 +47,7 @@ public class ElmInteractive
     }
 
     static public IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine)
+        IJsEngine evalElmPreparedJsEngine)
     {
         var responseJson =
             evalElmPreparedJsEngine.CallFunction("getDefaultElmCoreModulesTexts", 0).ToString()!;
@@ -57,7 +57,7 @@ public class ElmInteractive
     }
 
     static internal Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        IJsEngine evalElmPreparedJsEngine,
         TreeNodeWithStringPath? appCodeTree,
         CompilationCache compilationCacheBefore)
     {
@@ -78,7 +78,7 @@ public class ElmInteractive
 
     static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModulesCachingIncrements(
         IReadOnlyList<string> elmModulesTexts,
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        IJsEngine evalElmPreparedJsEngine,
         CompilationCache compilationCacheBefore)
     {
         var baseResults =
@@ -153,7 +153,7 @@ public class ElmInteractive
     static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModules(
         IReadOnlyList<string> elmModulesTexts,
         CompileInteractiveEnvironmentResult? parentEnvironment,
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        IJsEngine evalElmPreparedJsEngine,
         CompilationCache compilationCacheBefore)
     {
         var environmentBefore =
@@ -239,7 +239,7 @@ public class ElmInteractive
     }
 
     static internal Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        IJsEngine evalElmPreparedJsEngine,
         PineValue environment,
         string submission,
         Action<string>? addInspectionLogEntry,
@@ -313,7 +313,7 @@ public class ElmInteractive
         string submission);
 
     static public Result<string, EvaluatedSctructure> SubmissionResponseFromResponsePineValue(
-        JavaScriptEngineSwitcher.Core.IJsEngine evalElmPreparedJsEngine,
+        IJsEngine evalElmPreparedJsEngine,
         PineValue response)
     {
         var responseJson =
@@ -597,9 +597,9 @@ public class ElmInteractive
                 fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.compiledAppFiles));
     }
 
-    static public JavaScriptEngineSwitcher.Core.IJsEngine PrepareJsEngineToEvaluateElm()
+    static public IJsEngine PrepareJsEngineToEvaluateElm()
     {
-        var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
+        var javascriptEngine = IJsEngine.BuildJsEngine();
 
         javascriptEngine.Evaluate(JavascriptToEvaluateElm.Value);
 

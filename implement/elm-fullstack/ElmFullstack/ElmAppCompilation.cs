@@ -406,7 +406,7 @@ namespace ElmFullstack
 
         static public string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
-        static public JavaScriptEngineSwitcher.Core.IJsEngine CachedJsEngineToCompileFileTree(
+        static public IJsEngine CachedJsEngineToCompileFileTree(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var compilerId =
@@ -420,14 +420,14 @@ namespace ElmFullstack
                 _ => CreateJsEngineToCompileFileTree(compilerElmProgramCodeFiles));
         }
 
-        static readonly ConcurrentDictionary<string, JavaScriptEngineSwitcher.Core.IJsEngine> FileTreeCompilerJsEngineCache = new();
+        static readonly ConcurrentDictionary<string, IJsEngine> FileTreeCompilerJsEngineCache = new();
 
-        static public JavaScriptEngineSwitcher.Core.IJsEngine CreateJsEngineToCompileFileTree(
+        static public IJsEngine CreateJsEngineToCompileFileTree(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var javascript = BuildJavascriptToCompileFileTree(compilerElmProgramCodeFiles);
 
-            var javascriptEngine = ProcessHostedWithV8.ConstructJsEngine();
+            var javascriptEngine = IJsEngine.BuildJsEngine();
 
             javascriptEngine.Evaluate(javascript);
 
