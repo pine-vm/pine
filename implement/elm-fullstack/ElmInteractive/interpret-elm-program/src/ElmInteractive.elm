@@ -108,6 +108,7 @@ type EnvironmentElement
 
 type alias CompilationStack =
     { moduleAliases : Dict.Dict (List String) (List String)
+    , availableModules : Dict.Dict (List String) ElmModuleInCompilation
     , availableDeclarations : Dict.Dict String InternalDeclaration
     , inliningParentDeclarations : Set.Set String
     , elmValuesToExposeToGlobal : Dict.Dict String (List String)
@@ -129,6 +130,10 @@ type alias ElmFunctionDeclarationStruct =
     { arguments : List Elm.Syntax.Pattern.Pattern
     , expression : Elm.Syntax.Expression.Expression
     }
+
+
+type alias ElmModuleInCompilation =
+    Dict.Dict String Pine.Value
 
 
 submissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
@@ -409,101 +414,104 @@ expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesT
             Err ("Failed to get declarations from environment: " ++ error)
 
         Ok environmentBeforeDeclarations ->
-            let
-                environmentBeforeModules =
-                    environmentBeforeDeclarations
-                        |> Dict.toList
-                        |> List.map (Tuple.mapFirst (String.split "."))
-                        |> List.filter (Tuple.first >> List.all stringStartsWithUpper)
-                        |> Dict.fromList
-            in
-            contextModulesTexts
-                |> List.map parsedElmFileFromOnlyFileText
-                |> Result.Extra.combine
-                |> Result.andThen
-                    (\parsedElmFiles ->
-                        let
-                            modulesNamesWithDependencies =
-                                parsedElmFiles
-                                    |> List.map
-                                        (\file ->
-                                            file.parsedModule
-                                                |> listModuleTransitiveDependencies (List.map .parsedModule parsedElmFiles)
-                                                |> Result.mapError (Tuple.pair file)
-                                                |> Result.map (Tuple.pair file)
-                                        )
-                        in
-                        case modulesNamesWithDependencies |> Result.Extra.combine of
-                            Err ( file, error ) ->
-                                Err
-                                    ("Failed to resolve dependencies for module "
-                                        ++ String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
-                                        ++ ": "
-                                        ++ error
-                                    )
+            case separateEnvironmentDeclarations environmentBeforeDeclarations of
+                Err err ->
+                    Err ("Failed to separate declarations from environment: " ++ err)
 
-                            Ok modulesWithDependencies ->
+                Ok separateEnvironmentDeclarationsBefore ->
+                    contextModulesTexts
+                        |> List.map parsedElmFileFromOnlyFileText
+                        |> Result.Extra.combine
+                        |> Result.andThen
+                            (\parsedElmFiles ->
                                 let
-                                    moduleNamesOrderedByDeps =
-                                        modulesWithDependencies
-                                            |> List.concatMap Tuple.second
-                                            |> List.Extra.unique
+                                    modulesNamesWithDependencies =
+                                        parsedElmFiles
+                                            |> List.map
+                                                (\file ->
+                                                    file.parsedModule
+                                                        |> listModuleTransitiveDependencies (List.map .parsedModule parsedElmFiles)
+                                                        |> Result.mapError (Tuple.pair file)
+                                                        |> Result.map (Tuple.pair file)
+                                                )
                                 in
-                                moduleNamesOrderedByDeps
-                                    |> List.filterMap
-                                        (\moduleName ->
-                                            modulesWithDependencies
-                                                |> List.Extra.find
-                                                    (Tuple.first
-                                                        >> .parsedModule
-                                                        >> .moduleDefinition
-                                                        >> Elm.Syntax.Node.value
-                                                        >> Elm.Syntax.Module.moduleName
-                                                        >> (==) moduleName
-                                                    )
+                                case modulesNamesWithDependencies |> Result.Extra.combine of
+                                    Err ( file, error ) ->
+                                        Err
+                                            ("Failed to resolve dependencies for module "
+                                                ++ String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
+                                                ++ ": "
+                                                ++ error
+                                            )
+
+                                    Ok modulesWithDependencies ->
+                                        let
+                                            moduleNamesOrderedByDeps =
+                                                modulesWithDependencies
+                                                    |> List.concatMap Tuple.second
+                                                    |> List.Extra.unique
+                                        in
+                                        moduleNamesOrderedByDeps
+                                            |> List.filterMap
+                                                (\moduleName ->
+                                                    modulesWithDependencies
+                                                        |> List.Extra.find
+                                                            (Tuple.first
+                                                                >> .parsedModule
+                                                                >> .moduleDefinition
+                                                                >> Elm.Syntax.Node.value
+                                                                >> Elm.Syntax.Module.moduleName
+                                                                >> (==) moduleName
+                                                            )
+                                                )
+                                            |> List.map Tuple.first
+                                            |> Ok
+                            )
+                        |> Result.andThen
+                            (\parsedElmFiles ->
+                                parsedElmFiles
+                                    |> List.foldl
+                                        (\moduleToTranslate ->
+                                            Result.andThen
+                                                (\aggregate ->
+                                                    let
+                                                        currentAvailableModules =
+                                                            separateEnvironmentDeclarationsBefore.modules
+                                                                |> Dict.union aggregate
+                                                    in
+                                                    compileElmModuleTextIntoNamedExports currentAvailableModules moduleToTranslate
+                                                        |> Result.mapError
+                                                            ((++)
+                                                                ("Failed to compile elm module '"
+                                                                    ++ String.join "." (Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule))
+                                                                    ++ "': "
+                                                                )
+                                                            )
+                                                        |> Result.map
+                                                            (\( moduleName, moduleValue ) ->
+                                                                Dict.insert moduleName
+                                                                    (Dict.fromList moduleValue)
+                                                                    aggregate
+                                                            )
+                                                )
                                         )
-                                    |> List.map Tuple.first
-                                    |> Ok
-                    )
-                |> Result.andThen
-                    (\parsedElmFiles ->
-                        parsedElmFiles
-                            |> List.foldl
-                                (\moduleToTranslate ->
-                                    Result.andThen
-                                        (\aggregate ->
-                                            let
-                                                currentAvailableModules =
-                                                    environmentBeforeModules |> Dict.union aggregate
-                                            in
-                                            compileElmModuleTextIntoPineValue currentAvailableModules moduleToTranslate
-                                                |> Result.mapError
-                                                    ((++)
-                                                        ("Failed to compile elm module '"
-                                                            ++ String.join "." (Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule))
-                                                            ++ "': "
-                                                        )
-                                                    )
-                                                |> Result.map
-                                                    (\( moduleName, moduleValue ) -> Dict.insert moduleName moduleValue aggregate)
-                                        )
-                                )
-                                (Ok Dict.empty)
-                    )
-                |> Result.map
-                    (\contextModules ->
-                        let
-                            modulesValues =
-                                contextModules
-                                    |> Dict.toList
-                                    |> List.map (Tuple.mapFirst (String.join "."))
-                        in
-                        { addedModulesNames = Dict.keys contextModules
-                        , environment =
-                            Pine.environmentFromDeclarations
-                                (Dict.toList environmentBeforeDeclarations ++ modulesValues)
-                        }
-                    )
+                                        (Ok Dict.empty)
+                            )
+                        |> Result.map
+                            (\contextModules ->
+                                let
+                                    modulesValues =
+                                        contextModules
+                                            |> Dict.toList
+                                            |> List.map (Tuple.mapFirst (String.join "."))
+                                            |> List.map (Tuple.mapSecond emitModuleValue)
+                                in
+                                { addedModulesNames = Dict.keys contextModules
+                                , environment =
+                                    Pine.environmentFromDeclarations
+                                        (Dict.toList environmentBeforeDeclarations ++ modulesValues)
+                                }
+                            )
 
 
 listModuleTransitiveDependencies : List Elm.Syntax.File.File -> Elm.Syntax.File.File -> Result String (List (List String))
@@ -593,13 +601,10 @@ parsedElmFileFromOnlyFileText fileText =
                 }
 
 
-compileElmModuleTextIntoPineValue : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, Pine.Value )
-compileElmModuleTextIntoPineValue availableForDependency moduleToTranslate =
-    compileElmModuleTextIntoNamedExports availableForDependency moduleToTranslate
-        |> Result.map (Tuple.mapSecond (List.map Pine.valueFromContextExpansionWithName >> Pine.ListValue))
-
-
-compileElmModuleTextIntoNamedExports : Dict.Dict Elm.Syntax.ModuleName.ModuleName Pine.Value -> ProjectParsedElmFile -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
+compileElmModuleTextIntoNamedExports :
+    Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
+    -> ProjectParsedElmFile
+    -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
 compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
     let
         moduleName =
@@ -618,13 +623,6 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                                         )
                            )
                     )
-                |> Dict.fromList
-
-        declarationsOfOtherModules : Dict.Dict String InternalDeclaration
-        declarationsOfOtherModules =
-            availableModules
-                |> Dict.toList
-                |> List.map (Tuple.mapSecond CompiledDeclaration >> Tuple.mapFirst (String.join "."))
                 |> Dict.fromList
     in
     let
@@ -668,9 +666,9 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
 
         initialCompilationStack =
             { moduleAliases = moduleAliases
+            , availableModules = availableModules
             , availableDeclarations =
-                declarationsOfOtherModules
-                    |> Dict.union (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
+                (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
                     |> Dict.union (declarationsFromCustomTypes |> Dict.map (always CompiledDeclaration))
             , inliningParentDeclarations = Set.empty
             , elmValuesToExposeToGlobal =
@@ -2166,32 +2164,34 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
             Dict.get localModuleName compilation.moduleAliases
                 |> Maybe.withDefault localModuleName
     in
-    case compilation.availableDeclarations |> Dict.get (String.join "." canonicalModuleName) of
+    case compilation.availableModules |> Dict.get canonicalModuleName of
         Nothing ->
             Err
                 ("Did not find module '"
                     ++ String.join "." canonicalModuleName
                     ++ "'. There are "
-                    ++ (String.fromInt (Dict.size compilation.availableDeclarations)
+                    ++ (String.fromInt (Dict.size compilation.availableModules)
                             ++ " declarations in this scope: "
-                            ++ String.join ", " (Dict.keys compilation.availableDeclarations)
+                            ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
                        )
                 )
 
-        Just (ElmFunctionDeclaration _) ->
-            Err ("Got function declaration for module '" ++ String.join "." canonicalModuleName ++ "'")
+        Just moduleValue ->
+            case Dict.get nameInModule moduleValue of
+                Nothing ->
+                    Err
+                        ("Did not find '"
+                            ++ nameInModule
+                            ++ "' in module '"
+                            ++ String.join "." canonicalModuleName
+                            ++ "'. There are "
+                            ++ String.fromInt (Dict.size moduleValue)
+                            ++ " names available in that module: "
+                            ++ String.join ", " (Dict.keys moduleValue)
+                        )
 
-        Just (CompiledDeclaration moduleValue) ->
-            let
-                nameInModuleAsValue =
-                    Pine.valueFromString nameInModule
-            in
-            Pine.lookUpNameInListValue nameInModuleAsValue moduleValue
-                |> Result.mapError
-                    (Pine.displayStringFromPineError
-                        >> String.replace "\n" ": "
-                        >> (++) ("Failed lookup in module '" ++ (String.join "." canonicalModuleName ++ "': "))
-                    )
+                Just declarationValue ->
+                    Ok declarationValue
 
 
 expressionToLookupNameInEnvironment : String -> Pine.Expression
@@ -2401,7 +2401,9 @@ The second element contains the response, the value to display to the user.
 -}
 compileInteractiveSubmission : Pine.Value -> String -> Result String Pine.Expression
 compileInteractiveSubmission environment submission =
-    case getDeclarationsFromEnvironment environment of
+    case
+        getDeclarationsFromEnvironment environment |> Result.andThen separateEnvironmentDeclarations
+    of
         Err error ->
             Err ("Failed to get declarations from environment: " ++ error)
 
@@ -2415,7 +2417,9 @@ compileInteractiveSubmission environment submission =
 
                 defaultCompilationStack =
                     { moduleAliases = Dict.empty
-                    , availableDeclarations = environmentDeclarations |> Dict.map (always CompiledDeclaration)
+                    , availableModules = environmentDeclarations.modules
+                    , availableDeclarations =
+                        environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
                     , inliningParentDeclarations = Set.empty
                     , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
                     }
@@ -2530,6 +2534,47 @@ compileInteractiveSubmission environment submission =
                                             }
                                     }
                                 )
+
+
+emitModuleValue : ElmModuleInCompilation -> Pine.Value
+emitModuleValue =
+    Dict.toList
+        >> List.map Pine.valueFromContextExpansionWithName
+        >> Pine.ListValue
+
+
+separateEnvironmentDeclarations :
+    Dict.Dict String Pine.Value
+    ->
+        Result
+            String
+            { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
+            , otherDeclarations : Dict.Dict String Pine.Value
+            }
+separateEnvironmentDeclarations environmentDeclarations =
+    environmentDeclarations
+        |> Dict.filter (stringStartsWithUpper >> always)
+        |> Dict.toList
+        |> List.map (Tuple.mapFirst (String.split "."))
+        |> List.map
+            (\( moduleName, moduleValue ) ->
+                getDeclarationsFromEnvironment moduleValue
+                    |> Result.map (Tuple.pair moduleName)
+                    |> Result.mapError ((++) ("Failed to get declarations from module " ++ String.join "." moduleName))
+            )
+        |> Result.Extra.combine
+        |> Result.map Dict.fromList
+        |> Result.map
+            (\environmentBeforeModules ->
+                let
+                    otherDeclarations =
+                        environmentDeclarations
+                            |> Dict.filter (stringStartsWithUpper >> not >> always)
+                in
+                { modules = environmentBeforeModules
+                , otherDeclarations = otherDeclarations
+                }
+            )
 
 
 getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)

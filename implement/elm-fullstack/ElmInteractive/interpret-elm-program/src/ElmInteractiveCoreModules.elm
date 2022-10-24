@@ -698,10 +698,10 @@ type Encoder
   | U16 Endianness Int
   | U32 Endianness Int
   | SequenceEncoder (List Encoder)
-  | BytesEncoder Bytes
+  | BytesEncoder Bytes.Bytes
 
 
-encode : Encoder -> Bytes
+encode : Encoder -> Bytes.Bytes
 encode builder =
     Bytes.Bytes (encodeBlob builder)
 
@@ -738,7 +738,6 @@ encodeBlob builder =
         Bytes.Bytes blob -> blob
 
 
-
 -- INTEGERS
 
 
@@ -763,15 +762,14 @@ unsignedInt32 =
   U32
 
 
-bytes : Bytes -> Encoder
+bytes : Bytes.Bytes -> Encoder
 bytes =
-  Bytes
+  Bytes.Bytes
 
 
 sequence : List Encoder -> Encoder
 sequence builders =
   SequenceEncoder builders
-
 
 """
     ]
