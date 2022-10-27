@@ -11,14 +11,10 @@ namespace Pine;
 
 public class ExecutableFile
 {
-    public struct ProcessOutput
-    {
-        public string StandardError;
-
-        public string StandardOutput;
-
-        public int ExitCode;
-    }
+    public record ProcessOutput(
+        string StandardError,
+        string StandardOutput,
+        int ExitCode);
 
     static public (ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
@@ -141,11 +137,11 @@ public class ExecutableFile
         }
 
         return (new ProcessOutput
-        {
-            ExitCode = exitCode,
-            StandardError = standardError,
-            StandardOutput = standardOutput,
-        }, createdFiles);
+        (
+            ExitCode: exitCode,
+            StandardError: standardError,
+            StandardOutput: standardOutput
+        ), createdFiles);
     }
 
     /// <summary>

@@ -97,7 +97,7 @@ public class ElmTestRs
 
     static public ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
 
-    static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
+    static public (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmProjectFiles)
     {
         var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
@@ -139,7 +139,7 @@ public class ElmTestRs
             stdoutLines.Select(line => (line, DeserializeElmTestRsReportJsonEntry(line)))
             .ToImmutableList();
 
-        return (stdout, executeElmTestResult.processOutput.StandardError, parsedLines);
+        return (executeElmTestResult.processOutput, parsedLines);
     }
 
     static public ElmTestRsReportJsonEntry DeserializeElmTestRsReportJsonEntry(string json)

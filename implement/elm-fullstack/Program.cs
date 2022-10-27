@@ -594,7 +594,7 @@ public class Program
 
             elmTestCmd.OnExecute(() =>
             {
-                var result = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
+                var elmTestResult = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
 
                 static void saveTextToFileAndReportToConsole(string filePath, string text)
                 {
@@ -608,21 +608,28 @@ public class Program
 
                 if (elmTestRsOutput != null)
                 {
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", result.stdout ?? "");
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", result.stderr ?? "");
+                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.processOutput.StandardOutput ?? "");
+                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.processOutput.StandardError ?? "");
+                }
+
+                if(0 < elmTestResult.processOutput.StandardError?.Length)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine(elmTestResult.processOutput.StandardError);
+                    Console.ResetColor();
                 }
 
                 var eventsOutputs =
-                    result.stdoutLines
+                    elmTestResult.stdoutLines
                     .Select(l => ElmTestRs.OutputFromEvent(l.parsedLine))
                     .ToImmutableList();
 
-                foreach (var eventOutout in eventsOutputs)
+                foreach (var eventOutput in eventsOutputs)
                 {
-                    if (eventOutout.text.Any())
+                    if (eventOutput.text.Any())
                         Console.WriteLine("");
 
-                    foreach (var coloredText in eventOutout.text)
+                    foreach (var coloredText in eventOutput.text)
                     {
                         if (coloredText.color.Red != null)
                         {
@@ -645,8 +652,7 @@ public class Program
 
                 // TODO: Report more details on timing.
 
-                return
-                    eventsOutputs.All(e => e.overallSuccess != false) && eventsOutputs.Any(e => e.overallSuccess == true) ? 0 : 1;
+                return elmTestResult.processOutput.ExitCode;
             });
         });
 
@@ -2260,8 +2266,7 @@ public class Program
 
     static readonly DateTimeOffset programStartTime = DateTimeOffset.UtcNow;
 
-
-    static public (string stdout, string stderr, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
+    static public (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
         CompileAndElmTestRs(string source)
     {
         var (_, compiledAppFiles) = CompileApp(source);
