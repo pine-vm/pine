@@ -75,23 +75,23 @@ public class ElmTestRs
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("470e7fcf96cafe569455df522c03f577ab317a6fd758968feb208e751627fbf5",
-            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v2.0.1/elm-test-rs_linux.tar.gz"))
+            ("15083a48b6818bc9e247e8bd3b198907a1e9c782270a662ddd560dd6f9d71ea8",
+            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_linux.tar.gz"))
         .Add(
             OSPlatform.Windows,
-            ("a8ef939a9a7b91361745c2ce188c23ef246031693d4770ee3b0f82775b71f242",
-            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v2.0.1/elm-test-rs_windows.zip"));
+            ("b9a2d5d68307426e0b35f8030efbac940a3fa621a33ad2d84334a313cac33090",
+            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_windows.zip"));
 
     static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("227d743e45ebac69c3dccb406929ac671ad41d9e6dc22621c6111ab88c6c287f",
-            @"https://github.com/denoland/deno/releases/download/v1.20.6/deno-x86_64-unknown-linux-gnu.zip"))
+            ("3239864beb7ea1b85a18ccf757b1905eedeeb246c8a882c34c070de4301d5506",
+            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-unknown-linux-gnu.zip"))
         .Add(
             OSPlatform.Windows,
-            ("c531a3fb716175599033a5b71b150c14cc260c79a5c2f180927c840ac5d470c4",
-            @"https://github.com/denoland/deno/releases/download/v1.20.6/deno-x86_64-pc-windows-msvc.zip"));
+            ("166dfe795d6331ac9fb1c672374007129ea25e61650045d17e6c3f22083fc9f8",
+            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-pc-windows-msvc.zip"));
 
     static public ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
