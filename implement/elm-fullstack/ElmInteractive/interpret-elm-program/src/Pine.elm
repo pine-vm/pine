@@ -525,22 +525,12 @@ valueFromBool bool =
 
 trueValue : Value
 trueValue =
-    tagValue "True" []
+    BlobValue [ 4 ]
 
 
 falseValue : Value
 falseValue =
-    tagValue "False" []
-
-
-tagValue : String -> List Value -> Value
-tagValue tagName tagArguments =
-    ListValue [ valueFromString tagName, ListValue tagArguments ]
-
-
-tagValueExpression : String -> List Expression -> Expression
-tagValueExpression tagName tagArgumentsExpressions =
-    ListExpression [ LiteralExpression (valueFromString tagName), ListExpression tagArgumentsExpressions ]
+    BlobValue [ 2 ]
 
 
 describeExpression : Int -> Expression -> String

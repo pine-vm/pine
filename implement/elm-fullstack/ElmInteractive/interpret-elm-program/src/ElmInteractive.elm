@@ -256,102 +256,109 @@ elmValueAsJson elmValue =
 
 pineValueAsElmValue : Pine.Value -> Result String ElmValue
 pineValueAsElmValue pineValue =
-    case pineValue of
-        Pine.BlobValue blobValue ->
-            case blobValue of
-                [] ->
-                    Ok (ElmInternal "empty-blob")
+    if pineValue == Pine.trueValue then
+        Ok (ElmTag "True" [])
 
-                firstByte :: _ ->
-                    if firstByte == 4 || firstByte == 2 then
-                        blobValue
-                            |> Pine.bigIntFromBlobValue
-                            |> Result.map ElmInteger
+    else if pineValue == Pine.falseValue then
+        Ok (ElmTag "False" [])
 
-                    else if 10 < List.length blobValue then
-                        case Pine.decodeExpressionFromValue pineValue of
-                            Ok _ ->
-                                Ok (ElmInternal "expression")
+    else
+        case pineValue of
+            Pine.BlobValue blobValue ->
+                case blobValue of
+                    [] ->
+                        Ok (ElmInternal "empty-blob")
 
-                            Err _ ->
-                                Ok (ElmInternal "___error_skipped_large_blob___")
+                    firstByte :: _ ->
+                        if firstByte == 4 || firstByte == 2 then
+                            blobValue
+                                |> Pine.bigIntFromBlobValue
+                                |> Result.map ElmInteger
 
-                    else
-                        blobValue
-                            |> Pine.bigIntFromUnsignedBlobValue
-                            |> BigInt.toString
-                            |> String.toInt
-                            |> Maybe.withDefault 0
-                            |> Char.fromCode
-                            |> ElmChar
-                            |> Ok
+                        else if 10 < List.length blobValue then
+                            case Pine.decodeExpressionFromValue pineValue of
+                                Ok _ ->
+                                    Ok (ElmInternal "expression")
 
-        Pine.ListValue list ->
-            case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
-                Err error ->
-                    Err ("Failed to combine list: " ++ error)
+                                Err _ ->
+                                    Ok (ElmInternal "___error_skipped_large_blob___")
 
-                Ok listValues ->
-                    let
-                        tryMapToChar elmValue =
-                            case elmValue of
-                                ElmChar char ->
-                                    Just char
+                        else
+                            blobValue
+                                |> Pine.bigIntFromUnsignedBlobValue
+                                |> BigInt.toString
+                                |> String.toInt
+                                |> Maybe.withDefault 0
+                                |> Char.fromCode
+                                |> ElmChar
+                                |> Ok
 
-                                _ ->
-                                    Nothing
+            Pine.ListValue list ->
+                case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
+                    Err error ->
+                        Err ("Failed to combine list: " ++ error)
 
-                        resultAsList =
-                            Ok (ElmList listValues)
-                    in
-                    if listValues == [] then
-                        resultAsList
+                    Ok listValues ->
+                        let
+                            tryMapToChar elmValue =
+                                case elmValue of
+                                    ElmChar char ->
+                                        Just char
 
-                    else
-                        case listValues of
-                            [ ElmString tagName, ElmList tagArguments ] ->
-                                if stringStartsWithUpper tagName then
-                                    if tagName == elmRecordTypeTagName then
-                                        (case tagArguments of
-                                            [ recordValue ] ->
-                                                elmValueAsElmRecord recordValue
+                                    _ ->
+                                        Nothing
 
-                                            _ ->
-                                                Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
-                                        )
-                                            |> Result.mapError ((++) "Failed to extract value under record tag: ")
+                            resultAsList =
+                                Ok (ElmList listValues)
+                        in
+                        if listValues == [] then
+                            resultAsList
 
-                                    else if tagName == elmStringTypeTagName then
-                                        (case tagArguments of
-                                            [ ElmString string ] ->
-                                                Ok (ElmString string)
+                        else
+                            case listValues of
+                                [ ElmString tagName, ElmList tagArguments ] ->
+                                    if stringStartsWithUpper tagName then
+                                        if tagName == elmRecordTypeTagName then
+                                            (case tagArguments of
+                                                [ recordValue ] ->
+                                                    elmValueAsElmRecord recordValue
 
-                                            [ ElmList charsList ] ->
-                                                case charsList |> List.map tryMapToChar |> Maybe.Extra.combine of
-                                                    Just chars ->
-                                                        chars |> String.fromList |> ElmString |> Ok
+                                                _ ->
+                                                    Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
+                                            )
+                                                |> Result.mapError ((++) "Failed to extract value under record tag: ")
 
-                                                    Nothing ->
-                                                        Err "Failed to map chars"
+                                        else if tagName == elmStringTypeTagName then
+                                            (case tagArguments of
+                                                [ ElmString string ] ->
+                                                    Ok (ElmString string)
 
-                                            _ ->
-                                                Err "Unexpected shape of tag arguments"
-                                        )
-                                            |> Result.mapError ((++) "Failed to extract value under String tag: ")
+                                                [ ElmList charsList ] ->
+                                                    case charsList |> List.map tryMapToChar |> Maybe.Extra.combine of
+                                                        Just chars ->
+                                                            chars |> String.fromList |> ElmString |> Ok
+
+                                                        Nothing ->
+                                                            Err "Failed to map chars"
+
+                                                _ ->
+                                                    Err "Unexpected shape of tag arguments"
+                                            )
+                                                |> Result.mapError ((++) "Failed to extract value under String tag: ")
+
+                                        else
+                                            Ok (ElmTag tagName tagArguments)
 
                                     else
-                                        Ok (ElmTag tagName tagArguments)
-
-                                else
-                                    resultAsList
-
-                            _ ->
-                                case listValues |> List.map tryMapToChar |> Maybe.Extra.combine of
-                                    Just chars ->
-                                        chars |> String.fromList |> ElmString |> Ok
-
-                                    Nothing ->
                                         resultAsList
+
+                                _ ->
+                                    case listValues |> List.map tryMapToChar |> Maybe.Extra.combine of
+                                        Just chars ->
+                                            chars |> String.fromList |> ElmString |> Ok
+
+                                        Nothing ->
+                                            resultAsList
 
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
@@ -625,8 +632,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                            )
                     )
                 |> Dict.fromList
-    in
-    let
+
         declarationsFromCustomTypes : Dict.Dict String Pine.Value
         declarationsFromCustomTypes =
             moduleToTranslate.parsedModule.declarations
@@ -646,6 +652,13 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                                 []
                     )
                 |> Dict.fromList
+                |> Dict.map
+                    (\name originalDeclaredValue ->
+                        elmDeclarationsOverrides
+                            |> Dict.get moduleName
+                            |> Maybe.andThen (Dict.get name)
+                            |> Maybe.withDefault originalDeclaredValue
+                    )
 
         localFunctionDeclarations : Dict.Dict String Elm.Syntax.Expression.Function
         localFunctionDeclarations =
@@ -800,6 +813,26 @@ elmValuesToExposeToGlobalDefault =
     , ( "(::)", [ "List" ] )
     , ( "Nothing", [ "Maybe" ] )
     , ( "Just", [ "Maybe" ] )
+    ]
+        |> Dict.fromList
+
+
+elmDeclarationsOverrides : Dict.Dict (List String) (Dict.Dict String Pine.Value)
+elmDeclarationsOverrides =
+    [ ( [ "Basics" ]
+      , [ ( "True"
+          , Pine.trueValue
+                |> Pine.LiteralExpression
+                |> Pine.encodeExpressionAsValue
+          )
+        , ( "False"
+          , Pine.falseValue
+                |> Pine.LiteralExpression
+                |> Pine.encodeExpressionAsValue
+          )
+        ]
+            |> Dict.fromList
+      )
     ]
         |> Dict.fromList
 
@@ -2405,7 +2438,12 @@ compareLocations left right =
 
 valueFromString : String -> Pine.Value
 valueFromString =
-    Pine.valueFromString >> List.singleton >> Pine.tagValue elmStringTypeTagName
+    Pine.valueFromString >> List.singleton >> tagValue elmStringTypeTagName
+
+
+tagValue : String -> List Pine.Value -> Pine.Value
+tagValue tagName tagArguments =
+    Pine.ListValue [ Pine.valueFromString tagName, Pine.ListValue tagArguments ]
 
 
 pineKernelModuleName : String

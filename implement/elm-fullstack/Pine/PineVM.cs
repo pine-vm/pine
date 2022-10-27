@@ -143,9 +143,9 @@ public class PineVM
 
     static public PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
 
-    static readonly PineValue TrueValue = TagValue("True", ImmutableArray<PineValue>.Empty);
+    static readonly PineValue TrueValue = PineValue.Blob(new byte[] { 4 });
 
-    static readonly PineValue FalseValue = TagValue("False", ImmutableArray<PineValue>.Empty);
+    static readonly PineValue FalseValue = PineValue.Blob(new byte[] { 2 });
 
     static public Result<string, bool> DecodeBoolFromValue(PineValue value) =>
         value == TrueValue
@@ -155,10 +155,6 @@ public class PineVM
         (value == FalseValue ? Result<string, bool>.ok(false)
         :
         Result<string, bool>.err("Value is neither True nor False"));
-
-    static PineValue TagValue(string tagName, IImmutableList<PineValue> tagArguments) =>
-        PineValue.List(
-            ImmutableList.Create(Composition.ComponentFromString(tagName), PineValue.List(tagArguments)));
 
     static public Result<string, Expression> DecodeExpressionFromValue(PineValue value) =>
         DecodeUnionFromPineValue(ExpressionDecoders, value);
@@ -333,7 +329,7 @@ public class PineVM
             true
             :
             list.All(e => e.Equals(list[0])))
-            .Map(b => ValueFromBool(b));
+            .Map(ValueFromBool);
 
         static public Result<string, PineValue> logical_not(PineValue value) =>
             DecodeBoolFromValue(value)
@@ -493,7 +489,7 @@ public class PineVM
             KernelFunctionExpectingExactlyTwoArguments(
                 Result<string, PineValue>.ok,
                 Result<string, PineValue>.ok,
-                (nameValue, listValue) => lookUpNameInListValue(nameValue, listValue))
+                lookUpNameInListValue)
             (value).Map(foundNamed => PineValue.List(ImmutableList.Create(foundNamed)));
 
         static public Result<string, PineValue> lookUpNameInListValue(
