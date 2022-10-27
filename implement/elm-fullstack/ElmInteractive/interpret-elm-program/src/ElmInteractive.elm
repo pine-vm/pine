@@ -124,6 +124,7 @@ type alias EmitStack =
 type InternalDeclaration
     = CompiledDeclaration Pine.Value
     | ElmFunctionDeclaration ElmFunctionDeclarationStruct
+    | DeconstructionDeclaration Expression
 
 
 type alias ElmFunctionDeclarationStruct =
@@ -1008,44 +1009,65 @@ compileElmSyntaxLetBlock :
     -> Elm.Syntax.Expression.LetBlock
     -> Result String LetBlockStruct
 compileElmSyntaxLetBlock stackBefore letBlock =
-    let
-        newAvailableDeclarations =
-            letBlock.declarations
-                |> List.concatMap
-                    (\letDeclaration ->
-                        case Elm.Syntax.Node.value letDeclaration of
-                            Elm.Syntax.Expression.LetFunction letFunction ->
-                                [ ( Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunction.declaration).name
-                                  , internalDeclarationFromFunction letFunction
-                                  )
-                                ]
+    letBlock.declarations
+        |> List.concatMap
+            (\letDeclaration ->
+                case Elm.Syntax.Node.value letDeclaration of
+                    Elm.Syntax.Expression.LetFunction letFunction ->
+                        [ Ok
+                            ( Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunction.declaration).name
+                            , internalDeclarationFromFunction letFunction
+                            )
+                        ]
 
-                            Elm.Syntax.Expression.LetDestructuring _ _ ->
-                                []
-                    )
-                |> Dict.fromList
-
-        stack =
-            { stackBefore
-                | availableDeclarations = stackBefore.availableDeclarations |> Dict.union newAvailableDeclarations
-            }
-
-        letEntriesResults =
-            letBlock.declarations
-                |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxLetDeclaration stack)
-    in
-    case letEntriesResults |> Result.Extra.combine of
-        Err error ->
-            Err ("Failed to compile declaration in let block: " ++ error)
-
-        Ok letEntries ->
-            compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression)
-                |> Result.map
-                    (\expression ->
-                        { declarations = List.concat letEntries
-                        , expression = expression
+                    Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ pattern) (Elm.Syntax.Node.Node _ destructuredExpressionElm) ->
+                        destructuredExpressionElm
+                            |> compileElmSyntaxExpression stackBefore
+                            |> Result.andThen
+                                (\destructuredExpression ->
+                                    pattern
+                                        |> declarationsFromPattern
+                                        |> Result.map
+                                            (\declarations ->
+                                                declarations
+                                                    |> List.map
+                                                        (\( declName, deconsExpr ) ->
+                                                            ( declName
+                                                            , DeconstructionDeclaration (deconsExpr destructuredExpression)
+                                                            )
+                                                        )
+                                            )
+                                )
+                            |> Result.Extra.unpack (Err >> List.singleton) (List.map Ok)
+            )
+        |> Result.Extra.combine
+        |> Result.andThen
+            (\newAvailableDeclarations ->
+                let
+                    stack =
+                        { stackBefore
+                            | availableDeclarations =
+                                stackBefore.availableDeclarations
+                                    |> Dict.union (Dict.fromList newAvailableDeclarations)
                         }
-                    )
+
+                    letEntriesResults =
+                        letBlock.declarations
+                            |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxLetDeclaration stack)
+                in
+                case letEntriesResults |> Result.Extra.combine of
+                    Err error ->
+                        Err ("Failed to compile declaration in let block: " ++ error)
+
+                    Ok letEntries ->
+                        compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression)
+                            |> Result.map
+                                (\expression ->
+                                    { declarations = List.concat letEntries
+                                    , expression = expression
+                                    }
+                                )
+            )
 
 
 compileElmSyntaxLetDeclaration :
@@ -1388,9 +1410,20 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPattern,
             Err error
 
         Ok deconstruction ->
+            let
+                stack =
+                    { stackBefore
+                        | availableDeclarations =
+                            stackBefore.availableDeclarations
+                                |> Dict.union
+                                    (Dict.map (always DeconstructionDeclaration)
+                                        (Dict.fromList deconstruction.declarations)
+                                    )
+                    }
+            in
             elmExpression
                 |> Elm.Syntax.Node.value
-                |> compileElmSyntaxExpression stackBefore
+                |> compileElmSyntaxExpression stack
                 |> Result.map
                     (\expression ->
                         { conditionExpression = deconstruction.conditionExpression
@@ -1408,11 +1441,11 @@ compileElmSyntaxPattern :
     -> Expression
     -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
     -> Result String { conditionExpression : Expression, declarations : List ( String, Expression ) }
-compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
+compileElmSyntaxPattern stack deconstructedExpression elmPattern =
     let
         continueWithOnlyEqualsCondition valueToCompare =
             Ok
-                { conditionExpression = equalCondition [ caseBlockValueExpression, valueToCompare ]
+                { conditionExpression = equalCondition [ deconstructedExpression, valueToCompare ]
                 , declarations = []
                 }
     in
@@ -1427,7 +1460,7 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
             let
                 conditionsAndDeclarationsFromPattern elementIndex =
                     compileElmSyntaxPattern stack
-                        (listItemFromIndexExpression elementIndex caseBlockValueExpression)
+                        (listItemFromIndexExpression elementIndex deconstructedExpression)
                         >> Result.map
                             (\listElementResult ->
                                 { conditions = [ listElementResult.conditionExpression ]
@@ -1444,7 +1477,7 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                             matchesLengthCondition =
                                 equalCondition
                                     [ LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt (List.length listElements)))
-                                    , countListElementsExpression caseBlockValueExpression
+                                    , countListElementsExpression deconstructedExpression
                                     ]
 
                             condition =
@@ -1453,7 +1486,7 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                                 )
                                     |> booleanConjunctionExpressionFromList
                                         (equalCondition
-                                            [ caseBlockValueExpression, ListExpression [] ]
+                                            [ deconstructedExpression, ListExpression [] ]
                                         )
 
                             declarations =
@@ -1470,10 +1503,10 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                     let
                         declarations =
                             [ ( unconsLeftName
-                              , pineKernel_ListHead caseBlockValueExpression
+                              , pineKernel_ListHead deconstructedExpression
                               )
                             , ( unconsRightName
-                              , listSkipExpression 1 caseBlockValueExpression
+                              , listSkipExpression 1 deconstructedExpression
                               )
                             ]
 
@@ -1482,8 +1515,8 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                                 { functionName = "logical_not"
                                 , argument =
                                     equalCondition
-                                        [ caseBlockValueExpression
-                                        , listSkipExpression 1 caseBlockValueExpression
+                                        [ deconstructedExpression
+                                        , listSkipExpression 1 deconstructedExpression
                                         ]
                                 }
                     in
@@ -1516,7 +1549,7 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                 conditionExpression =
                     equalCondition
                         [ LiteralExpression (Pine.valueFromString qualifiedName.name)
-                        , pineKernel_ListHead caseBlockValueExpression
+                        , pineKernel_ListHead deconstructedExpression
                         ]
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
@@ -1531,7 +1564,7 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                                     (\argumentIndex declarationName ->
                                         ( declarationName
                                         , listItemFromIndexExpression argumentIndex
-                                            (listItemFromIndexExpression 1 caseBlockValueExpression)
+                                            (listItemFromIndexExpression 1 deconstructedExpression)
                                         )
                                     )
                     in
@@ -1551,7 +1584,7 @@ compileElmSyntaxPattern stack caseBlockValueExpression elmPattern =
                 { conditionExpression = LiteralExpression Pine.trueValue
                 , declarations =
                     [ ( name
-                      , caseBlockValueExpression
+                      , deconstructedExpression
                       )
                     ]
                 }
@@ -1794,6 +1827,9 @@ compileElmFunctionOrValueLookup name compilation =
                     }
                 )
 
+        Just (DeconstructionDeclaration deconstruction) ->
+            Ok deconstruction
+
 
 compileElmFunctionOrValueLookupWithoutLocalResolution : String -> CompilationStack -> Result String Expression
 compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
@@ -1814,6 +1850,9 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
 
                     Just (ElmFunctionDeclaration _) ->
                         Err ("Unexpected value for '" ++ name ++ "': Elm function declaration")
+
+                    Just (DeconstructionDeclaration deconstruction) ->
+                        Ok deconstruction
 
             else
                 Ok (ReferenceExpression name)
