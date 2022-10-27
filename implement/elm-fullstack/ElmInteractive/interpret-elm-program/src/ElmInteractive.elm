@@ -2607,7 +2607,7 @@ compileInteractiveSubmission environment submission =
                                                 pineExpression
                                                     |> Pine.encodeExpressionAsValue
                                                     |> Pine.LiteralExpression
-                                            , argument = Pine.ApplicationArgumentExpression
+                                            , argument = Pine.ListExpression []
                                             }
                                     }
                                 )
