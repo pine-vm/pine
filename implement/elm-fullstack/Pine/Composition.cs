@@ -48,8 +48,16 @@ public static class Composition
 
         return
             charsIntegersResults
+            .Select(charIntegerResult => charIntegerResult.AndThen(charInteger =>
+            // https://github.com/dotnet/runtime/blob/e05944dd74118db06d6987fe2724813950725737/src/libraries/System.Private.CoreLib/src/System/Char.cs#L1036
+            UnicodeUtility.IsValidUnicodeScalar(charInteger) ?
+            Result<string, string>.ok(char.ConvertFromUtf32((int)charInteger))
+            :
+            Result<string, string>.err("Out of range: " + charInteger)))
+            .Select((result, index) => result.MapError(err => "at " + index + ": " + err))
+            .ToImmutableList()
             .ListCombine()
-            .Map(charsIntegersResults => string.Join("", charsIntegersResults.Select(toIntResult => char.ConvertFromUtf32((int)toIntResult))));
+            .Map(chars => string.Join(null, chars));
     }
 
     static public Result<string, PineValue> ComponentFromUnsignedInteger(System.Numerics.BigInteger integer) =>
