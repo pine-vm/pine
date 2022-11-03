@@ -2078,11 +2078,7 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
             }
 
         innerDependencies =
-            [ [ expressionInClosure ]
-            , List.map Tuple.second environmentDeclarations
-            ]
-                |> List.concat
-                |> listDependenciesOfExpressions stackBefore.declarationsDependencies
+            listDependenciesOfExpression stackBefore.declarationsDependencies expressionInClosure
 
         outerDependencies =
             environmentDeclarations

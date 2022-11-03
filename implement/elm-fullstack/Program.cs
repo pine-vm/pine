@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-10-27";
+    static public string AppVersionId => "2022-11-03";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -612,7 +612,7 @@ public class Program
                     saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.processOutput.StandardError ?? "");
                 }
 
-                if(0 < elmTestResult.processOutput.StandardError?.Length)
+                if (0 < elmTestResult.processOutput.StandardError?.Length)
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine(elmTestResult.processOutput.StandardError);
