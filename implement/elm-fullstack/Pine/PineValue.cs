@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -6,10 +6,11 @@ using System.Linq;
 namespace Pine;
 
 /// <summary>
-/// This type describes values processes by Pine programs.
+/// The <see cref="PineValue"/> type describes values processed by Pine programs.
 /// It is a choice type with two cases, <see cref="ListValue"/> and <see cref="BlobValue"/>.
-/// Other kinds of data, like text or a file system directory, are encoded based on these primitives.
-/// For the encoding of expressions and programs as Pine values, see <see cref="PineVM"/>.
+/// Other kinds of data, like text, images, or a file system directory, are encoded based on these primitives.
+/// There is also a standard representation of program code and expressions as Pine values, 
+/// and you can see a reference implementation of this encoding at <see cref="PineVM.DecodeExpressionFromValue"/>.
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
