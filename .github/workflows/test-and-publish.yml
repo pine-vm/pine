@@ -8,9 +8,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ubuntu-20.04, windows-2022]
+        environment: [ubuntu-22.04, windows-2022]
         include:
-          - environment: ubuntu-20.04
+          - environment: ubuntu-22.04
             publish-runtime-id: linux-x64
           - environment: windows-2022
             publish-runtime-id: win10-x64
