@@ -5,8 +5,8 @@
     <TargetFramework>net7.0</TargetFramework>
     <RootNamespace>ElmFullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2022.1103.0.0</AssemblyVersion>
-    <FileVersion>2022.1103.0.0</FileVersion>
+    <AssemblyVersion>2022.1108.0.0</AssemblyVersion>
+    <FileVersion>2022.1108.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -26,13 +26,13 @@
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
     <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.3.4" />
     <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.3.4" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.4.0-2.final" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.0-rc.2.22476.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.4.0-4.final" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.0" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="MSTest.TestFramework" Version="2.2.10" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.32.2" />
-    <PackageReference Include="System.Collections.Immutable" Version="7.0.0-rc.2.22472.3" />
+    <PackageReference Include="System.Collections.Immutable" Version="7.0.0" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 
