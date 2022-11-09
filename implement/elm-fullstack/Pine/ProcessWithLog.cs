@@ -5,30 +5,42 @@ using System.Linq;
 
 namespace Pine;
 
-public record ProcessWithLog<LogEntryT, ResultT>(
-     (LogEntryT logEntry, Func<ProcessWithLog<LogEntryT, ResultT>> nextStep) LogEntry = default,
-     ResultT? Result = default)
+public abstract record ProcessWithLog<LogEntryT, ResultT>
 {
+    public record LogEntry(
+        LogEntryT logEntry,
+        Func<ProcessWithLog<LogEntryT, ResultT>> nextStep)
+        : ProcessWithLog<LogEntryT, ResultT>;
+
+    public record Result(ResultT Value)
+        : ProcessWithLog<LogEntryT, ResultT>;
+
     public ProcessWithLog<LogEntryT, NewResultT> Continue<NewResultT>(
         Func<ResultT, ProcessWithLog<LogEntryT, NewResultT>> continuation) =>
-        Result == null ?
-        new ProcessWithLog<LogEntryT, NewResultT>(LogEntry: (LogEntry.logEntry, () => LogEntry.nextStep().Continue(continuation)))
-        :
-        continuation(Result);
+        this switch
+        {
+            LogEntry logEntry =>
+            new ProcessWithLog<LogEntryT, NewResultT>.LogEntry(logEntry.logEntry, () => logEntry.nextStep().Continue(continuation)),
+
+            Result result => continuation(result.Value),
+
+            _ => throw new NotImplementedException()
+        };
 
     public ProcessWithLog<LogEntryT, NewResultT> MapResult<NewResultT>(
         Func<ResultT, NewResultT> resultMap) =>
-        Continue(result => new ProcessWithLog<LogEntryT, NewResultT>(Result: resultMap(result)));
+        Continue(result => new ProcessWithLog<LogEntryT, NewResultT>.Result(resultMap(result)));
 
     public ProcessWithLog<LogEntryT, ResultT> WithLogEntryAdded(
         LogEntryT logEntry) =>
-        Continue(result => new ProcessWithLog<LogEntryT, ResultT>(LogEntry:
-            (logEntry, () => new ProcessWithLog<LogEntryT, ResultT>(Result: result))));
+        Continue(result => new ProcessWithLog<LogEntryT, ResultT>.LogEntry(
+            logEntry, () => new ProcessWithLog<LogEntryT, ResultT>.Result(result)));
 
     public ProcessWithLog<LogEntryT, ResultT> WithLogEntryFromResultAdded(
         Func<ResultT, LogEntryT> logEntry) =>
-        Continue(result => new ProcessWithLog<LogEntryT, ResultT>(LogEntry:
-            (logEntry(result), () => new ProcessWithLog<LogEntryT, ResultT>(Result: result))));
+        Continue(result => new ProcessWithLog<LogEntryT, ResultT>.LogEntry(
+            logEntry(result),
+            () => new ProcessWithLog<LogEntryT, ResultT>.Result(result)));
 }
 
 static public class ProcessWithLogExtension
@@ -54,7 +66,7 @@ static public class ProcessWithLogExtension
         orig.Continue(previousResult =>
         previousResult
         .Unpack(
-            fromErr: error => new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>(Result: Result<ErrT, NewOkT>.err(error)),
+            fromErr: error => new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>.Result(Result<ErrT, NewOkT>.err(error)),
             fromOk: ok => andThen(ok)));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(
@@ -62,8 +74,9 @@ static public class ProcessWithLogExtension
         Func<OkT, LogEntryT> addLogEntry) =>
         ResultAndThenContinue(
             orig,
-            ok => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(
-                LogEntry: (addLogEntry(ok), () => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(Result: Result<ErrT, OkT>.ok(ok)))));
+            ok => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.LogEntry(
+                addLogEntry(ok),
+                () => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.Result(Result<ErrT, OkT>.ok(ok))));
 
     static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntriesIfOk<LogEntryT, ErrT, OkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
@@ -73,33 +86,47 @@ static public class ProcessWithLogExtension
             ok => addLogEntries(ok)
             .Reverse()
             .Aggregate(
-                seed: new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(Result: Result<ErrT, OkT>.ok(ok)),
-                (prev, logEntry) => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>(LogEntry: (logEntry, () => prev))));
+                seed: (ProcessWithLog<LogEntryT, Result<ErrT, OkT>>)new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.Result(Result<ErrT, OkT>.ok(ok)),
+                func: (prev, logEntry) => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.LogEntry(logEntry, () => prev)));
 
     static public ResultT LogToActions<LogEntryT, ResultT>(
         this ProcessWithLog<LogEntryT, ResultT> firstStep,
         Action<LogEntryT> logAction)
     {
-        if (firstStep.LogEntry.nextStep != null)
+        ResultT continueWithLogEntry(ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry)
         {
-            logAction(firstStep.LogEntry.logEntry);
+            logAction(logEntry.logEntry);
 
-            return LogToActions(firstStep.LogEntry.nextStep(), logAction);
+            return LogToActions(logEntry.nextStep(), logAction);
         }
 
-        return firstStep.Result!;
+        return firstStep switch
+        {
+            ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry => continueWithLogEntry(logEntry),
+
+            ProcessWithLog<LogEntryT, ResultT>.Result result => result.Value,
+
+            _ => throw new NotImplementedException()
+        };
     }
 
     static public (IImmutableList<LogEntryT> log, ResultT result) LogToList<LogEntryT, ResultT>(
          this ProcessWithLog<LogEntryT, ResultT> firstStep)
     {
-        if (firstStep.LogEntry.nextStep != null)
+        (IImmutableList<LogEntryT> log, ResultT result) continueWithLogEntry(ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry)
         {
-            var (log, result) = LogToList(firstStep.LogEntry.nextStep());
+            var (log, result) = LogToList(logEntry.nextStep());
 
-            return (log.Insert(0, firstStep.LogEntry.logEntry), result);
+            return (log.Insert(0, logEntry.logEntry), result);
         }
 
-        return (ImmutableList<LogEntryT>.Empty, firstStep.Result!);
+        return firstStep switch
+        {
+            ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry => continueWithLogEntry(logEntry),
+
+            ProcessWithLog<LogEntryT, ResultT>.Result result => (ImmutableList<LogEntryT>.Empty, result.Value),
+
+            _ => throw new NotImplementedException()
+        };
     }
 }

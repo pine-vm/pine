@@ -49,5 +49,5 @@ public class TestProcessWithLog
         }
     }
 
-    static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T Result) => new(Result: Result);
+    static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) => new ProcessWithLog<string, T>.Result(result);
 }

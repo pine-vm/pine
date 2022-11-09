@@ -90,6 +90,5 @@ static public class LoadComposition
             "Committer: " + describeGitParticipant(commitToDisplayParticipants.content.committer);
     }
 
-    static public ProcessWithLog<string, T> AsProcessWithStringLog<T>(T Result) => new(Result: Result);
-
+    static public ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) => new ProcessWithLog<string, T>.Result(result);
 }
