@@ -569,12 +569,12 @@ public class ElmInteractive
     static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
         appCodeTree == null ? null
         :
-        TreeToFlatDictionaryWithPathComparer(compileTree(appCodeTree)!)
+        TreeToFlatDictionaryWithPathComparer(CompileTree(appCodeTree)!)
         .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
         .WhereNotNull()
         .ToImmutableList();
 
-    static TreeNodeWithStringPath? compileTree(TreeNodeWithStringPath? sourceTree)
+    static TreeNodeWithStringPath? CompileTree(TreeNodeWithStringPath? sourceTree)
     {
         if (sourceTree == null)
             return null;
@@ -608,12 +608,13 @@ public class ElmInteractive
 
     static public string PrepareJavascriptToEvaluateElm()
     {
-        var parseElmAppCodeFiles = ParseElmSyntaxAppCodeFiles();
+        var compileElmProgramCodeFiles = LoadCompileElmProgramCodeFiles();
 
         var elmMakeResult =
             Elm019Binaries.ElmMakeToJavascript(
-                parseElmAppCodeFiles,
-                ImmutableList.Create("src", "Main.elm"));
+                compileElmProgramCodeFiles
+                .Extract(error => throw new NotImplementedException(nameof(LoadCompileElmProgramCodeFiles) + ": " + error)),
+                ImmutableList.Create("src", "ElmInteractiveMain.elm"));
 
         var javascriptFromElmMake =
             Encoding.UTF8.GetString(
@@ -624,23 +625,23 @@ public class ElmInteractive
         var listFunctionToPublish =
             new[]
             {
-                (functionNameInElm: "Main.evaluateSubmissionInInteractive",
+                (functionNameInElm: "ElmInteractiveMain.evaluateSubmissionInInteractive",
                 publicName: "evaluateSubmissionInInteractive",
                 arity: 1),
 
-                (functionNameInElm: "Main.getDefaultElmCoreModulesTexts",
+                (functionNameInElm: "ElmInteractiveMain.getDefaultElmCoreModulesTexts",
                 publicName: "getDefaultElmCoreModulesTexts",
                 arity: 1),
 
-                (functionNameInElm: "Main.compileInteractiveEnvironment",
+                (functionNameInElm: "ElmInteractiveMain.compileInteractiveEnvironment",
                 publicName: "compileInteractiveEnvironment",
                 arity: 1),
 
-                (functionNameInElm: "Main.compileInteractiveSubmission",
+                (functionNameInElm: "ElmInteractiveMain.compileInteractiveSubmission",
                 publicName: "compileInteractiveSubmission",
                 arity: 1),
 
-                (functionNameInElm: "Main.submissionResponseFromResponsePineValue",
+                (functionNameInElm: "ElmInteractiveMain.submissionResponseFromResponsePineValue",
                 publicName: "submissionResponseFromResponsePineValue",
                 arity: 1),
             };
@@ -651,11 +652,10 @@ public class ElmInteractive
                 listFunctionToPublish);
     }
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ParseElmSyntaxAppCodeFiles() =>
+    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompileElmProgramCodeFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ImmutableList.Create("ElmInteractive", "interpret-elm-program"),
-            assembly: typeof(ElmInteractive).Assembly)
-        .Extract(error => throw new NotImplementedException(nameof(ParseElmSyntaxAppCodeFiles) + ": " + error));
+            directoryPath: ImmutableList.Create("ElmFullstack", "compile-elm-program"),
+            assembly: typeof(ElmInteractive).Assembly);
 
     record EvaluateSubmissionResponseStructure
         (string? FailedToDecodeArguments = null,

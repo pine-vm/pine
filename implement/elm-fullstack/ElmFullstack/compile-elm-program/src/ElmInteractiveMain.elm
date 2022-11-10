@@ -1,4 +1,4 @@
-module Main exposing (..)
+module ElmInteractiveMain exposing (..)
 
 import Base64
 import Bytes

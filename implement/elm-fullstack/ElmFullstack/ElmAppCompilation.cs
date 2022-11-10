@@ -466,23 +466,7 @@ namespace ElmFullstack
             new(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
 
         static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
-            DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-                directoryPath: ImmutableList.Create("ElmFullstack", "compile-elm-program"),
-                assembly: typeof(ElmAppCompilation).Assembly);
-
-        static IReadOnlyList<byte>? GetManifestResourceStreamContent(string name)
-        {
-            using var stream = typeof(ElmAppCompilation).Assembly.GetManifestResourceStream(name);
-
-            if (stream == null)
-                return null;
-
-            using var memoryStream = new System.IO.MemoryStream();
-
-            stream.CopyTo(memoryStream);
-
-            return memoryStream.ToArray();
-        }
+            ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles();
 
         static public string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)
         {
