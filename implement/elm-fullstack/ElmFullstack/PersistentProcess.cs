@@ -139,7 +139,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         lock (process)
         {
             var responses =
-                serializedEvents.Select(serializedEvent => process.ProcessEvent(serializedEvent))
+                serializedEvents.Select(process.ProcessEvent)
                 .ToImmutableList();
 
             var compositionRecord = new CompositionRecordInFile

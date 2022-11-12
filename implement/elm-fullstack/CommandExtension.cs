@@ -9,6 +9,6 @@ static public class CommandExtension
     {
         helpCommand.Description = "Show help for the '" + commandToDescribe.Names.FirstOrDefault() + "' command";
 
-        helpCommand.OnExecute(() => commandToDescribe.ShowHelp());
+        helpCommand.OnExecute(commandToDescribe.ShowHelp);
     }
 }

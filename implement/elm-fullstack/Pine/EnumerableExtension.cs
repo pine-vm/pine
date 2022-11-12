@@ -87,7 +87,7 @@ static public class EnumerableExtension
 
         public int Compare(T? x, T? y)
         {
-            return IEnumerableComparer<T>.Compare(x, (IEnumerable<IComparable>?)y);
+            return IEnumerableComparer<T>.Compare(x, y);
         }
     }
 
