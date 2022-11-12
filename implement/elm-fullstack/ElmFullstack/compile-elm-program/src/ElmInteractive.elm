@@ -58,7 +58,7 @@ type alias ProjectParsedElmFile =
 type Expression
     = LiteralExpression Pine.Value
     | ListExpression (List Expression)
-    | ApplicationExpression ApplicationExpressionStructure
+    | DecodeAndEvaluateExpression DecodeAndEvaluateExpressionStructure
     | KernelApplicationExpression KernelApplicationExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
     | ReferenceExpression String
@@ -69,14 +69,14 @@ type Expression
     | RecordAccessExpression String Expression
 
 
-type alias KernelApplicationExpressionStructure =
-    { functionName : String
-    , argument : Expression
+type alias DecodeAndEvaluateExpressionStructure =
+    { expression : Expression
+    , environment : Expression
     }
 
 
-type alias ApplicationExpressionStructure =
-    { function : Expression
+type alias KernelApplicationExpressionStructure =
+    { functionName : String
     , argument : Expression
     }
 
@@ -165,7 +165,7 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
 submissionInInteractiveInPineContext : Pine.EvalContext -> String -> Result String ( Pine.EvalContext, SubmissionResponse )
 submissionInInteractiveInPineContext expressionContext submission =
-    compileInteractiveSubmission expressionContext.applicationArgument submission
+    compileInteractiveSubmission expressionContext.environment submission
         |> Result.andThen
             (\pineExpression ->
                 case Pine.evaluateExpression expressionContext pineExpression of
@@ -177,7 +177,7 @@ submissionInInteractiveInPineContext expressionContext submission =
 
                     Ok (Pine.ListValue [ newState, responseValue ]) ->
                         submissionResponseFromResponsePineValue responseValue
-                            |> Result.map (Tuple.pair { applicationArgument = newState })
+                            |> Result.map (Tuple.pair { environment = newState })
 
                     Ok (Pine.ListValue resultList) ->
                         Err
@@ -408,8 +408,8 @@ compileEvalContextForElmInteractive context =
                 InitContextFromApp { modulesTexts } ->
                     ElmInteractiveCoreModules.elmCoreModulesTexts ++ modulesTexts
     in
-    expandElmInteractiveEnvironmentWithModuleTexts Pine.emptyEvalContext.applicationArgument contextModulesTexts
-        |> Result.map (\result -> { applicationArgument = result.environment })
+    expandElmInteractiveEnvironmentWithModuleTexts Pine.emptyEvalContext.environment contextModulesTexts
+        |> Result.map (\result -> { environment = result.environment })
 
 
 expandElmInteractiveEnvironmentWithModuleTexts :
@@ -883,9 +883,9 @@ compileElmSyntaxExpression stack elmExpression =
                 getDeclarationValueFromCompilation ( moduleName, localName ) stack
                     |> Result.map
                         (\declaredValue ->
-                            ApplicationExpression
-                                { function = LiteralExpression declaredValue
-                                , argument = ListExpression []
+                            DecodeAndEvaluateExpression
+                                { expression = LiteralExpression declaredValue
+                                , environment = ListExpression []
                                 }
                         )
 
@@ -954,13 +954,13 @@ compileElmSyntaxExpression stack elmExpression =
                                         compileElmFunctionOrValueLookup ("(" ++ operator ++ ")") stack
                                             |> Result.map
                                                 (\operationFunction ->
-                                                    ApplicationExpression
-                                                        { function =
-                                                            ApplicationExpression
-                                                                { function = operationFunction
-                                                                , argument = leftExpression
+                                                    DecodeAndEvaluateExpression
+                                                        { expression =
+                                                            DecodeAndEvaluateExpression
+                                                                { expression = operationFunction
+                                                                , environment = leftExpression
                                                                 }
-                                                        , argument = rightExpression
+                                                        , environment = rightExpression
                                                         }
                                                 )
                                     )
@@ -1277,8 +1277,8 @@ listDependenciesOfExpression dependenciesRelations expression =
                 |> List.map (listDependenciesOfExpression dependenciesRelations)
                 |> List.foldl Set.union Set.empty
 
-        ApplicationExpression application ->
-            [ application.function, application.argument ]
+        DecodeAndEvaluateExpression decodeAndEvaluate ->
+            [ decodeAndEvaluate.expression, decodeAndEvaluate.environment ]
                 |> listDependenciesOfExpressions dependenciesRelations
 
         KernelApplicationExpression application ->
@@ -1356,7 +1356,7 @@ compileElmSyntaxValueConstructor valueConstructor =
         1 ->
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.valueFromString constructorName)
-                , Pine.ListExpression [ Pine.ApplicationArgumentExpression ]
+                , Pine.ListExpression [ Pine.EnvironmentExpression ]
                 ]
                 |> Pine.encodeExpressionAsValue
                 |> Pine.LiteralExpression
@@ -1374,9 +1374,9 @@ compileElmSyntaxValueConstructor valueConstructor =
                         , Pine.ListExpression
                             [ Pine.ListExpression
                                 [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                , Pine.ApplicationArgumentExpression
+                                , Pine.EnvironmentExpression
                                 ]
-                            , Pine.ApplicationArgumentExpression
+                            , Pine.EnvironmentExpression
                                 |> Pine.encodeExpressionAsValue
                                 |> Pine.LiteralExpression
                             ]
@@ -1719,9 +1719,9 @@ positionalApplicationExpressionFromListOfArguments function arguments =
 
         nextArgument :: followingArguments ->
             positionalApplicationExpressionFromListOfArguments
-                (ApplicationExpression
-                    { function = function
-                    , argument = nextArgument
+                (DecodeAndEvaluateExpression
+                    { expression = function
+                    , environment = nextArgument
                     }
                 )
                 followingArguments
@@ -1787,14 +1787,14 @@ buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
             Pine.valueFromString fieldName
 
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.ApplicationArgumentExpression
+            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
 
         continueWithRemainingExpression =
-            Pine.ApplicationExpression
-                { function = listItemFromIndexExpression_Pine 0 Pine.ApplicationArgumentExpression
-                , argument =
+            Pine.DecodeAndEvaluateExpression
+                { expression = listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                , environment =
                     Pine.ListExpression
-                        [ listItemFromIndexExpression_Pine 0 Pine.ApplicationArgumentExpression
+                        [ listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
                         , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                         ]
                 }
@@ -1823,9 +1823,9 @@ buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
         expressionEncoded =
             Pine.LiteralExpression (Pine.encodeExpressionAsValue recursivePart)
     in
-    Pine.ApplicationExpression
-        { function = expressionEncoded
-        , argument =
+    Pine.DecodeAndEvaluateExpression
+        { expression = expressionEncoded
+        , environment =
             Pine.ListExpression
                 [ expressionEncoded
                 , recordFieldsExpression
@@ -1854,9 +1854,9 @@ compileElmFunctionOrValueLookup name compilation =
 
         Just (CompiledDeclaration compiledDeclaration) ->
             Ok
-                (ApplicationExpression
-                    { function = LiteralExpression compiledDeclaration
-                    , argument = ListExpression []
+                (DecodeAndEvaluateExpression
+                    { expression = LiteralExpression compiledDeclaration
+                    , environment = ListExpression []
                     }
                 )
 
@@ -1875,9 +1875,9 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
 
                     Just (CompiledDeclaration compiledDeclaration) ->
                         Ok
-                            (ApplicationExpression
-                                { function = LiteralExpression compiledDeclaration
-                                , argument = ListExpression []
+                            (DecodeAndEvaluateExpression
+                                { expression = LiteralExpression compiledDeclaration
+                                , environment = ListExpression []
                                 }
                             )
 
@@ -1894,9 +1894,9 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
             getDeclarationValueFromCompilation ( moduleName, name ) compilation
                 |> Result.map
                     (\function ->
-                        ApplicationExpression
-                            { function = LiteralExpression function
-                            , argument = ListExpression []
+                        DecodeAndEvaluateExpression
+                            { expression = LiteralExpression function
+                            , environment = ListExpression []
                             }
                     )
 
@@ -1913,18 +1913,18 @@ emitExpression stack expression =
                 |> Result.Extra.combine
                 |> Result.map Pine.ListExpression
 
-        ApplicationExpression application ->
-            application.function
+        DecodeAndEvaluateExpression decodeAndEvaluate ->
+            decodeAndEvaluate.expression
                 |> emitExpression stack
                 |> Result.andThen
                     (\function ->
-                        application.argument
+                        decodeAndEvaluate.environment
                             |> emitExpression stack
                             |> Result.map
-                                (\argument ->
-                                    Pine.ApplicationExpression
-                                        { function = function
-                                        , argument = argument
+                                (\environment ->
+                                    Pine.DecodeAndEvaluateExpression
+                                        { expression = function
+                                        , environment = environment
                                         }
                                 )
                     )
@@ -2020,10 +2020,10 @@ emitFunctionBindingArgumentToName stackBefore function =
                     |> Result.map
                         (\functionExpression ->
                             Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.valueFromString "Application")
+                                [ Pine.LiteralExpression (Pine.valueFromString "DecodeAndEvaluate")
                                 , Pine.ListExpression
                                     [ Pine.ListExpression
-                                        [ Pine.LiteralExpression (Pine.valueFromString "function")
+                                        [ Pine.LiteralExpression (Pine.valueFromString "expression")
                                         , functionExpression
                                             |> Pine.encodeExpressionAsValue
                                             |> Pine.LiteralExpression
@@ -2031,7 +2031,7 @@ emitFunctionBindingArgumentToName stackBefore function =
                                             |> Pine.LiteralExpression
                                         ]
                                     , Pine.ListExpression
-                                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                                        [ Pine.LiteralExpression (Pine.valueFromString "environment")
                                         , argumentExpression
                                         ]
                                     ]
@@ -2107,15 +2107,15 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
                     emitExpression stack expressionInClosure
                         |> Result.map
                             (\expressionPine ->
-                                Pine.ApplicationExpression
-                                    { function =
+                                Pine.DecodeAndEvaluateExpression
+                                    { expression =
                                         expressionPine
                                             |> Pine.encodeExpressionAsValue
                                             |> Pine.LiteralExpression
-                                    , argument =
-                                        Pine.ApplicationExpression
-                                            { function = argumentExpression
-                                            , argument = Pine.ApplicationArgumentExpression
+                                    , environment =
+                                        Pine.DecodeAndEvaluateExpression
+                                            { expression = argumentExpression
+                                            , environment = Pine.EnvironmentExpression
                                             }
                                     }
                             )
@@ -2152,7 +2152,7 @@ emitApplicationArgumentExpression stackBefore environmentElements =
                     [ Pine.LiteralExpression (Pine.valueFromString elementName)
                     , Pine.ListExpression
                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                        , deconstructExpression Pine.ApplicationArgumentExpression
+                        , deconstructExpression Pine.EnvironmentExpression
                         ]
                     ]
                         |> Pine.ListExpression
@@ -2209,18 +2209,18 @@ emitReferenceExpression name compilation =
         Just runtimeIndex ->
             {-
                Ok
-                   (Pine.ApplicationExpression
-                       { function =
+                   (Pine.DecodeAndEvaluateExpression
+                       { expression =
                            listItemFromIndexExpression_Pine 1
-                               (listItemFromIndexExpression_Pine runtimeIndex Pine.ApplicationArgumentExpression)
-                       , argument = Pine.ApplicationArgumentExpression
+                               (listItemFromIndexExpression_Pine runtimeIndex Pine.EnvironmentExpression)
+                       , environment = Pine.EnvironmentExpression
                        }
                    )
             -}
             Ok
-                (Pine.ApplicationExpression
-                    { function = expressionToLookupNameInEnvironment name
-                    , argument = Pine.ApplicationArgumentExpression
+                (Pine.DecodeAndEvaluateExpression
+                    { expression = expressionToLookupNameInEnvironment name
+                    , environment = Pine.EnvironmentExpression
                     }
                 )
 
@@ -2264,7 +2264,7 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
 
 expressionToLookupNameInEnvironment : String -> Pine.Expression
 expressionToLookupNameInEnvironment name =
-    expressionToLookupNameInGivenScope name Pine.ApplicationArgumentExpression
+    expressionToLookupNameInGivenScope name Pine.EnvironmentExpression
 
 
 expressionToLookupNameInGivenScope : String -> Pine.Expression -> Pine.Expression
@@ -2506,7 +2506,7 @@ compileInteractiveSubmission environment submission =
                 Err error ->
                     Ok
                         (buildExpressionForNewStateAndResponse
-                            { newStateExpression = Pine.ApplicationArgumentExpression
+                            { newStateExpression = Pine.EnvironmentExpression
                             , responseExpression =
                                 Pine.LiteralExpression (Pine.valueFromString ("Failed to parse submission: " ++ error))
                             }
@@ -2562,7 +2562,7 @@ compileInteractiveSubmission environment submission =
                                                                         )
                                                                     )
                                                                 ]
-                                                            , Pine.ApplicationArgumentExpression
+                                                            , Pine.EnvironmentExpression
                                                             ]
                                                     }
                                             , responseExpression =
@@ -2596,14 +2596,14 @@ compileInteractiveSubmission environment submission =
                         Ok pineExpression ->
                             Ok
                                 (buildExpressionForNewStateAndResponse
-                                    { newStateExpression = Pine.ApplicationArgumentExpression
+                                    { newStateExpression = Pine.EnvironmentExpression
                                     , responseExpression =
-                                        Pine.ApplicationExpression
-                                            { function =
+                                        Pine.DecodeAndEvaluateExpression
+                                            { expression =
                                                 pineExpression
                                                     |> Pine.encodeExpressionAsValue
                                                     |> Pine.LiteralExpression
-                                            , argument = Pine.ListExpression []
+                                            , environment = Pine.ListExpression []
                                             }
                                     }
                                 )

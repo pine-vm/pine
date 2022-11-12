@@ -11,9 +11,9 @@ pineExpressionEncodeDecodeRoundtrip =
     , ( "literal blob", Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ]) )
     , ( "list empty", Pine.ListExpression [] )
     , ( "application one arg"
-      , Pine.ApplicationExpression
-            { function = Pine.LiteralExpression (Pine.ListValue [])
-            , argument = Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ])
+      , Pine.DecodeAndEvaluateExpression
+            { expression = Pine.LiteralExpression (Pine.ListValue [])
+            , environment = Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ])
             }
       )
     , ( "kernel application one arg"

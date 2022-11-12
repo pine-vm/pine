@@ -531,14 +531,14 @@ evolutionStagesToMakeElmFunction =
                         [ Pine.LiteralExpression (Pine.valueFromString "argument")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                            , Pine.ApplicationArgumentExpression
+                            , Pine.EnvironmentExpression
                             ]
                         ]
                     ]
                 ]
                 |> Pine.evaluateExpression
                     (Pine.emptyEvalContext
-                        |> Pine.addToContextAppArgument
+                        |> Pine.addToEnvironment
                             [ Pine.valueFromContextExpansionWithName
                                 ( "alfa", Pine.valueFromBigInt (BigInt.fromInt 123) )
                             ]
@@ -574,10 +574,10 @@ evolutionStagesToMakeElmFunction =
                             , Pine.ListExpression
                                 [ Pine.ListExpression
                                     [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                    , Pine.ApplicationArgumentExpression
+                                    , Pine.EnvironmentExpression
                                     ]
                                 , Pine.ListExpression
-                                    [ Pine.LiteralExpression (Pine.valueFromString "ApplicationArgument")
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Environment")
                                     , Pine.ListExpression []
                                     ]
                                 ]
@@ -587,7 +587,7 @@ evolutionStagesToMakeElmFunction =
                 ]
                 |> Pine.evaluateExpression
                     (Pine.emptyEvalContext
-                        |> Pine.addToContextAppArgument
+                        |> Pine.addToEnvironment
                             [ Pine.valueFromContextExpansionWithName
                                 ( "beta", Pine.valueFromBigInt (BigInt.fromInt 345) )
                             ]
@@ -605,7 +605,7 @@ evolutionStagesToMakeElmFunction =
                                                 ( "beta", Pine.valueFromBigInt (BigInt.fromInt 345) )
                                             ]
                                         )
-                                    , Pine.ApplicationArgumentExpression
+                                    , Pine.EnvironmentExpression
                                     ]
                             }
                         )

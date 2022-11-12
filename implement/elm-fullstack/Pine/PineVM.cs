@@ -31,13 +31,13 @@ public class PineVM
                     listExpression.List,
                     elem => EvaluateExpression(environment, elem))
                 .MapError(err => "Failed to evaluate list element: " + err)
-                .Map(list => PineValue.List(list));
+                .Map(PineValue.List);
         }
 
-        if (expression is Expression.ApplicationExpression applicationExpression)
+        if (expression is Expression.DecodeAndEvaluateExpression applicationExpression)
         {
             return
-                EvaluateApplicationExpression(environment, applicationExpression)
+                EvaluateDecodeAndEvaluateExpression(environment, applicationExpression)
                 .MapError(err => "Failed to evaluate function application: " + err);
         }
 
@@ -53,7 +53,7 @@ public class PineVM
             return EvaluateConditionalExpression(environment, conditionalExpression);
         }
 
-        if (expression is Expression.ApplicationArgumentExpression)
+        if (expression is Expression.EnvironmentExpression)
         {
             return Result<string, PineValue>.ok(environment);
         }
@@ -66,14 +66,14 @@ public class PineVM
         throw new NotImplementedException("Unexpected shape of expression");
     }
 
-    public Result<string, PineValue> EvaluateApplicationExpression(
+    public Result<string, PineValue> EvaluateDecodeAndEvaluateExpression(
         PineValue environment,
-        Expression.ApplicationExpression application) =>
-        EvaluateExpression(environment, application.function)
+        Expression.DecodeAndEvaluateExpression decodeAndEvaluate) =>
+        EvaluateExpression(environment, decodeAndEvaluate.expression)
         .MapError(error => "Failed to evaluate function: " + error)
         .AndThen(functionValue => DecodeExpressionFromValue(functionValue)
         .MapError(error => "Failed to decode expression from function value: " + error)
-        .AndThen(functionExpression => EvaluateExpression(environment, application.argument)
+        .AndThen(functionExpression => EvaluateExpression(environment, decodeAndEvaluate.environment)
         .MapError(error => "Failed to evaluate argument: " + error)
         .AndThen(argumentValue =>
         {
@@ -171,8 +171,8 @@ public class PineVM
             .AndThen(list => ResultListMapCombine(list, DecodeExpressionFromValue))
             .Map(expressionList => (Expression)new Expression.ListExpression(expressionList.ToImmutableArray())))
         .SetItem(
-            "Application",
-            value => DecodeApplicationExpression(value)
+            "DecodeAndEvaluate",
+            value => DecodeDecodeAndEvaluateExpression(value)
             .Map(application => (Expression)application))
         .SetItem(
             "KernelApplication",
@@ -183,19 +183,19 @@ public class PineVM
             value => DecodeConditionalExpression(value)
             .Map(conditional => (Expression)conditional))
         .SetItem(
-            "ApplicationArgument",
-            _ => Result<string, Expression>.ok(new Expression.ApplicationArgumentExpression()))
+            "Environment",
+            _ => Result<string, Expression>.ok(new Expression.EnvironmentExpression()))
         .SetItem(
             "StringTag",
             value => DecodeStringTagExpression(value)
             .Map(stringTag => (Expression)stringTag));
 
-    static public Result<string, Expression.ApplicationExpression> DecodeApplicationExpression(PineValue value) =>
+    static public Result<string, Expression.DecodeAndEvaluateExpression> DecodeDecodeAndEvaluateExpression(PineValue value) =>
         DecodeRecord2FromPineValue(
             value,
-            ("function", DecodeExpressionFromValue),
-            ("argument", DecodeExpressionFromValue),
-            (function, argument) => new Expression.ApplicationExpression(function: function, argument: argument));
+            ("expression", DecodeExpressionFromValue),
+            ("environment", DecodeExpressionFromValue),
+            (expression, environment) => new Expression.DecodeAndEvaluateExpression(expression: expression, environment: environment));
 
     static public Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(PineValue value) =>
         DecodeRecord2FromPineValue(
@@ -516,7 +516,7 @@ public class PineVM
 
                  var names =
                  listNamedEntries
-                 .Select((namedEntry, _) => Composition.StringFromComponent(namedEntry.name).Unpack(fromErr: _ => (string?)null, fromOk: s => s))
+                 .Select((namedEntry, _) => Composition.StringFromComponent(namedEntry.name).Unpack(fromErr: _ => null, fromOk: s => s))
                  .WhereNotNull().ToImmutableArray();
 
                  return Result<string, PineValue>.err(
@@ -579,9 +579,9 @@ public class PineVM
             ImmutableArray<Expression> List)
             : Expression;
 
-        public record ApplicationExpression(
-            Expression function,
-            Expression argument)
+        public record DecodeAndEvaluateExpression(
+            Expression expression,
+            Expression environment)
             : Expression;
 
         public record KernelApplicationExpression(
@@ -595,7 +595,7 @@ public class PineVM
             Expression ifFalse)
             : Expression;
 
-        public record ApplicationArgumentExpression() : Expression;
+        public record EnvironmentExpression() : Expression;
 
         public record StringTagExpression(
             string tag,

@@ -8,21 +8,21 @@ import Result.Extra
 type Expression
     = LiteralExpression Value
     | ListExpression (List Expression)
-    | ApplicationExpression ApplicationExpressionStructure
+    | DecodeAndEvaluateExpression DecodeAndEvaluateExpressionStructure
     | KernelApplicationExpression KernelApplicationExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
-    | ApplicationArgumentExpression
+    | EnvironmentExpression
     | StringTagExpression StringTagExpressionStructure
+
+
+type alias DecodeAndEvaluateExpressionStructure =
+    { expression : Expression
+    , environment : Expression
+    }
 
 
 type alias KernelApplicationExpressionStructure =
     { functionName : String
-    , argument : Expression
-    }
-
-
-type alias ApplicationExpressionStructure =
-    { function : Expression
     , argument : Expression
     }
 
@@ -50,8 +50,7 @@ type alias KernelFunction =
 
 
 type alias EvalContext =
-    { applicationArgument : Value
-    }
+    { environment : Value }
 
 
 type PathDescription a
@@ -64,23 +63,23 @@ environmentFromDeclarations declarations =
     declarations |> List.map valueFromContextExpansionWithName |> ListValue
 
 
-addToContextAppArgument : List Value -> EvalContext -> EvalContext
-addToContextAppArgument names context =
+addToEnvironment : List Value -> EvalContext -> EvalContext
+addToEnvironment names context =
     let
-        applicationArgument =
-            case context.applicationArgument of
+        environment =
+            case context.environment of
                 ListValue applicationArgumentList ->
                     ListValue (names ++ applicationArgumentList)
 
                 _ ->
                     ListValue names
     in
-    { context | applicationArgument = applicationArgument }
+    { context | environment = environment }
 
 
 emptyEvalContext : EvalContext
 emptyEvalContext =
-    { applicationArgument = ListValue [] }
+    { environment = ListValue [] }
 
 
 evaluateExpression : EvalContext -> Expression -> Result (PathDescription String) Value
@@ -96,11 +95,11 @@ evaluateExpression context expression =
                 |> Result.map ListValue
                 |> Result.mapError (DescribePathNode "Failed to evaluate list element")
 
-        ApplicationExpression application ->
-            evaluateFunctionApplication context application
+        DecodeAndEvaluateExpression decodeAndEvaluate ->
+            evaluateDecodeAndEvaluate context decodeAndEvaluate
                 |> Result.mapError
                     (\e ->
-                        e |> DescribePathNode ("Failed application of '" ++ describeExpression 1 application.function ++ "'")
+                        e |> DescribePathNode ("Failed decode and evaluate of '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
                     )
 
         KernelApplicationExpression application ->
@@ -140,8 +139,8 @@ evaluateExpression context expression =
                             conditional.ifFalse
                         )
 
-        ApplicationArgumentExpression ->
-            Ok context.applicationArgument
+        EnvironmentExpression ->
+            Ok context.environment
 
         StringTagExpression { tag, tagged } ->
             let
@@ -388,19 +387,19 @@ mapFromListValueOrBlobValue { fromList, fromBlob } value =
             fromBlob blob
 
 
-evaluateFunctionApplication : EvalContext -> ApplicationExpressionStructure -> Result (PathDescription String) Value
-evaluateFunctionApplication context application =
-    evaluateExpression context application.argument
+evaluateDecodeAndEvaluate : EvalContext -> DecodeAndEvaluateExpressionStructure -> Result (PathDescription String) Value
+evaluateDecodeAndEvaluate context decodeAndEvaluate =
+    evaluateExpression context decodeAndEvaluate.environment
         |> Result.mapError
             (\e ->
-                e |> DescribePathNode ("Failed to evaluate argument '" ++ describeExpression 1 application.argument ++ "'")
+                e |> DescribePathNode ("Failed to evaluate environment '" ++ describeExpression 1 decodeAndEvaluate.environment ++ "'")
             )
         |> Result.andThen
             (\argumentValue ->
-                evaluateExpression context application.function
+                evaluateExpression context decodeAndEvaluate.expression
                     |> Result.mapError
                         (\e ->
-                            e |> DescribePathNode ("Failed to evaluate function '" ++ describeExpression 1 application.function ++ "'")
+                            e |> DescribePathNode ("Failed to evaluate encoded expression '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
                         )
                     |> Result.andThen
                         (\functionValue ->
@@ -410,11 +409,11 @@ evaluateFunctionApplication context application =
                                     (\e ->
                                         e
                                             |> DescribePathEnd
-                                            |> DescribePathNode ("Failed to decode expression from function value '" ++ describeValue 3 functionValue ++ "'")
+                                            |> DescribePathNode ("Failed to decode expression from value '" ++ describeValue 3 functionValue ++ "'")
                                     )
                                 |> Result.andThen
                                     (\functionExpression ->
-                                        evaluateExpression { applicationArgument = argumentValue } functionExpression
+                                        evaluateExpression { environment = argumentValue } functionExpression
                                     )
                         )
             )
@@ -549,13 +548,13 @@ describeExpression depthLimit expression =
         LiteralExpression literal ->
             "literal(" ++ describeValue (depthLimit - 1) literal ++ ")"
 
-        ApplicationExpression application ->
-            "application("
+        DecodeAndEvaluateExpression decodeAndEvaluate ->
+            "decode-and-evaluate("
                 ++ (if depthLimit < 1 then
                         "..."
 
                     else
-                        describeExpression (depthLimit - 1) application.function
+                        describeExpression (depthLimit - 1) decodeAndEvaluate.expression
                    )
                 ++ ")"
 
@@ -565,8 +564,8 @@ describeExpression depthLimit expression =
         ConditionalExpression _ ->
             "conditional"
 
-        ApplicationArgumentExpression ->
-            "application-argument"
+        EnvironmentExpression ->
+            "environment"
 
         StringTagExpression { tag, tagged } ->
             "string-tag-" ++ tag ++ "(" ++ describeExpression (depthLimit - 1) tagged ++ ")"
@@ -798,10 +797,10 @@ encodeExpressionAsValue expression =
             , listExpr |> List.map encodeExpressionAsValue |> ListValue
             )
 
-        ApplicationExpression app ->
-            ( "Application"
-            , [ ( "function", encodeExpressionAsValue app.function )
-              , ( "argument", encodeExpressionAsValue app.argument )
+        DecodeAndEvaluateExpression decodeAndEvaluate ->
+            ( "DecodeAndEvaluate"
+            , [ ( "expression", encodeExpressionAsValue decodeAndEvaluate.expression )
+              , ( "environment", encodeExpressionAsValue decodeAndEvaluate.environment )
               ]
                 |> Dict.fromList
                 |> encodeRecordToPineValue
@@ -827,8 +826,8 @@ encodeExpressionAsValue expression =
                 |> encodeRecordToPineValue
             )
 
-        ApplicationArgumentExpression ->
-            ( "ApplicationArgument"
+        EnvironmentExpression ->
+            ( "Environment"
             , ListValue []
             )
 
@@ -857,8 +856,8 @@ decodeExpressionFromValue value =
                         >> Result.andThen (List.map decodeExpressionFromValue >> Result.Extra.combine)
                         >> Result.map ListExpression
                   )
-                , ( "Application"
-                  , decodeApplicationExpression >> Result.map ApplicationExpression
+                , ( "DecodeAndEvaluate"
+                  , decodeDecodeAndEvaluateExpression >> Result.map DecodeAndEvaluateExpression
                   )
                 , ( "KernelApplication"
                   , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
@@ -866,8 +865,8 @@ decodeExpressionFromValue value =
                 , ( "Conditional"
                   , decodeConditionalExpression >> Result.map ConditionalExpression
                   )
-                , ( "ApplicationArgument"
-                  , always (Ok ApplicationArgumentExpression)
+                , ( "Environment"
+                  , always (Ok EnvironmentExpression)
                   )
                 , ( "StringTag"
                   , decodeStringTagExpression >> Result.map StringTagExpression
@@ -876,13 +875,13 @@ decodeExpressionFromValue value =
             )
 
 
-decodeApplicationExpression : Value -> Result String ApplicationExpressionStructure
-decodeApplicationExpression =
+decodeDecodeAndEvaluateExpression : Value -> Result String DecodeAndEvaluateExpressionStructure
+decodeDecodeAndEvaluateExpression =
     decodeRecordFromPineValue
         >> Result.andThen
-            (always (Ok ApplicationExpressionStructure)
-                |> decodeRecordField "function" decodeExpressionFromValue
-                |> decodeRecordField "argument" decodeExpressionFromValue
+            (always (Ok DecodeAndEvaluateExpressionStructure)
+                |> decodeRecordField "expression" decodeExpressionFromValue
+                |> decodeRecordField "environment" decodeExpressionFromValue
             )
 
 
