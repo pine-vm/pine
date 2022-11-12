@@ -57,6 +57,7 @@ type alias ProjectParsedElmFile =
 
 type Expression
     = LiteralExpression Pine.Value
+    | IndependentFromEnvironmentExpression Pine.Expression
     | ListExpression (List Expression)
     | DecodeAndEvaluateExpression DecodeAndEvaluateExpressionStructure
     | KernelApplicationExpression KernelApplicationExpressionStructure
@@ -122,7 +123,7 @@ type alias EmitStack =
 
 
 type InternalDeclaration
-    = CompiledDeclaration Pine.Value
+    = CompiledDeclaration Pine.Expression
     | ElmFunctionDeclaration ElmFunctionDeclarationStruct
     | DeconstructionDeclaration Expression
 
@@ -134,7 +135,7 @@ type alias ElmFunctionDeclarationStruct =
 
 
 type alias ElmModuleInCompilation =
-    Dict.Dict String Pine.Value
+    Dict.Dict String Pine.Expression
 
 
 submissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
@@ -612,7 +613,7 @@ parsedElmFileFromOnlyFileText fileText =
 compileElmModuleTextIntoNamedExports :
     Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
     -> ProjectParsedElmFile
-    -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Value ) )
+    -> Result String ( Elm.Syntax.ModuleName.ModuleName, List ( String, Pine.Expression ) )
 compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
     let
         moduleName =
@@ -633,7 +634,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     )
                 |> Dict.fromList
 
-        declarationsFromCustomTypes : Dict.Dict String Pine.Value
+        declarationsFromCustomTypes : Dict.Dict String Pine.Expression
         declarationsFromCustomTypes =
             moduleToTranslate.parsedModule.declarations
                 |> List.map Elm.Syntax.Node.value
@@ -645,7 +646,6 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                                     |> List.map
                                         (Elm.Syntax.Node.value
                                             >> compileElmSyntaxValueConstructor
-                                            >> Tuple.mapSecond Pine.encodeExpressionAsValue
                                         )
 
                             _ ->
@@ -736,28 +736,21 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
 
         Ok functionDeclarations ->
             let
-                declarationsValuesFromCustomTypes : List ( String, Pine.Value )
-                declarationsValuesFromCustomTypes =
-                    declarationsFromCustomTypes
-                        |> Dict.toList
-
-                functionDeclarationsValues =
-                    functionDeclarations
-                        |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
-
                 declarationsValuesForInfix =
                     redirectsForInfix
                         |> Dict.toList
                         |> List.filterMap
                             (\( name, function ) ->
-                                functionDeclarationsValues
+                                functionDeclarations
                                     |> List.Extra.find (Tuple.first >> (==) function)
                                     |> Maybe.map (Tuple.second >> Tuple.pair name)
                             )
             in
             Ok
                 ( moduleName
-                , declarationsValuesFromCustomTypes ++ functionDeclarationsValues ++ declarationsValuesForInfix
+                , Dict.toList declarationsFromCustomTypes
+                    ++ functionDeclarations
+                    ++ declarationsValuesForInfix
                 )
 
 
@@ -817,18 +810,16 @@ elmValuesToExposeToGlobalDefault =
         |> Dict.fromList
 
 
-elmDeclarationsOverrides : Dict.Dict (List String) (Dict.Dict String Pine.Value)
+elmDeclarationsOverrides : Dict.Dict (List String) (Dict.Dict String Pine.Expression)
 elmDeclarationsOverrides =
     [ ( [ "Basics" ]
       , [ ( "True"
           , Pine.trueValue
                 |> Pine.LiteralExpression
-                |> Pine.encodeExpressionAsValue
           )
         , ( "False"
           , Pine.falseValue
                 |> Pine.LiteralExpression
-                |> Pine.encodeExpressionAsValue
           )
         ]
             |> Dict.fromList
@@ -881,13 +872,7 @@ compileElmSyntaxExpression stack elmExpression =
 
             else
                 getDeclarationValueFromCompilation ( moduleName, localName ) stack
-                    |> Result.map
-                        (\declaredValue ->
-                            DecodeAndEvaluateExpression
-                                { expression = LiteralExpression declaredValue
-                                , environment = ListExpression []
-                                }
-                        )
+                    |> Result.map IndependentFromEnvironmentExpression
 
         Elm.Syntax.Expression.Application application ->
             case application |> List.map Elm.Syntax.Node.value of
@@ -1270,6 +1255,9 @@ listDependenciesOfExpression : Dict.Dict String (Set.Set String) -> Expression -
 listDependenciesOfExpression dependenciesRelations expression =
     (case expression of
         LiteralExpression _ ->
+            Set.empty
+
+        IndependentFromEnvironmentExpression _ ->
             Set.empty
 
         ListExpression list ->
@@ -1853,12 +1841,7 @@ compileElmFunctionOrValueLookup name compilation =
                     elmFunctionDeclaration
 
         Just (CompiledDeclaration compiledDeclaration) ->
-            Ok
-                (DecodeAndEvaluateExpression
-                    { expression = LiteralExpression compiledDeclaration
-                    , environment = ListExpression []
-                    }
-                )
+            Ok (IndependentFromEnvironmentExpression compiledDeclaration)
 
         Just (DeconstructionDeclaration deconstruction) ->
             Ok deconstruction
@@ -1874,12 +1857,7 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
                         Err ("Missing declaration for '" ++ name ++ "'")
 
                     Just (CompiledDeclaration compiledDeclaration) ->
-                        Ok
-                            (DecodeAndEvaluateExpression
-                                { expression = LiteralExpression compiledDeclaration
-                                , environment = ListExpression []
-                                }
-                            )
+                        Ok (IndependentFromEnvironmentExpression compiledDeclaration)
 
                     Just (ElmFunctionDeclaration _) ->
                         Err ("Unexpected value for '" ++ name ++ "': Elm function declaration")
@@ -1892,13 +1870,7 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
 
         Just moduleName ->
             getDeclarationValueFromCompilation ( moduleName, name ) compilation
-                |> Result.map
-                    (\function ->
-                        DecodeAndEvaluateExpression
-                            { expression = LiteralExpression function
-                            , environment = ListExpression []
-                            }
-                    )
+                |> Result.map IndependentFromEnvironmentExpression
 
 
 emitExpression : EmitStack -> Expression -> Result String Pine.Expression
@@ -1906,6 +1878,9 @@ emitExpression stack expression =
     case expression of
         LiteralExpression literal ->
             Ok (Pine.LiteralExpression literal)
+
+        IndependentFromEnvironmentExpression pineExpression ->
+            Ok pineExpression
 
         ListExpression list ->
             list
@@ -2224,7 +2199,7 @@ emitReferenceExpression name compilation =
                 )
 
 
-getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Value
+getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Expression
 getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation =
     let
         canonicalModuleName =
@@ -2596,14 +2571,7 @@ compileInteractiveSubmission environment submission =
                             Ok
                                 (buildExpressionForNewStateAndResponse
                                     { newStateExpression = Pine.EnvironmentExpression
-                                    , responseExpression =
-                                        Pine.DecodeAndEvaluateExpression
-                                            { expression =
-                                                pineExpression
-                                                    |> Pine.encodeExpressionAsValue
-                                                    |> Pine.LiteralExpression
-                                            , environment = Pine.ListExpression []
-                                            }
+                                    , responseExpression = pineExpression
                                     }
                                 )
 
@@ -2611,6 +2579,7 @@ compileInteractiveSubmission environment submission =
 emitModuleValue : ElmModuleInCompilation -> Pine.Value
 emitModuleValue =
     Dict.toList
+        >> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
         >> List.map Pine.valueFromContextExpansionWithName
         >> Pine.ListValue
 
@@ -2621,7 +2590,7 @@ separateEnvironmentDeclarations :
         Result
             String
             { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
-            , otherDeclarations : Dict.Dict String Pine.Value
+            , otherDeclarations : Dict.Dict String Pine.Expression
             }
 separateEnvironmentDeclarations environmentDeclarations =
     environmentDeclarations
@@ -2631,22 +2600,40 @@ separateEnvironmentDeclarations environmentDeclarations =
         |> List.map
             (\( moduleName, moduleValue ) ->
                 getDeclarationsFromEnvironment moduleValue
+                    |> Result.andThen getDeclarationsExpressionsFromValues
                     |> Result.map (Tuple.pair moduleName)
                     |> Result.mapError ((++) ("Failed to get declarations from module " ++ String.join "." moduleName))
             )
         |> Result.Extra.combine
         |> Result.map Dict.fromList
-        |> Result.map
+        |> Result.andThen
             (\environmentBeforeModules ->
-                let
-                    otherDeclarations =
-                        environmentDeclarations
-                            |> Dict.filter (stringStartsWithUpper >> not >> always)
-                in
-                { modules = environmentBeforeModules
-                , otherDeclarations = otherDeclarations
-                }
+                environmentDeclarations
+                    |> Dict.filter (stringStartsWithUpper >> not >> always)
+                    |> getDeclarationsExpressionsFromValues
+                    |> Result.map
+                        (\otherDeclarations ->
+                            { modules = environmentBeforeModules
+                            , otherDeclarations = otherDeclarations
+                            }
+                        )
             )
+
+
+getDeclarationsExpressionsFromValues :
+    Dict.Dict String Pine.Value
+    -> Result String (Dict.Dict String Pine.Expression)
+getDeclarationsExpressionsFromValues =
+    Dict.map (always Pine.decodeExpressionFromValue)
+        >> Dict.toList
+        >> List.map
+            (\( name, decodeResult ) ->
+                decodeResult
+                    |> Result.map (Tuple.pair name)
+                    |> Result.mapError ((++) ("Failed to decode expression for declaration " ++ name ++ ": "))
+            )
+        >> Result.Extra.combine
+        >> Result.map Dict.fromList
 
 
 getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)

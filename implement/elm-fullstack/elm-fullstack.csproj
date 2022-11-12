@@ -5,8 +5,8 @@
     <TargetFramework>net7.0</TargetFramework>
     <RootNamespace>ElmFullstack</RootNamespace>
     <AssemblyName>elm-fs</AssemblyName>
-    <AssemblyVersion>2022.1111.0.0</AssemblyVersion>
-    <FileVersion>2022.1111.0.0</FileVersion>
+    <AssemblyVersion>2022.1112.0.0</AssemblyVersion>
+    <FileVersion>2022.1112.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
