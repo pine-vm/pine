@@ -12,7 +12,7 @@ type Expression
     | KernelApplicationExpression KernelApplicationExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
     | EnvironmentExpression
-    | StringTagExpression StringTagExpressionStructure
+    | StringTagExpression String Expression
 
 
 type alias DecodeAndEvaluateExpressionStructure =
@@ -31,12 +31,6 @@ type alias ConditionalExpressionStructure =
     { condition : Expression
     , ifTrue : Expression
     , ifFalse : Expression
-    }
-
-
-type alias StringTagExpressionStructure =
-    { tag : String
-    , tagged : Expression
     }
 
 
@@ -142,7 +136,7 @@ evaluateExpression context expression =
         EnvironmentExpression ->
             Ok context.environment
 
-        StringTagExpression { tag, tagged } ->
+        StringTagExpression tag tagged ->
             let
                 log =
                     Debug.log "eval expression with tag"
@@ -567,7 +561,7 @@ describeExpression depthLimit expression =
         EnvironmentExpression ->
             "environment"
 
-        StringTagExpression { tag, tagged } ->
+        StringTagExpression tag tagged ->
             "string-tag-" ++ tag ++ "(" ++ describeExpression (depthLimit - 1) tagged ++ ")"
 
 
@@ -831,13 +825,12 @@ encodeExpressionAsValue expression =
             , ListValue []
             )
 
-        StringTagExpression { tag, tagged } ->
+        StringTagExpression tag tagged ->
             ( "StringTag"
-            , [ ( "tag", valueFromString tag )
-              , ( "tagged", encodeExpressionAsValue tagged )
+            , [ valueFromString tag
+              , encodeExpressionAsValue tagged
               ]
-                |> Dict.fromList
-                |> encodeRecordToPineValue
+                |> ListValue
             )
     )
         |> (\( tagName, unionTagValue ) -> encodeUnionToPineValue tagName unionTagValue)
@@ -869,7 +862,21 @@ decodeExpressionFromValue value =
                   , always (Ok EnvironmentExpression)
                   )
                 , ( "StringTag"
-                  , decodeStringTagExpression >> Result.map StringTagExpression
+                  , decodePineListValue
+                        >> Result.andThen decodeListWithExactlyTwoElements
+                        >> Result.andThen
+                            (\( tagValue, taggedValue ) ->
+                                tagValue
+                                    |> stringFromValue
+                                    |> Result.mapError ((++) "Failed to decode tag: ")
+                                    |> Result.andThen
+                                        (\tag ->
+                                            taggedValue
+                                                |> decodeExpressionFromValue
+                                                |> Result.mapError ((++) "Failed to decoded tagged expression: ")
+                                                |> Result.map (\tagged -> StringTagExpression tag tagged)
+                                        )
+                            )
                   )
                 ]
             )
@@ -903,16 +910,6 @@ decodeConditionalExpression =
                 |> decodeRecordField "condition" decodeExpressionFromValue
                 |> decodeRecordField "ifTrue" decodeExpressionFromValue
                 |> decodeRecordField "ifFalse" decodeExpressionFromValue
-            )
-
-
-decodeStringTagExpression : Value -> Result String StringTagExpressionStructure
-decodeStringTagExpression =
-    decodeRecordFromPineValue
-        >> Result.andThen
-            (always (Ok StringTagExpressionStructure)
-                |> decodeRecordField "tag" stringFromValue
-                |> decodeRecordField "tagged" decodeExpressionFromValue
             )
 
 

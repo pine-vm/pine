@@ -1974,8 +1974,7 @@ emitExpression stack expression =
         StringTagExpression tag tagged ->
             tagged
                 |> emitExpression stack
-                |> Result.map
-                    (\taggedPine -> Pine.StringTagExpression { tag = tag, tagged = taggedPine })
+                |> Result.map (Pine.StringTagExpression tag)
 
         RecordAccessExpression fieldName recordExpr ->
             recordExpr

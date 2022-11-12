@@ -30,10 +30,7 @@ pineExpressionEncodeDecodeRoundtrip =
             }
       )
     , ( "string tag"
-      , Pine.StringTagExpression
-            { tag = "the tag string"
-            , tagged = Pine.ListExpression []
-            }
+      , Pine.StringTagExpression "the tag string" (Pine.ListExpression [])
       )
     ]
         |> List.map

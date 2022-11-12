@@ -213,11 +213,12 @@ public class PineVM
             (condition, ifTrue, ifFalse) => new Expression.ConditionalExpression(condition: condition, ifTrue: ifTrue, ifFalse: ifFalse));
 
     static public Result<string, Expression.StringTagExpression> DecodeStringTagExpression(PineValue value) =>
-        DecodeRecord2FromPineValue(
-            value,
-            (nameof(Expression.StringTagExpression.tag), Composition.StringFromComponent),
-            (nameof(Expression.StringTagExpression.tagged), DecodeExpressionFromValue),
-            (tag, tagged) => new Expression.StringTagExpression(tag: tag, tagged: tagged));
+        DecodePineListValue(value)
+        .AndThen(DecodeListWithExactlyTwoElements)
+        .AndThen(tagValueAndTaggedValue =>
+        Composition.StringFromComponent(tagValueAndTaggedValue.Item1).MapError(err => "Failed to decode tag: " + err)
+        .AndThen(tag => DecodeExpressionFromValue(tagValueAndTaggedValue.Item2).MapError(err => "Failed to decoded tagged expression: " + err)
+        .Map(tagged => new Expression.StringTagExpression(tag: tag, tagged: tagged))));
 
     static public Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
         IReadOnlyList<OkT> list,
