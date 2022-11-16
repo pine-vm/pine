@@ -165,57 +165,6 @@ namedValueFromValue value =
             Nothing
 
 
-lookUpNameInListValue : Value -> Value -> Result (PathDescription String) Value
-lookUpNameInListValue nameAsValue context =
-    let
-        nameAsString =
-            nameAsValue |> stringFromValue |> Result.withDefault "name_is_not_a_string"
-
-        getMatchFromList contextList =
-            case contextList of
-                [] ->
-                    Nothing
-
-                nextElement :: remainingElements ->
-                    case nextElement of
-                        ListValue [ labelValue, namedValue ] ->
-                            if labelValue == nameAsValue then
-                                Just namedValue
-
-                            else
-                                getMatchFromList remainingElements
-
-                        _ ->
-                            getMatchFromList remainingElements
-    in
-    case context of
-        ListValue applicationArgumentList ->
-            case getMatchFromList applicationArgumentList of
-                Nothing ->
-                    let
-                        availableNames =
-                            applicationArgumentList |> List.filterMap namedValueFromValue
-                    in
-                    Err
-                        (DescribePathEnd
-                            ("Did not find '"
-                                ++ nameAsString
-                                ++ "'. There are "
-                                ++ (applicationArgumentList |> List.length |> String.fromInt)
-                                ++ " entries and "
-                                ++ (availableNames |> List.length |> String.fromInt)
-                                ++ " names available in that scope: "
-                                ++ (availableNames |> List.map Tuple.first |> String.join ", ")
-                            )
-                        )
-
-                Just firstNameValue ->
-                    Ok firstNameValue
-
-        _ ->
-            Err (DescribePathEnd "applicationArgument is not a list")
-
-
 kernelFunctions : Dict.Dict String KernelFunction
 kernelFunctions =
     [ ( "equal"
@@ -316,16 +265,6 @@ kernelFunctions =
       )
     , ( "sort_int"
       , sort_int >> Ok
-      )
-    , ( "look_up_name_in_ListValue"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = Ok
-            , mapArg1 = Ok
-            , apply =
-                \name contextValue ->
-                    lookUpNameInListValue name contextValue
-                        |> Result.map (List.singleton >> ListValue)
-            }
       )
     ]
         |> Dict.fromList

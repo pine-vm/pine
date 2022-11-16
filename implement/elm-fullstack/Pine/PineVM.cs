@@ -138,8 +138,7 @@ public class PineVM
         .SetItem(nameof(KernelFunction.sub_int), KernelFunction.sub_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.div_int), KernelFunction.div_int)
-        .SetItem(nameof(KernelFunction.sort_int), value => Result<string, PineValue>.ok(KernelFunction.sort_int(value)))
-        .SetItem(nameof(KernelFunction.look_up_name_in_ListValue), KernelFunction.look_up_name_in_ListValue);
+        .SetItem(nameof(KernelFunction.sort_int), value => Result<string, PineValue>.ok(KernelFunction.sort_int(value)));
 
     static public PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
 
@@ -485,47 +484,6 @@ public class PineVM
                     _ => 0
                 };
         }
-
-        static public Result<string, PineValue> look_up_name_in_ListValue(PineValue value) =>
-            KernelFunctionExpectingExactlyTwoArguments(
-                Result<string, PineValue>.ok,
-                Result<string, PineValue>.ok,
-                lookUpNameInListValue)
-            (value).Map(foundNamed => PineValue.List(ImmutableList.Create(foundNamed)));
-
-        static public Result<string, PineValue> lookUpNameInListValue(
-            PineValue nameValue, PineValue listValue) =>
-             DecodePineListValue(listValue)
-             .AndThen(list =>
-             {
-                 var listNamedEntries =
-                 list.SelectMany(element =>
-                 element switch
-                 {
-                     PineValue.ListValue listComponent when listComponent.Elements.Count == 2 =>
-                     new[] { (name: listComponent.Elements[0], named: listComponent.Elements[1]) },
-                     _ => Array.Empty<(PineValue name, PineValue named)>()
-                 });
-
-                 foreach (var namedEntry in listNamedEntries)
-                 {
-                     if (namedEntry.name == nameValue)
-                         return Result<string, PineValue>.ok(namedEntry.named);
-                 }
-
-                 var nameAsString = Composition.StringFromComponent(nameValue).WithDefault("name_is_not_a_string");
-
-                 var names =
-                 listNamedEntries
-                 .Select((namedEntry, _) => Composition.StringFromComponent(namedEntry.name).Unpack(fromErr: _ => null, fromOk: s => s))
-                 .WhereNotNull().ToImmutableArray();
-
-                 return Result<string, PineValue>.err(
-                     "Did not find '" + nameAsString + "'. There are " +
-                     list.Count + " entries and " +
-                     names.Length + " names available in that scope: " +
-                     string.Join(", ", names));
-             });
 
         static Result<string, PineValue> KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
             Func<BigInteger, IReadOnlyList<BigInteger>, BigInteger> aggregate,

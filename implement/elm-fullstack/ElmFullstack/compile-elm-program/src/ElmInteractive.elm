@@ -119,6 +119,7 @@ type alias CompilationStack =
 type alias EmitStack =
     { declarationsDependencies : Dict.Dict String (Set.Set String)
     , appEnvElementsOrder : List String
+    , declarationsExpectedEnvironment : Dict.Dict String (List String)
     }
 
 
@@ -693,6 +694,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
         initialEmitStack =
             { declarationsDependencies = Dict.empty
             , appEnvElementsOrder = []
+            , declarationsExpectedEnvironment = Dict.empty
             }
 
         redirectsForInfix : Dict.Dict String String
@@ -1251,7 +1253,7 @@ declarationsFromPattern_Pine pattern =
             Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
 
 
-listDependenciesOfExpression : Dict.Dict String (Set.Set String) -> Expression -> Set.Set String
+listDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
 listDependenciesOfExpression dependenciesRelations expression =
     (case expression of
         LiteralExpression _ ->
@@ -1305,7 +1307,8 @@ listDependenciesOfExpression dependenciesRelations expression =
         RecordAccessExpression _ recordExpression ->
             listDependenciesOfExpression dependenciesRelations recordExpression
     )
-        |> getTransitiveDependenciesStep dependenciesRelations
+        |> getTransitiveDependenciesStep dependenciesRelations.declarationsDependencies
+        |> getTransitiveDependenciesStep (Dict.map (always Set.fromList) dependenciesRelations.declarationsExpectedEnvironment)
 
 
 getTransitiveDependenciesStep : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
@@ -1322,7 +1325,7 @@ getTransitiveDependenciesStep dependenciesDependencies current =
         |> Set.union current
 
 
-listDependenciesOfExpressions : Dict.Dict String (Set.Set String) -> List Expression -> Set.Set String
+listDependenciesOfExpressions : EmitStack -> List Expression -> Set.Set String
 listDependenciesOfExpressions dependenciesRelations =
     List.map (listDependenciesOfExpression dependenciesRelations) >> List.foldl Set.union Set.empty
 
@@ -1972,7 +1975,7 @@ emitFunctionBindingArgumentToName : EmitStack -> FunctionExpressionStruct -> Res
 emitFunctionBindingArgumentToName stackBefore function =
     let
         innerDependencies =
-            listDependenciesOfExpression stackBefore.declarationsDependencies function.expression
+            listDependenciesOfExpression stackBefore function.expression
 
         outerDependencies =
             function.argumentDeconstructions
@@ -1987,7 +1990,7 @@ emitFunctionBindingArgumentToName stackBefore function =
     in
     emitApplicationArgumentExpression
         stackBefore
-        environmentElements
+        (Dict.fromList environmentElements)
         |> Result.andThen
             (\( stack, argumentExpression ) ->
                 emitExpression stack function.expression
@@ -2043,7 +2046,7 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
     let
         newReferencesDependencies =
             environmentDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDependencies.declarationsDependencies))
+                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDependencies))
                 |> Dict.fromList
 
         stackBefore =
@@ -2052,7 +2055,7 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
             }
 
         innerDependencies =
-            listDependenciesOfExpression stackBefore.declarationsDependencies expressionInClosure
+            listDependenciesOfExpression stackBefore expressionInClosure
 
         outerDependencies =
             environmentDeclarations
@@ -2075,7 +2078,7 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
     else
         emitApplicationArgumentExpression
             stackBefore
-            environmentElements
+            (Dict.fromList environmentElements)
             |> Result.andThen
                 (\( stack, argumentExpression ) ->
                     emitExpression stack expressionInClosure
@@ -2098,14 +2101,69 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
 
 emitApplicationArgumentExpression :
     EmitStack
-    -> List ( String, EnvironmentElement )
+    -> Dict.Dict String EnvironmentElement
     -> Result String ( EmitStack, Pine.Expression )
-emitApplicationArgumentExpression stackBefore environmentElements =
+emitApplicationArgumentExpression stackBefore environmentElementsDict =
     let
+        environmentElementsOrderedPartForwarded =
+            stackBefore.appEnvElementsOrder
+                |> List.filterMap
+                    (\name ->
+                        environmentElementsDict
+                            |> Dict.get name
+                            |> Maybe.map (\element -> ( name, element ))
+                    )
+
+        environmentElementsForwardedNames =
+            environmentElementsOrderedPartForwarded |> List.map Tuple.first
+
+        environmentElementsOrderedPartNew =
+            environmentElementsDict
+                |> Dict.toList
+                |> List.filter (Tuple.first >> List.member >> (|>) environmentElementsForwardedNames >> not)
+
+        environmentElementsOrdered =
+            environmentElementsOrderedPartForwarded ++ environmentElementsOrderedPartNew
+
+        environmentElementsLiteralNames =
+            environmentElementsDict
+                |> Dict.toList
+                |> List.filterMap
+                    (\( elementName, element ) ->
+                        case element of
+                            LiteralEnvironmentElement _ ->
+                                Just elementName
+
+                            _ ->
+                                Nothing
+                    )
+
+        newDeclarationsExpectedEnvironment =
+            environmentElementsLiteralNames
+                |> List.map (Tuple.pair >> (|>) (List.map Tuple.first environmentElementsOrdered))
+                |> Dict.fromList
+
+        declarationsExpectedEnvironment =
+            stackBefore.declarationsExpectedEnvironment
+                |> Dict.union newDeclarationsExpectedEnvironment
+
         stack =
             { stackBefore
-                | appEnvElementsOrder = List.map Tuple.first environmentElements
+                | appEnvElementsOrder = environmentElementsOrdered |> List.map Tuple.first
+                , declarationsExpectedEnvironment = declarationsExpectedEnvironment
             }
+
+        expressionToLookupNameInPreviousEnvironment : String -> Result String Pine.Expression
+        expressionToLookupNameInPreviousEnvironment elementName =
+            resultIndexInEnvironmentFromElementName elementName stackBefore
+                |> Result.map
+                    (\runtimeIndex ->
+                        {-
+                           (expressionToLookupNameInEnvironment elementName)
+                        -}
+                        listItemFromIndexExpression_Pine 1
+                            (listItemFromIndexExpression_Pine runtimeIndex Pine.EnvironmentExpression)
+                    )
 
         buildEnvironmentElementExpression ( elementName, envExpansion ) =
             case envExpansion of
@@ -2135,18 +2193,21 @@ emitApplicationArgumentExpression stackBefore environmentElements =
                         |> Ok
 
                 ForwardedEnvironmentElement ->
-                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                    , [ Pine.LiteralExpression (Pine.valueFromString elementName)
+                    expressionToLookupNameInPreviousEnvironment elementName
+                        |> Result.map
+                            (\lookupExpr ->
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , [ Pine.LiteralExpression (Pine.valueFromString elementName)
 
-                      -- Below is the part we cannot express using a literal.
-                      , expressionToLookupNameInEnvironment elementName
-                      ]
-                        |> Pine.ListExpression
-                    ]
-                        |> Pine.ListExpression
-                        |> Ok
+                                  -- Below is the part we cannot express using a literal.
+                                  , lookupExpr
+                                  ]
+                                    |> Pine.ListExpression
+                                ]
+                                    |> Pine.ListExpression
+                            )
     in
-    environmentElements
+    environmentElementsOrdered
         |> List.map buildEnvironmentElementExpression
         |> Result.Extra.combine
         |> Result.map
@@ -2163,40 +2224,52 @@ emitApplicationArgumentExpression stackBefore environmentElements =
 
 emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
 emitReferenceExpression name compilation =
-    case
-        compilation.appEnvElementsOrder
-            |> List.indexedMap Tuple.pair
-            |> List.filter (Tuple.second >> (==) name)
-            |> List.head
-            |> Maybe.map Tuple.first
-    of
+    resultIndexInEnvironmentFromElementName name compilation
+        |> Result.andThen
+            (\runtimeIndex ->
+                {-
+                   Ok
+                       (Pine.DecodeAndEvaluateExpression
+                           { expression = expressionToLookupNameInEnvironment name
+                           , environment = Pine.EnvironmentExpression
+                           }
+                       )
+                -}
+                Ok
+                    (Pine.DecodeAndEvaluateExpression
+                        { expression =
+                            listItemFromIndexExpression_Pine 1
+                                (listItemFromIndexExpression_Pine runtimeIndex Pine.EnvironmentExpression)
+                        , environment = Pine.EnvironmentExpression
+                        }
+                    )
+            )
+
+
+resultIndexInEnvironmentFromElementName : String -> EmitStack -> Result String Int
+resultIndexInEnvironmentFromElementName name stack =
+    case maybeIndexInEnvironmentFromElementName name stack of
         Nothing ->
             Err
                 ("Failed getting runtime index for '"
                     ++ name
                     ++ "'. "
-                    ++ String.fromInt (List.length compilation.appEnvElementsOrder)
+                    ++ String.fromInt (List.length stack.appEnvElementsOrder)
                     ++ " names on the current stack: "
-                    ++ String.join ", " compilation.appEnvElementsOrder
+                    ++ String.join ", " stack.appEnvElementsOrder
                 )
 
         Just runtimeIndex ->
-            {-
-               Ok
-                   (Pine.DecodeAndEvaluateExpression
-                       { expression =
-                           listItemFromIndexExpression_Pine 1
-                               (listItemFromIndexExpression_Pine runtimeIndex Pine.EnvironmentExpression)
-                       , environment = Pine.EnvironmentExpression
-                       }
-                   )
-            -}
-            Ok
-                (Pine.DecodeAndEvaluateExpression
-                    { expression = expressionToLookupNameInEnvironment name
-                    , environment = Pine.EnvironmentExpression
-                    }
-                )
+            Ok runtimeIndex
+
+
+maybeIndexInEnvironmentFromElementName : String -> EmitStack -> Maybe Int
+maybeIndexInEnvironmentFromElementName name =
+    .appEnvElementsOrder
+        >> List.indexedMap Tuple.pair
+        >> List.filter (Tuple.second >> (==) name)
+        >> List.head
+        >> Maybe.map Tuple.first
 
 
 getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Expression
@@ -2474,6 +2547,7 @@ compileInteractiveSubmission environment submission =
                 emitStack =
                     { declarationsDependencies = Dict.empty
                     , appEnvElementsOrder = []
+                    , declarationsExpectedEnvironment = Dict.empty
                     }
             in
             case parseInteractiveSubmissionFromString submission of
@@ -2510,7 +2584,7 @@ compileInteractiveSubmission environment submission =
                                             emitClosureExpression
                                                 emitStack
                                                 [ ( declarationName, functionDeclarationCompilation ) ]
-                                                |> (|>) functionDeclarationCompilation
+                                                functionDeclarationCompilation
                                         )
                             of
                                 Err error ->
