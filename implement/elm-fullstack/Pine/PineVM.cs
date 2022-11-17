@@ -322,14 +322,23 @@ public class PineVM
     static public class KernelFunction
     {
         static public Result<string, PineValue> equal(PineValue value) =>
-            DecodePineListValue(value)
-            .Map(list =>
-            list.Count < 1
-            ?
-            true
-            :
-            list.All(e => e.Equals(list[0])))
-            .Map(ValueFromBool);
+            Result<string, PineValue>.ok(
+                ValueFromBool(
+                    value switch
+                    {
+                        PineValue.ListValue list =>
+                        list.Elements.Count < 1 ?
+                        true
+                        :
+                        list.Elements.All(e => e.Equals(list.Elements[0])),
+
+                        PineValue.BlobValue blob =>
+                        blob.Bytes.Length < 1 ? true :
+                        blob.Bytes.ToArray().All(b => b == blob.Bytes.Span[0]),
+
+                        _ => throw new NotImplementedException()
+                    }
+                ));
 
         static public Result<string, PineValue> logical_not(PineValue value) =>
             DecodeBoolFromValue(value)

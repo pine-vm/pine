@@ -168,14 +168,9 @@ namedValueFromValue value =
 kernelFunctions : Dict.Dict String KernelFunction
 kernelFunctions =
     [ ( "equal"
-      , decodePineListValue
-            >> Result.map
-                (\list ->
-                    list
-                        |> List.all ((==) (list |> List.head |> Maybe.withDefault (ListValue [])))
-                        |> valueFromBool
-                )
-            >> Result.mapError DescribePathEnd
+      , mapFromListValueOrBlobValue { fromList = list_all_same, fromBlob = list_all_same }
+            >> valueFromBool
+            >> Ok
       )
     , ( "logical_not"
       , boolFromValue
@@ -268,6 +263,16 @@ kernelFunctions =
       )
     ]
         |> Dict.fromList
+
+
+list_all_same : List a -> Bool
+list_all_same list =
+    case list of
+        [] ->
+            True
+
+        first :: rest ->
+            List.all ((==) first) rest
 
 
 sort_int : Value -> Value
