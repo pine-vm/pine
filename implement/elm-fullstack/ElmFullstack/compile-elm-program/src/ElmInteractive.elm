@@ -1944,7 +1944,7 @@ emitExpression stack expression =
             emitReferenceExpression localReference stack
 
         FunctionExpression function ->
-            emitFunctionBindingArgumentToName stack function
+            emitFunctionBindingEnvironmentToName stack function
 
         LetBlockExpression letBlock ->
             emitLetBlock stack letBlock
@@ -1968,11 +1968,11 @@ emitLetBlock stackBefore letBlock =
         letBlock.expression
 
 
-{-| Builds an expression that captures parts of the current application argument into a literal and wraps that in a function application expression that will bind the next application argument to the given name, together with the earlier captured context.
+{-| Builds an expression that captures parts of the current environment into a literal and wraps that in a function application expression that will bind the next environment to the given name, together with the earlier captured context.
 In other words, it captures dependencies from the current environment and combines them with the function to enable transport to and reuse in other places.
 -}
-emitFunctionBindingArgumentToName : EmitStack -> FunctionExpressionStruct -> Result String Pine.Expression
-emitFunctionBindingArgumentToName stackBefore function =
+emitFunctionBindingEnvironmentToName : EmitStack -> FunctionExpressionStruct -> Result String Pine.Expression
+emitFunctionBindingEnvironmentToName stackBefore function =
     let
         innerDependencies =
             listDependenciesOfExpression stackBefore function.expression
@@ -1988,7 +1988,7 @@ emitFunctionBindingArgumentToName stackBefore function =
             ]
                 |> List.concat
     in
-    emitApplicationArgumentExpression
+    emitEnvironmentCompositionExpression
         stackBefore
         (Dict.fromList environmentElements)
         |> Result.andThen
@@ -2076,7 +2076,7 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
         emitExpression stackBefore expressionInClosure
 
     else
-        emitApplicationArgumentExpression
+        emitEnvironmentCompositionExpression
             stackBefore
             (Dict.fromList environmentElements)
             |> Result.andThen
@@ -2099,11 +2099,11 @@ emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expr
                 )
 
 
-emitApplicationArgumentExpression :
+emitEnvironmentCompositionExpression :
     EmitStack
     -> Dict.Dict String EnvironmentElement
     -> Result String ( EmitStack, Pine.Expression )
-emitApplicationArgumentExpression stackBefore environmentElementsDict =
+emitEnvironmentCompositionExpression stackBefore environmentElementsDict =
     let
         environmentElementsOrderedPartForwarded =
             stackBefore.appEnvElementsOrder
