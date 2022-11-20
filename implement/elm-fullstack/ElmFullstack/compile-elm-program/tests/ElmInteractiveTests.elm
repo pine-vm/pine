@@ -497,7 +497,7 @@ evolutionStagesToMakeElmFunction =
                 , Pine.ListExpression
                     [ Pine.ListExpression
                         [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "kernel_function_name")
+                        , Pine.LiteralExpression (Pine.valueFromString "equal")
                         ]
                     , Pine.ListExpression
                         [ Pine.LiteralExpression (Pine.valueFromString "argument")
@@ -513,7 +513,7 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
-                            { functionName = "kernel_function_name"
+                            { functionName = "equal"
                             , argument = Pine.ListExpression []
                             }
                         )

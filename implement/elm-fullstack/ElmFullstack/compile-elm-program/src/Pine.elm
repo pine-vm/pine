@@ -97,27 +97,15 @@ evaluateExpression context expression =
                     )
 
         KernelApplicationExpression application ->
-            case Dict.get application.functionName kernelFunctions of
-                Nothing ->
-                    Err
-                        (DescribePathEnd
-                            ("Did not find kernel function '"
-                                ++ application.functionName
-                                ++ "'. There are "
-                                ++ String.fromInt (Dict.size kernelFunctions)
-                                ++ " kernel functions available: "
-                                ++ String.join ", " (Dict.keys kernelFunctions)
-                            )
-                        )
-
-                Just kernelFunction ->
-                    evaluateExpression context application.argument
-                        |> Result.andThen
-                            (\arg ->
-                                kernelFunction arg
-                                    |> Result.mapError (DescribePathNode ("Failed to apply kernel function '" ++ application.functionName ++ "': "))
-                                    |> Result.mapError (\e -> DescribePathNode ("Argument: " ++ describeValue 2 arg) e)
-                            )
+            evaluateExpression context application.argument
+                |> Result.mapError (DescribePathNode ("Failed to evaluate argument for kernel function " ++ application.functionName ++ ": "))
+                |> Result.andThen
+                    (\argument ->
+                        application.functionName
+                            |> decodeKernelFunctionFromName
+                            |> Result.mapError DescribePathEnd
+                            |> Result.map (\kernelFunction -> kernelFunction argument |> Result.withDefault (ListValue []))
+                    )
 
         ConditionalExpression conditional ->
             case evaluateExpression context conditional.condition of
@@ -333,7 +321,7 @@ evaluateDecodeAndEvaluate context decodeAndEvaluate =
                 e |> DescribePathNode ("Failed to evaluate environment '" ++ describeExpression 1 decodeAndEvaluate.environment ++ "'")
             )
         |> Result.andThen
-            (\argumentValue ->
+            (\environmentValue ->
                 evaluateExpression context decodeAndEvaluate.expression
                     |> Result.mapError
                         (\e ->
@@ -351,22 +339,10 @@ evaluateDecodeAndEvaluate context decodeAndEvaluate =
                                     )
                                 |> Result.andThen
                                     (\functionExpression ->
-                                        evaluateExpression { environment = argumentValue } functionExpression
+                                        evaluateExpression { environment = environmentValue } functionExpression
                                     )
                         )
             )
-
-
-kernelFunctionOnTwoBigIntWithBooleanResult : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> KernelFunction
-kernelFunctionOnTwoBigIntWithBooleanResult apply =
-    kernelFunctionExpectingExactlyTwoBigInt
-        (\leftInt rightInt -> Ok (valueFromBool (apply leftInt rightInt)))
-
-
-kernelFunctionExpectingExactlyTwoBigIntAndProducingBool : (BigInt.BigInt -> BigInt.BigInt -> Bool) -> KernelFunction
-kernelFunctionExpectingExactlyTwoBigIntAndProducingBool apply =
-    kernelFunctionExpectingExactlyTwoBigInt
-        (\a0 a1 -> Ok (valueFromBool (apply a0 a1)))
 
 
 kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt :
@@ -384,24 +360,12 @@ kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt apply =
         )
 
 
-kernelFunctionExpectingListOfBigInt :
-    (List BigInt.BigInt -> Result String Value)
-    -> Value
-    -> Result (PathDescription String) Value
+kernelFunctionExpectingListOfBigInt : (List BigInt.BigInt -> Result String Value) -> KernelFunction
 kernelFunctionExpectingListOfBigInt apply =
     decodePineListValue
         >> Result.andThen (List.map bigIntFromValue >> Result.Extra.combine)
         >> Result.andThen apply
         >> Result.mapError DescribePathEnd
-
-
-kernelFunctionExpectingExactlyTwoBigInt : (BigInt.BigInt -> BigInt.BigInt -> Result (PathDescription String) Value) -> KernelFunction
-kernelFunctionExpectingExactlyTwoBigInt apply =
-    kernelFunctionExpectingExactlyTwoArguments
-        { mapArg0 = bigIntFromValue >> Result.mapError DescribePathEnd
-        , mapArg1 = bigIntFromValue >> Result.mapError DescribePathEnd
-        , apply = apply
-        }
 
 
 kernelFunctionExpectingListOfTypeBool : (List Bool -> Bool) -> KernelFunction
@@ -841,9 +805,34 @@ decodeKernelApplicationExpression =
     decodeRecordFromPineValue
         >> Result.andThen
             (always (Ok KernelApplicationExpressionStructure)
-                |> decodeRecordField "functionName" stringFromValue
+                |> decodeRecordField "functionName"
+                    (stringFromValue
+                        >> Result.andThen
+                            (\functionName ->
+                                functionName
+                                    |> decodeKernelFunctionFromName
+                                    |> Result.map (always functionName)
+                            )
+                    )
                 |> decodeRecordField "argument" decodeExpressionFromValue
             )
+
+
+decodeKernelFunctionFromName : String -> Result String KernelFunction
+decodeKernelFunctionFromName functionName =
+    case Dict.get functionName kernelFunctions of
+        Nothing ->
+            Err
+                ("Did not find kernel function '"
+                    ++ functionName
+                    ++ "'. There are "
+                    ++ String.fromInt (Dict.size kernelFunctions)
+                    ++ " kernel functions available: "
+                    ++ String.join ", " (Dict.keys kernelFunctions)
+                )
+
+        Just kernelFunction ->
+            Ok kernelFunction
 
 
 decodeConditionalExpression : Value -> Result String ConditionalExpressionStructure

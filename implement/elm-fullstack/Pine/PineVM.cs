@@ -105,13 +105,7 @@ public class PineVM
         Expression.KernelApplicationExpression application) =>
         EvaluateExpression(environment, application.argument)
         .MapError(error => "Failed to evaluate argument: " + error)
-        .AndThen(argument =>
-        {
-            if (!NamedKernelFunctions.TryGetValue(application.functionName, out var function))
-                return Result<string, PineValue>.err("Did not find kernel function '" + application.functionName + "'");
-
-            return function(argument);
-        });
+        .Map(argument => application.function(argument).WithDefault(PineValue.EmptyList));
 
     public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
@@ -201,7 +195,24 @@ public class PineVM
             value,
             (nameof(Expression.KernelApplicationExpression.functionName), Composition.StringFromComponent),
             (nameof(Expression.KernelApplicationExpression.argument), DecodeExpressionFromValue),
-            (functionName, argument) => new Expression.KernelApplicationExpression(functionName: functionName, argument: argument));
+            (functionName, argument) => (functionName, argument))
+        .AndThen(functionNameAndArgument =>
+        DecodeKernelApplicationExpression(functionNameAndArgument.functionName, functionNameAndArgument.argument));
+
+    static public Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
+        string functionName,
+        Expression argument)
+    {
+        if (!NamedKernelFunctions.TryGetValue(functionName, out var kernelFunction))
+        {
+            return Result<string, Expression.KernelApplicationExpression>.err(
+                "Did not find kernel function '" + functionName + "'");
+        }
+
+        return Result<string, Expression.KernelApplicationExpression>.ok(
+            new Expression.KernelApplicationExpression(
+                function: kernelFunction, argument: argument));
+    }
 
     static public Result<string, Expression.ConditionalExpression> DecodeConditionalExpression(PineValue value) =>
         DecodeRecord3FromPineValue(
@@ -303,11 +314,11 @@ public class PineVM
 
     static public Result<string, IImmutableList<PineValue>> DecodePineListValue(PineValue value)
     {
-        if (value is not PineValue.ListValue listComponent)
+        if (value is not PineValue.ListValue listValue)
             return Result<string, IImmutableList<PineValue>>.err("Not a list");
 
         return Result<string, IImmutableList<PineValue>>.ok(
-            listComponent.Elements as IImmutableList<PineValue> ?? listComponent.Elements.ToImmutableList());
+            listValue.Elements as IImmutableList<PineValue> ?? listValue.Elements.ToImmutableList());
     }
 
     static public Result<string, (T, T)> DecodeListWithExactlyTwoElements<T>(IImmutableList<T> list)
@@ -405,20 +416,20 @@ public class PineVM
                 func: (aggregate, elem) =>
                 elem switch
                 {
-                    PineValue.BlobValue elemBlobComponent =>
+                    PineValue.BlobValue elemBlobValue =>
                     aggregate switch
                     {
-                        PineValue.BlobValue aggregateBlobComponent =>
+                        PineValue.BlobValue aggregateBlobValue =>
                         PineValue.Blob(CommonConversion.Concat(
-                            aggregateBlobComponent.Bytes.Span, elemBlobComponent.Bytes.Span)),
-                        _ => elemBlobComponent
+                            aggregateBlobValue.Bytes.Span, elemBlobValue.Bytes.Span)),
+                        _ => elemBlobValue
                     },
-                    PineValue.ListValue elemListComponent =>
+                    PineValue.ListValue elemListValue =>
                     aggregate switch
                     {
-                        PineValue.ListValue aggregateListComponent =>
-                        PineValue.List(aggregateListComponent.Elements.Concat(elemListComponent.Elements).ToImmutableList()),
-                        _ => elemListComponent
+                        PineValue.ListValue aggregateListValue =>
+                        PineValue.List(aggregateListValue.Elements.Concat(elemListValue.Elements).ToImmutableList()),
+                        _ => elemListValue
                     },
                     _ => throw new NotImplementedException()
                 }));
@@ -433,22 +444,29 @@ public class PineVM
 
         static public Result<string, PineValue> add_int(PineValue value) =>
             KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate + next),
+                (firstInt, otherInts) => Result<string, BigInteger>.ok(
+                    otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate + next)),
                 value);
 
         static public Result<string, PineValue> sub_int(PineValue value) =>
             KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate - next),
+                (firstInt, otherInts) => Result<string, BigInteger>.ok(
+                    otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate - next)),
                 value);
 
         static public Result<string, PineValue> mul_int(PineValue value) =>
             KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate * next),
+                (firstInt, otherInts) => Result<string, BigInteger>.ok(
+                    otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate * next)),
                 value);
 
         static public Result<string, PineValue> div_int(PineValue value) =>
             KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next),
+                (firstInt, otherInts) =>
+                otherInts.Contains(0) ?
+                Result<string, BigInteger>.err("Division by zero")
+                :
+                Result<string, BigInteger>.ok(otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next)),
                 value);
 
         static public PineValue sort_int(PineValue value) =>
@@ -495,17 +513,17 @@ public class PineVM
         }
 
         static Result<string, PineValue> KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-            Func<BigInteger, IReadOnlyList<BigInteger>, BigInteger> aggregate,
+            Func<BigInteger, IReadOnlyList<BigInteger>, Result<string, BigInteger>> aggregate,
             PineValue value) =>
             KernelFunctionExpectingListOfBigInt(
                 aggregate:
                 listOfIntegers =>
-                listOfIntegers.Count < 1
+                (listOfIntegers.Count < 1
                 ?
-                Result<string, PineValue>.err("List is empty. Expected at least one element")
+                Result<string, BigInteger>.err("List is empty. Expected at least one element")
                 :
-                Result<string, PineValue>.ok(
-                    Composition.ComponentFromSignedInteger(aggregate(listOfIntegers[0], listOfIntegers.Skip(1).ToImmutableArray()))),
+                aggregate(listOfIntegers[0], listOfIntegers.Skip(1).ToImmutableArray()))
+                .Map(Composition.ComponentFromSignedInteger),
                 value);
 
         static Result<string, PineValue> KernelFunctionExpectingListOfBigInt(
@@ -553,9 +571,12 @@ public class PineVM
             : Expression;
 
         public record KernelApplicationExpression(
-            string functionName,
+            Func<PineValue, Result<string, PineValue>> function,
             Expression argument)
-            : Expression;
+            : Expression
+        {
+            static public readonly object? functionName = null;
+        }
 
         public record ConditionalExpression(
             Expression condition,

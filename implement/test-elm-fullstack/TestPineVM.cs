@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using System;
 using System.Collections.Immutable;
 
 namespace TestElmFullstack;
@@ -26,11 +27,11 @@ public class TestPineVM
             },
             new
             {
-                expression = (PineVM.Expression)new PineVM.Expression.KernelApplicationExpression
+                expression = (PineVM.Expression) PineVM.DecodeKernelApplicationExpression
                 (
                     functionName : "concat",
                     argument : new PineVM.Expression.ListExpression(ImmutableArray<PineVM.Expression>.Empty)
-                ),
+                ).Extract(fromErr: err => throw new Exception(err)),
                 expected = Result<string, PineValue>.ok(
                     PineValue.List(ImmutableList<PineValue>.Empty))
             }
