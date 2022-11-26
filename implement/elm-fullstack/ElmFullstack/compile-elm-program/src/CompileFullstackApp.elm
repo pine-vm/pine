@@ -3,7 +3,7 @@ module CompileFullstackApp exposing
     , CompilationArguments
     , CompilationError(..)
     , DependencyKey(..)
-    , ElmCustomTypeStruct
+    , ElmChoiceTypeStruct
     , ElmMakeOutputType(..)
     , ElmMakeRequestStructure
     , ElmTypeAnnotation(..)
@@ -20,7 +20,7 @@ module CompileFullstackApp exposing
     , filePathFromElmModuleName
     , includeFilePathInElmMakeRequest
     , jsonCodingExpressionFromType
-    , jsonCodingFunctionFromCustomType
+    , jsonCodingFunctionFromChoiceType
     , parseAppStateElmTypeAndDependenciesRecursively
     , parseElmMakeModuleFunctionName
     , parseElmModuleText
@@ -83,7 +83,7 @@ type alias ElmAppInterfaceConvention =
 type alias MigrationConfig =
     { inputType : ElmTypeAnnotation
     , returnType : ElmTypeAnnotation
-    , dependencies : Dict.Dict String ElmCustomTypeStruct
+    , dependencies : Dict.Dict String ElmChoiceTypeStruct
     , migrateFunctionModuleName : List String
     , migrateFunctionDeclarationLocalName : String
     }
@@ -517,7 +517,10 @@ parseMigrationConfig { originalSourceModules } =
                 |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
 
 
-parseAppStateElmTypeAndDependenciesRecursively : Dict.Dict String ( List String, Elm.Syntax.File.File ) -> ( List String, Elm.Syntax.File.File ) -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+parseAppStateElmTypeAndDependenciesRecursively :
+    Dict.Dict String ( List String, Elm.Syntax.File.File )
+    -> ( List String, Elm.Syntax.File.File )
+    -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
     stateTypeAnnotationFromRootElmModule parsedModule
         |> Result.mapError
@@ -538,7 +541,7 @@ parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFileP
 parseAppStateMigrateElmTypeAndDependenciesRecursively :
     Dict.Dict String ( List String, Elm.Syntax.File.File )
     -> ( List String, Elm.Syntax.File.File )
-    -> Result (LocatedInSourceFiles String) ( ( ElmTypeAnnotation, ElmTypeAnnotation ), Dict.Dict String ElmCustomTypeStruct )
+    -> Result (LocatedInSourceFiles String) ( ( ElmTypeAnnotation, ElmTypeAnnotation ), Dict.Dict String ElmChoiceTypeStruct )
 parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
     migrateStateTypeAnnotationFromElmModule parsedModule
         |> Result.mapError
@@ -1611,13 +1614,13 @@ mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleFilePath,
 mapAppFilesToSupportJsonCoding :
     { generatedModuleNamePrefix : List String }
     -> List ElmTypeAnnotation
-    -> Dict.Dict String ElmCustomTypeStruct
+    -> Dict.Dict String ElmChoiceTypeStruct
     -> AppFiles
     -> ( AppFiles, { generatedModuleName : String, modulesToImport : List (List String) } )
-mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBeforeDeduplicating customTypes appFilesBefore =
+mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
     let
-        modulesToImportForCustomTypes =
-            customTypes
+        modulesToImportForChoiceTypes =
+            choiceTypes
                 |> Dict.keys
                 |> List.map moduleNameFromTypeName
                 |> Set.fromList
@@ -1633,13 +1636,13 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
             , [ "Bytes", "Decode" ]
             , [ "Bytes", "Encode" ]
             ]
-                ++ modulesToImportForCustomTypes
+                ++ modulesToImportForChoiceTypes
 
         generatedModuleModulesToImport =
             encodingModuleImportBase64 :: List.map (Tuple.pair >> (|>) Nothing) modulesToImport
 
-        appFilesAfterExposingCustomTypesInModules =
-            modulesToImportForCustomTypes
+        appFilesAfterExposingChoiceTypesInModules =
+            modulesToImportForChoiceTypes
                 |> List.foldl exposeAllInElmModuleInAppFiles appFilesBefore
 
         typeAnnotationsFunctions =
@@ -1656,16 +1659,16 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
                 |> List.map (\function -> { functionName = function.name, functionText = function.text })
 
         dependenciesFunctions =
-            customTypes
+            choiceTypes
                 |> Dict.toList
                 |> List.map
-                    (\( customTypeName, customType ) ->
-                        jsonCodingFunctionFromCustomType
-                            { customTypeName = customTypeName
+                    (\( choiceTypeName, choiceType ) ->
+                        jsonCodingFunctionFromChoiceType
+                            { choiceTypeName = choiceTypeName
                             , encodeValueExpression = jsonEncodeParamName
                             , typeArgLocalName = "type_arg"
                             }
-                            customType
+                            choiceType
                     )
                 |> List.concatMap
                     (\functionsForType ->
@@ -1708,7 +1711,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
                 |> String.join "\n\n"
 
         appFiles =
-            appFilesAfterExposingCustomTypesInModules
+            appFilesAfterExposingChoiceTypesInModules
                 |> updateFileContentAtPath
                     (always (fileContentFromString generatedModuleText))
                     generatedModulePath
@@ -1864,8 +1867,8 @@ type FileTreeNode blobStructure
                                         |> List.any
                                             (\declaration ->
                                                 case Elm.Syntax.Node.value declaration of
-                                                    Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                                        Elm.Syntax.Node.value customTypeDeclaration.name == "FileTreeNode"
+                                                    Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                                        Elm.Syntax.Node.value choiceTypeDeclaration.name == "FileTreeNode"
 
                                                     _ ->
                                                         False
@@ -2081,7 +2084,7 @@ updateFileContentAtPath updateFileContent filePath appFiles =
 
 
 type ElmTypeAnnotation
-    = CustomElmType String
+    = ChoiceElmType String
     | RecordElmType { fields : List ( String, ElmTypeAnnotation ) }
     | InstanceElmType { instantiated : ElmTypeAnnotation, arguments : List ElmTypeAnnotation }
     | TupleElmType (List ElmTypeAnnotation)
@@ -2090,7 +2093,7 @@ type ElmTypeAnnotation
     | UnitType
 
 
-type alias ElmCustomTypeStruct =
+type alias ElmChoiceTypeStruct =
     { parameters : List String
     , tags : Dict.Dict String (List ElmTypeAnnotation)
     }
@@ -2112,7 +2115,7 @@ type LeafElmTypeStruct
 parseElmTypeAndDependenciesRecursivelyFromAnnotation :
     Dict.Dict String ( List String, Elm.Syntax.File.File )
     -> ( ( List String, Elm.Syntax.File.File ), Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
-    -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+    -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseElmTypeAndDependenciesRecursivelyFromAnnotation modules ( ( currentModuleFilePath, currentModule ), typeAnnotationNode ) =
     parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
         { typesToIgnore = Set.empty }
@@ -2128,7 +2131,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal :
     { typesToIgnore : Set.Set String }
     -> Dict.Dict String Elm.Syntax.File.File
     -> ( Elm.Syntax.File.File, Elm.Syntax.TypeAnnotation.TypeAnnotation )
-    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( currentModule, typeAnnotation ) =
     case typeAnnotation of
         Elm.Syntax.TypeAnnotation.Typed instantiatedNode argumentsNodes ->
@@ -2190,13 +2193,13 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped :
     { typesToIgnore : Set.Set String }
     -> Dict.Dict String Elm.Syntax.File.File
     -> ( Elm.Syntax.File.File, ( Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ), List (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) ) )
-    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct )
+    -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules ( currentModule, ( instantiatedNode, argumentsNodes ) ) =
     let
         ( instantiatedModuleAlias, instantiatedLocalName ) =
             Elm.Syntax.Node.value instantiatedNode
 
-        instantiatedResult : Result String ( ElmTypeAnnotation, Dict.Dict String ElmCustomTypeStruct, List String )
+        instantiatedResult : Result String ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct, List String )
         instantiatedResult =
             case
                 parseElmTypeLeavesNames
@@ -2286,12 +2289,12 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                 else
                                                     Just (AliasDeclaration aliasDeclaration)
 
-                                            Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                                if Elm.Syntax.Node.value customTypeDeclaration.name /= instantiatedLocalName then
+                                            Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                                if Elm.Syntax.Node.value choiceTypeDeclaration.name /= instantiatedLocalName then
                                                     Nothing
 
                                                 else
-                                                    Just (CustomTypeDeclaration customTypeDeclaration)
+                                                    Just (ChoiceTypeDeclaration choiceTypeDeclaration)
 
                                             _ ->
                                                 Nothing
@@ -2322,22 +2325,22 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                             , aliasDeclaration.generics |> List.map Elm.Syntax.Node.value
                                                             )
 
-                                            CustomTypeDeclaration customTypeDeclaration ->
+                                            ChoiceTypeDeclaration choiceTypeDeclaration ->
                                                 let
                                                     typeName =
                                                         Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value instantiatedModule.moduleDefinition)
-                                                            ++ [ Elm.Syntax.Node.value customTypeDeclaration.name ]
+                                                            ++ [ Elm.Syntax.Node.value choiceTypeDeclaration.name ]
                                                             |> String.join "."
 
                                                     genericsNames =
-                                                        customTypeDeclaration.generics
+                                                        choiceTypeDeclaration.generics
                                                             |> List.map Elm.Syntax.Node.value
                                                 in
                                                 if stack.typesToIgnore |> Set.member typeName then
-                                                    Ok ( CustomElmType typeName, Dict.empty, genericsNames )
+                                                    Ok ( ChoiceElmType typeName, Dict.empty, genericsNames )
 
                                                 else
-                                                    customTypeDeclaration.constructors
+                                                    choiceTypeDeclaration.constructors
                                                         |> List.map Elm.Syntax.Node.value
                                                         |> List.map
                                                             (\constructor ->
@@ -2372,7 +2375,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                         |> Result.map listTupleSecondDictUnion
                                                         |> Result.map
                                                             (\( constructors, constructorsDeps ) ->
-                                                                ( CustomElmType typeName
+                                                                ( ChoiceElmType typeName
                                                                 , constructorsDeps
                                                                     |> Dict.insert
                                                                         typeName
@@ -2543,10 +2546,10 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
             }
     in
     case typeAnnotation of
-        CustomElmType custom ->
+        ChoiceElmType choice ->
             let
                 typeNameRepresentation =
-                    jsonCodingFunctionNameCommonPartFromTypeName custom
+                    jsonCodingFunctionNameCommonPartFromTypeName choice
             in
             { encodeExpression =
                 [ jsonEncodeFunctionNamePrefix ++ typeNameRepresentation
@@ -2763,30 +2766,30 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                     continueWithLocalNameAndCommonPrefix jsonCodeDictFunctionNameCommonPart
 
 
-jsonCodingFunctionFromCustomType :
-    { customTypeName : String, encodeValueExpression : String, typeArgLocalName : String }
-    -> ElmCustomTypeStruct
+jsonCodingFunctionFromChoiceType :
+    { choiceTypeName : String, encodeValueExpression : String, typeArgLocalName : String }
+    -> ElmChoiceTypeStruct
     -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
-jsonCodingFunctionFromCustomType { customTypeName, encodeValueExpression, typeArgLocalName } customType =
+jsonCodingFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeArgLocalName } choiceType =
     let
         encodeParametersText =
-            customType.parameters
+            choiceType.parameters
                 |> List.map (jsonCodingFunctionNameFromTypeParameterName >> .encodeName)
                 |> String.join " "
 
         decodeParametersText =
-            customType.parameters
+            choiceType.parameters
                 |> List.map (jsonCodingFunctionNameFromTypeParameterName >> .decodeName)
                 |> String.join " "
 
         moduleName =
-            moduleNameFromTypeName customTypeName
+            moduleNameFromTypeName choiceTypeName
 
         typeNameRepresentation =
-            jsonCodingFunctionNameCommonPartFromTypeName customTypeName
+            jsonCodingFunctionNameCommonPartFromTypeName choiceTypeName
 
         tagsExpressions =
-            customType.tags
+            choiceType.tags
                 |> Dict.toList
                 |> List.sortBy Tuple.first
                 |> List.map
@@ -2974,8 +2977,8 @@ moduleNameFromTypeName =
 buildTypeAnnotationText : ElmTypeAnnotation -> String
 buildTypeAnnotationText typeAnnotation =
     case typeAnnotation of
-        CustomElmType custom ->
-            custom
+        ChoiceElmType choice ->
+            choice
 
         RecordElmType { fields } ->
             "{ "
@@ -3058,7 +3061,7 @@ listTupleSecondDictUnion list =
 
 type Declaration
     = AliasDeclaration Elm.Syntax.TypeAlias.TypeAlias
-    | CustomTypeDeclaration Elm.Syntax.Type.Type
+    | ChoiceTypeDeclaration Elm.Syntax.Type.Type
 
 
 generalSupportingFunctionsTexts : List { functionName : String, functionText : String }
@@ -4427,7 +4430,7 @@ parseSourceFileFunctionFromTypeAnnotation typeAnnotation =
                     Err ("Unexpected shape of instantiation: " ++ detail)
             in
             case instance.instantiated of
-                CustomElmType instantiatedTypeName ->
+                ChoiceElmType instantiatedTypeName ->
                     if not (String.endsWith ".FileTreeNode" instantiatedTypeName) then
                         continueWithErrorUnexpectedInst ("instatiatedTypeName: " ++ instantiatedTypeName)
 
@@ -4443,7 +4446,7 @@ parseSourceFileFunctionFromTypeAnnotation typeAnnotation =
                                 continueWithErrorUnexpectedInst ("Unexpected number of arguments: " ++ String.fromInt (List.length instance.arguments))
 
                 _ ->
-                    continueWithErrorUnexpectedInst "Instantiated is not a custom type"
+                    continueWithErrorUnexpectedInst "Instantiated is not a choice type"
 
         _ ->
             Ok { isTree = False, encoding = RecordTreeLeaf BytesEncoding }
@@ -4602,8 +4605,8 @@ parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed 
                 |> Result.Extra.combine
                 |> Result.map RecordTreeBranch
 
-        CustomElmType _ ->
-            errorUnsupportedType "custom"
+        ChoiceElmType _ ->
+            errorUnsupportedType "choice"
 
         InstanceElmType _ ->
             errorUnsupportedType "instance"

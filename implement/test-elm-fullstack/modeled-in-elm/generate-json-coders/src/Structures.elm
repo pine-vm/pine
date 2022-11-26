@@ -1,16 +1,16 @@
 module Structures exposing (..)
 
-import OpaqueCustomType exposing (OpaqueCustomType)
+import OpaqueChoiceType exposing (OpaqueChoiceType)
 
 
 type alias MixedRecord =
     { int : Int
-    , opaqueCustomType : OpaqueCustomType
-    , list_custom_type : List CustomType
+    , opaqueChoiceType : OpaqueChoiceType
+    , list_custom_type : List ChoiceType
     }
 
 
-type CustomType
+type ChoiceType
     = CustomTagWithoutParameter
     | CustomTagWithOneParameter Int
     | CustomTagWithTwoParameters String Int

@@ -375,7 +375,7 @@ init =
                       , documentation = stringTrimUpToLineBreaks """
     Decrement
 
-A variant of the union type `Event`
+A variant of the choice type `Event`
 
     type Event
         = Increment
@@ -397,7 +397,7 @@ A variant of the union type `Event`
                       , documentation = stringTrimUpToLineBreaks """
     Increment
 
-A variant of the union type `Event`
+A variant of the choice type `Event`
 
     type Event
         = Increment
@@ -515,7 +515,7 @@ init =
                       , documentation = stringTrimUpToLineBreaks """
     Decrement
 
-A variant of the union type `Event`
+A variant of the choice type `Event`
 
     type Event
         = Increment
@@ -537,7 +537,7 @@ A variant of the union type `Event`
                       , documentation = stringTrimUpToLineBreaks """
     Increment
 
-A variant of the union type `Event`
+A variant of the choice type `Event`
 
     type Event
         = Increment

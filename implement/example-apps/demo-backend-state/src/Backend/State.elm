@@ -1,10 +1,10 @@
 module Backend.State exposing
-    ( CustomType(..)
-    , CustomTypeWithTypeParameter(..)
-    , OpaqueCustomType
+    ( ChoiceType(..)
+    , ChoiceTypeWithTypeParameter(..)
+    , OpaqueChoiceType
     , RecursiveType(..)
     , State
-    , valueForOpaqueCustomType
+    , valueForOpaqueChoiceType
     )
 
 import Bytes
@@ -19,8 +19,8 @@ type alias State =
     , lastHttpRequests : List ElmFullstack.HttpRequestEventStruct
     , tuple2 : Tuple2
     , tuple3 : Tuple3
-    , list_custom_type : List CustomType
-    , opaque_custom_type : OpaqueCustomType
+    , list_custom_type : List ChoiceType
+    , opaque_custom_type : OpaqueChoiceType
     , recursive_type : RecursiveType
     , bool : Bool
     , maybe : Maybe String
@@ -29,7 +29,7 @@ type alias State =
     , dict : Dict.Dict Int String
     , empty_record : {}
     , empty_tuple : ()
-    , customTypeInstance : CustomTypeWithTypeParameter Int
+    , choiceTypeInstance : ChoiceTypeWithTypeParameter Int
     , record_instance : RecordAliasWithTypeParameter String
     , listDict :
         ListDict.Dict
@@ -46,13 +46,13 @@ type RecursiveType
     | TagRecurse RecursiveType
 
 
-type OpaqueCustomType
-    = OpaqueCustomType String
+type OpaqueChoiceType
+    = OpaqueChoiceType String
 
 
-valueForOpaqueCustomType : String -> OpaqueCustomType
-valueForOpaqueCustomType =
-    OpaqueCustomType
+valueForOpaqueChoiceType : String -> OpaqueChoiceType
+valueForOpaqueChoiceType =
+    OpaqueChoiceType
 
 
 type alias Tuple2 =
@@ -63,7 +63,7 @@ type alias Tuple3 =
     ( Int, String, Int )
 
 
-type CustomType
+type ChoiceType
     = CustomTagWithoutParameter
     | CustomTagWithOneParameter Int
     | CustomTagWithTwoParameters String Int
@@ -71,8 +71,8 @@ type CustomType
     | CustomTagWithResultInstance (Result String Int)
 
 
-type CustomTypeWithTypeParameter a
-    = CustomTypeWithTypeParameter a
+type ChoiceTypeWithTypeParameter a
+    = ChoiceTypeWithTypeParameter a
 
 
 type alias RecordAliasWithTypeParameter typeParamInRecord =

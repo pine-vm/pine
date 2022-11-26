@@ -62,7 +62,7 @@ type DeclarationScope
 type Declaration documentation
     = FunctionOrValueDeclaration (FunctionOrValueDeclarationStruct documentation)
     | TypeAliasDeclaration (FunctionOrValueDeclarationStruct documentation)
-    | CustomTypeDeclaration (CustomTypeDeclarationStruct documentation)
+    | ChoiceTypeDeclaration (ChoiceTypeDeclarationStruct documentation)
 
 
 type alias FunctionOrValueDeclarationStruct documentation =
@@ -71,7 +71,7 @@ type alias FunctionOrValueDeclarationStruct documentation =
     }
 
 
-type alias CustomTypeDeclarationStruct documentation =
+type alias ChoiceTypeDeclarationStruct documentation =
     { name : String
     , documentation : documentation
     , tagsDeclarations : List (FunctionOrValueDeclarationStruct documentation)
@@ -793,8 +793,8 @@ completionItemsFromModule moduleCache =
                                                     TypeAliasDeclaration typeAlias ->
                                                         exposesTypeOrAlias typeAlias.name
 
-                                                    CustomTypeDeclaration customType ->
-                                                        exposesTypeOrAlias customType.name
+                                                    ChoiceTypeDeclaration choiceType ->
+                                                        exposesTypeOrAlias choiceType.name
                                             }
                                         )
 
@@ -847,10 +847,10 @@ completionItemsFromParsedDeclarationOrReference getTextLinesFromRange declaratio
                 }
             ]
 
-        CustomTypeDeclaration customTypeDeclaration ->
+        ChoiceTypeDeclaration choiceTypeDeclaration ->
             buildCompletionItem
-                { name = customTypeDeclaration.name
-                , buildMarkdown = customTypeDeclaration.documentation.buildMarkdown
+                { name = choiceTypeDeclaration.name
+                , buildMarkdown = choiceTypeDeclaration.documentation.buildMarkdown
                 , kind = Frontend.MonacoEditor.EnumCompletionItemKind
                 }
                 :: List.map
@@ -861,7 +861,7 @@ completionItemsFromParsedDeclarationOrReference getTextLinesFromRange declaratio
                             , kind = Frontend.MonacoEditor.EnumMemberCompletionItemKind
                             }
                     )
-                    customTypeDeclaration.tagsDeclarations
+                    choiceTypeDeclaration.tagsDeclarations
 
 
 documentationMarkdownFromCodeLinesAndDocumentation : List String -> Maybe String -> String
@@ -982,8 +982,8 @@ listDeclarationsAndReferencesInDeclaration declaration =
         Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
             declarationsAndReferencesForAliasDeclaration aliasDeclaration
 
-        Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-            listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration
+        Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+            listDeclarationsAndReferencesFromTypeDeclaration choiceTypeDeclaration
 
         Elm.Syntax.Declaration.PortDeclaration _ ->
             empty
@@ -1034,24 +1034,24 @@ declarationOrReferenceForAliasDeclaration aliasDeclaration =
 
 
 listDeclarationsAndReferencesFromTypeDeclaration : Elm.Syntax.Type.Type -> ParsedDeclarationsAndReferences
-listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration =
+listDeclarationsAndReferencesFromTypeDeclaration choiceTypeDeclaration =
     let
         documentationStringFromSyntax =
-            customTypeDeclaration.documentation
+            choiceTypeDeclaration.documentation
                 |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
 
         codeRange =
-            Elm.Syntax.Node.range customTypeDeclaration.name
-                :: List.map Elm.Syntax.Node.range customTypeDeclaration.constructors
+            Elm.Syntax.Node.range choiceTypeDeclaration.name
+                :: List.map Elm.Syntax.Node.range choiceTypeDeclaration.constructors
                 |> Elm.Syntax.Range.combine
                 |> expandRangeToLineStart
 
-        customTypeName =
-            Elm.Syntax.Node.value customTypeDeclaration.name
+        choiceTypeName =
+            Elm.Syntax.Node.value choiceTypeDeclaration.name
 
         tagsDeclarations : List (FunctionOrValueDeclarationStruct ParsedDocumentation)
         tagsDeclarations =
-            customTypeDeclaration.constructors
+            choiceTypeDeclaration.constructors
                 |> List.map
                     (\constructorNode ->
                         let
@@ -1068,7 +1068,7 @@ listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration =
                                             getTextLinesFromRange codeRange
                                     in
                                     [ markdownElmCodeBlockFromCodeLines [ tagName ]
-                                    , "A variant of the union type `" ++ customTypeName ++ "`"
+                                    , "A variant of the choice type `" ++ choiceTypeName ++ "`"
                                     , markdownElmCodeBlockFromCodeLines codeLines
                                     ]
                                         |> String.join "\n\n"
@@ -1077,8 +1077,8 @@ listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration =
                     )
     in
     { declarations =
-        [ ( CustomTypeDeclaration
-                { name = customTypeName
+        [ ( ChoiceTypeDeclaration
+                { name = choiceTypeName
                 , documentation =
                     { buildMarkdown =
                         \getTextLinesFromRange ->
@@ -1094,7 +1094,7 @@ listDeclarationsAndReferencesFromTypeDeclaration customTypeDeclaration =
           )
         ]
     , references =
-        customTypeDeclaration.constructors
+        choiceTypeDeclaration.constructors
             |> List.concatMap (Elm.Syntax.Node.value >> .arguments >> List.concatMap listTypeReferencesFromTypeAnnotation)
     }
 

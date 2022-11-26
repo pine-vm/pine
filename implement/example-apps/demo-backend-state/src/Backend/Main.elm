@@ -3,7 +3,7 @@ module Backend.Main exposing
     , backendMain
     )
 
-import Backend.State exposing (CustomType(..), CustomTypeWithTypeParameter(..), RecursiveType(..), valueForOpaqueCustomType)
+import Backend.State exposing (ChoiceType(..), ChoiceTypeWithTypeParameter(..), RecursiveType(..), valueForOpaqueChoiceType)
 import Base64
 import Bytes.Encode
 import Common
@@ -99,7 +99,7 @@ initState =
         , CustomTagWithResultInstance (Err "error string")
         , CustomTagWithResultInstance (Ok 678)
         ]
-    , opaque_custom_type = valueForOpaqueCustomType "content"
+    , opaque_custom_type = valueForOpaqueChoiceType "content"
     , recursive_type = TagRecurse (TagRecurse (TagRecurse (TagTerminate 4)))
     , bool = True
     , maybe = Just "Hello"
@@ -108,7 +108,7 @@ initState =
     , dict = [ ( 100, "A" ), ( 101, "B" ) ] |> Dict.fromList
     , empty_record = {}
     , empty_tuple = ()
-    , customTypeInstance = CustomTypeWithTypeParameter 4
+    , choiceTypeInstance = ChoiceTypeWithTypeParameter 4
     , record_instance = { field_a = 123, field_parameterized = "test arg" }
     , listDict =
         [ ( { orig = 1, dest = 3 }, "Edge A" )

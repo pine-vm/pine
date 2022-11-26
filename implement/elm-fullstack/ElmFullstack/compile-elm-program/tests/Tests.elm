@@ -223,18 +223,18 @@ parse_elm_type_annotation =
                 )
       , rootTypeAnnotationText = " WithAlias.OurAlias "
       }
-    , { testName = "Custom type"
+    , { testName = "Choice type"
       , modulesTexts =
-            [ [ "module WithCustom exposing (..)"
+            [ [ "module WithChoice exposing (..)"
               , ""
-              , "type CustomType = TagA | TagB"
+              , "type ChoiceType = TagA | TagB"
               ]
                 |> String.join "\n"
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.CustomElmType "WithCustom.CustomType"
-                , [ ( "WithCustom.CustomType"
+                ( CompileFullstackApp.ChoiceElmType "WithChoice.ChoiceType"
+                , [ ( "WithChoice.ChoiceType"
                     , { parameters = []
                       , tags =
                             [ ( "TagA", [] )
@@ -246,20 +246,20 @@ parse_elm_type_annotation =
                   ]
                     |> Dict.fromList
                 )
-      , rootTypeAnnotationText = " WithCustom.CustomType "
+      , rootTypeAnnotationText = " WithChoice.ChoiceType "
       }
-    , { testName = "Custom type with parameterized tags"
+    , { testName = "Choice type with parameterized tags"
       , modulesTexts =
-            [ [ "module WithCustom exposing (..)"
+            [ [ "module WithChoice exposing (..)"
               , ""
-              , "type CustomType = TagA String Int | TagB ( Int, String ) | TagC { f0 : Int, f1 : String }"
+              , "type ChoiceType = TagA String Int | TagB ( Int, String ) | TagC { f0 : Int, f1 : String }"
               ]
                 |> String.join "\n"
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.CustomElmType "WithCustom.CustomType"
-                , [ ( "WithCustom.CustomType"
+                ( CompileFullstackApp.ChoiceElmType "WithChoice.ChoiceType"
+                , [ ( "WithChoice.ChoiceType"
                     , { parameters = []
                       , tags =
                             [ ( "TagA"
@@ -290,11 +290,11 @@ parse_elm_type_annotation =
                   ]
                     |> Dict.fromList
                 )
-      , rootTypeAnnotationText = " WithCustom.CustomType "
+      , rootTypeAnnotationText = " WithChoice.ChoiceType "
       }
-    , { testName = "Recursive Custom type"
+    , { testName = "Recursive Choice type"
       , modulesTexts =
-            [ [ "module WithCustom exposing (..)"
+            [ [ "module WithChoice exposing (..)"
               , ""
               , "type RecursiveType = TagTerminate Int | TagRecurse RecursiveType"
               ]
@@ -302,12 +302,12 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.CustomElmType "WithCustom.RecursiveType"
-                , [ ( "WithCustom.RecursiveType"
+                ( CompileFullstackApp.ChoiceElmType "WithChoice.RecursiveType"
+                , [ ( "WithChoice.RecursiveType"
                     , { parameters = []
                       , tags =
                             [ ( "TagTerminate", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
-                            , ( "TagRecurse", [ CompileFullstackApp.CustomElmType "WithCustom.RecursiveType" ] )
+                            , ( "TagRecurse", [ CompileFullstackApp.ChoiceElmType "WithChoice.RecursiveType" ] )
                             ]
                                 |> Dict.fromList
                       }
@@ -315,23 +315,23 @@ parse_elm_type_annotation =
                   ]
                     |> Dict.fromList
                 )
-      , rootTypeAnnotationText = " WithCustom.RecursiveType "
+      , rootTypeAnnotationText = " WithChoice.RecursiveType "
       }
-    , { testName = "Custom type instance"
+    , { testName = "Choice type instance"
       , modulesTexts =
-            [ [ "module WithCustom exposing (..)"
+            [ [ "module WithChoice exposing (..)"
               , ""
-              , "type CustomType a = TagA a | TagB"
+              , "type ChoiceType a = TagA a | TagB"
               ]
                 |> String.join "\n"
             ]
       , expectedResult =
             Ok
                 ( CompileFullstackApp.InstanceElmType
-                    { instantiated = CompileFullstackApp.CustomElmType "WithCustom.CustomType"
+                    { instantiated = CompileFullstackApp.ChoiceElmType "WithChoice.ChoiceType"
                     , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
                     }
-                , [ ( "WithCustom.CustomType"
+                , [ ( "WithChoice.ChoiceType"
                     , { parameters = [ "a" ]
                       , tags =
                             [ ( "TagA", [ CompileFullstackApp.GenericType "a" ] )
@@ -343,7 +343,7 @@ parse_elm_type_annotation =
                   ]
                     |> Dict.fromList
                 )
-      , rootTypeAnnotationText = " WithCustom.CustomType Int "
+      , rootTypeAnnotationText = " WithChoice.ChoiceType Int "
       }
     , { testName = "Parameterized record alias instance"
       , modulesTexts =
@@ -382,7 +382,7 @@ parse_elm_type_annotation =
                         [ ( "field_list"
                           , CompileFullstackApp.InstanceElmType
                                 { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
-                                , arguments = [ CompileFullstackApp.CustomElmType "OtherModule.OurType" ]
+                                , arguments = [ CompileFullstackApp.ChoiceElmType "OtherModule.OurType" ]
                                 }
                           )
                         ]
@@ -414,7 +414,7 @@ parse_elm_type_annotation =
             Ok
                 ( CompileFullstackApp.InstanceElmType
                     { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
-                    , arguments = [ CompileFullstackApp.CustomElmType "Namespace.SomeModule.OurType" ]
+                    , arguments = [ CompileFullstackApp.ChoiceElmType "Namespace.SomeModule.OurType" ]
                     }
                 , [ ( "Namespace.SomeModule.OurType"
                     , { parameters = []
@@ -429,22 +429,22 @@ parse_elm_type_annotation =
     , { testName = "Aliased via exposing module import"
       , modulesTexts =
             [ """
-module OpaqueCustomType exposing (OpaqueCustomType, constructTagA, constructTagB)
+module OpaqueChoiceType exposing (OpaqueChoiceType, constructTagA, constructTagB)
 
 
-type OpaqueCustomType
+type OpaqueChoiceType
     = TagA
     | TagB Int
             """
             , """
 module Structures exposing (..)
 
-import OpaqueCustomType exposing (OpaqueCustomType)
+import OpaqueChoiceType exposing (OpaqueChoiceType)
 
 
 type alias MixedRecord =
     { int : Int
-    , opaqueCustomType : OpaqueCustomType
+    , opaqueChoiceType : OpaqueChoiceType
     }
             """
             ]
@@ -454,10 +454,10 @@ type alias MixedRecord =
                 ( CompileFullstackApp.RecordElmType
                     { fields =
                         [ ( "int", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
-                        , ( "opaqueCustomType", CompileFullstackApp.CustomElmType "OpaqueCustomType.OpaqueCustomType" )
+                        , ( "opaqueChoiceType", CompileFullstackApp.ChoiceElmType "OpaqueChoiceType.OpaqueChoiceType" )
                         ]
                     }
-                , [ ( "OpaqueCustomType.OpaqueCustomType"
+                , [ ( "OpaqueChoiceType.OpaqueChoiceType"
                     , { parameters = []
                       , tags =
                             [ ( "TagA", [] )
@@ -772,17 +772,17 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
             , decodeExpression = "jsonDecode__generic_Result Json.Decode.string Json.Decode.int"
             }
       }
-    , { testName = "Instance of generic custom type"
+    , { testName = "Instance of generic choice type"
       , typeAnnotation =
             CompileFullstackApp.InstanceElmType
-                { instantiated = CompileFullstackApp.CustomElmType "OwnModule.CustomType"
+                { instantiated = CompileFullstackApp.ChoiceElmType "OwnModule.ChoiceType"
                 , arguments =
                     [ CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
                     ]
                 }
       , expectedResult =
-            { encodeExpression = "jsonEncode_OwnModule_CustomType (\\type_arg -> Json.Encode.bool type_arg) valueToEncode"
-            , decodeExpression = "jsonDecode_OwnModule_CustomType Json.Decode.bool"
+            { encodeExpression = "jsonEncode_OwnModule_ChoiceType (\\type_arg -> Json.Encode.bool type_arg) valueToEncode"
+            , decodeExpression = "jsonDecode_OwnModule_ChoiceType Json.Decode.bool"
             }
       }
     ]
@@ -798,23 +798,23 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
         |> Test.describe "emit json coding expressions from type"
 
 
-emit_json_coding_expression_from_custom_type : Test.Test
-emit_json_coding_expression_from_custom_type =
+emit_json_coding_expression_from_choice_type : Test.Test
+emit_json_coding_expression_from_choice_type =
     [ { testName = "One tag without parameters"
-      , customTypeName = "ModuleName.CustomType"
-      , customType =
+      , choiceTypeName = "ModuleName.ChoiceType"
+      , choiceType =
             { parameters = []
             , tags = [ ( "TagA", [] ) ] |> Dict.fromList
             }
       , expectedResult =
             { encodeFunction = String.trim """
-jsonEncode_ModuleName_CustomType valueToEncode =
+jsonEncode_ModuleName_ChoiceType valueToEncode =
     case valueToEncode of
         ModuleName.TagA ->
             Json.Encode.object [ ( "TagA", Json.Encode.list identity [] ) ]
 """
             , decodeFunction = String.trim """
-jsonDecode_ModuleName_CustomType =
+jsonDecode_ModuleName_ChoiceType =
     Json.Decode.oneOf
         [ Json.Decode.field "TagA" (jsonDecodeSucceedWhenNotNull ModuleName.TagA)
         ]
@@ -822,11 +822,11 @@ jsonDecode_ModuleName_CustomType =
             }
       }
     , { testName = "Recursive type"
-      , customTypeName = "ModuleName.RecursiveType"
-      , customType =
+      , choiceTypeName = "ModuleName.RecursiveType"
+      , choiceType =
             { parameters = []
             , tags =
-                [ ( "TagRecurse", [ CompileFullstackApp.CustomElmType "ModuleName.RecursiveType" ] )
+                [ ( "TagRecurse", [ CompileFullstackApp.ChoiceElmType "ModuleName.RecursiveType" ] )
                 , ( "TagTerminate", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
                 ]
                     |> Dict.fromList
@@ -850,8 +850,8 @@ jsonDecode_ModuleName_RecursiveType =
             }
       }
     , { testName = "Tag with generic type instance"
-      , customTypeName = "ModuleName.TypeName"
-      , customType =
+      , choiceTypeName = "ModuleName.TypeName"
+      , choiceType =
             { parameters = []
             , tags =
                 [ ( "TagList"
@@ -880,8 +880,8 @@ jsonDecode_ModuleName_TypeName =
             }
       }
     , { testName = "One tag with two parameters"
-      , customTypeName = "ModuleName.TypeName"
-      , customType =
+      , choiceTypeName = "ModuleName.TypeName"
+      , choiceType =
             { parameters = []
             , tags =
                 [ ( "TagAlpha"
@@ -908,8 +908,8 @@ jsonDecode_ModuleName_TypeName =
             }
       }
     , { testName = "One tag with generic parameter"
-      , customTypeName = "ModuleName.TypeName"
-      , customType =
+      , choiceTypeName = "ModuleName.TypeName"
+      , choiceType =
             { parameters = [ "test" ]
             , tags =
                 [ ( "TagAlpha"
@@ -935,8 +935,8 @@ jsonDecode_ModuleName_TypeName jsonDecode_type_parameter_test =
             }
       }
     , { testName = "ListDict"
-      , customTypeName = "ListDict.Dict"
-      , customType =
+      , choiceTypeName = "ListDict.Dict"
+      , choiceType =
             { parameters = [ "key", "value" ]
             , tags =
                 [ ( "Dict"
@@ -976,12 +976,12 @@ jsonDecode_ListDict_Dict jsonDecode_type_parameter_key jsonDecode_type_parameter
       }
     ]
         |> List.map
-            (\{ testName, customType, customTypeName, expectedResult } ->
+            (\{ testName, choiceType, choiceTypeName, expectedResult } ->
                 Test.test testName <|
                     \() ->
-                        customType
-                            |> CompileFullstackApp.jsonCodingFunctionFromCustomType
-                                { customTypeName = customTypeName
+                        choiceType
+                            |> CompileFullstackApp.jsonCodingFunctionFromChoiceType
+                                { choiceTypeName = choiceTypeName
                                 , encodeValueExpression = "valueToEncode"
                                 , typeArgLocalName = "type_arg"
                                 }
@@ -992,4 +992,4 @@ jsonDecode_ListDict_Dict jsonDecode_type_parameter_key jsonDecode_type_parameter
                                )
                             |> Expect.equal expectedResult
             )
-        |> Test.describe "emit json coding expressions from custom type"
+        |> Test.describe "emit json coding expressions from choice type"

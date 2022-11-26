@@ -635,15 +635,15 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     )
                 |> Dict.fromList
 
-        declarationsFromCustomTypes : Dict.Dict String Pine.Expression
-        declarationsFromCustomTypes =
+        declarationsFromChoiceTypes : Dict.Dict String Pine.Expression
+        declarationsFromChoiceTypes =
             moduleToTranslate.parsedModule.declarations
                 |> List.map Elm.Syntax.Node.value
                 |> List.concatMap
                     (\declaration ->
                         case declaration of
-                            Elm.Syntax.Declaration.CustomTypeDeclaration customTypeDeclaration ->
-                                customTypeDeclaration.constructors
+                            Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                choiceTypeDeclaration.constructors
                                     |> List.map
                                         (Elm.Syntax.Node.value
                                             >> compileElmSyntaxValueConstructor
@@ -684,7 +684,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             , availableModules = availableModules
             , availableDeclarations =
                 (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
-                    |> Dict.union (declarationsFromCustomTypes |> Dict.map (always CompiledDeclaration))
+                    |> Dict.union (declarationsFromChoiceTypes |> Dict.map (always CompiledDeclaration))
             , inliningParentDeclarations = Set.empty
             , elmValuesToExposeToGlobal =
                 elmValuesToExposeToGlobalDefault
@@ -750,7 +750,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             in
             Ok
                 ( moduleName
-                , Dict.toList declarationsFromCustomTypes
+                , Dict.toList declarationsFromChoiceTypes
                     ++ functionDeclarations
                     ++ declarationsValuesForInfix
                 )
@@ -1552,10 +1552,10 @@ compileElmSyntaxPattern stack deconstructedExpression elmPattern =
                 _ ->
                     Err "Unsupported shape of uncons pattern."
 
-        Elm.Syntax.Pattern.NamedPattern qualifiedName customTypeArgumentPatterns ->
+        Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
             let
                 mapArgumentsToOnlyNameResults =
-                    customTypeArgumentPatterns
+                    choiceTypeArgumentPatterns
                         |> List.map Elm.Syntax.Node.value
                         |> List.map
                             (\argumentPattern ->
@@ -2622,7 +2622,7 @@ compileInteractiveSubmission environment submission =
                             Err "Alias declaration as submission is not implemented"
 
                         Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
-                            Err "Custom type declaration as submission is not implemented"
+                            Err "Choice type declaration as submission is not implemented"
 
                         Elm.Syntax.Declaration.PortDeclaration _ ->
                             Err "Port declaration as submission is not implemented"
