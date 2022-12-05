@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -71,7 +71,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         public override int GetHashCode() => slimHashCode;
     }
 
-    static public readonly IComparer<string> TreeEntryNameComparer = StringComparer.Ordinal;
+    static public readonly IComparer<(string name, TreeNodeWithStringPath component)> TreeEntryDefaultComparer = new TreeEntryDefaultComparerClass();
 
     static public TreeNodeWithStringPath Blob(ReadOnlyMemory<byte> blobContent) =>
         new BlobNode(blobContent);
@@ -82,7 +82,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
     static public TreeNodeWithStringPath NonSortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
         new TreeNode(treeContent);
 
-    static public TreeNodeWithStringPath EmptyTree => new TreeNode(ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty);
+    static public readonly TreeNodeWithStringPath EmptyTree = new TreeNode(ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty);
 
 
     public IImmutableList<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive() =>
@@ -169,7 +169,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
             })
             .Where(treeNode => treeNode.name != pathFirstElement)
             .Concat(new[] { (pathFirstElement, childNode) })
-            .OrderBy(treeEntry => treeEntry.Item1, TreeEntryNameComparer)
+            .Order(TreeEntryDefaultComparer)
             .ToImmutableList();
 
         return SortedTree(treeEntries);
@@ -180,7 +180,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         {
             BlobNode _ => node,
             TreeNode tree =>
-            new TreeNode(tree.Elements.OrderBy(child => child.name).Select(child => (child.name, Sort(child.component))).ToImmutableList()),
+            new TreeNode(tree.Elements.Order(TreeEntryDefaultComparer).Select(child => (child.name, Sort(child.component))).ToImmutableList()),
 
             _ => throw new NotImplementedException()
         };
@@ -196,5 +196,13 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
 
             _ => throw new NotImplementedException()
         };
+
+    class TreeEntryDefaultComparerClass : IComparer<(string name, TreeNodeWithStringPath component)>
+    {
+        public int Compare((string name, TreeNodeWithStringPath component) x, (string name, TreeNodeWithStringPath component) y)
+        {
+            return string.CompareOrdinal(x.name, y.name);
+        }
+    }
 }
 
