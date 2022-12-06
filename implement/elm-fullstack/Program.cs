@@ -15,16 +15,17 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-12-05";
+    static public string AppVersionId => "2022-12-06";
 
     static int AdminInterfaceDefaultPort => 4000;
 
     static int Main(string[] args)
     {
         Elm019Binaries.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
+        Elm019Binaries.elmMakeResultCacheFileStoreDefault = ElmMakeResultCacheFileStoreDefault;
 
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
-            new CacheByFileName(CacheDirectory: Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip"));
+            new CacheByFileName(new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip")));
 
         var app = new CommandLineApplication
         {
@@ -1419,6 +1420,10 @@ public class Program
 
     static public string ElmMakeHomeDirectoryPath =>
         Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
+
+    static public IFileStore ElmMakeResultCacheFileStoreDefault =>
+        new FileStoreFromSystemIOFile(
+            Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", AppVersionId));
 
     static public void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
     {

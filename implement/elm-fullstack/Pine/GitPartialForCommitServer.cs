@@ -32,7 +32,7 @@ public class GitPartialForCommitServer
 
         var fileCache = new CacheByFileName
         (
-            CacheDirectory: Path.Combine(fileCacheDirectory, ZipArchivePathPrefix.TrimStart('/'))
+            new FileStoreFromSystemIOFile(Path.Combine(fileCacheDirectory, ZipArchivePathPrefix.TrimStart('/')))
         );
 
         /*
@@ -64,7 +64,7 @@ public class GitPartialForCommitServer
                     gitCloneUrlPrefixes.Count + " prefixes are supported: " + string.Join(", ", gitCloneUrlPrefixes));
             }
 
-            byte[] loadWithFreshClone()
+            System.ReadOnlyMemory<byte> loadWithFreshClone()
             {
                 var files =
                     LoadFromGitHubOrGitLab.GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(

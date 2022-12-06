@@ -1,42 +1,28 @@
-﻿using System.IO;
+using System;
+using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine;
 
-public record CacheByFileName(string CacheDirectory)
+public record CacheByFileName(IFileStore FileStore)
 {
-    public byte[] GetOrUpdate(string fileName, System.Func<byte[]> getNew) =>
-        GetOrTryAdd(fileName, getNew)!;
+    public ReadOnlyMemory<byte> GetOrUpdate(string fileName, Func<ReadOnlyMemory<byte>> getNew) =>
+        GetOrTryAdd(fileName, () => getNew())!.Value;
 
-    public byte[]? GetOrTryAdd(string fileName, System.Func<byte[]?> tryBuild)
+    public ReadOnlyMemory<byte>? GetOrTryAdd(string fileName, Func<ReadOnlyMemory<byte>?> tryBuild)
     {
-        var cacheFilePath = Path.Combine(CacheDirectory, fileName);
+        var entryPath = ImmutableList.Create(fileName);
 
-        if (File.Exists(cacheFilePath))
-        {
-            try
-            {
-                return File.ReadAllBytes(cacheFilePath);
-            }
-            catch { }
-        }
+        var fromCache = FileStore.GetFileContent(entryPath);
+
+        if (fromCache is not null)
+            return new ReadOnlyMemory<byte>(fromCache.ToArray());
 
         var file = tryBuild();
 
-        if (file is not null)
+        if (file.HasValue)
         {
-            try
-            {
-                var directory = Path.GetDirectoryName(cacheFilePath);
-
-                if (directory != null)
-                    Directory.CreateDirectory(directory);
-
-                File.WriteAllBytes(cacheFilePath, file);
-            }
-            catch (System.Exception e)
-            {
-                System.Console.WriteLine("Failed to write cache entry: " + e.ToString());
-            }
+            FileStore.SetFileContent(entryPath, file.Value.ToArray());
         }
 
         return file;

@@ -16,6 +16,8 @@ public static class Elm019Binaries
 {
     static public string? overrideElmMakeHomeDirectory = null;
 
+    static public IFileStore? elmMakeResultCacheFileStoreDefault = null;
+
     static string? elmHomeDirectory;
 
     public record ElmMakeOk(ReadOnlyMemory<byte> producedFile);
@@ -33,6 +35,81 @@ public static class Elm019Binaries
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
         ElmMake(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
+
+    /// <inheritdoc cref="ElmMakeIgnoringCachedResults"/>
+    static public Result<string, ElmMakeOk> ElmMake(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string> pathToFileWithElmEntryPoint,
+        string outputFileName,
+        string? elmMakeCommandAppendix = null) =>
+        ElmMake(
+            elmCodeFiles: elmCodeFiles,
+            pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+            outputFileName: outputFileName,
+            elmMakeCommandAppendix: elmMakeCommandAppendix,
+            resultCacheFileStore: elmMakeResultCacheFileStoreDefault);
+
+    /// <inheritdoc cref="ElmMakeIgnoringCachedResults"/>
+    static public Result<string, ElmMakeOk> ElmMake(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string> pathToFileWithElmEntryPoint,
+        string outputFileName,
+        string? elmMakeCommandAppendix,
+        IFileStore? resultCacheFileStore)
+    {
+        var elmCodeFilesHash =
+            CommonConversion.StringBase16(
+                Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles))));
+
+        var requestIdentifer = new ElmMakeRequestIdentifier(
+            elmCodeFilesHash: elmCodeFilesHash,
+            pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+            outputFileName: outputFileName,
+            elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+        var requestHash =
+            CommonConversion.StringBase16(
+                CommonConversion.HashSHA256(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(requestIdentifer))));
+
+        var cacheEntryPath = ImmutableList.Create(requestHash);
+
+        try
+        {
+            var cacheEntryFile =
+                resultCacheFileStore?.GetFileContent(cacheEntryPath);
+
+            if (cacheEntryFile is not null)
+            {
+                var resultFromCache =
+                    System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmMakeOkJsonStructure>>(cacheEntryFile!.ToArray())
+                    ?.Map(AsElmMakeOk);
+
+                if (resultFromCache is Result<string, ElmMakeOk>.Ok resultOk)
+                    return resultFromCache;
+            }
+        }
+        catch { }
+
+        var result =
+            ElmMakeIgnoringCachedResults(
+                elmCodeFiles,
+                pathToFileWithElmEntryPoint,
+                outputFileName,
+                elmMakeCommandAppendix);
+
+        if (resultCacheFileStore is not null)
+        {
+            try
+            {
+                resultCacheFileStore.SetFileContent(
+                    cacheEntryPath,
+                    System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(result.Map(AsJsonStructure)));
+            }
+            catch { }
+        }
+
+        return result;
+    }
 
     /*
     2019-12-14: Switch to modeling file paths as a list of string instead of a string, to avoid that problem reported earlier and described below:
@@ -57,7 +134,7 @@ public static class Elm019Binaries
     /// <summary>
     /// Use the 'elm make' command on the elm executable file.
     /// </summary>
-    static public Result<string, ElmMakeOk> ElmMake(
+    static public Result<string, ElmMakeOk> ElmMakeIgnoringCachedResults(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
@@ -175,4 +252,19 @@ public static class Elm019Binaries
         Directory.CreateDirectory(elmHomeDirectory);
         return elmHomeDirectory;
     }
+
+    record ElmMakeRequestIdentifier(
+        string elmCodeFilesHash,
+        IReadOnlyList<string> pathToFileWithElmEntryPoint,
+        string outputFileName,
+        string? elmMakeCommandAppendix);
+
+    record ElmMakeOkJsonStructure(
+        string producedFileBase64);
+
+    static ElmMakeOk AsElmMakeOk(ElmMakeOkJsonStructure cacheEntry) =>
+        new(producedFile: Convert.FromBase64String(cacheEntry.producedFileBase64));
+
+    static ElmMakeOkJsonStructure AsJsonStructure(ElmMakeOk cacheEntry) =>
+        new(producedFileBase64: Convert.ToBase64String(cacheEntry.producedFile!.ToArray())!);
 }

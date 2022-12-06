@@ -351,7 +351,7 @@ static public class LoadFromGitHubOrGitLab
             not null => Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
                 Composition.ToFlatDictionaryWithPathComparer(
                     Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        ZipArchive.EntriesFromZipArchive(fromExternalCache))
+                        ZipArchive.EntriesFromZipArchive(fromExternalCache.Value))
                     .EnumerateBlobsTransitive())),
 
             _ => localCache.Value
