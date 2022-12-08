@@ -65,7 +65,7 @@ public class StartupAdminInterface
 
     record PublicHostConfiguration(
         PersistentProcess.PersistentProcessLiveRepresentation processLiveRepresentation,
-        IWebHost webHost);
+        IHost webHost);
 
     public void Configure(
         IApplicationBuilder app,
@@ -168,7 +168,7 @@ public class StartupAdminInterface
                     }
                 }
 
-                IWebHost buildWebHost(
+                IHost buildWebHost(
                     PersistentProcess.ProcessAppConfig processAppConfig,
                     IReadOnlyList<string> publicWebHostUrls)
                 {
@@ -193,47 +193,41 @@ public class StartupAdminInterface
                         :
                         System.Text.Json.JsonSerializer.Deserialize<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.Value.Span));
 
-                    return
-                        Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-                        .ConfigureLogging((hostingContext, logging) =>
-                        {
-                            logging.AddConfiguration(hostingContext.Configuration.GetSection("Logging"));
-                            logging.AddConsole();
-                            logging.AddDebug();
-                        })
-                        .ConfigureKestrel(kestrelOptions =>
-                        {
-                            kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
+                    var webAppAndElmAppConfig =
+                        new WebAppAndElmAppConfig(
+                            WebAppConfiguration: webAppConfiguration,
+                            ProcessEventInElmApp: serializedEvent =>
                             {
-                                httpsOptions.ServerCertificateSelector = (c, s) => FluffySpoon.AspNet.LetsEncrypt.LetsEncryptRenewalService.Certificate;
-                            });
-                        })
-                        .UseUrls(publicWebHostUrls.ToArray())
-                        .UseStartup<StartupPublicApp>()
-                        .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
-                        .ConfigureServices(services =>
-                        {
-                            services.AddSingleton(
-                                new WebAppAndElmAppConfig(
-                                    WebAppConfiguration: webAppConfiguration,
-                                    ProcessEventInElmApp: serializedEvent =>
-                                    {
-                                        lock (avoidConcurrencyLock)
-                                        {
-                                            var elmEventResponse =
-                                                processLiveRepresentation.ProcessElmAppEvent(
-                                                    processStoreWriter!, serializedEvent);
+                                lock (avoidConcurrencyLock)
+                                {
+                                    var elmEventResponse =
+                                        processLiveRepresentation.ProcessElmAppEvent(
+                                            processStoreWriter!, serializedEvent);
 
-                                            maintainStoreReductions();
+                                    maintainStoreReductions();
 
-                                            return elmEventResponse;
-                                        }
-                                    },
-                                    SourceComposition: processAppConfig.appConfigComponent,
-                                    InitOrMigrateCmds: restoreProcessResult.initOrMigrateCmds
-                                ));
-                        })
-                        .Build();
+                                    return elmEventResponse;
+                                }
+                            },
+                            SourceComposition: processAppConfig.appConfigComponent,
+                            InitOrMigrateCmds: restoreProcessResult.initOrMigrateCmds
+                        );
+
+                    var publicAppState = new PublicAppState(
+                        webAppAndElmAppConfig: webAppAndElmAppConfig,
+                        getDateTimeOffset: getDateTimeOffset);
+
+                    var appBuilder = WebApplication.CreateBuilder();
+
+                    var app =
+                        publicAppState.Build(
+                            appBuilder,
+                            env,
+                            publicWebHostUrls: publicWebHostUrls);
+
+                    publicAppState.ProcessEventTimeHasArrived();
+
+                    return app;
                 }
 
                 if (processLiveRepresentation?.lastAppConfig != null)
