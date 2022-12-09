@@ -667,8 +667,8 @@ public class TestWebHost
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 CollectionAssert.AreEqual(
-                    Composition.GetHash(webAppConfigTree).ToArray(),
-                    Composition.GetHash(responseAppConfigTree).ToArray(),
+                    Composition.GetHashSorted(webAppConfigTree).ToArray(),
+                    Composition.GetHashSorted(responseAppConfigTree).ToArray(),
                     "Get the same configuration back.");
             }
 

@@ -47,7 +47,7 @@ namespace ElmFullstack
             ElmAppInterfaceConfig interfaceConfig)
         {
             var sourceFilesHash =
-                CommonConversion.StringBase16(Composition.GetHash(Composition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
+                CommonConversion.StringBase16(Composition.GetHashSorted(Composition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
 
             var compilationHash =
                 CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(

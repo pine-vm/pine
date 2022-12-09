@@ -375,6 +375,12 @@ public static class Composition
         throw new Exception("Incomplete match on sum type.");
     }
 
+    static public ReadOnlyMemory<byte> GetHashSorted(TreeNodeWithStringPath treeNode) =>
+        GetHashNotSorted(TreeNodeWithStringPath.Sort(treeNode));
+
+    static public ReadOnlyMemory<byte> GetHashNotSorted(TreeNodeWithStringPath treeNode) =>
+        GetHash(FromTreeWithStringPath(treeNode));
+
     static public ReadOnlyMemory<byte> GetHash(PineValue component) =>
         GetHashAndDependencies(component).hash;
 
@@ -385,9 +391,6 @@ public static class Composition
 
         return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies: dependencies);
     }
-
-    static public ReadOnlyMemory<byte> GetHash(TreeNodeWithStringPath component) =>
-        CommonConversion.HashSHA256(GetSerialRepresentation(FromTreeWithStringPath(component)!));
 
     static public PineValue? FindComponentByHash(PineValue component, ReadOnlyMemory<byte> hash)
     {

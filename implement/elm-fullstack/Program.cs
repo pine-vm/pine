@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-12-07";
+    static public string AppVersionId => "2022-12-09";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -1445,7 +1445,7 @@ public class Program
 
     static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
     {
-        var compositionId = CommonConversion.StringBase16(Composition.GetHash(sourceTree));
+        var compositionId = CommonConversion.StringBase16(Composition.GetHashSorted(sourceTree));
 
         var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
