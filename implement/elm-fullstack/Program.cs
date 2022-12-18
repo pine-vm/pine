@@ -15,7 +15,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-12-09";
+    static public string AppVersionId => "2022-12-18";
 
     static int AdminInterfaceDefaultPort => 4000;
 
