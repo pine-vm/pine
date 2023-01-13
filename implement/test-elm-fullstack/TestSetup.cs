@@ -96,7 +96,7 @@ public class TestSetup
                 ElmAppInterfaceConfig.Default)
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
-        return compilationResult.compiledAppFiles;
+        return compilationResult.result.compiledFiles;
     }
 
     static public IProcessStoreReader EmptyProcessStoreReader() =>

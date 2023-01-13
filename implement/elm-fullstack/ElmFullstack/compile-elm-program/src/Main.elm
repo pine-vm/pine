@@ -11,7 +11,7 @@ import Platform
 
 
 type alias CompilationResponse =
-    Result String (Result (List CompileFullstackApp.LocatedCompilationError) CompileFullstackApp.AppFiles)
+    Result String (Result (List CompileFullstackApp.LocatedCompilationError) CompileFullstackApp.CompilationIterationSuccess)
 
 
 lowerSerialized : String -> String
@@ -27,7 +27,7 @@ jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value
 jsonEncodeLowerForSourceFilesResponse =
     json_encode_Result
         Json.Encode.string
-        (json_encode_Result (Json.Encode.list jsonEncodeLocatedCompilationError) jsonEncodeAppCode)
+        (json_encode_Result (Json.Encode.list jsonEncodeLocatedCompilationError) jsonEncodeCompilationIterationSuccess)
 
 
 jsonDecodeCompilationArguments : Json.Decode.Decoder CompilationArguments
@@ -79,6 +79,32 @@ jsonEncodeLocationInText location =
     , ( "column", location.column |> Json.Encode.int )
     ]
         |> Json.Encode.object
+
+
+jsonEncodeCompilationIterationSuccess : CompileFullstackApp.CompilationIterationSuccess -> Json.Encode.Value
+jsonEncodeCompilationIterationSuccess success =
+    [ ( "compiledFiles", jsonEncodeAppCode success.compiledFiles )
+    , ( "rootModuleEntryPointKind", jsonEncodeElmMakeEntryPointKind success.rootModuleEntryPointKind )
+    ]
+        |> Json.Encode.object
+
+
+jsonEncodeElmMakeEntryPointKind : CompileFullstackApp.ElmMakeEntryPointKind -> Json.Encode.Value
+jsonEncodeElmMakeEntryPointKind kind =
+    case kind of
+        CompileFullstackApp.ClassicMakeEntryPoint ->
+            Json.Encode.object
+                [ ( "ClassicMakeEntryPoint"
+                  , Json.Encode.list identity []
+                  )
+                ]
+
+        CompileFullstackApp.BlobMakeEntryPoint ->
+            Json.Encode.object
+                [ ( "BlobMakeEntryPoint"
+                  , Json.Encode.list identity []
+                  )
+                ]
 
 
 jsonEncodeCompilationError : CompileFullstackApp.CompilationError -> Json.Encode.Value
@@ -231,8 +257,7 @@ main =
         { init = \_ -> ( (), Cmd.none )
         , update =
             \_ stateBefore ->
-                ( [ lowerSerialized ""
-                  ]
+                ( [ lowerSerialized "" ]
                     |> always stateBefore
                 , Cmd.none
                 )

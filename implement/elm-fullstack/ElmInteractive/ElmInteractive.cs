@@ -594,7 +594,7 @@ public class ElmInteractive
 
                     throw new Exception(errorMessage);
                 },
-                fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.compiledAppFiles));
+                fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
     }
 
     static public IJsEngine PrepareJsEngineToEvaluateElm()

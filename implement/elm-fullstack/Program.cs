@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using McMaster.Extensions.CommandLineUtils;
@@ -15,7 +16,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2022-12-18";
+    static public string AppVersionId => "2023-01-12";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -739,7 +740,7 @@ public class Program
                     },
                     fromOk: compilationOk =>
                     {
-                        var compiledAppFiles = compilationOk.compiledAppFiles;
+                        var compiledAppFiles = compilationOk.result.compiledFiles;
 
                         var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
                         var compiledComposition = Composition.FromTreeWithStringPath(compiledTree);
@@ -1300,19 +1301,81 @@ public class Program
         string outputFileName,
         string? elmMakeCommandAppendix)
     {
+        var rootModuleContent = sourceFiles[pathToFileWithElmEntryPoint];
+        var rootModuleText = Encoding.UTF8.GetString(rootModuleContent.Span);
+
         return
+            ElmAppCompilation.ParseModuleNameFromElmModuleText(rootModuleText)
+            .AndThen(rootModuleName =>
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles.ToImmutableDictionary(),
-                ElmAppInterfaceConfig.Default)
+                interfaceConfig: new ElmAppInterfaceConfig(RootModuleName: string.Join(".", rootModuleName)))
             .MapError(err =>
             "Failed lowering Elm code with " + err.Count + " error(s):\n" +
             ElmAppCompilation.CompileCompilationErrorsDisplayText(err))
-            .AndThen(loweringOk => Elm019Binaries.ElmMake(
-                loweringOk.compiledAppFiles.ToImmutableDictionary(),
-                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint.ToImmutableList(),
-                outputFileName: outputFileName.Replace('\\', '/').Split('/').Last(),
-                elmMakeCommandAppendix: elmMakeCommandAppendix));
+            .AndThen(loweringOk =>
+            {
+                Result<string, Elm019Binaries.ElmMakeOk> continueWithClassicEntryPoint()
+                {
+                    return Elm019Binaries.ElmMake(
+                        loweringOk.result.compiledFiles.ToImmutableDictionary(),
+                        pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint.ToImmutableList(),
+                        outputFileName: outputFileName.Replace('\\', '/').Split('/').Last(),
+                        elmMakeCommandAppendix: elmMakeCommandAppendix);
+                }
+
+                Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint()
+                {
+                    return
+                    Elm019Binaries.ElmMakeToJavascript(
+                        loweringOk.result.compiledFiles.ToImmutableDictionary(),
+                        pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint.ToImmutableList(),
+                        elmMakeCommandAppendix: elmMakeCommandAppendix)
+                    .AndThen(makeJavascriptOk =>
+                    {
+                        var javascriptFromElmMake =
+                            Encoding.UTF8.GetString(makeJavascriptOk.producedFile.Span);
+
+                        var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
+
+                        var functionNameInElm = string.Join(".", rootModuleName.ToImmutableList().Add("blob_main_as_base64"));
+
+                        var listFunctionToPublish =
+                            new[]
+                            {
+                                (functionNameInElm: functionNameInElm,
+                                publicName: "blob_main_as_base64",
+                                arity: 0),
+                            };
+
+                        var finalJs =
+                            ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
+                                javascriptMinusCrashes,
+                                listFunctionToPublish);
+
+                        using var javascriptEngine = IJsEngine.BuildJsEngine();
+
+                        javascriptEngine.Evaluate(finalJs);
+
+                        var blobBase64 = (string)javascriptEngine.Evaluate("blob_main_as_base64");
+
+                        return
+                        Result<string, Elm019Binaries.ElmMakeOk>.ok(
+                            new Elm019Binaries.ElmMakeOk(producedFile: Convert.FromBase64String(blobBase64)));
+                    });
+                }
+
+                return
+                loweringOk.result.rootModuleEntryPointKind switch
+                {
+                    CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint => continueWithClassicEntryPoint(),
+                    CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint => continueWithBlobEntryPoint(),
+
+                    _ => throw new NotImplementedException()
+                };
+            }));
     }
+
 
     static public IEnumerable<string> DescribeCompositionForHumans(
         TreeNodeWithStringPath composition,

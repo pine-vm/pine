@@ -71,7 +71,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         var (process, buildArtifacts) =
             ProcessFromElm019Code.ProcessFromElmCodeFiles(
-            loweredAppFiles,
+            loweredAppFiles.compiledFiles,
             overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
         return (process, buildArtifacts);

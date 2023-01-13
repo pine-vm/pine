@@ -1,36 +1,4 @@
-module CompileFullstackApp exposing
-    ( AppFiles
-    , CompilationArguments
-    , CompilationError(..)
-    , DependencyKey(..)
-    , ElmChoiceTypeStruct
-    , ElmMakeOutputType(..)
-    , ElmMakeRequestStructure
-    , ElmTypeAnnotation(..)
-    , InterfaceBlobSingleEncoding(..)
-    , InterfaceSourceFilesFunctionVariant(..)
-    , LeafElmTypeStruct(..)
-    , LocatedCompilationError
-    , LocatedInSourceFiles(..)
-    , LocationInSourceFiles
-    , appendLineAndStringInLogFile
-    , asCompletelyLoweredElmApp
-    , buildTypeAnnotationText
-    , elmModulesDictFromAppFiles
-    , filePathFromElmModuleName
-    , includeFilePathInElmMakeRequest
-    , jsonCodingExpressionFromType
-    , jsonCodingFunctionFromChoiceType
-    , parseAppStateElmTypeAndDependenciesRecursively
-    , parseElmMakeModuleFunctionName
-    , parseElmModuleText
-    , parseElmTypeAndDependenciesRecursivelyFromAnnotation
-    , parseInterfaceRecordTree
-    , parseSourceFileFunction
-    , parseSourceFileFunctionName
-    , parserDeadEndToString
-    , parserDeadEndsToString
-    )
+module CompileFullstackApp exposing (..)
 
 import Base64
 import Bytes
@@ -127,6 +95,17 @@ encodingModuleImportBytes =
 encodingModuleImportBase64 : ( List String, Maybe String )
 encodingModuleImportBase64 =
     ( [ "CompilerGenerated", "Base64" ], Just "Base64" )
+
+
+type alias CompilationIterationSuccess =
+    { compiledFiles : AppFiles
+    , rootModuleEntryPointKind : ElmMakeEntryPointKind
+    }
+
+
+type ElmMakeEntryPointKind
+    = ClassicMakeEntryPoint
+    | BlobMakeEntryPoint
 
 
 type alias AppFiles =
@@ -247,7 +226,7 @@ type alias RecordTreeEmitBlobIntermediateResult =
 {-| This function returns an Err if the needed dependencies for ElmMake are not yet in the arguments.
 The integrating software can then perform the ElmMake, insert it into the dependencies dict and retry.
 -}
-asCompletelyLoweredElmApp : CompilationArguments -> Result (List LocatedCompilationError) AppFiles
+asCompletelyLoweredElmApp : CompilationArguments -> Result (List LocatedCompilationError) CompilationIterationSuccess
 asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefixes, dependencies, rootModuleName, interfaceToHostRootModuleName } =
     let
         sourceModules =
@@ -322,7 +301,7 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
         |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
         |> Result.andThen (loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies)
         |> Result.andThen
-            (loweredForBackendApp
+            (loweredForCompilationRoot
                 { originalSourceModules = sourceModules
                 , rootModuleName = rootModuleName
                 , interfaceToHostRootModuleName = interfaceToHostRootModuleName
@@ -374,6 +353,105 @@ loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceF
                     files
             )
             (Ok sourceFiles)
+
+
+loweredForCompilationRoot :
+    { rootModuleName : List String
+    , interfaceToHostRootModuleName : List String
+    , originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File )
+    }
+    -> AppFiles
+    -> Result (List (LocatedInSourceFiles CompilationError)) CompilationIterationSuccess
+loweredForCompilationRoot config sourceFiles =
+    case Dict.get (String.join "." config.rootModuleName) config.originalSourceModules of
+        Nothing ->
+            Ok
+                { compiledFiles = sourceFiles
+                , rootModuleEntryPointKind = ClassicMakeEntryPoint
+                }
+
+        Just ( _, mainModuleSyntax ) ->
+            let
+                declarationsNames =
+                    mainModuleSyntax.declarations
+                        |> List.map Elm.Syntax.Node.value
+                        |> List.filterMap
+                            (\declaration ->
+                                case declaration of
+                                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                        Just (Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name)
+
+                                    _ ->
+                                        Nothing
+                            )
+            in
+            if List.member "blobMain" declarationsNames then
+                loweredForBlobEntryPoint config sourceFiles
+                    |> Result.map (CompilationIterationSuccess >> (|>) BlobMakeEntryPoint)
+
+            else
+                loweredForBackendApp config sourceFiles
+                    |> Result.map (CompilationIterationSuccess >> (|>) ClassicMakeEntryPoint)
+
+
+loweredForBlobEntryPoint :
+    { r | rootModuleName : List String }
+    -> AppFiles
+    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
+loweredForBlobEntryPoint { rootModuleName } sourceFiles =
+    let
+        compilationRootFilePath =
+            filePathFromElmModuleName (String.join "." rootModuleName)
+    in
+    case Dict.get compilationRootFilePath sourceFiles of
+        Nothing ->
+            Ok sourceFiles
+
+        Just fileBefore ->
+            fileBefore
+                |> stringFromFileContent
+                |> Result.fromMaybe
+                    [ LocatedInSourceFiles
+                        { filePath = compilationRootFilePath, locationInModuleText = Elm.Syntax.Range.emptyRange }
+                        (OtherCompilationError "Failed to decode file content as string")
+                    ]
+                |> Result.andThen
+                    (\rootModuleText ->
+                        [ rootModuleText
+                        , String.trim """
+blob_main_as_base64 : String
+blob_main_as_base64 =
+    blobMain
+        |> Base64.fromBytes
+        |> Maybe.withDefault "Failed to encode as Base64"
+
+
+{-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>) Elm code needed to inform the Elm compiler about our entry points.
+-}
+main : Program Int {} String
+main =
+    Platform.worker
+        { init = always ( {}, Cmd.none )
+        , update = always (always ( blob_main_as_base64 |> always {}, Cmd.none ))
+        , subscriptions = always Sub.none
+        }
+"""
+                        ]
+                            |> String.join "\n\n"
+                            |> addImportsInElmModuleText [ ( [ "Base64" ], Nothing ) ]
+                            |> Result.mapError
+                                (\err ->
+                                    [ LocatedInSourceFiles
+                                        { filePath = compilationRootFilePath, locationInModuleText = Elm.Syntax.Range.emptyRange }
+                                        (OtherCompilationError ("Failed to add import: " ++ err))
+                                    ]
+                                )
+                    )
+                |> Result.map
+                    (\rootModuleText ->
+                        sourceFiles
+                            |> updateFileContentAtPath (always (fileContentFromString rootModuleText)) compilationRootFilePath
+                    )
 
 
 loweredForBackendApp :
