@@ -3,6 +3,7 @@ module Backend.Main exposing
     , backendMain
     )
 
+import Array
 import Backend.State exposing (ChoiceType(..), ChoiceTypeWithTypeParameter(..), RecursiveType(..), valueForOpaqueChoiceType)
 import Base64
 import Bytes.Encode
@@ -116,4 +117,5 @@ initState =
         ]
             |> ListDict.fromList
     , bytes = "Hello World!" |> Bytes.Encode.string |> Bytes.Encode.encode
+    , array_primitive = Array.fromList [ 0, 1, 3, 4 ]
     }

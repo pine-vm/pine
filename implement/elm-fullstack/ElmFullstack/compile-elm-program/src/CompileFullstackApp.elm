@@ -1708,6 +1708,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
         modulesToImport =
             [ [ "Dict" ]
             , [ "Set" ]
+            , [ "Array" ]
             , [ "Json", "Decode" ]
             , [ "Json", "Encode" ]
             , [ "Bytes" ]
@@ -2184,6 +2185,7 @@ type LeafElmTypeStruct
     | FloatLeaf
     | BytesLeaf
     | ListLeaf
+    | ArrayLeaf
     | SetLeaf
     | MaybeLeaf
     | ResultLeaf
@@ -2831,6 +2833,9 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                 ListLeaf ->
                     continueWithLocalNameAndCommonPrefix jsonCodeListFunctionNameCommonPart
 
+                ArrayLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonCodeArrayFunctionNameCommonPart
+
                 SetLeaf ->
                     continueWithLocalNameAndCommonPrefix jsonCodeSetFunctionNameCommonPart
 
@@ -3101,6 +3106,9 @@ buildTypeAnnotationText typeAnnotation =
                 ListLeaf ->
                     "List"
 
+                ArrayLeaf ->
+                    "Array.Array"
+
                 SetLeaf ->
                     "Set.Set"
 
@@ -3122,6 +3130,7 @@ parseElmTypeLeavesNames =
     , ( "Float", FloatLeaf )
     , ( "Bytes.Bytes", BytesLeaf )
     , ( "List", ListLeaf )
+    , ( "Array.Array", ArrayLeaf )
     , ( "Set.Set", SetLeaf )
     , ( "Result", ResultLeaf )
     , ( "Maybe", MaybeLeaf )
@@ -3236,6 +3245,10 @@ generalSupportingFunctionsTextsWithCommonNamePattern =
       , encodeSyntax = """ = Json.Encode.list"""
       , decodeSyntax = """ = Json.Decode.list"""
       }
+    , { functionNameCommonPart = jsonCodeArrayFunctionNameCommonPart
+      , encodeSyntax = """ = Json.Encode.array"""
+      , decodeSyntax = """ = Json.Decode.array"""
+      }
     , { functionNameCommonPart = jsonCodeSetFunctionNameCommonPart
       , encodeSyntax = """encoder =
     Set.toList >> Json.Encode.list encoder"""
@@ -3295,6 +3308,11 @@ jsonCodeMaybeFunctionNameCommonPart =
 jsonCodeListFunctionNameCommonPart : String
 jsonCodeListFunctionNameCommonPart =
     "_generic_List"
+
+
+jsonCodeArrayFunctionNameCommonPart : String
+jsonCodeArrayFunctionNameCommonPart =
+    "_generic_Array"
 
 
 jsonCodeSetFunctionNameCommonPart : String

@@ -1516,6 +1516,11 @@ prepareCompileForFileOpenedInEditor workspace =
                                 , rootModuleName = []
                                 , interfaceToHostRootModuleName = []
                                 }
+                                {-
+                                   TODO: Instead of discarding the 'rootModuleEntryPointKind' here, adapt to the different kinds of entry points.
+                                   In case the root builds a blob, we can get the bytes value and offer exporting to a file.
+                                -}
+                                |> Result.map .compiledFiles
 
                         compilationOrigin =
                             { requestFromUser = requestFromUserIdentity

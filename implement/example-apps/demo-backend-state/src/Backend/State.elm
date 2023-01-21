@@ -7,6 +7,7 @@ module Backend.State exposing
     , valueForOpaqueChoiceType
     )
 
+import Array
 import Bytes
 import Dict
 import ElmFullstack
@@ -38,6 +39,7 @@ type alias State =
             }
             String
     , bytes : Bytes.Bytes
+    , array_primitive : Array.Array Int
     }
 
 
