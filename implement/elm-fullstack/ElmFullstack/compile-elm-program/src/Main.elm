@@ -36,7 +36,7 @@ jsonDecodeCompilationArguments =
         (Json.Decode.field "sourceFiles" jsonDecodeAppCode)
         (Json.Decode.field "compilationInterfaceElmModuleNamePrefixes" (Json.Decode.list Json.Decode.string))
         (Json.Decode.field "dependencies" (Json.Decode.list jsonDecodeCompilationArgumentsDependency))
-        (Json.Decode.field "rootModuleName" (Json.Decode.list Json.Decode.string))
+        (Json.Decode.field "compilationRootFilePath" (Json.Decode.list Json.Decode.string))
         (Json.Decode.field "interfaceToHostRootModuleName" (Json.Decode.list Json.Decode.string))
 
 
@@ -84,7 +84,9 @@ jsonEncodeLocationInText location =
 jsonEncodeCompilationIterationSuccess : CompileFullstackApp.CompilationIterationSuccess -> Json.Encode.Value
 jsonEncodeCompilationIterationSuccess success =
     [ ( "compiledFiles", jsonEncodeAppCode success.compiledFiles )
-    , ( "rootModuleEntryPointKind", jsonEncodeElmMakeEntryPointKind success.rootModuleEntryPointKind )
+    , ( "rootModuleEntryPointKind"
+      , json_encode_Result Json.Encode.string jsonEncodeElmMakeEntryPointKind success.rootModuleEntryPointKind
+      )
     ]
         |> Json.Encode.object
 
@@ -92,19 +94,30 @@ jsonEncodeCompilationIterationSuccess success =
 jsonEncodeElmMakeEntryPointKind : CompileFullstackApp.ElmMakeEntryPointKind -> Json.Encode.Value
 jsonEncodeElmMakeEntryPointKind kind =
     case kind of
-        CompileFullstackApp.ClassicMakeEntryPoint ->
+        CompileFullstackApp.ClassicMakeEntryPoint entryPoint ->
             Json.Encode.object
                 [ ( "ClassicMakeEntryPoint"
-                  , Json.Encode.list identity []
+                  , [ jsonEncodeElmMakeEntryPointStruct entryPoint ]
+                        |> Json.Encode.list identity
                   )
                 ]
 
-        CompileFullstackApp.BlobMakeEntryPoint ->
+        CompileFullstackApp.BlobMakeEntryPoint entryPoint ->
             Json.Encode.object
                 [ ( "BlobMakeEntryPoint"
-                  , Json.Encode.list identity []
+                  , [ jsonEncodeElmMakeEntryPointStruct entryPoint ]
+                        |> Json.Encode.list identity
                   )
                 ]
+
+
+jsonEncodeElmMakeEntryPointStruct : CompileFullstackApp.ElmMakeEntryPointStruct -> Json.Encode.Value
+jsonEncodeElmMakeEntryPointStruct struct =
+    Json.Encode.object
+        [ ( "elmMakeJavaScriptFunctionName"
+          , Json.Encode.string struct.elmMakeJavaScriptFunctionName
+          )
+        ]
 
 
 jsonEncodeCompilationError : CompileFullstackApp.CompilationError -> Json.Encode.Value

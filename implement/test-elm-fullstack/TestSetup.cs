@@ -88,12 +88,13 @@ public class TestSetup
                 .OrderBy(file => string.Join('/', file.path)));
 
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(
-        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalAppFiles)
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalAppFiles,
+        IReadOnlyList<string> compilationRootFilePath)
     {
         var compilationResult =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: originalAppFiles,
-                ElmAppInterfaceConfig.Default)
+                ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath })
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
         return compilationResult.result.compiledFiles;

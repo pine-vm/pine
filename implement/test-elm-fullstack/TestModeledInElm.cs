@@ -21,7 +21,9 @@ public class TestModeledInElm
 
     static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>
-        TestSetup.AsLoweredElmApp(TestSetup.GetElmAppFromDirectoryPath(directoryPath));
+        TestSetup.AsLoweredElmApp(
+            TestSetup.GetElmAppFromDirectoryPath(directoryPath),
+            compilationRootFilePath: ImmutableList.Create("src", "Main.elm"));
 
     /*
     Get the value from `tests` in the Elm module `Main`.

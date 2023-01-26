@@ -16,7 +16,7 @@ namespace ElmFullstack;
 
 public class Program
 {
-    static public string AppVersionId => "2023-01-21";
+    static public string AppVersionId => "2023-01-25";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -721,9 +721,17 @@ public class Program
             var sourceFiles =
                 Composition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.tree);
 
+            var interfaceConfig =
+                ElmAppInterfaceConfig.Default with
+                {
+                    compilationRootFilePath = sourceFiles.ContainsKey(ElmAppInterfaceConfig.Default.compilationRootFilePath) ?
+                    ElmAppInterfaceConfig.Default.compilationRootFilePath :
+                    sourceFiles.Keys.Where(name => name.Last().EndsWith(".elm")).First()
+                };
+
             var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
-                ElmAppInterfaceConfig.Default);
+                interfaceConfig: interfaceConfig);
 
             var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
 
@@ -1301,15 +1309,10 @@ public class Program
         string outputFileName,
         string? elmMakeCommandAppendix)
     {
-        var rootModuleContent = sourceFiles[pathToFileWithElmEntryPoint];
-        var rootModuleText = Encoding.UTF8.GetString(rootModuleContent.Span);
-
         return
-            ElmAppCompilation.ParseModuleNameFromElmModuleText(rootModuleText)
-            .AndThen(rootModuleName =>
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles.ToImmutableDictionary(),
-                interfaceConfig: new ElmAppInterfaceConfig(RootModuleName: string.Join(".", rootModuleName)))
+                interfaceConfig: new ElmAppInterfaceConfig(compilationRootFilePath: pathToFileWithElmEntryPoint))
             .MapError(err =>
             "Failed lowering Elm code with " + err.Count + " error(s):\n" +
             ElmAppCompilation.CompileCompilationErrorsDisplayText(err))
@@ -1324,7 +1327,8 @@ public class Program
                         elmMakeCommandAppendix: elmMakeCommandAppendix);
                 }
 
-                Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint()
+                Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint(
+                    CompilerSerialInterface.ElmMakeEntryPointStruct entryPointStruct)
                 {
                     return
                     Elm019Binaries.ElmMakeToJavascript(
@@ -1338,7 +1342,7 @@ public class Program
 
                         var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
 
-                        var functionNameInElm = string.Join(".", rootModuleName.ToImmutableList().Add("blob_main_as_base64"));
+                        var functionNameInElm = entryPointStruct.elmMakeJavaScriptFunctionName;
 
                         var listFunctionToPublish =
                             new[]
@@ -1366,14 +1370,17 @@ public class Program
                 }
 
                 return
-                loweringOk.result.rootModuleEntryPointKind switch
+                loweringOk.result.rootModuleEntryPointKind
+                .MapError(err => "Failed to get entry point main declaration: " + err)
+                .AndThen(rootModuleEntryPointKind =>
+                rootModuleEntryPointKind switch
                 {
                     CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint => continueWithClassicEntryPoint(),
-                    CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint => continueWithBlobEntryPoint(),
+                    CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob => continueWithBlobEntryPoint(blob.EntryPointStruct),
 
                     _ => throw new NotImplementedException()
-                };
-            }));
+                });
+            });
     }
 
 

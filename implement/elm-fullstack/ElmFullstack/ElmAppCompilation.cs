@@ -10,11 +10,11 @@ using Pine.Json;
 
 namespace ElmFullstack
 {
-    public record ElmAppInterfaceConfig(string RootModuleName)
+    public record ElmAppInterfaceConfig(IReadOnlyList<string> compilationRootFilePath)
     {
         static public ElmAppInterfaceConfig Default => new
         (
-            RootModuleName: "Backend.Main"
+            compilationRootFilePath: ImmutableList.Create("src", "Backend", "Main.elm")
         );
     }
 
@@ -62,7 +62,7 @@ namespace ElmFullstack
             Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compileNew() =>
                 AsCompletelyLoweredElmApp(
                     sourceFiles,
-                    rootModuleName: interfaceConfig.RootModuleName.Split('.').ToImmutableList(),
+                    compilationRootFilePath: interfaceConfig.compilationRootFilePath,
                     interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
             (Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
@@ -91,7 +91,7 @@ namespace ElmFullstack
 
         public record CompilationIterationSuccess(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compiledFiles,
-            CompilerSerialInterface.ElmMakeEntryPointKind rootModuleEntryPointKind);
+            Result<string, CompilerSerialInterface.ElmMakeEntryPointKind> rootModuleEntryPointKind);
 
         public record StackFrame(
             IImmutableList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> discoveredDependencies,
@@ -99,17 +99,17 @@ namespace ElmFullstack
 
         static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IReadOnlyList<string> rootModuleName,
+            IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
-                rootModuleName,
+                compilationRootFilePath: compilationRootFilePath,
                 interfaceToHostRootModuleName,
                 ImmutableStack<StackFrame>.Empty);
 
         static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IReadOnlyList<string> rootModuleName,
+            IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack)
         {
@@ -129,7 +129,7 @@ namespace ElmFullstack
             var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
                 compilerElmProgramCodeFiles: compilerElmProgramCodeFiles,
                 sourceFiles: sourceFiles,
-                rootModuleName: rootModuleName,
+                compilationRootFilePath: compilationRootFilePath,
                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                 dependencies: dependencies);
 
@@ -277,7 +277,7 @@ namespace ElmFullstack
 
                         return AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
-                            rootModuleName: rootModuleName,
+                            compilationRootFilePath: compilationRootFilePath,
                             interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                             stack: stack.Push(newStackFrame));
                     });
@@ -295,7 +295,7 @@ namespace ElmFullstack
         static (Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, CompilationIterationSuccess>, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IReadOnlyList<string> rootModuleName,
+            IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies)
         {
@@ -327,7 +327,7 @@ namespace ElmFullstack
                     sourceFiles = sourceFilesJson,
                     compilationInterfaceElmModuleNamePrefixes = ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes,
                     dependencies = dependenciesJson,
-                    rootModuleName = rootModuleName,
+                    compilationRootFilePath = compilationRootFilePath,
                     interfaceToHostRootModuleName = interfaceToHostRootModuleName,
                 }
             );
@@ -620,15 +620,21 @@ namespace ElmFullstack
     {
         public record CompilationIterationSuccess(
             IReadOnlyList<AppCodeEntry> compiledFiles,
-            ElmMakeEntryPointKind rootModuleEntryPointKind);
+            Result<string, ElmMakeEntryPointKind> rootModuleEntryPointKind);
 
         [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
         abstract public record ElmMakeEntryPointKind
         {
-            public record ClassicMakeEntryPoint() : ElmMakeEntryPointKind;
+            public record ClassicMakeEntryPoint(
+                ElmMakeEntryPointStruct EntryPointStruct)
+                : ElmMakeEntryPointKind;
 
-            public record BlobMakeEntryPoint() : ElmMakeEntryPointKind;
+            public record BlobMakeEntryPoint(
+                ElmMakeEntryPointStruct EntryPointStruct)
+                : ElmMakeEntryPointKind;
         }
+
+        public record ElmMakeEntryPointStruct(string elmMakeJavaScriptFunctionName);
 
         public record CompilationError(
             IReadOnlyList<string>? OtherCompilationError = null,

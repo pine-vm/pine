@@ -579,9 +579,16 @@ public class ElmInteractive
         if (sourceTree == null)
             return null;
 
+        var sourceFiles = TreeToFlatDictionaryWithPathComparer(sourceTree);
+
+        var compilationRootFilePath = sourceFiles.FirstOrDefault(c => c.Key[c.Key.Count - 1].EndsWith(".elm")).Key;
+
+        if (compilationRootFilePath.Count == 0)
+            return null;
+
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
-            ElmAppInterfaceConfig.Default);
+            ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath });
 
         return
             compilationResult

@@ -36,7 +36,7 @@ type alias CompilationArguments =
     { sourceFiles : AppFiles
     , compilationInterfaceElmModuleNamePrefixes : List String
     , dependencies : List ( DependencyKey, Bytes.Bytes )
-    , rootModuleName : List String
+    , compilationRootFilePath : List String
     , interfaceToHostRootModuleName : List String
     }
 
@@ -99,13 +99,18 @@ encodingModuleImportBase64 =
 
 type alias CompilationIterationSuccess =
     { compiledFiles : AppFiles
-    , rootModuleEntryPointKind : ElmMakeEntryPointKind
+    , rootModuleEntryPointKind : Result String ElmMakeEntryPointKind
     }
 
 
 type ElmMakeEntryPointKind
-    = ClassicMakeEntryPoint
-    | BlobMakeEntryPoint
+    = ClassicMakeEntryPoint ElmMakeEntryPointStruct
+    | BlobMakeEntryPoint ElmMakeEntryPointStruct
+
+
+type alias ElmMakeEntryPointStruct =
+    { elmMakeJavaScriptFunctionName : String
+    }
 
 
 type alias AppFiles =
@@ -227,7 +232,7 @@ type alias RecordTreeEmitBlobIntermediateResult =
 The integrating software can then perform the ElmMake, insert it into the dependencies dict and retry.
 -}
 asCompletelyLoweredElmApp : CompilationArguments -> Result (List LocatedCompilationError) CompilationIterationSuccess
-asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefixes, dependencies, rootModuleName, interfaceToHostRootModuleName } =
+asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefixes, dependencies, compilationRootFilePath, interfaceToHostRootModuleName } =
     let
         sourceModules =
             elmModulesDictFromAppFiles sourceFiles
@@ -260,7 +265,8 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
                 |> Set.fromList
 
         containsBackend =
-            Dict.get (String.join "." rootModuleName) sourceModules /= Nothing
+            -- TODO: Reuse the entry point kind found by loweredForCompilationRoot
+            Dict.get "Backend.Main" sourceModules /= Nothing
 
         modulesToAddForBackendDepdendencies =
             if containsBackend then
@@ -303,7 +309,7 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
         |> Result.andThen
             (loweredForCompilationRoot
                 { originalSourceModules = sourceModules
-                , rootModuleName = rootModuleName
+                , compilationRootFilePath = compilationRootFilePath
                 , interfaceToHostRootModuleName = interfaceToHostRootModuleName
                 }
             )
@@ -356,24 +362,55 @@ loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceF
 
 
 loweredForCompilationRoot :
-    { rootModuleName : List String
+    { compilationRootFilePath : List String
     , interfaceToHostRootModuleName : List String
     , originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File )
     }
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) CompilationIterationSuccess
 loweredForCompilationRoot config sourceFiles =
-    case Dict.get (String.join "." config.rootModuleName) config.originalSourceModules of
+    case
+        config.originalSourceModules
+            |> Dict.toList
+            |> List.Extra.find (Tuple.second >> Tuple.first >> (==) config.compilationRootFilePath)
+    of
         Nothing ->
-            Ok
-                { compiledFiles = sourceFiles
-                , rootModuleEntryPointKind = ClassicMakeEntryPoint
-                }
+            Err
+                [ LocatedInSourceFiles
+                    { filePath = config.compilationRootFilePath
+                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                    }
+                    (OtherCompilationError ("Did not find file " ++ String.join "/" config.compilationRootFilePath))
+                ]
 
-        Just ( _, mainModuleSyntax ) ->
+        Just ( compilationRootModuleName, ( _, compilationRootModuleSyntax ) ) ->
             let
+                entryPointTypes =
+                    [ ( "backendMain"
+                      , loweredForBackendApp config
+                            >> Result.map
+                                (\( compiledFiles, entryPoint ) ->
+                                    { compiledFiles = compiledFiles
+                                    , rootModuleEntryPointKind = Ok (ClassicMakeEntryPoint entryPoint)
+                                    }
+                                )
+                      )
+                    , ( "blobMain"
+                      , loweredForBlobEntryPoint
+                            { compilationRootFilePath = config.compilationRootFilePath
+                            , compilationRootModuleName = String.split "." compilationRootModuleName
+                            }
+                            >> Result.map
+                                (\( compiledFiles, entryPoint ) ->
+                                    { compiledFiles = compiledFiles
+                                    , rootModuleEntryPointKind = Ok (BlobMakeEntryPoint entryPoint)
+                                    }
+                                )
+                      )
+                    ]
+
                 declarationsNames =
-                    mainModuleSyntax.declarations
+                    compilationRootModuleSyntax.declarations
                         |> List.map Elm.Syntax.Node.value
                         |> List.filterMap
                             (\declaration ->
@@ -385,27 +422,37 @@ loweredForCompilationRoot config sourceFiles =
                                         Nothing
                             )
             in
-            if List.member "blobMain" declarationsNames then
-                loweredForBlobEntryPoint config sourceFiles
-                    |> Result.map (CompilationIterationSuccess >> (|>) BlobMakeEntryPoint)
+            case entryPointTypes |> List.Extra.find (Tuple.first >> List.member >> (|>) declarationsNames) of
+                Nothing ->
+                    Ok
+                        { compiledFiles = sourceFiles
+                        , rootModuleEntryPointKind =
+                            Err
+                                ("Found no declaration of an entry point. I only support the following "
+                                    ++ String.fromInt (List.length entryPointTypes)
+                                    ++ " names for entry points declarations: "
+                                    ++ String.join ", " (List.map Tuple.first entryPointTypes)
+                                )
+                        }
 
-            else
-                loweredForBackendApp config sourceFiles
-                    |> Result.map (CompilationIterationSuccess >> (|>) ClassicMakeEntryPoint)
+                Just ( _, buildEntryPoint ) ->
+                    buildEntryPoint sourceFiles
 
 
 loweredForBlobEntryPoint :
-    { r | rootModuleName : List String }
+    { r | compilationRootFilePath : List String, compilationRootModuleName : List String }
     -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
-loweredForBlobEntryPoint { rootModuleName } sourceFiles =
-    let
-        compilationRootFilePath =
-            filePathFromElmModuleName (String.join "." rootModuleName)
-    in
+    -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
+loweredForBlobEntryPoint { compilationRootFilePath, compilationRootModuleName } sourceFiles =
     case Dict.get compilationRootFilePath sourceFiles of
         Nothing ->
-            Ok sourceFiles
+            Err
+                [ LocatedInSourceFiles
+                    { filePath = compilationRootFilePath
+                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                    }
+                    (OtherCompilationError "File not found")
+                ]
 
         Just fileBefore ->
             fileBefore
@@ -449,40 +496,59 @@ main =
                     )
                 |> Result.map
                     (\rootModuleText ->
-                        sourceFiles
+                        ( sourceFiles
                             |> updateFileContentAtPath (always (fileContentFromString rootModuleText)) compilationRootFilePath
+                        , { elmMakeJavaScriptFunctionName =
+                                String.join "." (compilationRootModuleName ++ [ "blob_main_as_base64" ])
+                          }
+                        )
                     )
 
 
 loweredForBackendApp :
-    { rootModuleName : List String
+    { compilationRootFilePath : List String
     , interfaceToHostRootModuleName : List String
     , originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File )
     }
     -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
-loweredForBackendApp { rootModuleName, interfaceToHostRootModuleName, originalSourceModules } sourceFiles =
+    -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
+loweredForBackendApp config sourceFiles =
     let
         interfaceToHostRootFilePath =
-            filePathFromElmModuleName (String.join "." interfaceToHostRootModuleName)
+            filePathFromElmModuleName (String.join "." config.interfaceToHostRootModuleName)
+
+        entryPoint =
+            { elmMakeJavaScriptFunctionName =
+                String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
+            }
     in
-    case Dict.get (String.join "." rootModuleName) originalSourceModules of
+    case
+        config.originalSourceModules
+            |> Dict.toList
+            |> List.Extra.find (Tuple.second >> Tuple.first >> (==) config.compilationRootFilePath)
+    of
         Nothing ->
             -- App contains no backend.
-            Ok sourceFiles
+            Err
+                [ LocatedInSourceFiles
+                    { filePath = config.compilationRootFilePath
+                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                    }
+                    (OtherCompilationError "Contains no backend")
+                ]
 
-        Just backendMainModule ->
+        Just ( compilationRootModuleName, compilationRootModule ) ->
             if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
                 -- Support integrating applications supplying their own lowered version.
-                Ok sourceFiles
+                Ok ( sourceFiles, entryPoint )
 
             else
-                parseAppStateElmTypeAndDependenciesRecursively originalSourceModules backendMainModule
+                parseAppStateElmTypeAndDependenciesRecursively config.originalSourceModules compilationRootModule
                     |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type name: "))
                     |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
                     |> Result.andThen
                         (\( stateTypeAnnotation, stateTypeDependencies ) ->
-                            parseMigrationConfig { originalSourceModules = originalSourceModules }
+                            parseMigrationConfig { originalSourceModules = config.originalSourceModules }
                                 |> Result.map
                                     (\maybeMigrationConfig ->
                                         let
@@ -499,7 +565,7 @@ loweredForBackendApp { rootModuleName, interfaceToHostRootModuleName, originalSo
 
                                             ( appFiles, generateSerializersResult ) =
                                                 mapAppFilesToSupportJsonCoding
-                                                    { generatedModuleNamePrefix = interfaceToHostRootModuleName }
+                                                    { generatedModuleNamePrefix = config.interfaceToHostRootModuleName }
                                                     typeToGenerateSerializersFor
                                                     stateAndMigrationTypeDependencies
                                                     sourceFiles
@@ -553,8 +619,8 @@ loweredForBackendApp { rootModuleName, interfaceToHostRootModuleName, originalSo
 
                                             rootElmModuleText =
                                                 composeBackendRootElmModuleText
-                                                    { interfaceToHostRootModuleName = String.join "." interfaceToHostRootModuleName
-                                                    , rootModuleNameBeforeLowering = String.join "." rootModuleName
+                                                    { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
+                                                    , rootModuleNameBeforeLowering = compilationRootModuleName
                                                     , stateTypeAnnotation = stateTypeAnnotation
                                                     , modulesToImport = modulesToImport
                                                     , stateEncodeFunction = encodeFunction
@@ -563,10 +629,12 @@ loweredForBackendApp { rootModuleName, interfaceToHostRootModuleName, originalSo
                                                     , migrateFromStringExpression = migrateFromStringExpressionFromGenerateModuleName generateSerializersResult.generatedModuleName
                                                     }
                                         in
-                                        appFiles
+                                        ( appFiles
                                             |> updateFileContentAtPath
                                                 (always (fileContentFromString rootElmModuleText))
                                                 interfaceToHostRootFilePath
+                                        , entryPoint
+                                        )
                                     )
                         )
 
