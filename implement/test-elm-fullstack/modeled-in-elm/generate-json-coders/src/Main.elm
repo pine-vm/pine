@@ -117,9 +117,11 @@ tests =
 main : Program Int {} String
 main =
     Platform.worker
-        { init = \_ -> ( {}, Cmd.none )
+        { init = always ( {}, Cmd.none )
         , update =
-            \_ _ ->
-                ( tests |> always {}, Cmd.none )
-        , subscriptions = \_ -> Sub.none
+            tests
+                |> always ( {}, Cmd.none )
+                |> always
+                |> always
+        , subscriptions = always Sub.none
         }

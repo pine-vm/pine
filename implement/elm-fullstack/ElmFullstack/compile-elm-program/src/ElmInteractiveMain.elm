@@ -169,19 +169,19 @@ Elm code needed to inform the Elm compiler about our entry points.
 main : Program Int () String
 main =
     Platform.worker
-        { init = \_ -> ( (), Cmd.none )
+        { init = always ( (), Cmd.none )
         , update =
-            \_ stateBefore ->
-                ( [ parseElmModuleTextToJson (evaluateSubmissionInInteractive "") |> always ""
-                  , compileInteractiveSubmission ""
-                  , compileInteractiveEnvironment ""
-                  , submissionResponseFromResponsePineValue ""
-                  , getDefaultElmCoreModulesTexts ""
-                  ]
-                    |> always stateBefore
-                , Cmd.none
-                )
-        , subscriptions = \_ -> Sub.none
+            { a = parseElmModuleTextToJson
+            , b = evaluateSubmissionInInteractive
+            , c = compileInteractiveSubmission
+            , d = compileInteractiveEnvironment
+            , e = submissionResponseFromResponsePineValue
+            , f = getDefaultElmCoreModulesTexts
+            }
+                |> always ( (), Cmd.none )
+                |> always
+                |> always
+        , subscriptions = always Sub.none
         }
 
 

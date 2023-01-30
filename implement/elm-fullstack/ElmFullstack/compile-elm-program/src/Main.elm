@@ -267,12 +267,11 @@ Elm code needed to inform the Elm compiler about our entry points.
 main : Program Int () String
 main =
     Platform.worker
-        { init = \_ -> ( (), Cmd.none )
+        { init = always ( (), Cmd.none )
         , update =
-            \_ stateBefore ->
-                ( [ lowerSerialized "" ]
-                    |> always stateBefore
-                , Cmd.none
-                )
-        , subscriptions = \_ -> Sub.none
+            { a = lowerSerialized }
+                |> always ( (), Cmd.none )
+                |> always
+                |> always
+        , subscriptions = always Sub.none
         }

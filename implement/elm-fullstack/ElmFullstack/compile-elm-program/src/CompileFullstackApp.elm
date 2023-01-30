@@ -949,15 +949,16 @@ interfaceToHost_deserializeState = deserializeState
 main : Program Int State String
 main =
     Platform.worker
-        { init = \\_ -> ( interfaceToHost_initState, Cmd.none )
+        { init = always ( interfaceToHost_initState, Cmd.none )
         , update =
-            \\event stateBefore ->
-                { a = interfaceToHost_processEvent
-                , b = interfaceToHost_serializeState
-                , c = interfaceToHost_deserializeState
-                }
-                    |> always ( stateBefore, Cmd.none )
-        , subscriptions = \\_ -> Sub.none
+            { a = interfaceToHost_processEvent
+            , b = interfaceToHost_serializeState
+            , c = interfaceToHost_deserializeState
+            }
+                |> always ( interfaceToHost_initState, Cmd.none )
+                |> always
+                |> always
+        , subscriptions = always Sub.none
         }
 
 
