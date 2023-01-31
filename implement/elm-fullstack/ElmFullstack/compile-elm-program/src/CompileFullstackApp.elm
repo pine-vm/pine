@@ -385,6 +385,7 @@ loweredForCompilationRoot config sourceFiles =
 
         Just ( compilationRootModuleName, ( _, compilationRootModuleSyntax ) ) ->
             let
+                entryPointTypes : List ( String, AppFiles -> Result (List (LocatedInSourceFiles CompilationError)) { compiledFiles : AppFiles, rootModuleEntryPointKind : Result error ElmMakeEntryPointKind } )
                 entryPointTypes =
                     [ ( "backendMain"
                       , loweredForBackendApp config
@@ -406,6 +407,18 @@ loweredForCompilationRoot config sourceFiles =
                                     , rootModuleEntryPointKind = Ok (BlobMakeEntryPoint entryPoint)
                                     }
                                 )
+                      )
+                    , ( "main"
+                      , \compiledFiles ->
+                            Ok
+                                { compiledFiles = compiledFiles
+                                , rootModuleEntryPointKind =
+                                    Ok
+                                        (ClassicMakeEntryPoint
+                                            { elmMakeJavaScriptFunctionName = compilationRootModuleName ++ ".main"
+                                            }
+                                        )
+                                }
                       )
                     ]
 
