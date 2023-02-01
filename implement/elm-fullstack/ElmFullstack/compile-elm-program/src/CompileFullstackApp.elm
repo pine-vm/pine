@@ -2618,6 +2618,68 @@ tryConcretizeRecordInstance typeArguments recordType =
                         Just typeArgument ->
                             Ok typeArgument
 
+                InstanceElmType instanceElmType ->
+                    instanceElmType.instantiated
+                        |> tryConcretizeFieldType
+                        |> Result.mapError ((++) "Failed to concretize instantiated: ")
+                        |> Result.andThen
+                            (\concreteInstantiated ->
+                                instanceElmType.arguments
+                                    |> List.indexedMap
+                                        (\argIndex ->
+                                            tryConcretizeFieldType
+                                                >> Result.mapError
+                                                    ((++)
+                                                        ("Failed to concretize instance argument "
+                                                            ++ String.fromInt argIndex
+                                                            ++ ": "
+                                                        )
+                                                    )
+                                        )
+                                    |> Result.Extra.combine
+                                    |> Result.map
+                                        (\concreteArguments ->
+                                            InstanceElmType
+                                                { instantiated = concreteInstantiated
+                                                , arguments = concreteArguments
+                                                }
+                                        )
+                            )
+
+                TupleElmType tupleElmType ->
+                    tupleElmType
+                        |> List.indexedMap
+                            (\argIndex ->
+                                tryConcretizeFieldType
+                                    >> Result.mapError
+                                        ((++)
+                                            ("Failed to concretize tuple element "
+                                                ++ String.fromInt argIndex
+                                                ++ ": "
+                                            )
+                                        )
+                            )
+                        |> Result.Extra.combine
+                        |> Result.map TupleElmType
+
+                RecordElmType recordElmType ->
+                    recordElmType.fields
+                        |> List.map
+                            (\( fieldName, innerFieldType ) ->
+                                innerFieldType
+                                    |> tryConcretizeFieldType
+                                    |> Result.mapError
+                                        ((++)
+                                            ("Failed to concretize field "
+                                                ++ fieldName
+                                                ++ ": "
+                                            )
+                                        )
+                                    |> Result.map (Tuple.pair fieldName)
+                            )
+                        |> Result.Extra.combine
+                        |> Result.map (\fields -> RecordElmType { fields = fields })
+
                 _ ->
                     Ok fieldType
     in

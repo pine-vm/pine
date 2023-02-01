@@ -110,7 +110,20 @@ initState =
     , empty_record = {}
     , empty_tuple = ()
     , choiceTypeInstance = ChoiceTypeWithTypeParameter 4
-    , record_instance = { field_a = 123, field_parameterized = "test arg" }
+    , record_instance_string =
+        { field_a = 123
+        , field_parameterized = "test arg"
+        , field_parameterized_maybe = Nothing
+        , field_parameterized_tuple = ( "alfa", "beta" )
+        , field_parameterized_record = { field_int = 0, field_parameterized = "test" }
+        }
+    , record_instance_int =
+        { field_a = 234
+        , field_parameterized = 456
+        , field_parameterized_maybe = Just 567
+        , field_parameterized_tuple = ( 3, 4 )
+        , field_parameterized_record = { field_int = 0, field_parameterized = 78 }
+        }
     , listDict =
         [ ( { orig = 1, dest = 3 }, "Edge A" )
         , ( { orig = 3, dest = 4 }, "Edge B" )

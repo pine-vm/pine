@@ -31,7 +31,8 @@ type alias State =
     , empty_record : {}
     , empty_tuple : ()
     , choiceTypeInstance : ChoiceTypeWithTypeParameter Int
-    , record_instance : RecordAliasWithTypeParameter String
+    , record_instance_string : RecordAliasWithTypeParameter_Alfa String
+    , record_instance_int : RecordAliasWithTypeParameter_Alfa Int
     , listDict :
         ListDict.Dict
             { orig : Int
@@ -77,7 +78,16 @@ type ChoiceTypeWithTypeParameter a
     = ChoiceTypeWithTypeParameter a
 
 
-type alias RecordAliasWithTypeParameter typeParamInRecord =
+type alias RecordAliasWithTypeParameter_Alfa typeParamInRecord_alfa =
     { field_a : Int
-    , field_parameterized : typeParamInRecord
+    , field_parameterized : typeParamInRecord_alfa
+    , field_parameterized_maybe : Maybe typeParamInRecord_alfa
+    , field_parameterized_tuple : ( typeParamInRecord_alfa, typeParamInRecord_alfa )
+    , field_parameterized_record : RecordAliasWithTypeParameter_Beta typeParamInRecord_alfa
+    }
+
+
+type alias RecordAliasWithTypeParameter_Beta typeParamInRecord_beta =
+    { field_int : Int
+    , field_parameterized : typeParamInRecord_beta
     }
