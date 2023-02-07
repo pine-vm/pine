@@ -25,7 +25,7 @@ public record struct StoreProvisionalReductionReport(
 
 public record struct ProcessAppConfig(
     PineValue appConfigComponent,
-    (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts);
+    ProcessFromElm019Code.BuildArtifacts buildArtifacts);
 
 public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposable
 {
@@ -54,9 +54,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         TreeNodeWithStringPath? DeployAppConfigAndInitElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null);
 
-    static public (IDisposableProcessWithStringInterface process,
-        (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
-        ProcessFromWebAppConfig(
+    static public ProcessFromElm019Code.PreparedProcess ProcessFromWebAppConfig(
         TreeNodeWithStringPath appConfig,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
@@ -69,12 +67,10 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         var (loweredAppFiles, _) = compilationResult;
 
-        var (process, buildArtifacts) =
+        return
             ProcessFromElm019Code.ProcessFromElmCodeFiles(
-            loweredAppFiles.compiledFiles,
-            overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
-
-        return (process, buildArtifacts);
+                loweredAppFiles.compiledFiles,
+                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
     }
 
     PersistentProcessLiveRepresentation(
@@ -233,10 +229,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                 if (compositionLogRecord.reduction != null)
                 {
-                    var (newElmAppProcess, (javascriptFromElmMake, javascriptPreparedToRun)) =
+                    var prepareProcessResult =
                         ProcessFromWebAppConfig(
                             compositionLogRecord.reduction.Value.appConfigAsTree,
                             overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+                    var newElmAppProcess = prepareProcessResult.startProcess();
 
                     var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState.Span);
 
@@ -249,7 +247,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     processRepresentationDuringRestore.lastElmAppVolatileProcess?.Dispose();
 
                     processRepresentationDuringRestore = new PersistentProcessLiveRepresentationDuringRestore(
-                        lastAppConfig: new ProcessAppConfig(compositionLogRecord.reduction.Value.appConfig, (javascriptFromElmMake, javascriptPreparedToRun)),
+                        lastAppConfig: new ProcessAppConfig(
+                            compositionLogRecord.reduction.Value.appConfig,
+                            prepareProcessResult.buildArtifacts),
                         lastElmAppVolatileProcess: newElmAppProcess,
                         initOrMigrateCmds: null);
 
@@ -337,8 +337,10 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             var elmAppStateBefore = processBefore.lastElmAppVolatileProcess?.GetSerializedState();
 
-            var (newElmAppProcess, buildArtifacts) =
+            var prepareProcessResult =
                 ProcessFromWebAppConfig(deployAppConfigAndMigrateElmAppState, overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+            var newElmAppProcess = prepareProcessResult.startProcess();
 
             var migrateEventResult = AttemptProcessEvent(
                 newElmAppProcess,
@@ -359,9 +361,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     processBefore.lastElmAppVolatileProcess?.Dispose();
 
                     return new PersistentProcessLiveRepresentationDuringRestore(
-                            lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(deployAppConfigAndMigrateElmAppState), buildArtifacts),
-                            lastElmAppVolatileProcess: newElmAppProcess,
-                            initOrMigrateCmds: migrateEventOk);
+                        lastAppConfig: new ProcessAppConfig(
+                            Composition.FromTreeWithStringPath(deployAppConfigAndMigrateElmAppState),
+                            prepareProcessResult.buildArtifacts),
+                        lastElmAppVolatileProcess: newElmAppProcess,
+                        initOrMigrateCmds: migrateEventOk);
                 }))
                 .WithDefault(Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                     "Unexpected shape of response: migrateResult is Nothing")
@@ -372,10 +376,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             var appConfig = compositionEvent.DeployAppConfigAndInitElmAppState;
 
-            var (newElmAppProcess, buildArtifacts) =
+            var prepareProcessResult =
                 ProcessFromWebAppConfig(
                     appConfig,
                     overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+
+            var newElmAppProcess = prepareProcessResult.startProcess();
 
             var initEventResult = AttemptProcessEvent(
                 newElmAppProcess,
@@ -390,7 +396,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                     return
                     new PersistentProcessLiveRepresentationDuringRestore(
-                        lastAppConfig: new ProcessAppConfig(Composition.FromTreeWithStringPath(appConfig), buildArtifacts),
+                        lastAppConfig: new ProcessAppConfig(
+                            Composition.FromTreeWithStringPath(appConfig),
+                            prepareProcessResult.buildArtifacts),
                         lastElmAppVolatileProcess: newElmAppProcess,
                         initEventOk);
                 });

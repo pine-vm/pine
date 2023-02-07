@@ -5,8 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using JavaScriptEngineSwitcher.Core;
-using JavaScriptEngineSwitcher.V8;
 using Pine;
 
 namespace ElmFullstack;
@@ -98,16 +96,20 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
 
 public class ProcessFromElm019Code
 {
-    static public (IDisposableProcessWithStringInterface process,
-        (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
-        ProcessFromElmCodeFiles(
+    public record PreparedProcess(
+        BuildArtifacts buildArtifacts,
+        Func<IDisposableProcessWithStringInterface> startProcess);
+
+    public record BuildArtifacts(
+        string javaScriptFromElmMake,
+        string javaScriptPreparedToRun);
+
+    static public PreparedProcess ProcessFromElmCodeFiles(
         IReadOnlyCollection<(IReadOnlyList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null) =>
         ProcessFromElmCodeFiles(Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
 
-    static public (IDisposableProcessWithStringInterface process,
-        (string javascriptFromElmMake, string javascriptPreparedToRun) buildArtifacts)
-        ProcessFromElmCodeFiles(
+    static public PreparedProcess ProcessFromElmCodeFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
@@ -132,8 +134,11 @@ public class ProcessFromElm019Code
                 pathToFunctionCommonStart + ElmAppInterfaceConvention.DeserializeStateFunctionName);
 
         return
-            (new ProcessHostedWithV8(javascriptPreparedToRun),
-            (javascriptFromElmMake, javascriptPreparedToRun));
+            new PreparedProcess(
+                buildArtifacts: new BuildArtifacts(
+                    javaScriptFromElmMake: javascriptFromElmMake,
+                    javaScriptPreparedToRun: javascriptPreparedToRun),
+                startProcess: () => new ProcessHostedWithV8(javascriptPreparedToRun));
     }
 
     [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]

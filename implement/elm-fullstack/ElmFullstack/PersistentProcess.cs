@@ -26,11 +26,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
 
     byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
 
-    IDisposableProcessWithStringInterface process;
-
-    public readonly string JavascriptFromElmMake;
-
-    public readonly string JavascriptPreparedToRun;
+    readonly IDisposableProcessWithStringInterface process;
 
     public PersistentProcessWithHistoryOnFileFromElm019Code(
         IProcessStoreReader storeReader,
@@ -38,8 +34,10 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         Action<string> logger,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
-        (process, (JavascriptFromElmMake, JavascriptPreparedToRun)) =
+        var prepareProcessResult =
             ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles, overrideElmAppInterfaceConfig);
+
+        process = prepareProcessResult.startProcess();
 
         var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
