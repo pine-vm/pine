@@ -132,7 +132,7 @@ public class PineVM
         .SetItem(nameof(KernelFunction.sub_int), KernelFunction.sub_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.div_int), KernelFunction.div_int)
-        .SetItem(nameof(KernelFunction.sort_int), value => Result<string, PineValue>.ok(KernelFunction.sort_int(value)));
+        .SetItem(nameof(KernelFunction.is_sorted_ascending_int), value => Result<string, PineValue>.ok(KernelFunction.is_sorted_ascending_int(value)));
 
     static public PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
 
@@ -468,6 +468,9 @@ public class PineVM
                 :
                 Result<string, BigInteger>.ok(otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next)),
                 value);
+
+        static public PineValue is_sorted_ascending_int(PineValue value) =>
+            ValueFromBool(sort_int(value) == value);
 
         static public PineValue sort_int(PineValue value) =>
             value switch

@@ -102,12 +102,12 @@ gt a b =
 
 le : comparable -> comparable -> Bool
 le a b =
-    Pine_kernel.equal [ Pine_kernel.sort_int [a, b], [a, b] ]
+    Pine_kernel.is_sorted_ascending_int [a, b]
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    Pine_kernel.equal [ Pine_kernel.sort_int [b, a], [b, a] ]
+    Pine_kernel.is_sorted_ascending_int [b, a]
 
 
 apR : a -> (a -> b) -> b

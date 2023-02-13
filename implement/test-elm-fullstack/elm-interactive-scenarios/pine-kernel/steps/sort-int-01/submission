@@ -1,1 +1,1 @@
-Pine_kernel.sort_int [ [ 11, 13, 12 ], [ 15, 14 ], [], [ 3, 1 ] ]
+Pine_kernel.is_sorted_ascending_int [ -3, 0, 5, 11 ]

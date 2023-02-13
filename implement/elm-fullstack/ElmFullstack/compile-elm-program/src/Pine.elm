@@ -246,8 +246,8 @@ kernelFunctions =
     , ( "div_int"
       , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.div b a))
       )
-    , ( "sort_int"
-      , sort_int >> Ok
+    , ( "is_sorted_ascending_int"
+      , is_sorted_ascending_int >> valueFromBool >> Ok
       )
     ]
         |> Dict.fromList
@@ -261,6 +261,11 @@ list_all_same list =
 
         first :: rest ->
             List.all ((==) first) rest
+
+
+is_sorted_ascending_int : Value -> Bool
+is_sorted_ascending_int value =
+    value == sort_int value
 
 
 sort_int : Value -> Value
