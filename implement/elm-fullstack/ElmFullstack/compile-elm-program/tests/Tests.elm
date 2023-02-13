@@ -130,7 +130,6 @@ subscriptions _ =
                                             ]
                                                 |> Dict.fromList
                                                 |> CompileFullstackApp.elmModulesDictFromAppFiles
-                                                |> Dict.map (always (Tuple.mapSecond Tuple.second))
                                     in
                                     CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
                                         sourceModules
@@ -504,18 +503,23 @@ type alias MixedRecord =
                                             modules
                                                 |> List.map
                                                     (\parsedModule ->
-                                                        ( Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
-                                                        , parsedModule
+                                                        let
+                                                            moduleName =
+                                                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
+                                                        in
+                                                        ( filePathFromElmModuleName moduleName
+                                                        , { fileText = "fake"
+                                                          , parsedSyntax = parsedModule
+                                                          , moduleName = moduleName
+                                                          }
                                                         )
                                                     )
-                                                |> List.map (Tuple.mapFirst (String.join "."))
                                                 |> Dict.fromList
-                                                |> Dict.map (\moduleName -> Tuple.pair (filePathFromElmModuleName moduleName))
 
                                         rootModuleImports =
                                             namedModules
-                                                |> Dict.keys
-                                                |> List.map ((++) "import ")
+                                                |> Dict.values
+                                                |> List.map (.moduleName >> String.join "." >> (++) "import ")
 
                                         rootModuleText =
                                             ("module Root exposing (..)"
@@ -561,7 +565,6 @@ type alias MixedRecord =
                                                                         (rootModule.moduleDefinition
                                                                             |> Elm.Syntax.Node.value
                                                                             |> Elm.Syntax.Module.moduleName
-                                                                            |> String.join "."
                                                                             |> filePathFromElmModuleName
                                                                         )
                                                                         rootModule

@@ -77,9 +77,9 @@ elmAppInterfaceConvention =
     }
 
 
-appStateMigrationInterfaceModuleName : String
+appStateMigrationInterfaceModuleName : List String
 appStateMigrationInterfaceModuleName =
-    "Backend.MigrateState"
+    [ "Backend", "MigrateState" ]
 
 
 appStateMigrationInterfaceFunctionName : String
@@ -228,6 +228,13 @@ type alias RecordTreeEmitBlobIntermediateResult =
     }
 
 
+type alias SourceParsedElmModule =
+    { fileText : String
+    , parsedSyntax : Elm.Syntax.File.File
+    , moduleName : List String
+    }
+
+
 {-| This function returns an Err if the needed dependencies for ElmMake are not yet in the arguments.
 The integrating software can then perform the ElmMake, insert it into the dependencies dict and retry.
 -}
@@ -236,7 +243,6 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
     let
         sourceModules =
             elmModulesDictFromAppFiles sourceFiles
-                |> Dict.map (always (Tuple.mapSecond Tuple.second))
 
         compilationInterfaceModuleDependencies : Dict.Dict String (List String)
         compilationInterfaceModuleDependencies =
@@ -249,24 +255,30 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
         usedCompilationInterfaceModules : Set.Set String
         usedCompilationInterfaceModules =
             sourceModules
-                |> Dict.keys
+                |> Dict.values
+                |> List.map .moduleName
                 |> List.concatMap
                     (\moduleName ->
                         compilationInterfaceElmModuleNamePrefixes
                             |> List.concatMap
                                 (\compilationInterfacePrefix ->
-                                    if String.startsWith (compilationInterfacePrefix ++ ".") moduleName then
-                                        [ String.dropLeft (String.length compilationInterfacePrefix + 1) moduleName ]
+                                    case moduleName of
+                                        [] ->
+                                            []
 
-                                    else
-                                        []
+                                        firstDirectory :: others ->
+                                            if firstDirectory == compilationInterfacePrefix then
+                                                [ String.join "." others ]
+
+                                            else
+                                                []
                                 )
                     )
                 |> Set.fromList
 
         containsBackend =
             -- TODO: Reuse the entry point kind found by loweredForCompilationRoot
-            Dict.get "Backend.Main" sourceModules /= Nothing
+            findModuleByName [ "Backend", "Main" ] sourceModules /= Nothing
 
         modulesToAddForBackendDepdendencies =
             if containsBackend then
@@ -294,7 +306,7 @@ asCompletelyLoweredElmApp { sourceFiles, compilationInterfaceElmModuleNamePrefix
                             let
                                 filePath =
                                     filePathFromElmModuleName
-                                        (String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition)))
+                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
                             in
                             prevFiles
                                 |> Dict.insert filePath (fileContentFromString moduleToAdd)
@@ -330,7 +342,7 @@ loweredForSourceFiles compilationInterfaceElmModuleNamePrefixes sourceFiles =
 
 
 loweredForJsonCoders :
-    { originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File ) }
+    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule }
     -> List String
     -> AppFiles
     -> Result (LocatedInSourceFiles String) AppFiles
@@ -364,16 +376,12 @@ loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceF
 loweredForCompilationRoot :
     { compilationRootFilePath : List String
     , interfaceToHostRootModuleName : List String
-    , originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File )
+    , originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
     }
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) CompilationIterationSuccess
 loweredForCompilationRoot config sourceFiles =
-    case
-        config.originalSourceModules
-            |> Dict.toList
-            |> List.Extra.find (Tuple.second >> Tuple.first >> (==) config.compilationRootFilePath)
-    of
+    case Dict.get config.compilationRootFilePath config.originalSourceModules of
         Nothing ->
             Err
                 [ LocatedInSourceFiles
@@ -383,8 +391,9 @@ loweredForCompilationRoot config sourceFiles =
                     (OtherCompilationError ("Did not find file " ++ String.join "/" config.compilationRootFilePath))
                 ]
 
-        Just ( compilationRootModuleName, ( _, compilationRootModuleSyntax ) ) ->
+        Just compilationRootModule ->
             let
+                entryPointTypes : List ( String, AppFiles -> Result (List (LocatedInSourceFiles CompilationError)) { compiledFiles : AppFiles, rootModuleEntryPointKind : Result error ElmMakeEntryPointKind } )
                 entryPointTypes =
                     [ ( "backendMain"
                       , loweredForBackendApp config
@@ -398,7 +407,7 @@ loweredForCompilationRoot config sourceFiles =
                     , ( "blobMain"
                       , loweredForBlobEntryPoint
                             { compilationRootFilePath = config.compilationRootFilePath
-                            , compilationRootModuleName = String.split "." compilationRootModuleName
+                            , compilationRootModuleName = compilationRootModule.moduleName
                             }
                             >> Result.map
                                 (\( compiledFiles, entryPoint ) ->
@@ -407,10 +416,23 @@ loweredForCompilationRoot config sourceFiles =
                                     }
                                 )
                       )
+                    , ( "main"
+                      , \compiledFiles ->
+                            Ok
+                                { compiledFiles = compiledFiles
+                                , rootModuleEntryPointKind =
+                                    Ok
+                                        (ClassicMakeEntryPoint
+                                            { elmMakeJavaScriptFunctionName =
+                                                String.join "." (compilationRootModule.moduleName ++ [ "main" ])
+                                            }
+                                        )
+                                }
+                      )
                     ]
 
                 declarationsNames =
-                    compilationRootModuleSyntax.declarations
+                    compilationRootModule.parsedSyntax.declarations
                         |> List.map Elm.Syntax.Node.value
                         |> List.filterMap
                             (\declaration ->
@@ -508,25 +530,21 @@ main =
 loweredForBackendApp :
     { compilationRootFilePath : List String
     , interfaceToHostRootModuleName : List String
-    , originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File )
+    , originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
     }
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
 loweredForBackendApp config sourceFiles =
     let
         interfaceToHostRootFilePath =
-            filePathFromElmModuleName (String.join "." config.interfaceToHostRootModuleName)
+            filePathFromElmModuleName config.interfaceToHostRootModuleName
 
         entryPoint =
             { elmMakeJavaScriptFunctionName =
                 String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
             }
     in
-    case
-        config.originalSourceModules
-            |> Dict.toList
-            |> List.Extra.find (Tuple.second >> Tuple.first >> (==) config.compilationRootFilePath)
-    of
+    case Dict.get config.compilationRootFilePath config.originalSourceModules of
         Nothing ->
             -- App contains no backend.
             Err
@@ -537,13 +555,15 @@ loweredForBackendApp config sourceFiles =
                     (OtherCompilationError "Contains no backend")
                 ]
 
-        Just ( compilationRootModuleName, compilationRootModule ) ->
+        Just compilationRootModule ->
             if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
                 -- Support integrating applications supplying their own lowered version.
                 Ok ( sourceFiles, entryPoint )
 
             else
-                parseAppStateElmTypeAndDependenciesRecursively config.originalSourceModules compilationRootModule
+                parseAppStateElmTypeAndDependenciesRecursively
+                    config.originalSourceModules
+                    ( config.compilationRootFilePath, compilationRootModule.parsedSyntax )
                     |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type name: "))
                     |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
                     |> Result.andThen
@@ -583,12 +603,12 @@ loweredForBackendApp config sourceFiles =
                                             encodeFunction =
                                                 "jsonEncodeDeserializedState =\n"
                                                     ++ indentElmCodeLines 1
-                                                        (generateSerializersResult.generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.encodeFunction.name)
+                                                        (String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.encodeFunction.name ]))
 
                                             decodeFunction =
                                                 "jsonDecodeDeserializedState =\n"
                                                     ++ indentElmCodeLines 1
-                                                        (generateSerializersResult.generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.decodeFunction.name)
+                                                        (String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.decodeFunction.name ]))
 
                                             ( migrateFromStringExpressionFromGenerateModuleName, typeToGenerateSerializersForMigration ) =
                                                 case maybeMigrationConfig of
@@ -603,7 +623,8 @@ loweredForBackendApp config sourceFiles =
                                                                 buildJsonCodingFunctionsForTypeAnnotation migrationConfig.inputType
                                                         in
                                                         ( \generatedModuleName ->
-                                                            [ "Json.Decode.decodeString " ++ (generatedModuleName ++ "." ++ inputTypeFunctionNames.decodeFunction.name)
+                                                            [ "Json.Decode.decodeString "
+                                                                ++ String.join "." (generatedModuleName ++ [ inputTypeFunctionNames.decodeFunction.name ])
                                                             , ">> Result.mapError Json.Decode.errorToString"
                                                             , ">> Result.map " ++ String.join "." (migrationConfig.migrateFunctionModuleName ++ [ migrationConfig.migrateFunctionDeclarationLocalName ])
                                                             ]
@@ -612,7 +633,8 @@ loweredForBackendApp config sourceFiles =
                                                         )
 
                                             stateFromStringExpression =
-                                                [ "Json.Decode.decodeString " ++ (generateSerializersResult.generatedModuleName ++ "." ++ functionsNamesInGeneratedModules.decodeFunction.name)
+                                                [ "Json.Decode.decodeString "
+                                                    ++ String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.decodeFunction.name ])
                                                 , ">> Result.mapError Json.Decode.errorToString"
                                                 ]
                                                     |> String.join "\n"
@@ -620,7 +642,7 @@ loweredForBackendApp config sourceFiles =
                                             rootElmModuleText =
                                                 composeBackendRootElmModuleText
                                                     { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
-                                                    , rootModuleNameBeforeLowering = compilationRootModuleName
+                                                    , rootModuleNameBeforeLowering = String.join "." compilationRootModule.moduleName
                                                     , stateTypeAnnotation = stateTypeAnnotation
                                                     , modulesToImport = modulesToImport
                                                     , stateEncodeFunction = encodeFunction
@@ -640,15 +662,17 @@ loweredForBackendApp config sourceFiles =
 
 
 parseMigrationConfig :
-    { originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File ) }
+    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule }
     -> Result (List (LocatedInSourceFiles CompilationError)) (Maybe MigrationConfig)
 parseMigrationConfig { originalSourceModules } =
-    case Dict.get appStateMigrationInterfaceModuleName originalSourceModules of
+    case findModuleByName appStateMigrationInterfaceModuleName originalSourceModules of
         Nothing ->
             Ok Nothing
 
         Just ( originalInterfaceModuleFilePath, originalInterfaceModule ) ->
-            parseAppStateMigrateElmTypeAndDependenciesRecursively originalSourceModules ( originalInterfaceModuleFilePath, originalInterfaceModule )
+            parseAppStateMigrateElmTypeAndDependenciesRecursively
+                originalSourceModules
+                ( originalInterfaceModuleFilePath, originalInterfaceModule.parsedSyntax )
                 |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse migration state type name: "))
                 |> Result.map
                     (\( ( inputType, returnType ), stateTypeDependencies ) ->
@@ -656,7 +680,7 @@ parseMigrationConfig { originalSourceModules } =
                             { inputType = inputType
                             , returnType = returnType
                             , dependencies = stateTypeDependencies
-                            , migrateFunctionModuleName = String.split "." appStateMigrationInterfaceModuleName
+                            , migrateFunctionModuleName = appStateMigrationInterfaceModuleName
                             , migrateFunctionDeclarationLocalName = appStateMigrationInterfaceFunctionName
                             }
                     )
@@ -664,7 +688,7 @@ parseMigrationConfig { originalSourceModules } =
 
 
 parseAppStateElmTypeAndDependenciesRecursively :
-    Dict.Dict String ( List String, Elm.Syntax.File.File )
+    Dict.Dict (List String) SourceParsedElmModule
     -> ( List String, Elm.Syntax.File.File )
     -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
@@ -685,7 +709,7 @@ parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFileP
 
 
 parseAppStateMigrateElmTypeAndDependenciesRecursively :
-    Dict.Dict String ( List String, Elm.Syntax.File.File )
+    Dict.Dict (List String) SourceParsedElmModule
     -> ( List String, Elm.Syntax.File.File )
     -> Result (LocatedInSourceFiles String) ( ( ElmTypeAnnotation, ElmTypeAnnotation ), Dict.Dict String ElmChoiceTypeStruct )
 parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
@@ -1628,7 +1652,7 @@ functionNameFlagsSeparator =
 
 
 mapJsonCodersModuleText :
-    { originalSourceModules : Dict.Dict String ( List String, Elm.Syntax.File.File ) }
+    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule }
     -> ( AppFiles, List String, String )
     -> Result (LocatedInSourceFiles String) ( AppFiles, String )
 mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleFilePath, moduleText ) =
@@ -1724,14 +1748,15 @@ mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleFilePath,
                                             newFunction =
                                                 functionName
                                                     ++ " =\n    "
-                                                    ++ generatedModuleName
-                                                    ++ "."
-                                                    ++ (if functionToReplace.functionType.isDecoder then
-                                                            functionsNamesInGeneratedModules.decodeFunction.name
+                                                    ++ String.join "."
+                                                        (generatedModuleName
+                                                            ++ [ if functionToReplace.functionType.isDecoder then
+                                                                    functionsNamesInGeneratedModules.decodeFunction.name
 
-                                                        else
-                                                            functionsNamesInGeneratedModules.encodeFunction.name
-                                                       )
+                                                                 else
+                                                                    functionsNamesInGeneratedModules.encodeFunction.name
+                                                               ]
+                                                        )
 
                                             mapFunctionDeclarationLines originalFunctionTextLines =
                                                 [ originalFunctionTextLines |> List.take 1
@@ -1763,7 +1788,7 @@ mapAppFilesToSupportJsonCoding :
     -> List ElmTypeAnnotation
     -> Dict.Dict String ElmChoiceTypeStruct
     -> AppFiles
-    -> ( AppFiles, { generatedModuleName : String, modulesToImport : List (List String) } )
+    -> ( AppFiles, { generatedModuleName : List String, modulesToImport : List (List String) } )
 mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
     let
         modulesToImportForChoiceTypes =
@@ -1845,15 +1870,13 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
                 |> SHA256.toHex
 
         generatedModuleName =
-            (generatedModuleNamePrefix |> String.join ".")
-                ++ ".Generated_"
-                ++ String.left 8 generatedModuleHash
+            generatedModuleNamePrefix ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
 
         generatedModulePath =
             filePathFromElmModuleName generatedModuleName
 
         generatedModuleText =
-            [ "module " ++ generatedModuleName ++ " exposing (..)"
+            [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
             , generatedModuleTextWithoutModuleDeclaration
             ]
                 |> String.join "\n\n"
@@ -1866,7 +1889,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
     in
     ( appFiles
     , { generatedModuleName = generatedModuleName
-      , modulesToImport = String.split "." generatedModuleName :: modulesToImport
+      , modulesToImport = generatedModuleName :: modulesToImport
       }
     )
 
@@ -1991,15 +2014,13 @@ type FileTreeNode blobStructure
                                         |> SHA256.toHex
 
                                 generatedModuleName =
-                                    (interfaceModuleName |> String.join ".")
-                                        ++ ".Generated_"
-                                        ++ String.left 8 generatedModuleHash
+                                    interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
 
                                 generatedModulePath =
                                     filePathFromElmModuleName generatedModuleName
 
                                 generatedModuleText =
-                                    [ "module " ++ generatedModuleName ++ " exposing (..)"
+                                    [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
                                     , generatedModuleTextWithoutModuleDeclaration
                                     ]
                                         |> String.join "\n\n"
@@ -2050,7 +2071,7 @@ type FileTreeNode blobStructure
                                     )
                                     (addImportsInElmModuleText
                                         [ encodingModuleImportBytes
-                                        , ( String.split "." generatedModuleName, Nothing )
+                                        , ( generatedModuleName, Nothing )
                                         ]
                                         moduleText
                                         |> Result.andThen addMappingFunctionIfTypeIsPresent
@@ -2110,15 +2131,13 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
                                         |> SHA256.toHex
 
                                 generatedModuleName =
-                                    (interfaceModuleName |> String.join ".")
-                                        ++ ".Generated_"
-                                        ++ String.left 8 generatedModuleHash
+                                    interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
 
                                 generatedModulePath =
                                     filePathFromElmModuleName generatedModuleName
 
                                 generatedModuleText =
-                                    [ "module " ++ generatedModuleName ++ " exposing (..)"
+                                    [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
                                     , generatedModuleTextWithoutModuleDeclaration
                                     ]
                                         |> String.join "\n\n"
@@ -2137,7 +2156,7 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
                                     )
                                     (addImportsInElmModuleText
                                         [ encodingModuleImportBytes
-                                        , ( String.split "." generatedModuleName, Nothing )
+                                        , ( generatedModuleName, Nothing )
                                         ]
                                         moduleText
                                         |> Result.mapError (Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteString moduleText))
@@ -2160,7 +2179,7 @@ exposeAllInElmModuleInAppFiles : List String -> AppFiles -> AppFiles
 exposeAllInElmModuleInAppFiles moduleName appFiles =
     let
         moduleFilePath =
-            filePathFromElmModuleName (String.join "." moduleName)
+            filePathFromElmModuleName moduleName
     in
     case
         appFiles
@@ -2262,13 +2281,13 @@ type LeafElmTypeStruct
 
 
 parseElmTypeAndDependenciesRecursivelyFromAnnotation :
-    Dict.Dict String ( List String, Elm.Syntax.File.File )
+    Dict.Dict (List String) SourceParsedElmModule
     -> ( ( List String, Elm.Syntax.File.File ), Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
     -> Result (LocatedInSourceFiles String) ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseElmTypeAndDependenciesRecursivelyFromAnnotation modules ( ( currentModuleFilePath, currentModule ), typeAnnotationNode ) =
     parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
         { typesToIgnore = Set.empty }
-        (Dict.map (always Tuple.second) modules)
+        modules
         ( currentModule, Elm.Syntax.Node.value typeAnnotationNode )
         |> Result.mapError
             (LocatedInSourceFiles
@@ -2278,7 +2297,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotation modules ( ( currentModuleFi
 
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal :
     { typesToIgnore : Set.Set String }
-    -> Dict.Dict String Elm.Syntax.File.File
+    -> Dict.Dict (List String) SourceParsedElmModule
     -> ( Elm.Syntax.File.File, Elm.Syntax.TypeAnnotation.TypeAnnotation )
     -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( currentModule, typeAnnotation ) =
@@ -2340,7 +2359,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
 
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped :
     { typesToIgnore : Set.Set String }
-    -> Dict.Dict String Elm.Syntax.File.File
+    -> Dict.Dict (List String) SourceParsedElmModule
     -> ( Elm.Syntax.File.File, ( Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ), List (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) ) )
     -> Result String ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules ( currentModule, ( instantiatedNode, argumentsNodes ) ) =
@@ -2396,7 +2415,9 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                             )
                                                     in
                                                     if containsMatchingExposition then
-                                                        modules |> Dict.get (Elm.Syntax.Node.value moduleImport.moduleName |> String.join ".")
+                                                        modules
+                                                            |> findModuleByName (Elm.Syntax.Node.value moduleImport.moduleName)
+                                                            |> Maybe.map (Tuple.second >> .parsedSyntax)
 
                                                     else
                                                         Nothing
@@ -2418,7 +2439,9 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                     |> List.head
                                     |> Maybe.andThen
                                         (\matchingImport ->
-                                            modules |> Dict.get (String.join "." (Elm.Syntax.Node.value matchingImport.moduleName))
+                                            modules
+                                                |> findModuleByName (Elm.Syntax.Node.value matchingImport.moduleName)
+                                                |> Maybe.map (Tuple.second >> .parsedSyntax)
                                         )
                     in
                     case maybeInstantiatedModule of
@@ -2604,6 +2627,68 @@ tryConcretizeRecordInstance typeArguments recordType =
 
                         Just typeArgument ->
                             Ok typeArgument
+
+                InstanceElmType instanceElmType ->
+                    instanceElmType.instantiated
+                        |> tryConcretizeFieldType
+                        |> Result.mapError ((++) "Failed to concretize instantiated: ")
+                        |> Result.andThen
+                            (\concreteInstantiated ->
+                                instanceElmType.arguments
+                                    |> List.indexedMap
+                                        (\argIndex ->
+                                            tryConcretizeFieldType
+                                                >> Result.mapError
+                                                    ((++)
+                                                        ("Failed to concretize instance argument "
+                                                            ++ String.fromInt argIndex
+                                                            ++ ": "
+                                                        )
+                                                    )
+                                        )
+                                    |> Result.Extra.combine
+                                    |> Result.map
+                                        (\concreteArguments ->
+                                            InstanceElmType
+                                                { instantiated = concreteInstantiated
+                                                , arguments = concreteArguments
+                                                }
+                                        )
+                            )
+
+                TupleElmType tupleElmType ->
+                    tupleElmType
+                        |> List.indexedMap
+                            (\argIndex ->
+                                tryConcretizeFieldType
+                                    >> Result.mapError
+                                        ((++)
+                                            ("Failed to concretize tuple element "
+                                                ++ String.fromInt argIndex
+                                                ++ ": "
+                                            )
+                                        )
+                            )
+                        |> Result.Extra.combine
+                        |> Result.map TupleElmType
+
+                RecordElmType recordElmType ->
+                    recordElmType.fields
+                        |> List.map
+                            (\( fieldName, innerFieldType ) ->
+                                innerFieldType
+                                    |> tryConcretizeFieldType
+                                    |> Result.mapError
+                                        ((++)
+                                            ("Failed to concretize field "
+                                                ++ fieldName
+                                                ++ ": "
+                                            )
+                                        )
+                                    |> Result.map (Tuple.pair fieldName)
+                            )
+                        |> Result.Extra.combine
+                        |> Result.map (\fields -> RecordElmType { fields = fields })
 
                 _ ->
                     Ok fieldType
@@ -3419,7 +3504,12 @@ jsonDecodeFunctionNamePrefix =
     "jsonDecode_"
 
 
-elmModulesDictFromAppFiles : AppFiles -> Dict.Dict String ( List String, ( String, Elm.Syntax.File.File ) )
+findModuleByName : List String -> Dict.Dict (List String) SourceParsedElmModule -> Maybe ( List String, SourceParsedElmModule )
+findModuleByName moduleName =
+    Dict.toList >> List.filter (Tuple.second >> .moduleName >> (==) moduleName) >> List.head
+
+
+elmModulesDictFromAppFiles : AppFiles -> Dict.Dict (List String) SourceParsedElmModule
 elmModulesDictFromAppFiles =
     Dict.toList
         >> List.filter
@@ -3440,10 +3530,11 @@ elmModulesDictFromAppFiles =
 
                                 Ok elmFile ->
                                     Just
-                                        ( String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition))
-                                        , ( filePath
-                                          , ( fileContentAsString, elmFile )
-                                          )
+                                        ( filePath
+                                        , { fileText = fileContentAsString
+                                          , parsedSyntax = elmFile
+                                          , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition)
+                                          }
                                         )
                         )
             )
@@ -3505,7 +3596,7 @@ prepareReplaceFunctionInSourceFilesModuleText :
     AppFiles
     -> ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
-    -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result String String }
+    -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : List String } -> String -> Result String String }
 prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule originalFunctionDeclaration =
     let
         functionName =
@@ -3617,10 +3708,10 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule original
                                                             case config.variant of
                                                                 SourceFile ->
                                                                     fileEncodingTreeExpression
-                                                                        (generatedModuleName ++ "." ++ valueFunctionName)
+                                                                        (String.join "." generatedModuleName ++ "." ++ valueFunctionName)
 
                                                                 SourceFileTree ->
-                                                                    [ generatedModuleName ++ "." ++ valueFunctionName
+                                                                    [ String.join "." generatedModuleName ++ "." ++ valueFunctionName
                                                                     , sourceFilesInterfaceModuleAddedFunctionMapNode.functionName
                                                                     , sourceFilesInterfaceModuleAddedFunctionMapBlobs.functionName
                                                                         ++ """(\\blobValue -> """
@@ -3643,30 +3734,36 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule original
                             )
 
 
-sourceFilesInterfaceModuleAddedFunctions : List { functionName : String, mapFunctionLines : { generatedModuleName : String } -> Maybe (List String) -> List String }
+sourceFilesInterfaceModuleAddedFunctions : List { functionName : String, mapFunctionLines : { generatedModuleName : List String } -> Maybe (List String) -> List String }
 sourceFilesInterfaceModuleAddedFunctions =
     [ sourceFilesInterfaceModuleAddedFunctionMapNode
     , sourceFilesInterfaceModuleAddedFunctionMapBlobs
     ]
 
 
-sourceFilesInterfaceModuleAddedFunctionMapNode : { functionName : String, mapFunctionLines : { generatedModuleName : String } -> Maybe (List String) -> List String }
+sourceFilesInterfaceModuleAddedFunctionMapNode :
+    { functionName : String
+    , mapFunctionLines : { generatedModuleName : List String } -> Maybe (List String) -> List String
+    }
 sourceFilesInterfaceModuleAddedFunctionMapNode =
     { functionName = "mapFileTreeNodeFromGenerated"
     , mapFunctionLines = \{ generatedModuleName } -> always (String.split "\n" ("""
-mapFileTreeNodeFromGenerated : """ ++ generatedModuleName ++ """.FileTreeNode a -> FileTreeNode a
+mapFileTreeNodeFromGenerated : """ ++ String.join "." generatedModuleName ++ """.FileTreeNode a -> FileTreeNode a
 mapFileTreeNodeFromGenerated node =
     case node of
-        """ ++ generatedModuleName ++ """.BlobNode blob ->
+        """ ++ String.join "." generatedModuleName ++ """.BlobNode blob ->
             BlobNode blob
 
-        """ ++ generatedModuleName ++ """.TreeNode tree ->
+        """ ++ String.join "." generatedModuleName ++ """.TreeNode tree ->
             tree |> List.map (Tuple.mapSecond mapFileTreeNodeFromGenerated) |> TreeNode
 """))
     }
 
 
-sourceFilesInterfaceModuleAddedFunctionMapBlobs : { functionName : String, mapFunctionLines : { generatedModuleName : String } -> Maybe (List String) -> List String }
+sourceFilesInterfaceModuleAddedFunctionMapBlobs :
+    { functionName : String
+    , mapFunctionLines : { generatedModuleName : List String } -> Maybe (List String) -> List String
+    }
 sourceFilesInterfaceModuleAddedFunctionMapBlobs =
     { functionName = "mapBlobs"
     , mapFunctionLines = always (always (String.split "\n" """
@@ -3691,7 +3788,7 @@ prepareReplaceFunctionInElmMakeModuleText :
         Result
             (List CompilationError)
             { valueFunctionsTexts : List String
-            , updateInterfaceModuleText : { generatedModuleName : String } -> String -> Result String String
+            , updateInterfaceModuleText : { generatedModuleName : List String } -> String -> Result String String
             }
 prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule originalFunctionDeclaration =
     let
@@ -3759,7 +3856,7 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule
                                                 (\leaf ->
                                                     interfaceModuleRecordExpression
                                                         leaf.emitBlob.interfaceModule
-                                                        { sourceExpression = generatedModuleName ++ "." ++ leaf.valueFunctionName }
+                                                        { sourceExpression = String.join "." generatedModuleName ++ "." ++ leaf.valueFunctionName }
                                                 )
                                                 mappedTree
 
@@ -4265,7 +4362,7 @@ mapElmModuleWithNameIfExists : ({ filePath : List String } -> String -> err) -> 
 mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCode =
     let
         elmModuleFilePath =
-            filePathFromElmModuleName elmModuleName
+            filePathFromElmModuleName (String.split "." elmModuleName)
     in
     case Dict.get elmModuleFilePath appCode of
         Nothing ->
@@ -4819,9 +4916,9 @@ filePathRepresentationInFunctionName =
         >> String.fromList
 
 
-filePathFromElmModuleName : String -> List String
+filePathFromElmModuleName : List String -> List String
 filePathFromElmModuleName elmModuleName =
-    case elmModuleName |> String.split "." |> List.reverse of
+    case elmModuleName |> List.reverse of
         [] ->
             []
 
