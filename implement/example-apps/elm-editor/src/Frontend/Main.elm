@@ -1510,6 +1510,7 @@ prepareCompileForFileOpenedInEditor workspace =
 
                         loweredElmAppFromDependencies dependencies =
                             CompileFullstackApp.asCompletelyLoweredElmApp
+                                CompileFullstackApp.defaultEntryPoints
                                 { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
                                 , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
                                 , dependencies = dependencies

@@ -2,7 +2,8 @@ module Main exposing (..)
 
 import Base64
 import Bytes
-import CompileFullstackApp exposing (CompilationArguments)
+import CompileBackendApp
+import CompileFullstackApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointType)
 import Dict
 import Elm.Syntax.Range
 import Json.Decode
@@ -18,9 +19,28 @@ lowerSerialized : String -> String
 lowerSerialized argumentsJson =
     Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson
         |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
-        |> Result.map CompileFullstackApp.asCompletelyLoweredElmApp
+        |> Result.map (CompileFullstackApp.asCompletelyLoweredElmApp defaultEntryPoints)
         |> jsonEncodeLowerForSourceFilesResponse
         |> Json.Encode.encode 0
+
+
+defaultEntryPoints : Dict.Dict String EntryPointType
+defaultEntryPoints =
+    CompileFullstackApp.defaultEntryPoints
+        |> Dict.union
+            (Dict.fromList
+                [ ( "backendMain"
+                  , \entryPointConfig ->
+                        CompileBackendApp.loweredForBackendApp entryPointConfig
+                            >> Result.map
+                                (\( compiledFiles, entryPoint ) ->
+                                    { compiledFiles = compiledFiles
+                                    , rootModuleEntryPointKind = ClassicMakeEntryPoint entryPoint
+                                    }
+                                )
+                  )
+                ]
+            )
 
 
 jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value

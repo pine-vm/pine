@@ -1,6 +1,7 @@
 module Tests exposing (..)
 
 import Bytes.Encode
+import CompileBackendApp
 import CompileFullstackApp
 import Dict
 import Elm.Syntax.Declaration
@@ -68,8 +69,8 @@ dependencies_encoding_roundtrip =
         |> Test.describe "Dependency key encoding roundtrip"
 
 
-state_type_name_from_root_elm_module : Test.Test
-state_type_name_from_root_elm_module =
+backend_state_type_name_from_root_elm_module : Test.Test
+backend_state_type_name_from_root_elm_module =
     [ ( "Without module name qualifier"
       , """module Backend.Main exposing
     ( State
@@ -131,7 +132,7 @@ subscriptions _ =
                                                 |> Dict.fromList
                                                 |> CompileFullstackApp.elmModulesDictFromAppFiles
                                     in
-                                    CompileFullstackApp.parseAppStateElmTypeAndDependenciesRecursively
+                                    CompileBackendApp.parseAppStateElmTypeAndDependenciesRecursively
                                         sourceModules
                                         ( moduleFilePath, parsedModule )
                                         |> Expect.equal expectedResult
