@@ -1513,7 +1513,7 @@ prepareCompileForFileOpenedInEditor workspace =
                                 { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
                                 , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
                                 , dependencies = dependencies
-                                , compilationRootFilePath = []
+                                , compilationRootFilePath = entryPointFilePath
                                 , interfaceToHostRootModuleName = []
                                 }
                                 {-
