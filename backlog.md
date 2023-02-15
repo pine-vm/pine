@@ -11,7 +11,7 @@ An idea that came up during a session introducing the basics of programming. We 
 + Support application to configure tradeoff between the cost of persisting and cost of restoring.
 + Reduce load on storage: Provide automation to remove reductions which are not needed anymore from the store.
 
-### Collaboration on Elm-Fullstack
+### Collaboration on Elm-Time
 
 + Simplify modeling of tests: Support modeling Elm app using a string for the main (and only) module contents, using the default `elm.json`.
 

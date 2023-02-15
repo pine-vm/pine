@@ -10,18 +10,18 @@ The `rich-chat-room` example implements a full-featured chat room.
 
 ## Running and Hacking on the Rich Chat Room App
 
-You can find the source code for this example at [https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room)
+You can find the source code for this example at [https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room](https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room)
 
 To run the app with the default source code, use the `run-server` command as follows:
 
 ```cmd
-elm-fs  run-server  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room
+elm-time  run-server  --deploy=https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room
 ```
 
 If you have copied (and modified) the code on your local file system, you can run the app with this command:
 
 ```cmd
-elm-fs  run-server  --deploy=.
+elm-time  run-server  --deploy=.
 ```
 
 ## Fast Distribution of Messages in the Chat Room Using Long-Polling

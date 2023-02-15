@@ -1,16 +1,16 @@
 # Build dotnet build image
-FROM mcr.microsoft.com/dotnet/sdk:7.0.200 AS build-env
+FROM mcr.microsoft.com/dotnet/sdk:7.0.103 AS build-env
 WORKDIR /app
 
 # Copy everything and build
 COPY . ./
-WORKDIR /app/elm-fullstack
+WORKDIR /app/elm-time
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:7.0.3 AS binaries
 
-COPY --from=build-env /app/elm-fullstack/out /elm-fullstack/dotnet/
+COPY --from=build-env /app/elm-time/out /elm-time/dotnet/
 
 # Build the process with a deployment for the default app.
 FROM binaries AS build-default-config
@@ -22,10 +22,10 @@ RUN apt install -y git
 
 COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
-RUN dotnet "/elm-fullstack/dotnet/elm-fs.dll"  deploy  /docker-image-default-app/  /elm-fullstack/process-store  --init-app-state
+RUN dotnet "/elm-time/dotnet/elm-time.dll"  deploy  /docker-image-default-app/  /elm-time/process-store  --init-app-state
 
-WORKDIR /elm-fullstack
+WORKDIR /elm-time
 
-ENTRYPOINT ["dotnet", "/elm-fullstack/dotnet/elm-fs.dll", "run-server", "--process-store=/elm-fullstack/process-store"]
+ENTRYPOINT ["dotnet", "/elm-time/dotnet/elm-time.dll", "run-server", "--process-store=/elm-time/process-store"]
 
 # ENV APPSETTING_adminPassword="password-for-admin-interface"

@@ -21,15 +21,15 @@ steps:
   inputs:
     command: restore
     projects: |
-      **/elm-fullstack.csproj
-      **/test-elm-fullstack.csproj
+      **/elm-time.csproj
+      **/test-elm-time.csproj
 
 - task: DotNetCoreCLI@2
   displayName: 'test'
   inputs:
     command: test
     projects: |
-      **/test-elm-fullstack.csproj
+      **/test-elm-time.csproj
     arguments:  --logger trx
     publishTestResults: false
 
@@ -39,5 +39,5 @@ steps:
     testRunner: VSTest
     testResultsFiles: '**/*.trx'
 
-- script: dotnet publish ./implement/elm-fullstack/elm-fullstack.csproj
+- script: dotnet publish ./implement/elm-time/elm-time.csproj
   displayName: 'publish web host'

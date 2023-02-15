@@ -31,25 +31,25 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
-      run: dotnet clean ./implement/test-elm-fullstack/test-elm-fullstack.csproj && dotnet nuget locals all --clear
+      run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
 
     - name: Run tests with dotnet test
-      run: dotnet test ./implement/test-elm-fullstack/test-elm-fullstack.csproj --logger trx
+      run: dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger trx
     - name: dotnet publish
       env:
         PUBLISH_RUNTIME_ID: ${{ matrix.publish-runtime-id }}
-      run: dotnet publish -c Debug -r ${{ env.PUBLISH_RUNTIME_ID }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./publish  ./implement/elm-fullstack
+      run: dotnet publish -c Debug -r ${{ env.PUBLISH_RUNTIME_ID }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./publish  ./implement/elm-time
     - name: Publish artifacts
       uses: actions/upload-artifact@v1
       with:
-        name: elm-fullstack-bin-${{github.sha}}-${{ matrix.publish-runtime-id }}
+        name: elm-time-bin-${{github.sha}}-${{ matrix.publish-runtime-id }}
         path: ./publish
     - name: dotnet publish with separate assemblies
-      run: dotnet publish -c Debug ./implement/elm-fullstack --output ./publish-separate-assemblies
+      run: dotnet publish -c Debug ./implement/elm-time --output ./publish-separate-assemblies
     - name: Publish artifacts with separate assemblies
       uses: actions/upload-artifact@v1
       with:
-        name: elm-fullstack-separate-assemblies-${{github.sha}}-${{ matrix.publish-runtime-id }}
+        name: elm-time-separate-assemblies-${{github.sha}}-${{ matrix.publish-runtime-id }}
         path: ./publish-separate-assemblies
-    - name: Elm App Compiler - Run tests with elm-fs elm-test-rs
-      run: ./publish/elm-fs  elm-test-rs  ./implement/elm-fullstack/ElmFullstack/compile-elm-program
+    - name: Elm App Compiler - Run tests with elm-time elm-test-rs
+      run: ./publish/elm-time  elm-test-rs  ./implement/elm-time/ElmTime/compile-elm-program

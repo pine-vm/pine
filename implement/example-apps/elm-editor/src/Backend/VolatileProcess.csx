@@ -9,7 +9,7 @@
 #r "System.Runtime.InteropServices.RuntimeInformation"
 #r "System.Text.Json"
 
-#r "elm-fs"
+#r "elm-time"
 
 using Pine;
 using System;

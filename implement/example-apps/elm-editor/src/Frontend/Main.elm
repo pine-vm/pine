@@ -2660,8 +2660,8 @@ activityBar =
             8
 
         bottomActionItems =
-            [ { icon = Visuals.ChatActionIcon, linkUrl = Just "https://github.com/elm-fullstack/elm-fullstack/discussions" }
-            , { icon = Visuals.GitHubActionIcon, linkUrl = Just "https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor" }
+            [ { icon = Visuals.ChatActionIcon, linkUrl = Just "https://github.com/elm-time/elm-time/discussions" }
+            , { icon = Visuals.GitHubActionIcon, linkUrl = Just "https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor" }
             ]
 
         actionItemWrapper { icon, linkUrl } =

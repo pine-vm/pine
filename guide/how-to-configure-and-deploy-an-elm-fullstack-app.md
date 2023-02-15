@@ -1,30 +1,30 @@
 # How to Configure and Deploy an Elm Fullstack App
 
-## Installing and Registering the `elm-fs` Command
+## Installing and Registering the `elm-time` Command
 
-In this guide, I use the `elm-fs` command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-fullstack/elm-fullstack/releases
+In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-time/elm-time/releases
 
-Here are direct links to the downloads, containing the `elm-fs` executable file in a zip-archive:
+Here are direct links to the downloads, containing the `elm-time` executable file in a zip-archive:
 
-+ Windows: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64.zip
-+ Linux: https://github.com/elm-fullstack/elm-fullstack/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-linux-x64.zip
++ Windows: https://github.com/elm-time/elm-time/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64.zip
++ Linux: https://github.com/elm-time/elm-time/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-linux-x64.zip
 
-To register the elm-fs executable on your system, run the `elm-fs  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
+To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
 ```text
-./elm-fs  install
+./elm-time  install
 ```
 
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-fs' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
 
 ```text
-I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-fs' command in newer terminal instances.
+I copied the executable file to '/bin/elm-time'. You will be able to use the 'elm-time' command in newer terminal instances.
 ```
 
 ## Running a Server and Deploying an App
@@ -32,12 +32,12 @@ I copied the executable file to '/bin/elm-fs'. You will be able to use the 'elm-
 As part of a deployment, Elm Fullstack compiles the app program code.
 The compiler requires the program code to contain the entry point for a back-end app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-fullstack/elm-fullstack/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-time/elm-time/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -47,22 +47,22 @@ I got no path to a persistent store for the process. This process will not be pe
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
 This path points to commit 8ce169c776160db7a035a8d3a7845341af11f871
-The first parent commit with same tree is https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
-Loaded source composition fe9b6872328a845ef50c7953bf969e9df773b8fd4b6abe24ba032f72501d021f from 'https://github.com/elm-fullstack/elm-fullstack/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app'.
+The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
+Loaded source composition fe9b6872328a845ef50c7953bf969e9df773b8fd4b6abe24ba032f72501d021f from 'https://github.com/elm-time/elm-time/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Begin to build the process live representation.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Begin to restore the process state.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Restored the process state in 4 seconds.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Completed building the process live representation.
-info: ElmFullstack.WebHost.StartupPublicApp[0]
+info: ElmTime.WebHost.StartupPublicApp[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
@@ -71,7 +71,7 @@ When this server has completed starting, we can see the deployed app at http://l
 
 ## App Code Structure Conventions
 
-This section covers the conventions for structuring the app code so that we can deploy it to an Elm Fullstack process. The [example apps](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
+This section covers the conventions for structuring the app code so that we can deploy it to an Elm Fullstack process. The [example apps](https://github.com/elm-time/elm-time/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
 
 ### `Backend.Main` Elm Module
 
@@ -147,7 +147,7 @@ The tree we modeled with this record type has two leaves:
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-fullstack/elm-fullstack/blob/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-time/elm-time/blob/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -193,7 +193,7 @@ The `SourceFiles` module provides access to the app source code files.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [app 'Elm Editor' uses this interface](https://github.com/elm-fullstack/elm-fullstack/blob/94c2551500ab48cc5c0743adf8dac0c386604203/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
+The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/94c2551500ab48cc5c0743adf8dac0c386604203/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
@@ -256,7 +256,7 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-fullstack/elm-fullstack/blob/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-time/elm-time/blob/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
 
 ### `elm-fullstack.json`
 
@@ -273,20 +273,20 @@ On startup, the server restores the state of the process from the given store lo
 Here is a complete command to run a server that maintains the persistence of the Elm Fullstack process:
 
 ```cmd
-elm-fs  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
+elm-time  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
 When running this command, you will get an output like this:
 
 ```text
 Starting the web server with the admin interface...
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Begin to build the process live representation.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Begin to restore the process state.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Found no composition record, default to initial state.
-info: ElmFullstack.WebHost.StartupAdminInterface[0]
+info: ElmTime.WebHost.StartupAdminInterface[0]
       Completed building the process live representation.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
@@ -304,20 +304,20 @@ When you navigate to http://localhost:4000/ using a web browser, you find a prom
 When you log in at http://localhost:4000/, you will get this message:
 
 ```
-Welcome to the Elm Fullstack admin interface version 2022-10-17.
+Welcome to the Elm-Time admin interface version 2022-10-17.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
 
 ## Deploy an App to an Existing Server
 
-Use the `elm-fs  deploy` command to deploy an app to a running server in an atomic operation.
+Use the `elm-time  deploy` command to deploy an app to a running server in an atomic operation.
 
 With this command, we need to specify the path to the app to deploy and the destination site to deploy to.
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-fs  deploy  --init-app-state  https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
@@ -331,7 +331,7 @@ The server at 'http://localhost:4000/api/deploy-and-init-app-state' is asking fo
 
 We enter the same password we gave with the `--admin-password` option on the command to run the server.
 
-The `elm-fs  deploy` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
+The `elm-time  deploy` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
 ```text
 Saved report to file 'C:\Users\John\elm-fullstack-tool\report\2021-08-20T06-36-09_deploy.json'.
 ```

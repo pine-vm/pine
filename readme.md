@@ -1,8 +1,8 @@
-# Elm Full-Stack
+# Elm-Time
 
-Elm Fullstack is a tool for developing web services and full-stack web applications. It leverages the [Elm programming language](https://elm-lang.org) and its ecosystem of libraries. As it evolves, Elm Fullstack automates more and more activities in software development that humans had performed in the past.
+Elm-Time is an open-source, cross-platform runtime environment for the Elm programming language.
 
-Elm Fullstack currently offers:
+Elm-Time currently offers:
 
 + Persisting and restoring the state of backend Elm apps.
 + Migrating the backend state when deploying a new program version: [Design Report - Migrations in Elm Fullstack Deployments](https://michaelrätzel.com/blog/design-report-migrations-in-elm-fullstack-deployments)
@@ -15,16 +15,16 @@ Elm Fullstack currently offers:
 Use this command to run a server and deploy an example app:
 
 ```cmd
-elm-fs  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-fullstack/elm-fullstack/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
 ```
 
 For a guide on installation and configuration options, see [How to Configure and Deploy an Elm Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
 
 ## Releases / Artifacts
 
-### elm-fs Executable File
+### elm-time Executable File
 
-The `elm-fs` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-fullstack/elm-fullstack/releases) on GitHub.
+The `elm-time` executable file contains all the functionality to build apps and operate backend processes. You can download the files from the [releases section](https://github.com/elm-time/elm-time/releases) on GitHub.
 
 ### Docker Image
 
@@ -46,19 +46,19 @@ As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), 
 
 ### Rich Chat Room
 
-The [rich chat room example app](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
-For a detailed description of this app, see the readme file at https://github.com/elm-fullstack/elm-fullstack/blob/main/implement/example-apps/rich-chat-room/readme.md
+The [rich chat room example app](https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
+For a detailed description of this app, see the readme file at https://github.com/elm-time/elm-time/blob/main/implement/example-apps/rich-chat-room/readme.md
 
 ### Elm Editor
 
-[Elm Editor](https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor) is a web app for developing Elm programs.
+[Elm Editor](https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor) is a web app for developing Elm programs.
 
 As an integrated development environment, it assists us in reading, writing, and testing Elm programs and in collaborating with other developers.
 
-<a href="https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/readme.md">
+<a href="https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor/readme.md">
 <img src="./guide/image/2021-03-17-elm-editor-user-interface.png" width="500" />
 </a>
 
 To see Elm Editor in action, check out the public instance at https://elm-editor.com
 
-To learn more about Elm Editor, see https://github.com/elm-fullstack/elm-fullstack/tree/main/implement/example-apps/elm-editor/readme.md
+To learn more about Elm Editor, see https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor/readme.md
