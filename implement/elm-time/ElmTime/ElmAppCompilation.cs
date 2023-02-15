@@ -28,7 +28,7 @@ namespace ElmTime
 
         public const string DeserializeStateFunctionName = "interfaceToHost_deserializeState";
 
-        static public IImmutableList<string> CompilationInterfaceModuleNamePrefixes => ImmutableList.Create("ElmFullstackCompilerInterface", "CompilationInterface");
+        static public IImmutableList<string> CompilationInterfaceModuleNamePrefixes => ImmutableList.Create("CompilationInterface");
     }
 
     public class ElmAppCompilation
