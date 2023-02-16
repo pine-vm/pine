@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Pine;
 
-namespace ElmTime.WebHost;
+namespace ElmTime.Platform.WebServer;
 
 static public class Asp
 {

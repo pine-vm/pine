@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
-using ElmTime.WebHost.ProcessStoreSupportingMigrations;
+using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -15,7 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pine;
 
-namespace ElmTime.WebHost;
+namespace ElmTime.Platform.WebServer;
 
 public class StartupAdminInterface
 {
@@ -39,9 +39,17 @@ public class StartupAdminInterface
 
     static public string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
-    static public string JsonFileName => "elm-fullstack.json";
+    static public IImmutableList<string> JsonFilePathDefault => ImmutableList.Create("elm-web-server.json");
 
-    static public IImmutableList<string> JsonFilePath => ImmutableList.Create(JsonFileName);
+    static public IImmutableList<IImmutableList<string>> JsonFilePathAlternatives =
+        ImmutableList.Create(
+            JsonFilePathDefault,
+
+            /*
+             * Support smooth migration of projects with backwards compatibility here:
+             * Support the name used before 2023 as alternative.
+             * */
+            ImmutableList.Create("elm-fullstack.json"));
 
     private readonly ILogger<StartupAdminInterface> logger;
 
@@ -64,7 +72,7 @@ public class StartupAdminInterface
     }
 
     record PublicHostConfiguration(
-        PersistentProcess.PersistentProcessLiveRepresentation processLiveRepresentation,
+        PersistentProcessLiveRepresentation processLiveRepresentation,
         IHost webHost);
 
     public void Configure(
@@ -122,7 +130,7 @@ public class StartupAdminInterface
                 logger.LogInformation("Begin to build the process live representation.");
 
                 var restoreProcessResult =
-                    PersistentProcess.PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
+                    PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                         new ProcessStoreReaderInFileStore(processStoreFileStore),
                         logger: logEntry => logger.LogInformation(logEntry));
 
@@ -169,7 +177,7 @@ public class StartupAdminInterface
                 }
 
                 IHost buildWebHost(
-                    PersistentProcess.ProcessAppConfig processAppConfig,
+                    ProcessAppConfig processAppConfig,
                     IReadOnlyList<string> publicWebHostUrls)
                 {
                     var appConfigTree =
@@ -181,7 +189,7 @@ public class StartupAdminInterface
 
                     var webAppConfigurationFile =
                         appConfigFilesNamesAndContents
-                        .Where(filePathAndContent => filePathAndContent.path.SequenceEqual(JsonFilePath))
+                        .Where(filePathAndContent => JsonFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
                         .Select(filePathAndContent => filePathAndContent.blobContent)
                         .Cast<ReadOnlyMemory<byte>?>()
                         .FirstOrDefault();
@@ -611,7 +619,7 @@ public class StartupAdminInterface
                         var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                         var filesForRestore =
-                            PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
+                            PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
                                 processStoreFileStore).files
                             .Select(filePathAndContent => filePathAndContent.Key)
                             .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
@@ -846,7 +854,7 @@ public class StartupAdminInterface
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var testContinueResult = PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
+        var testContinueResult = PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
             compositionLogEvent: compositionLogEvent,
             fileStoreReader: processStoreFileStore,
             logger: testContinueLogger);
@@ -890,7 +898,7 @@ public class StartupAdminInterface
 public record AttemptContinueWithCompositionEventReport(
     string beginTime,
     CompositionLogRecordInFile.CompositionEvent compositionEvent,
-    PersistentProcess.StoreProvisionalReductionReport? storeReductionReport,
+    StoreProvisionalReductionReport? storeReductionReport,
     int? storeReductionTimeSpentMilli,
     int totalTimeSpentMilli,
     Result<string, string> result);
@@ -903,6 +911,6 @@ public record TruncateProcessHistoryReport(
     int lockedTimeSpentMilli,
     int totalTimeSpentMilli,
     int storeReductionTimeSpentMilli,
-    PersistentProcess.StoreProvisionalReductionReport? storeReductionReport,
+    StoreProvisionalReductionReport? storeReductionReport,
     int getFilesForRestoreTimeSpentMilli,
     int deleteFilesTimeSpentMilli);

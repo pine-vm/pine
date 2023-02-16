@@ -7,7 +7,7 @@ import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
-import ElmFullstack
+import ElmWebServer
 import Json.Decode
 
 
@@ -19,21 +19,21 @@ type alias CounterEvent =
     { addition : Int }
 
 
-backendMain : ElmFullstack.BackendConfig State
+backendMain : ElmWebServer.WebServerConfig State
 backendMain =
     { init = ( 0, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions : State -> ElmWebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         ( state, result ) =
@@ -67,7 +67,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
     in
     ( state
-    , [ ElmFullstack.RespondToHttpRequest httpResponse ]
+    , [ ElmWebServer.RespondToHttpRequest httpResponse ]
     )
 
 

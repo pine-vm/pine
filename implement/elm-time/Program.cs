@@ -10,13 +10,13 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Pine;
-using static ElmTime.WebHost.Configuration;
+using static ElmTime.Platform.WebServer.Configuration;
 
 namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-02-15";
+    static public string AppVersionId => "2023-02-16";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -345,7 +345,7 @@ public class Program
                     Console.WriteLine("Loading app config to deploy...");
 
                     var appConfigZipArchive =
-                        WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+                        Platform.WebServer.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                             sourcePath: deployOptionValue).configZipArchive;
 
                     var appConfigTree =
@@ -355,7 +355,7 @@ public class Program
                     var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
 
                     var processStoreWriter =
-                        new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                        new Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                             processStoreFileStore,
                             getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
                             processStoreFileStore);
@@ -363,7 +363,7 @@ public class Program
                     processStoreWriter.StoreComponent(appConfigComponent);
 
                     var appConfigValueInFile =
-                        new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                        new Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
                             HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
                         };
@@ -372,11 +372,11 @@ public class Program
                         (deletePreviousProcessOption.HasValue() || processStorePath == null) && !copyProcessOption.HasValue();
 
                     var compositionLogEvent =
-                        WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                        Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                             appConfigValueInFile: appConfigValueInFile,
                             initElmAppState: initElmAppState);
 
-                    var testDeployResult = WebHost.PersistentProcess.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
+                    var testDeployResult = Platform.WebServer.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                         compositionLogEvent: compositionLogEvent,
                         fileStoreReader: processStoreFileStore)
                     .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
@@ -389,7 +389,7 @@ public class Program
                     Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                     .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                     .UseUrls(adminInterfaceUrls)
-                    .UseStartup<WebHost.StartupAdminInterface>()
+                    .UseStartup<Platform.WebServer.StartupAdminInterface>()
                     .WithSettingPublicWebHostUrls(publicAppUrls)
                     .WithProcessStoreFileStore(processStoreFileStore);
 
@@ -1574,7 +1574,7 @@ public class Program
         Console.WriteLine("Beginning to build configuration...");
 
         var buildResult =
-            WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+            Platform.WebServer.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                 sourcePath: sourcePath);
 
         var (sourceCompositionId, sourceSummary) = CompileSourceSummary(buildResult.sourceTree);
@@ -1604,9 +1604,9 @@ public class Program
                     (site.TrimEnd('/')) +
                     (initElmAppState
                     ?
-                    WebHost.StartupAdminInterface.PathApiDeployAndInitAppState
+                    Platform.WebServer.StartupAdminInterface.PathApiDeployAndInitAppState
                     :
-                    WebHost.StartupAdminInterface.PathApiDeployAndMigrateAppState);
+                    Platform.WebServer.StartupAdminInterface.PathApiDeployAndMigrateAppState);
 
                 Console.WriteLine("Attempting to deploy app '" + filteredSourceCompositionId + "' to '" + deployAddress + "'...");
 
@@ -1653,7 +1653,7 @@ public class Program
                 var processStoreFileStore = new FileStoreFromSystemIOFile(site);
 
                 var processStoreWriter =
-                    new WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                    new Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                         processStoreFileStore,
                         getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
                         processStoreFileStore);
@@ -1667,18 +1667,18 @@ public class Program
                 processStoreWriter.StoreComponent(appConfigComponent);
 
                 var appConfigValueInFile =
-                    new WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                    new Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
                         HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
                     };
 
                 var compositionLogEvent =
-                    WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                    Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                         appConfigValueInFile: appConfigValueInFile,
                         initElmAppState: initElmAppState);
 
                 var (statusCode, responseReport) =
-                    WebHost.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
+                    Platform.WebServer.StartupAdminInterface.AttemptContinueWithCompositionEventAndCommit(
                         compositionLogEvent,
                         processStoreFileStore);
 
@@ -1954,7 +1954,7 @@ public class Program
                 return new System.Net.Http.HttpRequestMessage
                 {
                     Method = System.Net.Http.HttpMethod.Post,
-                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + WebHost.StartupAdminInterface.PathApiElmAppState),
+                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiElmAppState),
                     Content = httpContent,
                 };
             },
@@ -1995,7 +1995,7 @@ public class Program
                 return new System.Net.Http.HttpRequestMessage
                 {
                     Method = System.Net.Http.HttpMethod.Get,
-                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + WebHost.StartupAdminInterface.PathApiElmAppState),
+                    RequestUri = MapUriForForAdminInterface(site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiElmAppState),
                 };
             },
             defaultPassword: siteDefaultPassword,
@@ -2031,7 +2031,7 @@ public class Program
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var requestUrl =
-            site.TrimEnd('/') + WebHost.StartupAdminInterface.PathApiTruncateProcessHistory;
+            site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiTruncateProcessHistory;
 
         Console.WriteLine("Beginning to truncate process history at '" + site + "'...");
 
@@ -2082,14 +2082,14 @@ public class Program
 
         sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
             "Basic",
-            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sourceAdminPassword))));
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sourceAdminPassword))));
 
         var processHistoryFileStoreRemoteReader = new DelegatingFileStoreReader
         (
             ListFilesInDirectoryDelegate: directoryPath =>
             {
                 var httpRequestPath =
-                    WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
+                    Platform.WebServer.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
                     string.Join("/", directoryPath);
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
@@ -2104,7 +2104,7 @@ public class Program
             GetFileContentDelegate: filePath =>
             {
                 var httpRequestPath =
-                    WebHost.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                    Platform.WebServer.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
                     string.Join("/", filePath);
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
@@ -2119,7 +2119,7 @@ public class Program
             }
         );
 
-        return WebHost.PersistentProcess.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
+        return Platform.WebServer.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }
 
     static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
@@ -2169,11 +2169,11 @@ public class Program
 
         httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
             "Basic",
-            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sitePassword))));
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sitePassword))));
 
         var deployAddress =
             site.TrimEnd('/') +
-            WebHost.StartupAdminInterface.PathApiReplaceProcessHistory;
+            Platform.WebServer.StartupAdminInterface.PathApiReplaceProcessHistory;
 
         Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
 
@@ -2278,7 +2278,7 @@ public class Program
         string outputOption)
     {
         var buildResult =
-            WebHost.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
+            Platform.WebServer.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
                 sourcePath: sourcePath);
 
         var configZipArchive = buildResult.configZipArchive;

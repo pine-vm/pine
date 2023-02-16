@@ -11,7 +11,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pine;
 
-namespace ElmTime.WebHost;
+namespace ElmTime.Platform.WebServer;
 
 public class PublicAppState
 {
@@ -75,7 +75,7 @@ public class PublicAppState
                 }
 
                 if (!lastAppEventTimeHasArrived.HasValue ||
-                    NotifyTimeHasArrivedMaximumDistance <= (getDateTimeOffset() - lastAppEventTimeHasArrived.Value))
+                    NotifyTimeHasArrivedMaximumDistance <= getDateTimeOffset() - lastAppEventTimeHasArrived.Value)
                 {
                     ProcessEventTimeHasArrived();
                 }

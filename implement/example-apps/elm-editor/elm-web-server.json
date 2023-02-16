@@ -6,7 +6,7 @@
     "httpRequestEventSizeLimit": 1400000,
     "disabled____________________letsEncryptOptions": {
         "Domains": [
-            "editor.elm-fullstack.org",
+            "editor.elm-time.org",
             "elm-editor.com"
         ],
         "Email": "viir@viir.de",
@@ -14,8 +14,8 @@
             "CountryName": "Germany",
             "State": "DE",
             "Locality": "DE",
-            "Organization": "Elm-Fullstack",
-            "OrganizationUnit": "Elm-Fullstack"
+            "Organization": "Elm-Time",
+            "OrganizationUnit": "Elm-Time"
         },
         "UseStaging": false
     }

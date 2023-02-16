@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Pine;
 
-namespace ElmTime.WebHost;
+namespace ElmTime.Platform.WebServer;
 
 static public class Configuration
 {

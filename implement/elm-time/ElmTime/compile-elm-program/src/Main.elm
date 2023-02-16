@@ -27,20 +27,7 @@ lowerSerialized argumentsJson =
 defaultEntryPoints : Dict.Dict String EntryPointType
 defaultEntryPoints =
     CompileFullstackApp.defaultEntryPoints
-        |> Dict.union
-            (Dict.fromList
-                [ ( "backendMain"
-                  , \entryPointConfig ->
-                        CompileBackendApp.loweredForBackendApp entryPointConfig
-                            >> Result.map
-                                (\( compiledFiles, entryPoint ) ->
-                                    { compiledFiles = compiledFiles
-                                    , rootModuleEntryPointKind = ClassicMakeEntryPoint entryPoint
-                                    }
-                                )
-                  )
-                ]
-            )
+        |> Dict.union CompileBackendApp.entryPoints
 
 
 jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value

@@ -5,10 +5,10 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using ElmTime.WebHost.ProcessStoreSupportingMigrations;
+using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
 using Pine;
 
-namespace ElmTime.WebHost.PersistentProcess;
+namespace ElmTime.Platform.WebServer;
 
 public interface IPersistentProcess
 {
@@ -195,7 +195,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             compositionEventsFromLatestReduction,
             overrideElmAppInterfaceConfig);
 
-        logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
+        logger?.Invoke("Restored the process state in " + (int)restoreStopwatch.Elapsed.TotalSeconds + " seconds.");
 
         return processLiveRepresentation;
     }

@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Pine;
 
-namespace ElmTime.WebHost;
+namespace ElmTime.Platform.WebServer;
 
 static public class BuildConfigurationFromArguments
 {

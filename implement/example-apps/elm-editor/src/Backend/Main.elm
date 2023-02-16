@@ -11,7 +11,7 @@ import Common
 import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
 import Dict
-import ElmFullstack
+import ElmWebServer
 import FileTree
 import Flate
 import MonacoHtml
@@ -20,15 +20,15 @@ import Url
 
 
 type Event
-    = HttpRequestEvent ElmFullstack.HttpRequestEventStruct
-    | CreateVolatileProcessResponse ElmFullstack.CreateVolatileProcessResult
-    | RequestToVolatileProcessResponse String ElmFullstack.RequestToVolatileProcessResult
+    = HttpRequestEvent ElmWebServer.HttpRequestEventStruct
+    | CreateVolatileProcessResponse ElmWebServer.CreateVolatileProcessResult
+    | RequestToVolatileProcessResponse String ElmWebServer.RequestToVolatileProcessResult
 
 
 type alias State =
     { posixTimeMilli : Int
     , volatileProcessesIds : Set.Set String
-    , pendingHttpRequests : List ElmFullstack.HttpRequestEventStruct
+    , pendingHttpRequests : List ElmWebServer.HttpRequestEventStruct
     , pendingTasksForRequestVolatileProcess : Dict.Dict String { volatileProcessId : String, startPosixTimeMilli : Int }
     }
 
@@ -43,7 +43,7 @@ requestToVolatileProcessTimeoutMilliseconds =
     1000 * 30
 
 
-backendMain : ElmFullstack.BackendConfig State
+backendMain : ElmWebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
@@ -59,19 +59,19 @@ initState =
     }
 
 
-subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions : State -> ElmWebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent =
     processEvent (HttpRequestEvent httpRequestEvent)
 
 
-processEvent : Event -> State -> ( State, ElmFullstack.BackendCmds State )
+processEvent : Event -> State -> ( State, ElmWebServer.Commands State )
 processEvent hostEvent stateBefore =
     let
         ( ( state, toVolatileProcessesCmds ), responseCmds ) =
@@ -83,12 +83,12 @@ processEvent hostEvent stateBefore =
     )
 
 
-updatePartRequestsToVolatileProcess : State -> ( State, ElmFullstack.BackendCmds State )
+updatePartRequestsToVolatileProcess : State -> ( State, ElmWebServer.Commands State )
 updatePartRequestsToVolatileProcess stateBefore =
     let
         tasksToEnsureEnoughVolatileProcessesCreated =
             if Set.size stateBefore.volatileProcessesIds < parallelVolatileProcessesCount then
-                [ ElmFullstack.CreateVolatileProcess
+                [ ElmWebServer.CreateVolatileProcess
                     { programCode = VolatileProcess.volatileProcessProgramCode
                     , update =
                         \createVolatileProcessResult ->
@@ -140,7 +140,7 @@ updatePartRequestsToVolatileProcess stateBefore =
                 Just volatileProcessId ->
                     let
                         task =
-                            ElmFullstack.RequestToVolatileProcess
+                            ElmWebServer.RequestToVolatileProcess
                                 { processId = volatileProcessId
                                 , request =
                                     httpRequestEvent.request.bodyAsBase64
@@ -166,7 +166,7 @@ updatePartRequestsToVolatileProcess stateBefore =
                     )
 
 
-updateExceptRequestsToVolatileProcess : Event -> State -> ( State, ElmFullstack.BackendCmds State )
+updateExceptRequestsToVolatileProcess : Event -> State -> ( State, ElmWebServer.Commands State )
 updateExceptRequestsToVolatileProcess hostEvent stateBefore =
     case hostEvent of
         HttpRequestEvent httpRequestEvent ->
@@ -179,7 +179,10 @@ updateExceptRequestsToVolatileProcess hostEvent stateBefore =
             updateForCreateVolatileProcessResult createVolatileProcessResponse stateBefore
 
 
-updateForHttpRequestEventExceptRequestsToVolatileProcess : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEventExceptRequestsToVolatileProcess :
+    ElmWebServer.HttpRequestEventStruct
+    -> State
+    -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateBeforeUpdatingTime =
     let
         stateBefore =
@@ -222,7 +225,7 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
 
         continueWithStaticHttpResponse httpResponse =
             ( stateBefore
-            , [ ElmFullstack.RespondToHttpRequest
+            , [ ElmWebServer.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -296,7 +299,11 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                             )
 
 
-updateForRequestToVolatileProcessResult : String -> ElmFullstack.RequestToVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForRequestToVolatileProcessResult :
+    String
+    -> ElmWebServer.RequestToVolatileProcessResult
+    -> State
+    -> ( State, ElmWebServer.Commands State )
 updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult stateBefore =
     case
         stateBefore.pendingHttpRequests
@@ -331,7 +338,7 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
 
                         Just pendingTask ->
                             case requestToVolatileProcessResult of
-                                Err ElmFullstack.ProcessNotFound ->
+                                Err ElmWebServer.ProcessNotFound ->
                                     ( httpResponseInternalServerError
                                         ("Error: Volatile process '"
                                             ++ pendingTask.volatileProcessId
@@ -389,7 +396,7 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
                 , volatileProcessesIds = volatileProcessesIds
                 , pendingTasksForRequestVolatileProcess = stateBefore.pendingTasksForRequestVolatileProcess |> Dict.remove taskId
               }
-            , [ ElmFullstack.RespondToHttpRequest
+            , [ ElmWebServer.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -397,7 +404,10 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
             )
 
 
-updateForCreateVolatileProcessResult : ElmFullstack.CreateVolatileProcessResult -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForCreateVolatileProcessResult :
+    ElmWebServer.CreateVolatileProcessResult
+    -> State
+    -> ( State, ElmWebServer.Commands State )
 updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
     case createVolatileProcessResult of
         Err createVolatileProcessError ->
@@ -421,7 +431,7 @@ updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
                             )
             in
             ( { stateBefore | pendingHttpRequests = [] }
-            , List.map ElmFullstack.RespondToHttpRequest httpResponses
+            , List.map ElmWebServer.RespondToHttpRequest httpResponses
             )
 
         Ok { processId } ->
@@ -432,7 +442,7 @@ updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
             )
 
 
-taskIdForHttpRequest : ElmFullstack.HttpRequestEventStruct -> String
+taskIdForHttpRequest : ElmWebServer.HttpRequestEventStruct -> String
 taskIdForHttpRequest httpRequestEvent =
     "http-request-api-" ++ httpRequestEvent.httpRequestId
 

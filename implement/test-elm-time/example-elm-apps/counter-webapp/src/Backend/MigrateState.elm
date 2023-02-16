@@ -1,13 +1,13 @@
 module Backend.MigrateState exposing (migrate)
 
 import Backend.Main
-import ElmFullstack
+import ElmWebServer
 
 
 type alias PreviousBackendState =
     Int
 
 
-migrate : PreviousBackendState -> ( Backend.Main.State, ElmFullstack.BackendCmds Backend.Main.State )
+migrate : PreviousBackendState -> ( Backend.Main.State, ElmWebServer.Commands Backend.Main.State )
 migrate state =
     ( state, [] )

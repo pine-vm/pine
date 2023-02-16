@@ -4,6 +4,8 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using ElmTime;
+using ElmTime.Platform.WebServer;
+using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
 using ElmTime.ProcessStore;
 using Pine;
 
@@ -61,14 +63,14 @@ public class TestSetup
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalWebAppConfig,
         WebAppConfigurationJsonStructure jsonStructure)
     {
-        var filePath = ElmTime.WebHost.StartupAdminInterface.JsonFilePath;
-
         return
             jsonStructure == null ?
-            originalWebAppConfig.Remove(filePath)
+            originalWebAppConfig.RemoveRange(StartupAdminInterface.JsonFilePathAlternatives)
             :
             originalWebAppConfig
-            .SetItem(filePath, System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
+            .SetItem(
+                StartupAdminInterface.JsonFilePathDefault,
+                System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
@@ -100,7 +102,7 @@ public class TestSetup
         return compilationResult.result.compiledFiles;
     }
 
-    static public IProcessStoreReader EmptyProcessStoreReader() =>
+    static public ElmTime.ProcessStore.IProcessStoreReader EmptyProcessStoreReader() =>
         new ProcessStoreReaderFromDelegates
         (
             EnumerateSerializedCompositionsRecordsReverseDelegate: () => Array.Empty<byte[]>(),
@@ -111,7 +113,7 @@ public class TestSetup
 record ProcessStoreReaderFromDelegates(
     Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate,
     Func<byte[], ReductionRecord?> GetReductionDelegate)
-    : IProcessStoreReader
+    : ElmTime.ProcessStore.IProcessStoreReader
 {
     public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
         EnumerateSerializedCompositionsRecordsReverseDelegate();

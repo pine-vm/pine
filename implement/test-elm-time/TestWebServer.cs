@@ -6,8 +6,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using ElmTime;
-using ElmTime.WebHost;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -15,11 +13,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static MoreLinq.Extensions.BatchExtension;
 using Pine;
+using ElmTime.Platform.WebServer;
 
 namespace TestElmTime;
 
 [TestClass]
-public class TestWebHost
+public class TestWebServer
 {
     [TestMethod]
     public void Web_host_stores_process_reduction_every_ten_minutes_by_default()
@@ -33,13 +32,13 @@ public class TestWebHost
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
                 new (int addition, int expectedResponse)[]
                 {
-                        (0, 0),
-                        (1, 1),
-                        (3, 4),
-                        (5, 9),
-                        (7, 16),
-                        (11, 27),
-                        (-13, 14),
+                    (0, 0),
+                    (1, 1),
+                    (3, 4),
+                    (5, 9),
+                    (7, 16),
+                    (11, 27),
+                    (-13, 14),
                 }).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
@@ -500,7 +499,7 @@ public class TestWebHost
             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
             var echoRequestStructure =
-                System.Text.Json.JsonSerializer.Deserialize<ElmTime.WebHost.InterfaceToHost.HttpRequest>(responseContentString)!;
+                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.HttpRequest>(responseContentString)!;
 
             Assert.AreEqual(
                 Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
@@ -542,7 +541,7 @@ public class TestWebHost
             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
             var echoRequestStructure =
-                System.Text.Json.JsonSerializer.Deserialize<ElmTime.WebHost.InterfaceToHost.HttpRequest>(responseContentString)!;
+                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.HttpRequest>(responseContentString)!;
 
             var observedContentType =
                 echoRequestStructure.headers
@@ -923,7 +922,7 @@ public class TestWebHost
         }
 
         var processVersionAfterFirstBatch =
-            ElmTime.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
+            ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
                 testSetup
                 .BuildProcessStoreReaderInFileDirectory()
                 .EnumerateSerializedCompositionLogRecordsReverse().First());
@@ -1331,8 +1330,8 @@ public class TestWebHost
             promptForPasswordOnConsole: false);
 
         using (var restoredProcess =
-            ElmTime.WebHost.PersistentProcess.PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
-                new ElmTime.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+            PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
+                new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(testDirectory)),
                     _ => { }).process!)
         {

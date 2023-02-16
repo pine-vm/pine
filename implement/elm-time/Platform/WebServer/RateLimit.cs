@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace ElmTime.WebHost;
+namespace ElmTime.Platform.WebServer;
 
 public interface IRateLimit
 {

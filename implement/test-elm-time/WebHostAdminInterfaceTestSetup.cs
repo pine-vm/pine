@@ -5,7 +5,7 @@ using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using ElmTime.WebHost;
+using ElmTime.Platform.WebServer;
 using Microsoft.AspNetCore.Hosting;
 using Pine;
 
@@ -153,17 +153,17 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         if (deployAppConfigAndInitElmState != null)
         {
             var compositionLogEvent =
-                new ElmTime.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+                new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
                 {
                     DeployAppConfigAndInitElmAppState =
-                        new ElmTime.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure
+                        new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
                             HashBase16 = CommonConversion.StringBase16(Composition.GetHash(deployAppConfigAndInitElmState))
                         }
                 };
 
             var processStoreWriter =
-                new ElmTime.WebHost.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                 fileStore,
                 getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
                 fileStore);
@@ -177,15 +177,15 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     public IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>
         new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
-    public ElmTime.WebHost.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
+    public ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
         new(BuildProcessStoreFileStoreReaderInFileDirectory());
 
-    public IEnumerable<ElmTime.WebHost.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
+    public IEnumerable<ElmTime.Platform.WebServer.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
     {
         var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-        ElmTime.WebHost.InterfaceToHost.AppEventStructure eventLogEntry(
-            ElmTime.WebHost.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
+        ElmTime.Platform.WebServer.InterfaceToHost.AppEventStructure eventLogEntry(
+            ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
         {
             var component =
                 logEntry.LiteralStringUtf8 != null
@@ -202,14 +202,14 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
             var eventString = Encoding.UTF8.GetString(blobComponent.Bytes.Span);
 
-            return JsonSerializer.Deserialize<ElmTime.WebHost.InterfaceToHost.AppEventStructure>(eventString)!;
+            return JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.AppEventStructure>(eventString)!;
         }
 
         return
             BuildProcessStoreReaderInFileDirectory()
             .EnumerateSerializedCompositionLogRecordsReverse()
             .Select(Encoding.UTF8.GetString)
-            .Select(r => JsonSerializer.Deserialize<ElmTime.WebHost.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>(r)!)
+            .Select(r => JsonSerializer.Deserialize<ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>(r)!)
             .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
             .WhereNotNull()
             .Select(eventLogEntry);

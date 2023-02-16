@@ -1,4 +1,4 @@
-namespace ElmTime;
+namespace ElmTime.Platform.WebServer;
 
 public record WebAppConfigurationJsonStructure(
     RateLimitWindow? singleRateLimitWindowPerClientIPv4Address = null,

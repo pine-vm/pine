@@ -95,10 +95,12 @@ subscriptions _ =
     }
 """
       , Ok
-            ( CompileFullstackApp.RecordElmType
-                { fields = [ ( "field_name", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ] }
-            , Dict.empty
-            )
+            { stateTypeAnnotation =
+                CompileFullstackApp.RecordElmType
+                    { fields = [ ( "field_name", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ] }
+            , dependencies = Dict.empty
+            , instantiatedConfigTypeName = [ "ElmFullstack", "BackendConfig" ]
+            }
       )
     ]
         |> List.map
