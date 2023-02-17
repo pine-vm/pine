@@ -1,35 +1,34 @@
-module ElmFullstack exposing (..)
+module ElmWebServer exposing (..)
 
-{-| The `ElmFullstack` module provides the types to build backend app declarations.
-The type declarations in this module mirror the interface of the Elm Fullstack executable file and enable type-checking for compatibility.
+{-| The `ElmWebServer` module provides the types to build web server declarations.
+The type declarations in this module mirror the interface of the Elm Time executable file and enable type-checking for compatibility.
 -}
 
 
-{-| Describe a complete backend app. A backend app can handle HTTP requests or spawn volatile processes to integrate other software
+{-| Describes a web server program. A web server can handle HTTP requests and spawn volatile processes to integrate other software
 components.
-The `BackendConfig` type does not include migrations because their types, by definition, can vary independently of the other types.
 -}
-type alias BackendConfig state =
-    { init : ( state, BackendCmds state )
-    , subscriptions : state -> BackendSubs state
+type alias WebServerConfig state =
+    { init : ( state, Commands state )
+    , subscriptions : state -> Subscriptions state
     }
 
 
-type alias BackendSubs state =
-    { httpRequest : HttpRequestEventStruct -> state -> ( state, BackendCmds state )
+type alias Subscriptions state =
+    { httpRequest : HttpRequestEventStruct -> state -> ( state, Commands state )
     , posixTimeIsPast :
         Maybe
             { minimumPosixTimeMilli : Int
-            , update : { currentPosixTimeMilli : Int } -> state -> ( state, BackendCmds state )
+            , update : { currentPosixTimeMilli : Int } -> state -> ( state, Commands state )
             }
     }
 
 
-type alias BackendCmds state =
-    List (BackendCmd state)
+type alias Commands state =
+    List (Command state)
 
 
-type BackendCmd state
+type Command state
     = RespondToHttpRequest RespondToHttpRequestStruct
     | CreateVolatileProcess (CreateVolatileProcessStruct state)
     | RequestToVolatileProcess (RequestToVolatileProcessStruct state)
@@ -78,7 +77,7 @@ type alias HttpHeader =
 
 type alias CreateVolatileProcessStruct state =
     { programCode : String
-    , update : CreateVolatileProcessResult -> state -> ( state, BackendCmds state )
+    , update : CreateVolatileProcessResult -> state -> ( state, Commands state )
     }
 
 
@@ -98,7 +97,7 @@ type alias CreateVolatileProcessComplete =
 type alias RequestToVolatileProcessStruct state =
     { processId : String
     , request : String
-    , update : RequestToVolatileProcessResult -> state -> ( state, BackendCmds state )
+    , update : RequestToVolatileProcessResult -> state -> ( state, Commands state )
     }
 
 

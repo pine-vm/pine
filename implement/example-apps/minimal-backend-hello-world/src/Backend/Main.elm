@@ -5,28 +5,28 @@ module Backend.Main exposing
 
 import Base64
 import Bytes.Encode
-import ElmFullstack
+import ElmWebServer
 
 
 type alias State =
     ()
 
 
-backendMain : ElmFullstack.BackendConfig ()
+backendMain : ElmWebServer.WebServerConfig ()
 backendMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions : State -> ElmWebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent state =
     let
         httpResponse =
@@ -40,7 +40,7 @@ updateForHttpRequestEvent httpRequestEvent state =
             }
     in
     ( state
-    , [ ElmFullstack.RespondToHttpRequest
+    , [ ElmWebServer.RespondToHttpRequest
             { httpRequestId = httpRequestEvent.httpRequestId
             , response = httpResponse
             }

@@ -18,7 +18,7 @@ Use this command to run a server and deploy an example app:
 elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
 ```
 
-For a guide on installation and configuration options, see [How to Configure and Deploy an Elm Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+For a guide on installation and configuration options, see [How to Configure and Deploy an Elm Backend App](guide/how-to-configure-and-deploy-an-elm-backend-app.md).
 
 ## Releases / Artifacts
 
@@ -34,7 +34,7 @@ To deploy in a docker container, use the `elm-time/elm-time` image from the [Git
 docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/elm-time/elm-time
 ```
 
-To learn more about these artifacts' interfaces, see [How to Configure and Deploy an Elm Fullstack App](guide/how-to-configure-and-deploy-an-elm-fullstack-app.md).
+To learn more about these artifacts' interfaces, see [How to Configure and Deploy an Elm Backend App](guide/how-to-configure-and-deploy-an-elm-backend-app.md).
 
 ## Building from Source
 

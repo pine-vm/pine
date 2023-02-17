@@ -818,7 +818,7 @@ public class StartupAdminInterface
             "To learn about the admin interface and how to deploy an app, see  " + LinkHtmlElementFromUrl(LinkToGuideUrl)
         );
 
-    static string LinkToGuideUrl => "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-fullstack-app.md";
+    static string LinkToGuideUrl => "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md";
 
     static string LinkHtmlElementFromUrl(string url) =>
         "<a href='" + url + "'>" + url + "</a>";

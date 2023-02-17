@@ -1,13 +1,16 @@
-# How to Configure and Deploy an Elm Fullstack App
+# How to Configure and Deploy an Elm Backend App
+
+This guide covers running a backend app programmed in Elm, including configuration, deployment, and migrations.
+The backend includes a web server and a database persisting the application state and automating state migrations.
 
 ## Installing and Registering the `elm-time` Command
 
 In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-time/elm-time/releases
 
-Here are direct links to the downloads, containing the `elm-time` executable file in a zip-archive:
+Here are direct links to the downloads, containing the `elm-time` executable file in a zip archive:
 
-+ Windows: https://github.com/elm-time/elm-time/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64.zip
-+ Linux: https://github.com/elm-time/elm-time/releases/download/v2022-10-17/elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-linux-x64.zip
++ Windows: https://github.com/elm-time/elm-time/releases/download/v2023-02-16/elm-time-bin-f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427-win10-x64.zip
++ Linux: https://github.com/elm-time/elm-time/releases/download/v2023-02-16/elm-time-bin-f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427-linux-x64.zip
 
 To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -18,7 +21,7 @@ To register the elm-time executable on your system, run the `elm-time  install` 
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-fullstack-bin-1fd86d6f4e45b25c270057203effd5c5b2747bff-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-time-bin-f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
@@ -29,15 +32,15 @@ I copied the executable file to '/bin/elm-time'. You will be able to use the 'el
 
 ## Running a Server and Deploying an App
 
-As part of a deployment, Elm Fullstack compiles the app program code.
-The compiler requires the program code to contain the entry point for a back-end app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
+As part of a deployment, Elm-Time compiles the app program code.
+The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-time/elm-time/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
+Here is an example app containing back-end and front-end: https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -46,23 +49,27 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 8ce169c776160db7a035a8d3a7845341af11f871
-The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app
-Loaded source composition fe9b6872328a845ef50c7953bf969e9df773b8fd4b6abe24ba032f72501d021f from 'https://github.com/elm-time/elm-time/tree/8ce169c776160db7a035a8d3a7845341af11f871/implement/example-apps/docker-image-default-app'.
+This path points to commit f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427
+The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/ae3c34a3a883e9f4266d4288c59cd3623f2f1377/implement/example-apps/docker-image-default-app
+Loaded source composition deaed99fea5a584b211381e8427c0bfc41175ec2d5d6b1cfb18f2d719c3d8967 from 'https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Begin to build the process live representation.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Begin to restore the process state.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
-info: ElmTime.WebHost.StartupAdminInterface[0]
-      Restored the process state in 4 seconds.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+      Restored the process state in 0 seconds.
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Completed building the process live representation.
-info: ElmTime.WebHost.StartupPublicApp[0]
+info: ElmTime.Platform.WebServer.PublicAppState[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://[::]:5000
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Started the public app at 'http://*:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
@@ -71,14 +78,14 @@ When this server has completed starting, we can see the deployed app at http://l
 
 ## App Code Structure Conventions
 
-This section covers the conventions for structuring the app code so that we can deploy it to an Elm Fullstack process. The [example apps](https://github.com/elm-time/elm-time/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
+This section covers the conventions for structuring the app code so that we can deploy it using Elm-Time. The [example apps](https://github.com/elm-time/elm-time/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
 
 ### `Backend.Main` Elm Module
 
 The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `backendMain`:
 
 ```Elm
-backendMain : ElmFullstack.BackendConfig ()
+backendMain : ElmWebServer.WebServerConfig ()
 backendMain =
 [...]
 ```
@@ -86,7 +93,7 @@ backendMain =
 As we can see in the example apps, we compose the backend from an `init` value and an `subscriptions` function:
 
 ```Elm
-backendMain : ElmFullstack.BackendConfig ()
+backendMain : ElmWebServer.WebServerConfig ()
 backendMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
@@ -246,47 +253,47 @@ In the simplest case, we did not change the back-end state model since the last 
 module Backend.MigrateState exposing (migrate)
 
 import Backend.Main
-import ElmFullstack
+import ElmWebServer
 
 
-migrate : Backend.Main.State -> ( Backend.Main.State, ElmFullstack.BackendCmds Backend.Main.State )
+migrate : Backend.Main.State -> ( Backend.Main.State, ElmWebServer.Commands Backend.Main.State )
 migrate state =
     ( state, [] )
 ```
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-time/elm-time/blob/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/test-elm-fullstack/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-time/elm-time/blob/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
 
-### `elm-fullstack.json`
+### `elm-web-server.json`
 
-The `elm-fullstack.json` file is where you can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
+The `elm-web-server.json` file is where we can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
 Since these features are optional to use, in the simplest case, this file is not present at all.
 
-## Running a Server With an Elm-Fullstack Process
+## Running a Server With an Elm-Time Process
 
-At the beginning of this guide, we ran a server and deployed an app in a single command. But combining these two operations is not necessary. Deployments are part of the process history, which means the last deployment follows from the state of the process store. (To learn more about the persistence, see [persistence-in-elm-fullstack.md](./persistence-in-elm-fullstack.md))
+At the beginning of this guide, we ran a server and deployed an app in a single command. But combining these two operations is not necessary. Deployments are part of the process history, which means the last deployment follows from the state of the process store. (To learn more about the persistence, see [persistence-in-elm-time.md](./persistence-in-elm-time.md))
 
 When running a server, we want to configure two aspects: The location where to persist the process state, and the password to access the admin interface.
 On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the file system.
 
-Here is a complete command to run a server that maintains the persistence of the Elm Fullstack process:
+Here is a complete command to run a server that maintains the persistence of the Elm-Time process:
 
 ```cmd
 elm-time  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
-When running this command, you will get an output like this:
+When running this command, we will get an output like this:
 
 ```text
 Starting the web server with the admin interface...
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Begin to build the process live representation.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Begin to restore the process state.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Found no composition record, default to initial state.
-info: ElmTime.WebHost.StartupAdminInterface[0]
+info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Completed building the process live representation.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
@@ -297,14 +304,14 @@ In case the process store contained a process in which an app was deployed, the 
 Started the public app at 'http://*:5000'
 ```
 
-This server continues running until you shut it down. It will output additional log messages for various events, for example, HTTP requests.
+This server continues running until we shut it down. It will output additional log messages for various events, for example, HTTP requests.
 
-When you navigate to http://localhost:4000/ using a web browser, you find a prompt to authenticate. You can use the password `test` that we specified in the command above. You don't need a username in that prompt.
+When we navigate to http://localhost:4000/ using a web browser, we find a prompt to authenticate. We can use the password `test` that we specified in the command above. We don't need a username in that prompt.
 
-When you log in at http://localhost:4000/, you will get this message:
+When we log in at http://localhost:4000/, we get this message:
 
 ```
-Welcome to the Elm-Time admin interface version 2022-10-17.
+Welcome to the Elm-Time admin interface version 2023-02-16.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -317,7 +324,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/cd427019349f3d9d2f5b4c594b34d4e6c3e193cf/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
@@ -333,8 +340,9 @@ We enter the same password we gave with the `--admin-password` option on the com
 
 The `elm-time  deploy` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
 ```text
-Saved report to file 'C:\Users\John\elm-fullstack-tool\report\2021-08-20T06-36-09_deploy.json'.
+Saved report to file 'C:\Users\John\elm-time-tool\report\2023-02-17T15-28-25_deploy.json'.
 ```
+
 In this report, we can see if the deployment was successful and how much time it took. If a migration fails, we also find a description of the problem in this report.
 
 ## Configure the Admin Password via Environment Variable
@@ -343,23 +351,23 @@ If you do not use the `--admin-password` option with the `run-server` command, t
 Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
 
 ```cmd
-docker  run  -p 80:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  elmfullstack/elm-fullstack
+docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/elm-time/elm-time
 ```
 
 ## Manage the Process Store
 
 The process store contains not only the latest state of the app but also the event log.
-In the Docker image `elmfullstack/elm-fullstack`, the process store is located in the directory `/elm-fullstack/process-store`.
+In the Docker image `elm-time/elm-time`, the process store is located in the directory `/elm-time/process-store`.
 You can copy this directory to backup the process store or copy it to another container.
 
 Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
 ```powershell
-docker run --mount source=your-docker-volume-name,destination=/elm-fullstack/process-store -p 80:80 -p 4000:4000 elmfullstack/elm-fullstack
+docker  run  --mount source=your-docker-volume-name,destination=/elm-time/process-store  -p 80:80  -p 4000:4000  ghcr.io/elm-time/elm-time
 ```
 
 ## Support HTTPS
 
-The Elm-fullstack web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `elm-fullstack.json` file as follows:
+The Elm-Time web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `elm-web-server.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {
