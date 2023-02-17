@@ -21,7 +21,7 @@ The sequence of events that entered an Elm-Time process defines its complete sta
 + Deploy app config and migrate Elm app state: Deploy a new configuration, including an Elm app for the backend. Uses the migrate function in the Elm code to migrate the state from the previously active Elm app.
 + Deploy app config and init Elm app state: Deploy a new configuration, including an Elm app for the backend. In contrast to the deployment with migration, this one uses the init function in the Elm code to initialize the state of the backend.
 
-To learn how to do deployments and migrations, see the guide on [How to Configure and Deploy an Elm Backend App](guide/how-to-configure-and-deploy-an-elm-backend-app.md).
+To learn how to do deployments and migrations, see the guide on [How to Configure and Deploy an Elm Backend App](./how-to-configure-and-deploy-an-elm-backend-app.md).
 
 ## Under the Hood - How It Works
 
