@@ -1,0 +1,51 @@
+name: Publish to Release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [unpublished]
+
+jobs:
+  build:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [ubuntu-22.04, windows-2022]
+        include:
+          - environment: ubuntu-22.04
+            publish-runtime-id: linux-x64
+          - environment: windows-2022
+            publish-runtime-id: win10-x64
+
+    runs-on: ${{ matrix.environment }}
+
+    steps:
+
+    - uses: olegtarasov/get-tag@v2.1.2
+      id: tagName
+
+    - name: Avoid git mutating files on checkout
+      run: |
+        git config --global core.autocrlf false
+    - uses: actions/checkout@v3
+    - uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '7.0.200'
+        include-prerelease: true
+
+    - name: Try use dotnet
+      run: dotnet --info
+
+    - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
+      run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
+
+    - name: dotnet publish
+      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./publish  ./implement/elm-time
+
+    - name: Publish artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: elm-time-bin-${{ steps.tagName.outputs.tag }}-${{ matrix.publish-runtime-id }}
+        path: ./publish
+
