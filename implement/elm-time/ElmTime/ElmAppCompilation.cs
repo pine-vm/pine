@@ -123,8 +123,8 @@ namespace ElmTime
                 .ToImmutableList();
 
             var compilerElmProgramCodeFiles =
-                CachedCompilerElmProgramCodeFilesForElmFullstackBackend.Value
-                .Extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmFullstackBackend) + ": " + error));
+                CachedCompilerElmProgramCodeFilesForElmBackend.Value
+                .Extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmBackend) + ": " + error));
 
             var (compilationResult, compilationReport) = CachedElmAppCompilationIteration(
                 compilerElmProgramCodeFiles: compilerElmProgramCodeFiles,
@@ -472,10 +472,10 @@ namespace ElmTime
                     listFunctionToPublish);
         }
 
-        static readonly public Lazy<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> CachedCompilerElmProgramCodeFilesForElmFullstackBackend =
-            new(LoadCompilerElmProgramCodeFilesForElmFullstackBackend);
+        static readonly public Lazy<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> CachedCompilerElmProgramCodeFilesForElmBackend =
+            new(LoadCompilerElmProgramCodeFilesForElmBackend);
 
-        static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmFullstackBackend() =>
+        static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmBackend() =>
             ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles();
 
         static public string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)

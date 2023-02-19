@@ -59,15 +59,15 @@ public class TestSetup
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
        GetElmAppFromExampleName("http-proxy");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithElmFullstackJson(
-        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalWebAppConfig,
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServerConfigJson(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalWebServerConfig,
         WebAppConfigurationJsonStructure jsonStructure)
     {
         return
             jsonStructure == null ?
-            originalWebAppConfig.RemoveRange(StartupAdminInterface.JsonFilePathAlternatives)
+            originalWebServerConfig.RemoveRange(StartupAdminInterface.JsonFilePathAlternatives)
             :
-            originalWebAppConfig
+            originalWebServerConfig
             .SetItem(
                 StartupAdminInterface.JsonFilePathDefault,
                 System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));

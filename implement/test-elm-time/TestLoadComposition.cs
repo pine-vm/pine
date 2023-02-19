@@ -16,7 +16,7 @@ public class TestLoadComposition
         {
             new
             {
-                input = "https://elm-editor.com/?project-state=https%3A%2F%2Fgithub.com%2Felm-fullstack%2Felm-fullstack%2Ftree%2F742650b6a6f1e3dc723d76fbb8c189ca16a0bee6%2Fimplement%2Fexample-apps%2Felm-editor%2Fdefault-app&file-path-to-open=src%2FMain.elm",
+                input = "https://elm-editor.com/?project-state=https%3A%2F%2Fgithub.com%2Felm-time%2Felm-time%2Ftree%2F742650b6a6f1e3dc723d76fbb8c189ca16a0bee6%2Fimplement%2Fexample-apps%2Felm-editor%2Fdefault-app&file-path-to-open=src%2FMain.elm",
                 expectedCompositionId = "ba36b62d7a0e2ffd8ed107782138be0e2b25257a67dc9273508b00daa003b6f3"
             },
             new

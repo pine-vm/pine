@@ -180,7 +180,7 @@ public class TestWebServer
                 .ToList();
 
         var webAppConfig =
-            TestSetup.WithElmFullstackJson(
+            TestSetup.WithWebServerConfigJson(
                 TestSetup.CounterElmWebApp,
                 new WebAppConfigurationJsonStructure
                 (
@@ -279,7 +279,7 @@ public class TestWebServer
         const int requestSizeLimit = 20_000;
 
         var webAppConfig =
-            TestSetup.WithElmFullstackJson(
+            TestSetup.WithWebServerConfigJson(
                 TestSetup.StringBuilderElmWebApp,
                 new WebAppConfigurationJsonStructure
                 {

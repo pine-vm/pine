@@ -10,7 +10,7 @@ The `rich-chat-room` example implements a full-featured chat room.
 
 ## Running and Hacking on the Rich Chat Room App
 
-You can find the source code for this example at [https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room](https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room)
+You can find the source code for this example at <https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room>
 
 To run the app with the default source code, use the `run-server` command as follows:
 
