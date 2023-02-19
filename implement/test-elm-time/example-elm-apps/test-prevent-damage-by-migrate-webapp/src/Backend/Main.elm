@@ -9,7 +9,7 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import CompilationInterface.GenerateJsonCoders
-import ElmFullstack
+import ElmWebServer
 import Json.Decode
 import Json.Encode
 
@@ -18,7 +18,7 @@ type alias State =
     Backend.StateType.State
 
 
-backendMain : ElmFullstack.BackendConfig State
+backendMain : ElmWebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
@@ -32,14 +32,14 @@ initState =
     }
 
 
-subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions : State -> ElmWebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         ( state, httpResponseCode, httpResponseBodyString ) =
@@ -84,7 +84,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
     in
     ( state
-    , [ ElmFullstack.RespondToHttpRequest httpResponse ]
+    , [ ElmWebServer.RespondToHttpRequest httpResponse ]
     )
 
 

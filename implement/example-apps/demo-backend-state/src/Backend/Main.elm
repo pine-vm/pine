@@ -11,7 +11,7 @@ import Common
 import CompilationInterface.ElmMake
 import CompilationInterface.GenerateJsonCoders
 import Dict
-import ElmFullstack
+import ElmWebServer
 import Json.Encode
 import ListDict
 import Set
@@ -22,21 +22,21 @@ type alias State =
     Backend.State.State
 
 
-backendMain : ElmFullstack.BackendConfig State
+backendMain : ElmWebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions : State -> ElmWebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -75,7 +75,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 }
     in
     ( state
-    , [ ElmFullstack.RespondToHttpRequest { httpRequestId = httpRequestEvent.httpRequestId, response = httpResponse }
+    , [ ElmWebServer.RespondToHttpRequest { httpRequestId = httpRequestEvent.httpRequestId, response = httpResponse }
       ]
     )
 

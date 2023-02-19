@@ -6,23 +6,23 @@ module Backend.Main exposing
 import Base64
 import Bytes
 import Bytes.Encode
-import ElmFullstack
+import ElmWebServer
 
 
 type alias State =
     { posixTimeMilli : Int
-    , httpRequestsToRespondTo : List ElmFullstack.HttpRequestEventStruct
+    , httpRequestsToRespondTo : List ElmWebServer.HttpRequestEventStruct
     }
 
 
-backendMain : ElmFullstack.BackendConfig State
+backendMain : ElmWebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmFullstack.BackendSubs State
+subscriptions : State -> ElmWebServer.Subscriptions State
 subscriptions state =
     let
         nextCompletionPosixTimeMilli =
@@ -42,7 +42,7 @@ subscriptions state =
     }
 
 
-updateForHttpRequestEvent : ElmFullstack.HttpRequestEventStruct -> State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -54,7 +54,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     state |> updateForHttpResponses
 
 
-updateForHttpResponses : State -> ( State, ElmFullstack.BackendCmds State )
+updateForHttpResponses : State -> ( State, ElmWebServer.Commands State )
 updateForHttpResponses state =
     ( state
     , state
@@ -78,17 +78,17 @@ updateForHttpResponses state =
                     }
                 }
             )
-        |> List.map ElmFullstack.RespondToHttpRequest
+        |> List.map ElmWebServer.RespondToHttpRequest
     )
 
 
-getHttpRequestsWithCompletionTimes : State -> List ( ElmFullstack.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
+getHttpRequestsWithCompletionTimes : State -> List ( ElmWebServer.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
 getHttpRequestsWithCompletionTimes state =
     state.httpRequestsToRespondTo
         |> List.map (\requestEvent -> ( requestEvent, completionTimeForHttpRequest requestEvent ))
 
 
-completionTimeForHttpRequest : ElmFullstack.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
+completionTimeForHttpRequest : ElmWebServer.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
 completionTimeForHttpRequest httpRequest =
     let
         delayMilliseconds =

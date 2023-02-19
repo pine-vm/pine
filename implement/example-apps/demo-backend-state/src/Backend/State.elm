@@ -10,14 +10,14 @@ module Backend.State exposing
 import Array
 import Bytes
 import Dict
-import ElmFullstack
+import ElmWebServer
 import ListDict
 import Set
 
 
 type alias State =
     { httpRequestsCount : Int
-    , lastHttpRequests : List ElmFullstack.HttpRequestEventStruct
+    , lastHttpRequests : List ElmWebServer.HttpRequestEventStruct
     , tuple2 : Tuple2
     , tuple3 : Tuple3
     , list_custom_type : List ChoiceType
