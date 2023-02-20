@@ -13,8 +13,18 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 {
     public record ParsedType(IReadOnlyList<ParsedType.Variant> Variants)
     {
-        public record Variant(string Name, Type ClrType, ConstructorInfo Constructor, IReadOnlyList<PropertyInfo> ConstructorArguments);
+        public record Variant(
+            string Name,
+            Type ClrType,
+            ConstructorInfo Constructor,
+            IReadOnlyList<ConstructorParameter> ConstructorParameters);
     }
+
+    public record ConstructorParameter(
+        PropertyInfo PropertyInfo,
+        JsonIgnore? JsonIgnore);
+
+    public record JsonIgnore(object Default);
 
     private static readonly ConcurrentDictionary<Type, Result<string, ParsedType>> parseTypeToConvertCache = new();
 
@@ -78,6 +88,16 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 
     static Result<string, ParsedType.Variant> ParseUnionTypeVariant(Type variantType)
     {
+        static object DefaultValueFromType(Type type)
+        {
+            if (type.IsValueType)
+            {
+                return Activator.CreateInstance(type);
+            }
+
+            return null;
+        }
+
         var allProperties = variantType.GetProperties();
 
         var constructorsResults =
@@ -94,10 +114,20 @@ public class JsonConverterForChoiceType : JsonConverterFactory
                             allProperties
                             .FirstOrDefault(p => string.Equals(p.Name, constructorParams[i].Name, StringComparison.OrdinalIgnoreCase));
 
-                        if (constructorParamProperty is not null)
-                            return Result<string, PropertyInfo>.ok(constructorParamProperty);
+                        if (constructorParamProperty is null)
+                            return Result<string, ConstructorParameter>.err(
+                                "Did not find a matching property for constructor param " + constructorParam.Name);
 
-                        return Result<string, PropertyInfo>.err("Did not find a matching property for constructor param " + constructorParam.Name);
+                        JsonIgnore? jsonIgnore = null;
+
+                        if (constructorParamProperty.CustomAttributes.Any(ca => ca.AttributeType.Equals(typeof(JsonIgnoreAttribute))))
+                            jsonIgnore = new JsonIgnore(DefaultValueFromType(constructorParamProperty.PropertyType));
+
+                        return Result<string, ConstructorParameter>.ok(
+                            new ConstructorParameter(
+                                PropertyInfo: constructorParamProperty,
+                                JsonIgnore: jsonIgnore));
+
                     })
                     .ToImmutableList();
 
@@ -110,7 +140,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 
         foreach (var constructorResult in constructorsResults)
         {
-            if (constructorResult is Result<string, (ConstructorInfo, IReadOnlyList<PropertyInfo>)>.Ok constructorMatch)
+            if (constructorResult is Result<string, (ConstructorInfo, IReadOnlyList<ConstructorParameter>)>.Ok constructorMatch)
                 return Result<string, ParsedType.Variant>.ok(
                     new ParsedType.Variant(variantType.Name, variantType, constructorMatch.Value.Item1, constructorMatch.Value.Item2));
         }
@@ -160,14 +190,23 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
                 "Unexpected variant name: " + propertyName +
                 ". Expected one of these " + variantsNames.Count + " names: " + string.Join(", ", variantsNames));
 
-        var constructorArguments = new object?[variant.ConstructorArguments.Count];
+        var constructorArguments = new object?[variant.ConstructorParameters.Count];
 
         for (var argumentIndex = 0; argumentIndex < constructorArguments.Length; ++argumentIndex)
         {
-            constructorArguments[argumentIndex] =
-                JsonSerializer.Deserialize(ref reader, variant.ConstructorArguments[argumentIndex].PropertyType, options);
+            var constructorParameter = variant.ConstructorParameters[argumentIndex];
 
-            reader.Read();
+            if (constructorParameter.JsonIgnore is JsonConverterForChoiceType.JsonIgnore JsonIgnore)
+            {
+                constructorArguments[argumentIndex] = JsonIgnore.Default;
+            }
+            else
+            {
+                constructorArguments[argumentIndex] =
+                    JsonSerializer.Deserialize(ref reader, constructorParameter.PropertyInfo.PropertyType, options);
+
+                reader.Read();
+            }
         }
 
         var result = (T)variant.Constructor.Invoke(constructorArguments);
@@ -205,16 +244,23 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
 
         if (variant == null)
         {
-            throw new JsonException("Type " + value.GetType().FullName + " not registered as variant of " + (typeof(T).FullName));
+            throw new JsonException("Type " + value.GetType().FullName + " not registered as variant of " + typeof(T).FullName);
         }
 
         writer.WritePropertyName(variant.Name);
 
         writer.WriteStartArray();
 
-        foreach (var argument in variant.ConstructorArguments)
+        foreach (var constructorParameter in variant.ConstructorParameters)
         {
-            JsonSerializer.Serialize(writer, argument.GetValue(value), inputType: argument.PropertyType, options);
+            if (constructorParameter.JsonIgnore is not null)
+                continue;
+
+            JsonSerializer.Serialize(
+                writer,
+                constructorParameter.PropertyInfo.GetValue(value),
+                inputType: constructorParameter.PropertyInfo.PropertyType,
+                options);
         }
 
         writer.WriteEndArray();

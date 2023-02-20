@@ -129,4 +129,33 @@ public class TestJsonConverterForChoiceType
                     Result<string, long>.ok(345678912345678912),
                     Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error")))));
     }
+
+    [TestMethod]
+    public void JSON_serialize_record_choice_type_variant_with_ignored_property()
+    {
+        Assert.AreEqual(
+            $$"""{"StringProperty":"stringValue"}""",
+            JsonSerializer.Serialize(
+                new DemoChoice.DemoVariant(
+                    StringProperty: "stringValue",
+                    IntProperty: 123)));
+
+        Assert.AreEqual(
+            $$"""{"DemoVariant":["stringValue"]}""",
+            JsonSerializer.Serialize<DemoChoice>(
+                new DemoChoice.DemoVariant(
+                    StringProperty: "stringValue",
+                    IntProperty: 123)));
+    }
+
+    [JsonConverter(typeof(JsonConverterForChoiceType))]
+    public abstract record DemoChoice
+    {
+        public record DemoVariant(
+            string StringProperty,
+
+            [property: JsonIgnore]
+            int IntProperty)
+            : DemoChoice;
+    }
 }
