@@ -2,13 +2,10 @@
 
 Elm-Time is an open-source, cross-platform runtime environment for the Elm programming language.
 
-Elm-Time currently offers:
+Besides a web server platform, Elm-Time also comes with an integrated database management system that automatically persists and maintains the state of the Elm application.
+To learn more about the database management system and persistence, see the dedicated guide [Persistence in Elm-Time](./guide/persistence-in-elm-time.md)
 
-+ Persisting and restoring the state of backend Elm apps.
-+ Migrating the backend state when deploying a new program version: [Design Report - Migrations in Elm Fullstack Deployments](https://michaelrätzel.com/blog/design-report-migrations-in-elm-fullstack-deployments)
-+ Generating functions to serialize and deserialize Elm values based on type declarations from Elm programs.
-+ Ports to integrate and interoperate with custom components written in any programming language.
-+ A single executable file (per operating system) integrating all tools with a command-line interface.
+The Elm-Time compiler offers various interfaces supporting the automatic generation of Elm code at build time. This automation frees applications from boilerplate and glue code and allows us to focus on business logic.
 
 ## Getting Started
 
