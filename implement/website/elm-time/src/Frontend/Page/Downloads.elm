@@ -1,7 +1,11 @@
 module Frontend.Page.Downloads exposing (..)
 
 import Element
+import Element.Background
+import Element.Border
 import Element.Font
+import FontAwesome
+import FontAwesome.Brands
 import Frontend.View as View
 import Frontend.Visuals as Visuals
 
@@ -14,6 +18,7 @@ type alias DownloadLinksByPlatform =
 
 type alias DownloadPlatform =
     { title : String
+    , icon : FontAwesome.Icon FontAwesome.WithoutId
     , getDownloadLink : DownloadLinksByPlatform -> String
     }
 
@@ -21,9 +26,11 @@ type alias DownloadPlatform =
 downloadPlatforms : List DownloadPlatform
 downloadPlatforms =
     [ { title = "Linux"
+      , icon = FontAwesome.Brands.linux
       , getDownloadLink = .linux
       }
     , { title = "Windows"
+      , icon = FontAwesome.Brands.windows
       , getDownloadLink = .windows
       }
     ]
@@ -52,10 +59,11 @@ view device =
         |> List.map viewPlatform
         |> View.responsiveRowOrColumn device
             [ Element.width Element.fill
-            , Element.spacing Visuals.defaultFontSize
-            , Element.padding (Visuals.defaultFontSize * 2)
+            , Element.spacing (Visuals.defaultFontSize // 2)
             ]
-    , [ [ Element.text "Docker Image" ]
+    , [ [ Element.text "Docker Image "
+        , FontAwesome.Brands.docker |> FontAwesome.view |> Element.html
+        ]
             |> Element.paragraph (Visuals.headingAttributes 2)
       , [ Element.text "Official Elm-Time Docker Image"
         , Element.text dockerImageUrl
@@ -101,17 +109,28 @@ viewPlatform platform =
         [ Element.pointer
         , Element.width Element.fill
         , Element.Font.color Visuals.defaultLinkConfig.color
+        , Element.mouseOver
+            [ Element.Font.color (Element.rgb 1 1 1)
+            , Element.Background.color linkHoverColor
+            ]
+        , Element.Border.rounded 4
         ]
         { url = downloadUrl
         , label =
-            [ Element.text platform.title
+            [ platform.icon
+                |> FontAwesome.view
+                |> Element.html
+                |> Element.el [ Element.Font.size (Visuals.defaultFontSize * 4), Element.alignTop, Element.centerX ]
+            , Element.text platform.title
                 |> Element.el (Element.centerX :: Visuals.headingAttributes 3)
             , [ Element.text downloadFileName ]
-                |> Element.paragraph [ Element.centerX ]
+                |> Element.paragraph [ Element.Font.center ]
+                |> Element.el [ Visuals.elementFontSizePercent 90, Element.width Element.fill ]
             ]
                 |> Element.column
                     [ Element.width Element.fill
-                    , Element.spacing Visuals.defaultFontSize
+                    , Element.spacing (Visuals.defaultFontSize // 2)
+                    , Element.padding Visuals.defaultFontSize
                     ]
         }
         {-

@@ -19,6 +19,7 @@
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm-community/result-extra": "2.4.0",
+            "lattyware/elm-fontawesome": "6.0.0",
             "mdgriffith/elm-ui": "1.1.8",
             "rtfeldman/elm-hex": "1.0.0"
         },

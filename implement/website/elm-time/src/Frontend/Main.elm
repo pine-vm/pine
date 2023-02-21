@@ -7,6 +7,7 @@ import Browser.Navigation
 import Element
 import Element.Background
 import Element.Font
+import FontAwesome.Styles
 import Frontend.Page.Downloads
 import Frontend.Page.Home
 import Frontend.Visuals as Visuals
@@ -180,6 +181,7 @@ view state =
     { title = title
     , body =
         [ [ Element.html Visuals.globalCssStyleHtmlElement
+          , Element.html FontAwesome.Styles.css
           , header
           , [ pageHeadingElement
             , viewPageMainContent state.selectedPage device
