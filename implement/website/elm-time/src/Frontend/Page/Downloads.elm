@@ -1,6 +1,7 @@
 module Frontend.Page.Downloads exposing (..)
 
 import Element
+import Element.Font
 import Frontend.View as View
 import Frontend.Visuals as Visuals
 
@@ -96,9 +97,13 @@ viewPlatform platform =
                 |> List.head
                 |> Maybe.withDefault downloadUrl
     in
-    Visuals.linkElementFromUrlAndLabel
+    Element.link
+        [ Element.pointer
+        , Element.width Element.fill
+        , Element.Font.color Visuals.defaultLinkConfig.color
+        ]
         { url = downloadUrl
-        , labelElement =
+        , label =
             [ Element.text platform.title
                 |> Element.el (Element.centerX :: Visuals.headingAttributes 3)
             , [ Element.text downloadFileName ]
@@ -108,8 +113,12 @@ viewPlatform platform =
                     [ Element.width Element.fill
                     , Element.spacing Visuals.defaultFontSize
                     ]
-        , newTabLink = False
         }
+        {-
+           Avoid bug in layout of 'link' element:
+           Apply the workaround shared by Luca at https://github.com/mdgriffith/elm-ui/issues/226#issue-627821005
+        -}
+        |> Element.el [ Element.width Element.fill ]
 
 
 linkHoverColor : Element.Color
