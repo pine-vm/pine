@@ -12,6 +12,7 @@ import CompileFullstackApp
         , EntryPointClass
         , LocatedInSourceFiles(..)
         , SourceParsedElmModule
+        , addModulesFromTextToAppFiles
         , buildJsonCodingFunctionsForTypeAnnotation
         , buildTypeAnnotationText
         , entryPointClassFromSetOfEquallyProcessedFunctionNames
@@ -23,6 +24,7 @@ import CompileFullstackApp
         , locatedInSourceFilesFromRange
         , mapAppFilesToSupportJsonCoding
         , mapLocatedInSourceFiles
+        , modulesToAddForBase64Coding
         , parseElmTypeAndDependenciesRecursivelyFromAnnotation
         , syntaxRangeCoveringCompleteModule
         , updateFileContentAtPath
@@ -158,11 +160,12 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                 stateType.stateTypeAnnotation :: typeToGenerateSerializersForMigration
 
                                             ( appFiles, generateSerializersResult ) =
-                                                mapAppFilesToSupportJsonCoding
-                                                    { generatedModuleNamePrefix = config.interfaceToHostRootModuleName }
-                                                    typeToGenerateSerializersFor
-                                                    stateAndMigrationTypeDependencies
-                                                    sourceFiles
+                                                sourceFiles
+                                                    |> addModulesFromTextToAppFiles modulesToAddForBase64Coding
+                                                    |> mapAppFilesToSupportJsonCoding
+                                                        { generatedModuleNamePrefix = config.interfaceToHostRootModuleName }
+                                                        typeToGenerateSerializersFor
+                                                        stateAndMigrationTypeDependencies
 
                                             modulesToImport =
                                                 generateSerializersResult.modulesToImport

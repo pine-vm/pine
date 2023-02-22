@@ -347,44 +347,14 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                     )
                 |> Set.fromList
 
-        containsBackend =
-            -- TODO: Reuse the entry point kind found by loweredForCompilationRoot
-            findModuleByName [ "Backend", "Main" ] sourceModules /= Nothing
-
-        modulesToAddForBackendDepdendencies =
-            if containsBackend then
-                Set.fromList modulesToAddForBase64Coding
-
-            else
-                Set.empty
-
         modulesToAdd =
             usedCompilationInterfaceModules
                 |> Set.toList
                 |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
                 |> List.concat
-                |> Set.fromList
-                |> Set.union modulesToAddForBackendDepdendencies
-                |> Set.toList
     in
-    modulesToAdd
-        |> List.foldl
-            (\moduleToAdd prevFiles ->
-                moduleToAdd
-                    |> parseElmModuleText
-                    |> Result.map
-                        (\moduleToAddSyntax ->
-                            let
-                                filePath =
-                                    filePathFromElmModuleName
-                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
-                            in
-                            prevFiles
-                                |> Dict.insert filePath (fileContentFromString moduleToAdd)
-                        )
-                    |> Result.withDefault prevFiles
-            )
-            arguments.sourceFiles
+    arguments.sourceFiles
+        |> addModulesFromTextToAppFiles modulesToAdd
         |> loweredForSourceFiles arguments.compilationInterfaceElmModuleNamePrefixes
         |> Result.andThen (loweredForJsonCoders { originalSourceModules = sourceModules } arguments.compilationInterfaceElmModuleNamePrefixes)
         |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
@@ -3843,6 +3813,28 @@ filePathRepresentationInFunctionName =
                     '_'
             )
         >> String.fromList
+
+
+addModulesFromTextToAppFiles : List String -> AppFiles -> AppFiles
+addModulesFromTextToAppFiles modulesToAdd sourceFiles =
+    modulesToAdd
+        |> List.foldl
+            (\moduleToAdd prevFiles ->
+                moduleToAdd
+                    |> parseElmModuleText
+                    |> Result.map
+                        (\moduleToAddSyntax ->
+                            let
+                                filePath =
+                                    filePathFromElmModuleName
+                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
+                            in
+                            prevFiles
+                                |> Dict.insert filePath (fileContentFromString moduleToAdd)
+                        )
+                    |> Result.withDefault prevFiles
+            )
+            sourceFiles
 
 
 filePathFromElmModuleName : List String -> List String
