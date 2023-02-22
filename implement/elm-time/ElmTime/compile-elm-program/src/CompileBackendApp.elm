@@ -44,6 +44,7 @@ import Set
 type alias BackendRootModuleConfig =
     { interfaceToHostRootModuleName : String
     , rootModuleNameBeforeLowering : String
+    , mainDeclarationName : String
     , stateTypeAnnotation : ElmTypeAnnotation
     , modulesToImport : List (List String)
     , stateEncodeFunction : String
@@ -88,7 +89,7 @@ appStateMigrationInterfaceFunctionName =
 entryPoints : List EntryPointClass
 entryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
-        (Set.singleton "backendMain")
+        (Set.fromList [ "webServerMain", "backendMain" ])
         (\functionDeclaration entryPointConfig ->
             loweredForBackendApp functionDeclaration entryPointConfig
                 >> Result.map
@@ -224,6 +225,11 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                             |> Elm.Syntax.Node.value
                                                             |> Elm.Syntax.Module.moduleName
                                                             |> String.join "."
+                                                    , mainDeclarationName =
+                                                        appDeclaration.declaration
+                                                            |> Elm.Syntax.Node.value
+                                                            |> .name
+                                                            |> Elm.Syntax.Node.value
                                                     , stateTypeAnnotation = stateType.stateTypeAnnotation
                                                     , modulesToImport = modulesToImport
                                                     , stateEncodeFunction = encodeFunction
@@ -246,9 +252,11 @@ loweredForBackendApp appDeclaration config sourceFiles =
 
 composeBackendRootElmModuleTextFromTypeName : Dict.Dict (List String) (BackendRootModuleConfig -> String)
 composeBackendRootElmModuleTextFromTypeName =
-    [ ( [ "ElmFullstack", "BackendConfig" ]
-      , composeBackendRootElmModuleTextElmFullstack
+    [ ( [ "Platform", "WebServer", "WebServerConfig" ]
+      , composeBackendRootElmModuleTextPlatformWebServer
       )
+
+    -- TODO: Phase-out old namespace 'ElmWebServer'
     , ( [ "ElmWebServer", "WebServerConfig" ]
       , composeBackendRootElmModuleTextWebServer
       )
@@ -434,9 +442,15 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
             )
 
 
-composeBackendRootElmModuleTextElmFullstack : BackendRootModuleConfig -> String
-composeBackendRootElmModuleTextElmFullstack config =
-    "module " ++ config.interfaceToHostRootModuleName ++ """ exposing
+composeBackendRootElmModuleTextPlatformWebServer : BackendRootModuleConfig -> String
+composeBackendRootElmModuleTextPlatformWebServer config =
+    let
+        mainDeclarationNameQualifiedName =
+            config.rootModuleNameBeforeLowering ++ "." ++ config.mainDeclarationName
+    in
+    "module "
+        ++ config.interfaceToHostRootModuleName
+        ++ """ exposing
     ( State
     , interfaceToHost_deserializeState
     , interfaceToHost_initState
@@ -445,22 +459,28 @@ composeBackendRootElmModuleTextElmFullstack config =
     , main
     )
 
-import """ ++ config.rootModuleNameBeforeLowering ++ """
-""" ++ (config.modulesToImport |> List.map (Tuple.pair >> (|>) Nothing >> importSyntaxTextFromModuleNameAndAlias) |> String.join "\n") ++ """
+import """
+        ++ config.rootModuleNameBeforeLowering
+        ++ """
+"""
+        ++ (config.modulesToImport |> List.map (Tuple.pair >> (|>) Nothing >> importSyntaxTextFromModuleNameAndAlias) |> String.join "\n")
+        ++ """
 import Platform
-import ElmFullstack exposing (..)
+import Platform.WebServer exposing (..)
 
 
 type alias DeserializedState =
-    (""" ++ buildTypeAnnotationText config.stateTypeAnnotation ++ """)
+    ("""
+        ++ buildTypeAnnotationText config.stateTypeAnnotation
+        ++ """)
 
 
 type alias DeserializedStateWithTaskFramework =
     { stateLessFramework : DeserializedState
     , nextTaskIndex : Int
     , posixTimeMilli : Int
-    , createVolatileProcessTasks : Dict.Dict TaskId (CreateVolatileProcessResult -> DeserializedState -> ( DeserializedState, BackendCmds DeserializedState ))
-    , requestToVolatileProcessTasks : Dict.Dict TaskId (RequestToVolatileProcessResult -> DeserializedState -> ( DeserializedState, BackendCmds DeserializedState ))
+    , createVolatileProcessTasks : Dict.Dict TaskId (CreateVolatileProcessResult -> DeserializedState -> ( DeserializedState, Platform.WebServer.Commands DeserializedState ))
+    , requestToVolatileProcessTasks : Dict.Dict TaskId (RequestToVolatileProcessResult -> DeserializedState -> ( DeserializedState, Platform.WebServer.Commands DeserializedState ))
     , terminateVolatileProcessTasks : Dict.Dict TaskId ()
     }
 
@@ -487,7 +507,7 @@ type State
 
 
 type BackendEvent
-    = HttpRequestEvent ElmFullstack.HttpRequestEventStruct
+    = HttpRequestEvent Platform.WebServer.HttpRequestEventStruct
     | TaskCompleteEvent TaskCompleteEventStruct
     | PosixTimeHasArrivedEvent { posixTimeMilli : Int }
     | InitStateEvent
@@ -543,7 +563,9 @@ type alias TaskId =
 
 
 interfaceToHost_initState =
-    """ ++ config.rootModuleNameBeforeLowering ++ """.backendMain.init
+    """
+        ++ mainDeclarationNameQualifiedName
+        ++ """.init
         |> Tuple.first
         |> initDeserializedStateWithTaskFramework
         |> DeserializeSuccessful
@@ -556,7 +578,9 @@ interfaceToHost_processEvent hostEvent stateBefore =
 
         DeserializeSuccessful deserializedState ->
             deserializedState
-                |> wrapForSerialInterface_processEvent Backend.Main.backendMain.subscriptions hostEvent
+                |> wrapForSerialInterface_processEvent """
+        ++ mainDeclarationNameQualifiedName
+        ++ """.subscriptions hostEvent
                 |> Tuple.mapFirst DeserializeSuccessful
 
 
@@ -638,7 +662,7 @@ jsonDecodeState =
 
 
 wrapForSerialInterface_processEvent :
-    (DeserializedState -> BackendSubs DeserializedState)
+    (DeserializedState -> Subscriptions DeserializedState)
     -> String
     -> DeserializedStateWithTaskFramework
     -> ( DeserializedStateWithTaskFramework, String )
@@ -661,7 +685,7 @@ wrapForSerialInterface_processEvent subscriptions serializedEvent stateBefore =
 
 
 processEvent :
-    (DeserializedState -> BackendSubs DeserializedState)
+    (DeserializedState -> Subscriptions DeserializedState)
     -> BackendEvent
     -> DeserializedStateWithTaskFramework
     -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
@@ -690,7 +714,7 @@ processEvent subscriptions hostEvent stateBefore =
 
 
 processEventLessRememberTime :
-    (DeserializedState -> BackendSubs DeserializedState)
+    (DeserializedState -> Subscriptions DeserializedState)
     -> BackendEvent
     -> DeserializedStateWithTaskFramework
     -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
@@ -770,7 +794,9 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                         }
 
         InitStateEvent ->
-            continueWithUpdateToTasks (always Backend.Main.backendMain.init) stateBefore
+            continueWithUpdateToTasks (always """
+        ++ mainDeclarationNameQualifiedName
+        ++ """.init) stateBefore
 
         SetStateEvent stateString ->
             let
@@ -817,16 +843,20 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
 
 setStateFromString : String -> Result String DeserializedState
 setStateFromString =
-""" ++ indentElmCodeLines 1 config.stateFromStringExpression ++ """
+"""
+        ++ indentElmCodeLines 1 config.stateFromStringExpression
+        ++ """
 
-migrateFromString : String -> Result String ( DeserializedState, BackendCmds DeserializedState )
+migrateFromString : String -> Result String ( DeserializedState, Commands DeserializedState )
 migrateFromString =
-""" ++ indentElmCodeLines 1 config.migrateFromStringExpression ++ """
+"""
+        ++ indentElmCodeLines 1 config.migrateFromStringExpression
+        ++ """
 
 
 backendEventResponseFromRuntimeTasksAndSubscriptions :
-    (DeserializedState -> BackendSubs DeserializedState)
-    -> List (BackendCmd DeserializedState)
+    (DeserializedState -> Subscriptions DeserializedState)
+    -> List (Command DeserializedState)
     -> DeserializedStateWithTaskFramework
     -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
 backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBefore =
@@ -845,7 +875,7 @@ backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBe
         |> Tuple.mapSecond concatBackendEventResponse
 
 
-backendEventResponseFromSubscriptions : BackendSubs DeserializedState -> BackendEventResponse
+backendEventResponseFromSubscriptions : Subscriptions DeserializedState -> BackendEventResponse
 backendEventResponseFromSubscriptions subscriptions =
     { startTasks = []
     , completeHttpResponses = []
@@ -857,7 +887,7 @@ backendEventResponseFromSubscriptions subscriptions =
 
 
 backendEventResponseFromRuntimeTask :
-    BackendCmd DeserializedState
+    Command DeserializedState
     -> DeserializedStateWithTaskFramework
     -> ( DeserializedStateWithTaskFramework, BackendEventResponse )
 backendEventResponseFromRuntimeTask task stateBefore =
@@ -877,13 +907,13 @@ backendEventResponseFromRuntimeTask task stateBefore =
             )
     in
     case task of
-        RespondToHttpRequest respondToHttpRequest ->
+        Platform.WebServer.RespondToHttpRequest respondToHttpRequest ->
             ( stateBefore
             , passiveBackendEventResponse
                 |> withCompleteHttpResponsesAdded [ respondToHttpRequest ]
             )
 
-        ElmFullstack.CreateVolatileProcess createVolatileProcess ->
+        Platform.WebServer.CreateVolatileProcess createVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -901,7 +931,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                     ]
             )
 
-        ElmFullstack.RequestToVolatileProcess requestToVolatileProcess ->
+        Platform.WebServer.RequestToVolatileProcess requestToVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -923,7 +953,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                     ]
             )
 
-        ElmFullstack.TerminateVolatileProcess terminateVolatileProcess ->
+        Platform.WebServer.TerminateVolatileProcess terminateVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -1168,7 +1198,11 @@ encodeHttpHeader httpHeader =
         |> Json.Encode.object
 
 
-""" ++ config.stateEncodeFunction ++ "\n\n" ++ config.stateDecodeFunction ++ """
+"""
+        ++ config.stateEncodeFunction
+        ++ "\n\n"
+        ++ config.stateDecodeFunction
+        ++ """
 
 
 jsonEncode__generic_Result : (a -> Json.Encode.Value) -> (b -> Json.Encode.Value) -> Result a b -> Json.Encode.Value

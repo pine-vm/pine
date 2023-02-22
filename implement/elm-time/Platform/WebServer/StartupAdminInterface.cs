@@ -39,7 +39,7 @@ public class StartupAdminInterface
 
     static public string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
-    static public IImmutableList<string> JsonFilePathDefault => ImmutableList.Create("elm-web-server.json");
+    static public IImmutableList<string> JsonFilePathDefault => ImmutableList.Create("web-server.json");
 
     static public IImmutableList<IImmutableList<string>> JsonFilePathAlternatives =
         ImmutableList.Create(
@@ -49,6 +49,7 @@ public class StartupAdminInterface
              * Support smooth migration of projects with backwards compatibility here:
              * Support the name used before 2023 as alternative.
              * */
+            ImmutableList.Create("elm-web-server.json"),
             ImmutableList.Create("elm-fullstack.json"));
 
     private readonly ILogger<StartupAdminInterface> logger;
