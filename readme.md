@@ -2,7 +2,7 @@
 
 Elm-Time is an open-source, cross-platform runtime environment for the Elm programming language.
 
-Besides a web server platform, Elm-Time also comes with an integrated database management system that automatically persists and maintains the state of the Elm application.
+Elm-Time integrates a web server and a database management system, automating the persistence and maintenance of application state and database migrations.
 To learn more about the database management system and persistence, see the dedicated guide [Persistence in Elm-Time](./guide/persistence-in-elm-time.md)
 
 The Elm-Time compiler offers various interfaces supporting the automatic generation of Elm code at build time. This automation frees applications from boilerplate and glue code and allows us to focus on business logic.
