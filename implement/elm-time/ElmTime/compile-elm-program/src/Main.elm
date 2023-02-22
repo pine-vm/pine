@@ -3,7 +3,7 @@ module Main exposing (..)
 import Base64
 import Bytes
 import CompileBackendApp
-import CompileFullstackApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointType)
+import CompileFullstackApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointClass)
 import Dict
 import Elm.Syntax.Range
 import Json.Decode
@@ -24,10 +24,10 @@ lowerSerialized argumentsJson =
         |> Json.Encode.encode 0
 
 
-defaultEntryPoints : Dict.Dict String EntryPointType
+defaultEntryPoints : List EntryPointClass
 defaultEntryPoints =
     CompileFullstackApp.defaultEntryPoints
-        |> Dict.union CompileBackendApp.entryPoints
+        ++ CompileBackendApp.entryPoints
 
 
 jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value

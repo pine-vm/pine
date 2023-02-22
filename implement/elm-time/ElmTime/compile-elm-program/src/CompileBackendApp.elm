@@ -9,11 +9,12 @@ import CompileFullstackApp
         , ElmMakeEntryPointKind(..)
         , ElmMakeEntryPointStruct
         , ElmTypeAnnotation
-        , EntryPointType
+        , EntryPointClass
         , LocatedInSourceFiles(..)
         , SourceParsedElmModule
         , buildJsonCodingFunctionsForTypeAnnotation
         , buildTypeAnnotationText
+        , entryPointClassFromSetOfEquallyProcessedFunctionNames
         , fileContentFromString
         , filePathFromElmModuleName
         , findModuleByName
@@ -28,11 +29,14 @@ import CompileFullstackApp
         )
 import Dict
 import Elm.Syntax.Declaration
+import Elm.Syntax.Expression
 import Elm.Syntax.File
+import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
+import Set
 
 
 type alias BackendRootModuleConfig =
@@ -57,16 +61,14 @@ type alias MigrationConfig =
 
 
 type alias ElmAppInterfaceConvention =
-    { backendMainDeclarationName : String
-    , serializeStateFunctionName : String
+    { serializeStateFunctionName : String
     , deserializeStateFunctionName : String
     }
 
 
 elmAppInterfaceConvention : ElmAppInterfaceConvention
 elmAppInterfaceConvention =
-    { backendMainDeclarationName = "backendMain"
-    , serializeStateFunctionName = "interfaceToHost_serializeState"
+    { serializeStateFunctionName = "interfaceToHost_serializeState"
     , deserializeStateFunctionName = "interfaceToHost_deserializeState"
     }
 
@@ -81,27 +83,28 @@ appStateMigrationInterfaceFunctionName =
     "migrate"
 
 
-entryPoints : Dict.Dict String EntryPointType
+entryPoints : List EntryPointClass
 entryPoints =
-    Dict.fromList
-        [ ( elmAppInterfaceConvention.backendMainDeclarationName
-          , \entryPointConfig ->
-                loweredForBackendApp entryPointConfig
-                    >> Result.map
-                        (\( compiledFiles, entryPoint ) ->
-                            { compiledFiles = compiledFiles
-                            , rootModuleEntryPointKind = ClassicMakeEntryPoint entryPoint
-                            }
-                        )
-          )
-        ]
+    [ entryPointClassFromSetOfEquallyProcessedFunctionNames
+        (Set.singleton "backendMain")
+        (\functionDeclaration entryPointConfig ->
+            loweredForBackendApp functionDeclaration entryPointConfig
+                >> Result.map
+                    (\( compiledFiles, entryPoint ) ->
+                        { compiledFiles = compiledFiles
+                        , rootModuleEntryPointKind = ClassicMakeEntryPoint entryPoint
+                        }
+                    )
+        )
+    ]
 
 
 loweredForBackendApp :
-    CompileEntryPointConfig
+    Elm.Syntax.Expression.Function
+    -> CompileEntryPointConfig
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
-loweredForBackendApp config sourceFiles =
+loweredForBackendApp appDeclaration config sourceFiles =
     let
         interfaceToHostRootFilePath =
             filePathFromElmModuleName config.interfaceToHostRootModuleName
@@ -111,136 +114,131 @@ loweredForBackendApp config sourceFiles =
                 String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
             }
     in
-    case Dict.get config.compilationRootFilePath config.originalSourceModules of
-        Nothing ->
-            -- App contains no backend.
-            Err
-                [ LocatedInSourceFiles
-                    { filePath = config.compilationRootFilePath
-                    , locationInModuleText = Elm.Syntax.Range.emptyRange
-                    }
-                    (OtherCompilationError "Contains no backend")
-                ]
+    if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
+        -- Support integrating applications supplying their own lowered version.
+        Ok ( sourceFiles, entryPoint )
 
-        Just compilationRootModule ->
-            if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
-                -- Support integrating applications supplying their own lowered version.
-                Ok ( sourceFiles, entryPoint )
+    else
+        parseAppStateElmTypeAndDependenciesRecursively
+            appDeclaration
+            config.originalSourceModules
+            ( config.compilationRootFilePath, config.compilationRootModule.parsedSyntax )
+            |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type: "))
+            |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
+            |> Result.andThen
+                (\stateType ->
+                    case Dict.get stateType.instantiatedConfigTypeName composeBackendRootElmModuleTextFromTypeName of
+                        Nothing ->
+                            Err
+                                [ LocatedInSourceFiles
+                                    { filePath = config.compilationRootFilePath
+                                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                                    }
+                                    (OtherCompilationError
+                                        ("Unknown instantiated config type name: "
+                                            ++ String.join "." stateType.instantiatedConfigTypeName
+                                        )
+                                    )
+                                ]
 
-            else
-                parseAppStateElmTypeAndDependenciesRecursively
-                    config.originalSourceModules
-                    ( config.compilationRootFilePath, compilationRootModule.parsedSyntax )
-                    |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type: "))
-                    |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
-                    |> Result.andThen
-                        (\stateType ->
-                            case Dict.get stateType.instantiatedConfigTypeName composeBackendRootElmModuleTextFromTypeName of
-                                Nothing ->
-                                    Err
-                                        [ LocatedInSourceFiles
-                                            { filePath = config.compilationRootFilePath
-                                            , locationInModuleText = Elm.Syntax.Range.emptyRange
-                                            }
-                                            (OtherCompilationError
-                                                ("Unknown instantiated config type name: "
-                                                    ++ String.join "." stateType.instantiatedConfigTypeName
-                                                )
-                                            )
-                                        ]
+                        Just composeBackendRootElmModuleText ->
+                            parseMigrationConfig { originalSourceModules = config.originalSourceModules }
+                                |> Result.map
+                                    (\maybeMigrationConfig ->
+                                        let
+                                            stateAndMigrationTypeDependencies =
+                                                stateType.dependencies
+                                                    |> Dict.union
+                                                        (maybeMigrationConfig
+                                                            |> Maybe.map .dependencies
+                                                            |> Maybe.withDefault Dict.empty
+                                                        )
 
-                                Just composeBackendRootElmModuleText ->
-                                    parseMigrationConfig { originalSourceModules = config.originalSourceModules }
-                                        |> Result.map
-                                            (\maybeMigrationConfig ->
-                                                let
-                                                    stateAndMigrationTypeDependencies =
-                                                        stateType.dependencies
-                                                            |> Dict.union
-                                                                (maybeMigrationConfig
-                                                                    |> Maybe.map .dependencies
-                                                                    |> Maybe.withDefault Dict.empty
-                                                                )
+                                            typeToGenerateSerializersFor =
+                                                stateType.stateTypeAnnotation :: typeToGenerateSerializersForMigration
 
-                                                    typeToGenerateSerializersFor =
-                                                        stateType.stateTypeAnnotation :: typeToGenerateSerializersForMigration
+                                            ( appFiles, generateSerializersResult ) =
+                                                mapAppFilesToSupportJsonCoding
+                                                    { generatedModuleNamePrefix = config.interfaceToHostRootModuleName }
+                                                    typeToGenerateSerializersFor
+                                                    stateAndMigrationTypeDependencies
+                                                    sourceFiles
 
-                                                    ( appFiles, generateSerializersResult ) =
-                                                        mapAppFilesToSupportJsonCoding
-                                                            { generatedModuleNamePrefix = config.interfaceToHostRootModuleName }
-                                                            typeToGenerateSerializersFor
-                                                            stateAndMigrationTypeDependencies
-                                                            sourceFiles
+                                            modulesToImport =
+                                                generateSerializersResult.modulesToImport
+                                                    ++ (maybeMigrationConfig
+                                                            |> Maybe.map (.migrateFunctionModuleName >> List.singleton)
+                                                            |> Maybe.withDefault []
+                                                       )
 
-                                                    modulesToImport =
-                                                        generateSerializersResult.modulesToImport
-                                                            ++ (maybeMigrationConfig
-                                                                    |> Maybe.map (.migrateFunctionModuleName >> List.singleton)
-                                                                    |> Maybe.withDefault []
-                                                               )
+                                            functionsNamesInGeneratedModules =
+                                                buildJsonCodingFunctionsForTypeAnnotation stateType.stateTypeAnnotation
 
-                                                    functionsNamesInGeneratedModules =
-                                                        buildJsonCodingFunctionsForTypeAnnotation stateType.stateTypeAnnotation
+                                            encodeFunction =
+                                                "jsonEncodeDeserializedState =\n"
+                                                    ++ indentElmCodeLines 1
+                                                        (String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.encodeFunction.name ]))
 
-                                                    encodeFunction =
-                                                        "jsonEncodeDeserializedState =\n"
-                                                            ++ indentElmCodeLines 1
-                                                                (String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.encodeFunction.name ]))
+                                            decodeFunction =
+                                                "jsonDecodeDeserializedState =\n"
+                                                    ++ indentElmCodeLines 1
+                                                        (String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.decodeFunction.name ]))
 
-                                                    decodeFunction =
-                                                        "jsonDecodeDeserializedState =\n"
-                                                            ++ indentElmCodeLines 1
-                                                                (String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.decodeFunction.name ]))
+                                            ( migrateFromStringExpressionFromGenerateModuleName, typeToGenerateSerializersForMigration ) =
+                                                case maybeMigrationConfig of
+                                                    Nothing ->
+                                                        ( always "always (Err \"Did not find a migration function in the program code\")"
+                                                        , []
+                                                        )
 
-                                                    ( migrateFromStringExpressionFromGenerateModuleName, typeToGenerateSerializersForMigration ) =
-                                                        case maybeMigrationConfig of
-                                                            Nothing ->
-                                                                ( always "always (Err \"Did not find a migration function in the program code\")"
-                                                                , []
-                                                                )
+                                                    Just migrationConfig ->
+                                                        let
+                                                            inputTypeFunctionNames =
+                                                                buildJsonCodingFunctionsForTypeAnnotation migrationConfig.inputType
+                                                        in
+                                                        ( \generatedModuleName ->
+                                                            [ "Json.Decode.decodeString "
+                                                                ++ String.join "." (generatedModuleName ++ [ inputTypeFunctionNames.decodeFunction.name ])
+                                                            , ">> Result.mapError Json.Decode.errorToString"
+                                                            , ">> Result.map " ++ String.join "." (migrationConfig.migrateFunctionModuleName ++ [ migrationConfig.migrateFunctionDeclarationLocalName ])
+                                                            ]
+                                                                |> String.join "\n"
+                                                        , [ migrationConfig.inputType, migrationConfig.returnType ]
+                                                        )
 
-                                                            Just migrationConfig ->
-                                                                let
-                                                                    inputTypeFunctionNames =
-                                                                        buildJsonCodingFunctionsForTypeAnnotation migrationConfig.inputType
-                                                                in
-                                                                ( \generatedModuleName ->
-                                                                    [ "Json.Decode.decodeString "
-                                                                        ++ String.join "." (generatedModuleName ++ [ inputTypeFunctionNames.decodeFunction.name ])
-                                                                    , ">> Result.mapError Json.Decode.errorToString"
-                                                                    , ">> Result.map " ++ String.join "." (migrationConfig.migrateFunctionModuleName ++ [ migrationConfig.migrateFunctionDeclarationLocalName ])
-                                                                    ]
-                                                                        |> String.join "\n"
-                                                                , [ migrationConfig.inputType, migrationConfig.returnType ]
-                                                                )
+                                            stateFromStringExpression =
+                                                [ "Json.Decode.decodeString "
+                                                    ++ String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.decodeFunction.name ])
+                                                , ">> Result.mapError Json.Decode.errorToString"
+                                                ]
+                                                    |> String.join "\n"
 
-                                                    stateFromStringExpression =
-                                                        [ "Json.Decode.decodeString "
-                                                            ++ String.join "." (generateSerializersResult.generatedModuleName ++ [ functionsNamesInGeneratedModules.decodeFunction.name ])
-                                                        , ">> Result.mapError Json.Decode.errorToString"
-                                                        ]
-                                                            |> String.join "\n"
-
-                                                    rootElmModuleText =
-                                                        composeBackendRootElmModuleText
-                                                            { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
-                                                            , rootModuleNameBeforeLowering = String.join "." compilationRootModule.moduleName
-                                                            , stateTypeAnnotation = stateType.stateTypeAnnotation
-                                                            , modulesToImport = modulesToImport
-                                                            , stateEncodeFunction = encodeFunction
-                                                            , stateDecodeFunction = decodeFunction
-                                                            , stateFromStringExpression = stateFromStringExpression
-                                                            , migrateFromStringExpression = migrateFromStringExpressionFromGenerateModuleName generateSerializersResult.generatedModuleName
-                                                            }
-                                                in
-                                                ( appFiles
-                                                    |> updateFileContentAtPath
-                                                        (always (fileContentFromString rootElmModuleText))
-                                                        interfaceToHostRootFilePath
-                                                , entryPoint
-                                                )
-                                            )
-                        )
+                                            rootElmModuleText =
+                                                composeBackendRootElmModuleText
+                                                    { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
+                                                    , rootModuleNameBeforeLowering =
+                                                        config.compilationRootModule.parsedSyntax.moduleDefinition
+                                                            |> Elm.Syntax.Node.value
+                                                            |> Elm.Syntax.Module.moduleName
+                                                            |> String.join "."
+                                                    , stateTypeAnnotation = stateType.stateTypeAnnotation
+                                                    , modulesToImport = modulesToImport
+                                                    , stateEncodeFunction = encodeFunction
+                                                    , stateDecodeFunction = decodeFunction
+                                                    , stateFromStringExpression = stateFromStringExpression
+                                                    , migrateFromStringExpression =
+                                                        generateSerializersResult.generatedModuleName
+                                                            |> migrateFromStringExpressionFromGenerateModuleName
+                                                    }
+                                        in
+                                        ( appFiles
+                                            |> updateFileContentAtPath
+                                                (always (fileContentFromString rootElmModuleText))
+                                                interfaceToHostRootFilePath
+                                        , entryPoint
+                                        )
+                                    )
+                )
 
 
 composeBackendRootElmModuleTextFromTypeName : Dict.Dict (List String) (BackendRootModuleConfig -> String)
@@ -282,7 +280,8 @@ parseMigrationConfig { originalSourceModules } =
 
 
 parseAppStateElmTypeAndDependenciesRecursively :
-    Dict.Dict (List String) SourceParsedElmModule
+    Elm.Syntax.Expression.Function
+    -> Dict.Dict (List String) SourceParsedElmModule
     -> ( List String, Elm.Syntax.File.File )
     ->
         Result
@@ -291,8 +290,8 @@ parseAppStateElmTypeAndDependenciesRecursively :
             , dependencies : Dict.Dict String ElmChoiceTypeStruct
             , instantiatedConfigTypeName : List String
             }
-parseAppStateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
-    stateTypeAnnotationFromRootElmModule parsedModule
+parseAppStateElmTypeAndDependenciesRecursively rootFunctionDeclaration sourceModules ( parsedModuleFilePath, parsedModule ) =
+    stateTypeAnnotationFromRootFunctionDeclaration rootFunctionDeclaration
         |> Result.mapError
             ((++) "Did not find state type annotation: "
                 >> LocatedInSourceFiles
@@ -347,56 +346,34 @@ parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModu
             )
 
 
-stateTypeAnnotationFromRootElmModule :
-    Elm.Syntax.File.File
+stateTypeAnnotationFromRootFunctionDeclaration :
+    Elm.Syntax.Expression.Function
     ->
         Result
             String
             { instantiated : Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String )
             , parameter : Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
             }
-stateTypeAnnotationFromRootElmModule parsedModule =
-    parsedModule.declarations
-        |> List.filterMap
-            (\declaration ->
-                case Elm.Syntax.Node.value declaration of
-                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                        if
-                            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                                == elmAppInterfaceConvention.backendMainDeclarationName
-                        then
-                            Just functionDeclaration
+stateTypeAnnotationFromRootFunctionDeclaration rootFunctionDeclaration =
+    case rootFunctionDeclaration.signature of
+        Nothing ->
+            Err "Missing function signature"
 
-                        else
-                            Nothing
+        Just signature ->
+            case Elm.Syntax.Node.value (Elm.Syntax.Node.value signature).typeAnnotation of
+                Elm.Syntax.TypeAnnotation.Typed instantiated typeArguments ->
+                    case typeArguments of
+                        [ singleTypeArgument ] ->
+                            Ok
+                                { instantiated = instantiated
+                                , parameter = singleTypeArgument
+                                }
 
-                    _ ->
-                        Nothing
-            )
-        |> List.head
-        |> Maybe.map
-            (\functionDeclaration ->
-                case functionDeclaration.signature of
-                    Nothing ->
-                        Err "Missing function signature"
+                        _ ->
+                            Err ("Unexpected number of type arguments: " ++ String.fromInt (List.length typeArguments))
 
-                    Just signature ->
-                        case Elm.Syntax.Node.value (Elm.Syntax.Node.value signature).typeAnnotation of
-                            Elm.Syntax.TypeAnnotation.Typed instantiated typeArguments ->
-                                case typeArguments of
-                                    [ singleTypeArgument ] ->
-                                        Ok
-                                            { instantiated = instantiated
-                                            , parameter = singleTypeArgument
-                                            }
-
-                                    _ ->
-                                        Err ("Unexpected number of type arguments: " ++ String.fromInt (List.length typeArguments))
-
-                            _ ->
-                                Err "Unexpected type annotation: Not an instance"
-            )
-        |> Maybe.withDefault (Err ("Did not find declaration with name '" ++ elmAppInterfaceConvention.backendMainDeclarationName ++ "'"))
+                _ ->
+                    Err "Unexpected type annotation: Not an instance"
 
 
 migrateStateTypeAnnotationFromElmModule :

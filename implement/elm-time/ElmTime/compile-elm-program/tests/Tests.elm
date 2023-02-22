@@ -120,8 +120,25 @@ subscriptions _ =
                                         ++ "': "
                                         ++ CompileFullstackApp.parserDeadEndsToString moduleText error
                                 )
-                            |> Result.map
+                            |> Result.andThen
                                 (\parsedModule ->
+                                    parsedModule.declarations
+                                        |> List.map Elm.Syntax.Node.value
+                                        |> List.filterMap
+                                            (\declaration ->
+                                                case declaration of
+                                                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                                        Just functionDeclaration
+
+                                                    _ ->
+                                                        Nothing
+                                            )
+                                        |> List.head
+                                        |> Maybe.map (Tuple.pair parsedModule >> Ok)
+                                        |> Maybe.withDefault (Err "Did not find root declaration")
+                                )
+                            |> Result.map
+                                (\( parsedModule, rootFunctionDeclaration ) ->
                                     let
                                         moduleFilePath =
                                             [ "src", "Backend", "Main.elm" ]
@@ -135,6 +152,7 @@ subscriptions _ =
                                                 |> CompileFullstackApp.elmModulesDictFromAppFiles
                                     in
                                     CompileBackendApp.parseAppStateElmTypeAndDependenciesRecursively
+                                        rootFunctionDeclaration
                                         sourceModules
                                         ( moduleFilePath, parsedModule )
                                         |> Expect.equal expectedResult
