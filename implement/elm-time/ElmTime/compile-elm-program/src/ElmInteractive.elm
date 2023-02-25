@@ -118,7 +118,7 @@ type alias CompilationStack =
 
 type alias EmitStack =
     { declarationsDependencies : Dict.Dict String (Set.Set String)
-    , appEnvElementsOrder : List String
+    , environmentElementsOrder : List String
     , declarationsExpectedEnvironment : Dict.Dict String (List String)
     }
 
@@ -693,7 +693,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
 
         initialEmitStack =
             { declarationsDependencies = Dict.empty
-            , appEnvElementsOrder = []
+            , environmentElementsOrder = []
             , declarationsExpectedEnvironment = Dict.empty
             }
 
@@ -881,45 +881,8 @@ compileElmSyntaxExpression stack elmExpression =
                 [] ->
                     Err "Invalid shape of application: Zero elements in the list"
 
-                appliedFunctionElmSyntax :: elmArguments ->
-                    case elmArguments |> List.map (compileElmSyntaxExpression stack) |> Result.Extra.combine of
-                        Err error ->
-                            Err ("Failed to compile Elm arguments: " ++ error)
-
-                        Ok arguments ->
-                            let
-                                continueWithNonKernelApplication =
-                                    case compileElmSyntaxExpression stack appliedFunctionElmSyntax of
-                                        Err error ->
-                                            Err ("Failed to compile Elm function syntax: " ++ error)
-
-                                        Ok appliedFunctionSyntax ->
-                                            Ok
-                                                (positionalApplicationExpressionFromListOfArguments
-                                                    appliedFunctionSyntax
-                                                    arguments
-                                                )
-                            in
-                            case appliedFunctionElmSyntax of
-                                Elm.Syntax.Expression.FunctionOrValue functionModuleName functionLocalName ->
-                                    if functionModuleName == [ pineKernelModuleName ] then
-                                        case arguments of
-                                            [ singleArgumentExpression ] ->
-                                                Ok
-                                                    (KernelApplicationExpression
-                                                        { functionName = functionLocalName
-                                                        , argument = singleArgumentExpression
-                                                        }
-                                                    )
-
-                                            _ ->
-                                                Err "Invalid argument list for kernel application: Wrap arguments into a single list expression"
-
-                                    else
-                                        continueWithNonKernelApplication
-
-                                _ ->
-                                    continueWithNonKernelApplication
+                appliedFunctionElmSyntax :: argumentsElmSyntax ->
+                    compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax
 
         Elm.Syntax.Expression.OperatorApplication operator _ leftExpr rightExpr ->
             let
@@ -1022,6 +985,52 @@ compileElmSyntaxExpression stack elmExpression =
                 ("Unsupported type of expression: "
                     ++ (elmExpression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0)
                 )
+
+
+compileElmSyntaxApplication :
+    CompilationStack
+    -> Elm.Syntax.Expression.Expression
+    -> List Elm.Syntax.Expression.Expression
+    -> Result String Expression
+compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
+    case argumentsElmSyntax |> List.map (compileElmSyntaxExpression stack) |> Result.Extra.combine of
+        Err error ->
+            Err ("Failed to compile Elm arguments: " ++ error)
+
+        Ok arguments ->
+            let
+                continueWithNonKernelApplication =
+                    case compileElmSyntaxExpression stack appliedFunctionElmSyntax of
+                        Err error ->
+                            Err ("Failed to compile Elm function syntax: " ++ error)
+
+                        Ok appliedFunctionSyntax ->
+                            Ok
+                                (positionalApplicationExpressionFromListOfArguments
+                                    appliedFunctionSyntax
+                                    arguments
+                                )
+            in
+            case appliedFunctionElmSyntax of
+                Elm.Syntax.Expression.FunctionOrValue functionModuleName functionLocalName ->
+                    if functionModuleName == [ pineKernelModuleName ] then
+                        case arguments of
+                            [ singleArgumentExpression ] ->
+                                Ok
+                                    (KernelApplicationExpression
+                                        { functionName = functionLocalName
+                                        , argument = singleArgumentExpression
+                                        }
+                                    )
+
+                            _ ->
+                                Err "Invalid argument list for kernel application: Wrap arguments into a single list expression"
+
+                    else
+                        continueWithNonKernelApplication
+
+                _ ->
+                    continueWithNonKernelApplication
 
 
 compileElmSyntaxLetBlock :
@@ -1892,20 +1901,7 @@ emitExpression stack expression =
                 |> Result.map Pine.ListExpression
 
         DecodeAndEvaluateExpression decodeAndEvaluate ->
-            decodeAndEvaluate.expression
-                |> emitExpression stack
-                |> Result.andThen
-                    (\function ->
-                        decodeAndEvaluate.environment
-                            |> emitExpression stack
-                            |> Result.map
-                                (\environment ->
-                                    Pine.DecodeAndEvaluateExpression
-                                        { expression = function
-                                        , environment = environment
-                                        }
-                                )
-                    )
+            emitDecodeAndEvaluateExpression stack decodeAndEvaluate
 
         KernelApplicationExpression kernelApplication ->
             kernelApplication.argument
@@ -1958,6 +1954,24 @@ emitExpression stack expression =
             recordExpr
                 |> emitExpression stack
                 |> Result.map (pineExpressionForRecordAccess fieldName)
+
+
+emitDecodeAndEvaluateExpression : EmitStack -> DecodeAndEvaluateExpressionStructure -> Result String Pine.Expression
+emitDecodeAndEvaluateExpression stack decodeAndEvaluate =
+    decodeAndEvaluate.expression
+        |> emitExpression stack
+        |> Result.andThen
+            (\function ->
+                decodeAndEvaluate.environment
+                    |> emitExpression stack
+                    |> Result.map
+                        (\environment ->
+                            Pine.DecodeAndEvaluateExpression
+                                { expression = function
+                                , environment = environment
+                                }
+                        )
+            )
 
 
 emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
@@ -2106,7 +2120,7 @@ emitEnvironmentCompositionExpression :
 emitEnvironmentCompositionExpression stackBefore environmentElementsDict =
     let
         environmentElementsOrderedPartForwarded =
-            stackBefore.appEnvElementsOrder
+            stackBefore.environmentElementsOrder
                 |> List.filterMap
                     (\name ->
                         environmentElementsDict
@@ -2149,7 +2163,7 @@ emitEnvironmentCompositionExpression stackBefore environmentElementsDict =
 
         stack =
             { stackBefore
-                | appEnvElementsOrder = environmentElementsOrdered |> List.map Tuple.first
+                | environmentElementsOrder = environmentElementsOrdered |> List.map Tuple.first
                 , declarationsExpectedEnvironment = declarationsExpectedEnvironment
             }
 
@@ -2254,9 +2268,9 @@ resultIndexInEnvironmentFromElementName name stack =
                 ("Failed getting runtime index for '"
                     ++ name
                     ++ "'. "
-                    ++ String.fromInt (List.length stack.appEnvElementsOrder)
+                    ++ String.fromInt (List.length stack.environmentElementsOrder)
                     ++ " names on the current stack: "
-                    ++ String.join ", " stack.appEnvElementsOrder
+                    ++ String.join ", " stack.environmentElementsOrder
                 )
 
         Just runtimeIndex ->
@@ -2265,7 +2279,7 @@ resultIndexInEnvironmentFromElementName name stack =
 
 maybeIndexInEnvironmentFromElementName : String -> EmitStack -> Maybe Int
 maybeIndexInEnvironmentFromElementName name =
-    .appEnvElementsOrder
+    .environmentElementsOrder
         >> List.indexedMap Tuple.pair
         >> List.filter (Tuple.second >> (==) name)
         >> List.head
@@ -2546,7 +2560,7 @@ compileInteractiveSubmission environment submission =
 
                 emitStack =
                     { declarationsDependencies = Dict.empty
-                    , appEnvElementsOrder = []
+                    , environmentElementsOrder = []
                     , declarationsExpectedEnvironment = Dict.empty
                     }
             in
