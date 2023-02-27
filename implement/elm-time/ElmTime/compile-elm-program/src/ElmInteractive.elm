@@ -1966,12 +1966,248 @@ emitDecodeAndEvaluateExpression stack decodeAndEvaluate =
                     |> emitExpression stack
                     |> Result.map
                         (\environment ->
-                            Pine.DecodeAndEvaluateExpression
+                            let
+                                sizeBeforeReduction =
+                                    [ function, environment ]
+                                        |> List.map (countPineExpressionSize estimatePineValueSize)
+                                        |> List.sum
+
+                                reductionMaxDepth =
+                                    if sizeBeforeReduction < 10 * 1000 then
+                                        2
+
+                                    else
+                                        1
+                            in
+                            attemptReduceDecodeAndEvaluateExpressionRecursive
+                                { maxDepth = reductionMaxDepth }
                                 { expression = function
                                 , environment = environment
                                 }
                         )
             )
+
+
+attemptReduceDecodeAndEvaluateExpressionRecursive :
+    { maxDepth : Int }
+    -> Pine.DecodeAndEvaluateExpressionStructure
+    -> Pine.Expression
+attemptReduceDecodeAndEvaluateExpressionRecursive { maxDepth } originalExpression =
+    let
+        default =
+            Pine.DecodeAndEvaluateExpression originalExpression
+    in
+    if maxDepth < 1 then
+        default
+
+    else
+        case searchReductionForDecodeAndEvaluateExpression originalExpression of
+            Nothing ->
+                default
+
+            Just reduced ->
+                case reduced of
+                    Pine.DecodeAndEvaluateExpression reducedDecodeAndEval ->
+                        attemptReduceDecodeAndEvaluateExpressionRecursive
+                            { maxDepth = maxDepth - 1 }
+                            reducedDecodeAndEval
+
+                    _ ->
+                        reduced
+
+
+searchReductionForDecodeAndEvaluateExpression :
+    Pine.DecodeAndEvaluateExpressionStructure
+    -> Maybe Pine.Expression
+searchReductionForDecodeAndEvaluateExpression originalExpression =
+    if pineExpressionIsIndependent originalExpression.expression then
+        case Pine.evaluateExpression Pine.emptyEvalContext originalExpression.expression of
+            Err _ ->
+                Nothing
+
+            Ok expressionValue ->
+                case Pine.decodeExpressionFromValue expressionValue of
+                    Err _ ->
+                        Nothing
+
+                    Ok decodedExpression ->
+                        let
+                            findReplacementForExpression expression =
+                                if expression == Pine.EnvironmentExpression then
+                                    Just originalExpression.environment
+
+                                else
+                                    Nothing
+
+                            transformResult =
+                                transformPineExpressionWithOptionalReplacement
+                                    findReplacementForExpression
+                                    decodedExpression
+                        in
+                        if (Tuple.second transformResult).referencesOriginalEnvironment then
+                            Nothing
+
+                        else
+                            let
+                                reducedExpression =
+                                    transformResult
+                                        |> Tuple.first
+                                        |> searchForExpressionReductionRecursive { maxDepth = 4 }
+                            in
+                            Just reducedExpression
+
+    else
+        Nothing
+
+
+searchForExpressionReductionRecursive : { maxDepth : Int } -> Pine.Expression -> Pine.Expression
+searchForExpressionReductionRecursive { maxDepth } expression =
+    if maxDepth < 1 then
+        expression
+
+    else
+        let
+            transformed =
+                expression
+                    |> transformPineExpressionWithOptionalReplacement searchForExpressionReduction
+                    |> Tuple.first
+        in
+        if transformed == expression then
+            transformed
+
+        else
+            searchForExpressionReductionRecursive { maxDepth = maxDepth - 1 } transformed
+
+
+searchForExpressionReduction : Pine.Expression -> Maybe Pine.Expression
+searchForExpressionReduction expression =
+    case expression of
+        Pine.KernelApplicationExpression rootKernelApp ->
+            case rootKernelApp.functionName of
+                "list_head" ->
+                    case rootKernelApp.argument of
+                        Pine.ListExpression argumentList ->
+                            List.head argumentList
+
+                        _ ->
+                            Nothing
+
+                "skip" ->
+                    case rootKernelApp.argument of
+                        Pine.ListExpression [ Pine.LiteralExpression skipCountLiteral, Pine.ListExpression expressionList ] ->
+                            case
+                                skipCountLiteral
+                                    |> Pine.bigIntFromValue
+                                    |> Result.toMaybe
+                                    |> Maybe.andThen (BigInt.toString >> String.toInt)
+                            of
+                                Nothing ->
+                                    Nothing
+
+                                Just skipCount ->
+                                    expressionList
+                                        |> List.drop skipCount
+                                        |> Pine.ListExpression
+                                        |> Just
+
+                        _ ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+transformPineExpressionWithOptionalReplacement :
+    (Pine.Expression -> Maybe Pine.Expression)
+    -> Pine.Expression
+    -> ( Pine.Expression, { referencesOriginalEnvironment : Bool } )
+transformPineExpressionWithOptionalReplacement findReplacement expression =
+    case findReplacement expression of
+        Just replacement ->
+            ( replacement, { referencesOriginalEnvironment = False } )
+
+        Nothing ->
+            case expression of
+                Pine.LiteralExpression _ ->
+                    ( expression, { referencesOriginalEnvironment = False } )
+
+                Pine.ListExpression list ->
+                    let
+                        itemsResults =
+                            list
+                                |> List.map (transformPineExpressionWithOptionalReplacement findReplacement)
+                    in
+                    ( Pine.ListExpression (List.map Tuple.first itemsResults)
+                    , { referencesOriginalEnvironment =
+                            itemsResults |> List.any (Tuple.second >> .referencesOriginalEnvironment)
+                      }
+                    )
+
+                Pine.DecodeAndEvaluateExpression decodeAndEvaluate ->
+                    let
+                        expressionResult =
+                            transformPineExpressionWithOptionalReplacement findReplacement decodeAndEvaluate.expression
+
+                        environmentResult =
+                            transformPineExpressionWithOptionalReplacement findReplacement decodeAndEvaluate.environment
+                    in
+                    ( Pine.DecodeAndEvaluateExpression
+                        { expression = Tuple.first expressionResult
+                        , environment = Tuple.first environmentResult
+                        }
+                    , { referencesOriginalEnvironment =
+                            (Tuple.second expressionResult).referencesOriginalEnvironment
+                                || (Tuple.second environmentResult).referencesOriginalEnvironment
+                      }
+                    )
+
+                Pine.KernelApplicationExpression kernelApp ->
+                    kernelApp.argument
+                        |> transformPineExpressionWithOptionalReplacement findReplacement
+                        |> Tuple.mapFirst
+                            (\argument ->
+                                Pine.KernelApplicationExpression { argument = argument, functionName = kernelApp.functionName }
+                            )
+
+                Pine.ConditionalExpression conditional ->
+                    let
+                        condition =
+                            transformPineExpressionWithOptionalReplacement findReplacement conditional.condition
+
+                        ifTrue =
+                            transformPineExpressionWithOptionalReplacement findReplacement conditional.ifTrue
+
+                        ifFalse =
+                            transformPineExpressionWithOptionalReplacement findReplacement conditional.ifFalse
+                    in
+                    ( Pine.ConditionalExpression
+                        { condition = Tuple.first condition
+                        , ifTrue = Tuple.first ifTrue
+                        , ifFalse = Tuple.first ifFalse
+                        }
+                    , { referencesOriginalEnvironment =
+                            [ condition, ifTrue, ifFalse ]
+                                |> List.map (Tuple.second >> .referencesOriginalEnvironment)
+                                |> List.any identity
+                      }
+                    )
+
+                Pine.EnvironmentExpression ->
+                    ( Pine.EnvironmentExpression
+                    , { referencesOriginalEnvironment = True
+                      }
+                    )
+
+                Pine.StringTagExpression tag tagged ->
+                    tagged
+                        |> transformPineExpressionWithOptionalReplacement findReplacement
+                        |> Tuple.mapFirst
+                            (\taggedMapped ->
+                                Pine.StringTagExpression tag taggedMapped
+                            )
 
 
 emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
@@ -3240,3 +3476,69 @@ json_decode_optionalField fieldName decoder =
     in
     Json.Decode.value
         |> Json.Decode.andThen finishDecoding
+
+
+pineExpressionIsIndependent : Pine.Expression -> Bool
+pineExpressionIsIndependent expression =
+    case expression of
+        Pine.LiteralExpression _ ->
+            True
+
+        Pine.ListExpression list ->
+            List.all pineExpressionIsIndependent list
+
+        Pine.DecodeAndEvaluateExpression decodeAndEval ->
+            [ decodeAndEval.environment, decodeAndEval.expression ]
+                |> List.all pineExpressionIsIndependent
+
+        Pine.KernelApplicationExpression kernelApp ->
+            pineExpressionIsIndependent kernelApp.argument
+
+        Pine.ConditionalExpression conditional ->
+            [ conditional.condition, conditional.ifTrue, conditional.ifFalse ]
+                |> List.all pineExpressionIsIndependent
+
+        Pine.EnvironmentExpression ->
+            False
+
+        Pine.StringTagExpression _ tagged ->
+            pineExpressionIsIndependent tagged
+
+
+countPineExpressionSize : (Pine.Value -> Int) -> Pine.Expression -> Int
+countPineExpressionSize countValueSize expression =
+    case expression of
+        Pine.LiteralExpression literal ->
+            countValueSize literal
+
+        Pine.ListExpression list ->
+            1 + List.sum (List.map (countPineExpressionSize countValueSize) list)
+
+        Pine.DecodeAndEvaluateExpression decodeAndEval ->
+            [ decodeAndEval.environment, decodeAndEval.expression ]
+                |> List.map (countPineExpressionSize countValueSize)
+                |> List.sum
+
+        Pine.KernelApplicationExpression kernelApp ->
+            2 + countPineExpressionSize countValueSize kernelApp.argument
+
+        Pine.ConditionalExpression conditional ->
+            [ conditional.condition, conditional.ifTrue, conditional.ifFalse ]
+                |> List.map (countPineExpressionSize countValueSize)
+                |> List.sum
+
+        Pine.EnvironmentExpression ->
+            1
+
+        Pine.StringTagExpression _ tagged ->
+            countPineExpressionSize countValueSize tagged
+
+
+estimatePineValueSize : Pine.Value -> Int
+estimatePineValueSize value =
+    case value of
+        Pine.BlobValue blob ->
+            10 + List.length blob
+
+        Pine.ListValue list ->
+            10 + List.sum (List.map estimatePineValueSize list)
