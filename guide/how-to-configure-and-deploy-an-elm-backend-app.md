@@ -9,8 +9,8 @@ In this guide, I use the `elm-time` command-line interface (CLI) program. You ca
 
 Here are direct links to the downloads, containing the `elm-time` executable file in a zip archive:
 
-+ Windows: https://github.com/elm-time/elm-time/releases/download/v2023-02-16/elm-time-bin-f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427-win10-x64.zip
-+ Linux: https://github.com/elm-time/elm-time/releases/download/v2023-02-16/elm-time-bin-f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427-linux-x64.zip
++ Windows: https://github.com/elm-time/elm-time/releases/download/v2023-02-27/elm-time-bin-v2023-02-27-win10-x64.zip
++ Linux: https://github.com/elm-time/elm-time/releases/download/v2023-02-27/elm-time-bin-v2023-02-27-linux-x64.zip
 
 To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -21,7 +21,7 @@ To register the elm-time executable on your system, run the `elm-time  install` 
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-time-bin-f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-time-bin-v2023-02-27-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
@@ -35,12 +35,12 @@ I copied the executable file to '/bin/elm-time'. You will be able to use the 'el
 As part of a deployment, Elm-Time compiles the app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing back-end and front-end: https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app
+Here is an example app containing backend and frontend: https://github.com/elm-time/elm-time/tree/56e788f7fbcf723443714c9263f4af9ece9c0933/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/56e788f7fbcf723443714c9263f4af9ece9c0933/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:

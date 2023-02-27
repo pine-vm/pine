@@ -12,7 +12,7 @@ The Elm-Time compiler offers various interfaces supporting the automatic generat
 Use this command to run a server and deploy an example app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/2fe621f492eced8a6f0da6e89e0aa90d01d6a04c/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/56e788f7fbcf723443714c9263f4af9ece9c0933/implement/example-apps/docker-image-default-app
 ```
 
 For a guide on installation and configuration options, see [How to Configure and Deploy an Elm Backend App](guide/how-to-configure-and-deploy-an-elm-backend-app.md).
