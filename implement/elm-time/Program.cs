@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-02-27";
+    static public string AppVersionId => "2023-02-28";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -1291,6 +1291,10 @@ public class Program
                             },
                             fromOk: makeOk =>
                             {
+                                var outputDirectory = Path.GetDirectoryName(outputPath);
+
+                                Directory.CreateDirectory(outputDirectory);
+
                                 File.WriteAllBytes(outputPath, makeOk.producedFile.ToArray());
                                 Console.WriteLine("Saved the output to " + outputPath);
 
