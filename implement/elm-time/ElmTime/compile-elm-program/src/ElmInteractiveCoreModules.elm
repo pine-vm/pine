@@ -254,13 +254,13 @@ repeatHelp result n value =
 
 range : Int -> Int -> List Int
 range lo hi =
-    rangeHelp lo hi []
+    rangeHelp (lo, hi, [])
 
 
-rangeHelp : Int -> Int -> List Int -> List Int
-rangeHelp lo hi list =
+rangeHelp : (Int, Int, List Int) -> List Int
+rangeHelp (lo, hi, list) =
     if lo <= hi then
-        rangeHelp lo (hi - 1) (cons hi list)
+        rangeHelp (lo, (hi - 1), (cons hi list))
     else
         list
 

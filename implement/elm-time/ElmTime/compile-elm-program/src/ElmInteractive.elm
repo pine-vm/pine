@@ -2052,7 +2052,7 @@ searchReductionForDecodeAndEvaluateExpression originalExpression =
                                 reducedExpression =
                                     transformResult
                                         |> Tuple.first
-                                        |> searchForExpressionReductionRecursive { maxDepth = 4 }
+                                        |> searchForExpressionReductionRecursive { maxDepth = 5 }
                             in
                             Just reducedExpression
 
