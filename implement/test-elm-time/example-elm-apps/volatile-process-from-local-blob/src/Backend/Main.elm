@@ -6,30 +6,30 @@ module Backend.Main exposing
 import Base64
 import Bytes.Encode
 import CompilationInterface.SourceFiles
-import ElmWebServer
+import Platform.WebServer
 
 
 type alias State =
     { volatileProcessId : Maybe String
-    , pendingHttpRequest : Maybe ElmWebServer.HttpRequestEventStruct
+    , pendingHttpRequest : Maybe Platform.WebServer.HttpRequestEventStruct
     }
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init = ( { volatileProcessId = Nothing, pendingHttpRequest = Nothing }, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -38,7 +38,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     ( state, state |> volatileProcessCmdsFromState )
 
 
-volatileProcessCmdsFromState : State -> ElmWebServer.Commands State
+volatileProcessCmdsFromState : State -> Platform.WebServer.Commands State
 volatileProcessCmdsFromState state =
     case state.pendingHttpRequest of
         Nothing ->
@@ -47,14 +47,14 @@ volatileProcessCmdsFromState state =
         Just pendingHttpRequest ->
             case state.volatileProcessId of
                 Nothing ->
-                    [ ElmWebServer.CreateVolatileProcess
+                    [ Platform.WebServer.CreateVolatileProcess
                         { programCode = CompilationInterface.SourceFiles.file____src_Backend_VolatileProcess_csx.utf8
                         , update = updateForCreateVolatileProcess pendingHttpRequest
                         }
                     ]
 
                 Just volatileProcessId ->
-                    [ ElmWebServer.RequestToVolatileProcess
+                    [ Platform.WebServer.RequestToVolatileProcess
                         { processId = volatileProcessId
                         , request = ""
                         , update = updateForRequestToVolatileProcess pendingHttpRequest
@@ -62,12 +62,12 @@ volatileProcessCmdsFromState state =
                     ]
 
 
-updateForCreateVolatileProcess : ElmWebServer.HttpRequestEventStruct -> ElmWebServer.CreateVolatileProcessResult -> State -> ( State, ElmWebServer.Commands State )
+updateForCreateVolatileProcess : Platform.WebServer.HttpRequestEventStruct -> Platform.WebServer.CreateVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
 updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse stateBefore =
     case createVolatileProcessResponse of
         Err { exceptionToString } ->
             ( stateBefore
-            , [ ElmWebServer.RespondToHttpRequest
+            , [ Platform.WebServer.RespondToHttpRequest
                     { httpRequestId = pendingHttpRequest.httpRequestId
                     , response = httpResponseInternalServerError ("Error creating volatile process: " ++ exceptionToString)
                     }
@@ -82,12 +82,12 @@ updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse 
             ( state, state |> volatileProcessCmdsFromState )
 
 
-updateForRequestToVolatileProcess : ElmWebServer.HttpRequestEventStruct -> ElmWebServer.RequestToVolatileProcessResult -> State -> ( State, ElmWebServer.Commands State )
+updateForRequestToVolatileProcess : Platform.WebServer.HttpRequestEventStruct -> Platform.WebServer.RequestToVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
 updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessResponse stateBefore =
     let
         httpResponse =
             case requestToVolatileProcessResponse of
-                Err ElmWebServer.ProcessNotFound ->
+                Err Platform.WebServer.ProcessNotFound ->
                     httpResponseInternalServerError "Error running in volatile process: ProcessNotFound"
 
                 Ok requestToVolatileProcessComplete ->
@@ -102,7 +102,7 @@ updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessRes
                             }
     in
     ( { stateBefore | pendingHttpRequest = Nothing }
-    , [ ElmWebServer.RespondToHttpRequest
+    , [ Platform.WebServer.RespondToHttpRequest
             { httpRequestId = pendingHttpRequest.httpRequestId
             , response = httpResponse
             }
@@ -110,7 +110,7 @@ updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessRes
     )
 
 
-httpResponseInternalServerError : String -> ElmWebServer.HttpResponse
+httpResponseInternalServerError : String -> Platform.WebServer.HttpResponse
 httpResponseInternalServerError errorMessage =
     { statusCode = 500
     , bodyAsBase64 = bodyFromString errorMessage

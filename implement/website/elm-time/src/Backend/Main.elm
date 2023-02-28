@@ -6,8 +6,8 @@ module Backend.Main exposing
 import Base64
 import Build
 import Bytes.Encode
-import ElmWebServer
 import FileTree
+import Platform.WebServer
 import Url
 
 
@@ -15,21 +15,21 @@ type alias State =
     {}
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init = ( {}, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         bodyFromString =
@@ -115,5 +115,5 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
     in
     ( stateBefore
-    , [ ElmWebServer.RespondToHttpRequest httpResponse ]
+    , [ Platform.WebServer.RespondToHttpRequest httpResponse ]
     )

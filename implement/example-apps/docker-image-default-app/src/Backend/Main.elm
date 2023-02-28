@@ -7,31 +7,31 @@ import Base64
 import Bytes.Encode
 import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
-import ElmWebServer
+import Platform.WebServer
 import Url
 
 
 type alias State =
     { httpRequestsCount : Int
-    , lastHttpRequests : List ElmWebServer.HttpRequestEventStruct
+    , lastHttpRequests : List Platform.WebServer.HttpRequestEventStruct
     }
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -67,7 +67,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 }
     in
     ( state
-    , [ ElmWebServer.RespondToHttpRequest
+    , [ Platform.WebServer.RespondToHttpRequest
             { httpRequestId = httpRequestEvent.httpRequestId
             , response = httpResponse
             }

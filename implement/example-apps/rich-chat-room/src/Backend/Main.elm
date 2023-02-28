@@ -12,10 +12,10 @@ import CompilationInterface.GenerateJsonCoders as GenerateJsonCoders
 import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
-import ElmWebServer
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
+import Platform.WebServer
 import SHA1
 import Url
 
@@ -51,14 +51,14 @@ type alias UserProfile =
     }
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions state =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast =
@@ -75,7 +75,7 @@ subscriptions state =
     }
 
 
-processPendingHttpRequests : State -> ( State, ElmWebServer.Commands State )
+processPendingHttpRequests : State -> ( State, Platform.WebServer.Commands State )
 processPendingHttpRequests stateBefore =
     let
         ( state, httpResponses ) =
@@ -135,11 +135,11 @@ processPendingHttpRequests stateBefore =
                 |> List.foldl Dict.remove stateBefore.pendingHttpRequests
     in
     ( { state | pendingHttpRequests = pendingHttpRequests }
-    , List.map ElmWebServer.RespondToHttpRequest httpResponses
+    , List.map Platform.WebServer.RespondToHttpRequest httpResponses
     )
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         ( ( state, pendingHttpRequestsCmds ), directCmds ) =
@@ -151,7 +151,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     )
 
 
-updateForHttpRequestEventWithoutPendingHttpRequests : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEventWithoutPendingHttpRequests : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBeforeUpdatingTime =
     let
         stateBefore =
@@ -159,7 +159,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
 
         respondWithFrontendHtmlDocument { enableInspector } =
             ( stateBefore
-            , [ ElmWebServer.RespondToHttpRequest
+            , [ Platform.WebServer.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
@@ -210,7 +210,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                             }
                     in
                     ( stateBefore
-                    , [ ElmWebServer.RespondToHttpRequest httpResponse ]
+                    , [ Platform.WebServer.RespondToHttpRequest httpResponse ]
                     )
 
                 Ok requestFromUser ->
@@ -269,7 +269,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                             }
             in
             ( stateBefore
-            , [ ElmWebServer.RespondToHttpRequest
+            , [ Platform.WebServer.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -408,7 +408,7 @@ initUserProfile =
     { chosenName = "" }
 
 
-userSessionIdAndStateFromRequestOrCreateNew : ElmWebServer.HttpRequestProperties -> State -> ( String, UserSessionState )
+userSessionIdAndStateFromRequestOrCreateNew : Platform.WebServer.HttpRequestProperties -> State -> ( String, UserSessionState )
 userSessionIdAndStateFromRequestOrCreateNew httpRequest state =
     state |> getFirstMatchingUserSessionOrCreateNew (getSessionIdsFromHttpRequest httpRequest)
 
@@ -437,7 +437,7 @@ getFirstMatchingUserSessionOrCreateNew sessionIds state =
         |> Maybe.withDefault (state |> getNextUserSessionIdAndState)
 
 
-getSessionIdsFromHttpRequest : ElmWebServer.HttpRequestProperties -> List String
+getSessionIdsFromHttpRequest : Platform.WebServer.HttpRequestProperties -> List String
 getSessionIdsFromHttpRequest httpRequest =
     let
         cookies =
@@ -541,7 +541,7 @@ encodeStringToBytes =
     Bytes.Encode.string >> Bytes.Encode.encode
 
 
-addCookieUserSessionId : String -> ElmWebServer.HttpResponse -> ElmWebServer.HttpResponse
+addCookieUserSessionId : String -> Platform.WebServer.HttpResponse -> Platform.WebServer.HttpResponse
 addCookieUserSessionId userSessionId httpResponse =
     let
         cookieHeader =

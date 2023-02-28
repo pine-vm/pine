@@ -6,7 +6,7 @@ As long as that field has the value `Nothing`, the different type is not apparen
 -}
 
 import Backend.Main
-import ElmWebServer
+import Platform.WebServer
 
 
 type alias BackendState =
@@ -15,7 +15,7 @@ type alias BackendState =
     }
 
 
-migrate : BackendState -> ( Backend.Main.State, ElmWebServer.Commands Backend.Main.State )
+migrate : BackendState -> ( Backend.Main.State, Platform.WebServer.Commands Backend.Main.State )
 migrate originalState =
     let
         state =

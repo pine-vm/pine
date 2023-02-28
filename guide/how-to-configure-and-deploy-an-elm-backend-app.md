@@ -85,7 +85,7 @@ This section covers the conventions for structuring the app code so that we can 
 The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `backendMain`:
 
 ```Elm
-backendMain : ElmWebServer.WebServerConfig ()
+backendMain : Platform.WebServer.WebServerConfig ()
 backendMain =
 [...]
 ```
@@ -93,7 +93,7 @@ backendMain =
 As we can see in the example apps, we compose the backend from an `init` value and an `subscriptions` function:
 
 ```Elm
-backendMain : ElmWebServer.WebServerConfig ()
+backendMain : Platform.WebServer.WebServerConfig ()
 backendMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
@@ -253,10 +253,10 @@ In the simplest case, we did not change the back-end state model since the last 
 module Backend.MigrateState exposing (migrate)
 
 import Backend.Main
-import ElmWebServer
+import Platform.WebServer
 
 
-migrate : Backend.Main.State -> ( Backend.Main.State, ElmWebServer.Commands Backend.Main.State )
+migrate : Backend.Main.State -> ( Backend.Main.State, Platform.WebServer.Commands Backend.Main.State )
 migrate state =
     ( state, [] )
 ```

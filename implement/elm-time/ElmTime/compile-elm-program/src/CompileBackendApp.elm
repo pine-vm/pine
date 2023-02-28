@@ -256,8 +256,8 @@ composeBackendRootElmModuleTextFromTypeName =
       , composeBackendRootElmModuleTextPlatformWebServer
       )
 
-    -- TODO: Phase-out old namespace 'ElmWebServer'
-    , ( [ "ElmWebServer", "WebServerConfig" ]
+    -- TODO: Phase-out old namespace 'Platform.WebServer'
+    , ( [ "Platform.WebServer", "WebServerConfig" ]
       , composeBackendRootElmModuleTextWebServer
       )
     ]
@@ -1278,7 +1278,7 @@ composeBackendRootElmModuleTextWebServer config =
 import """ ++ config.rootModuleNameBeforeLowering ++ """
 """ ++ (config.modulesToImport |> List.map (Tuple.pair >> (|>) Nothing >> importSyntaxTextFromModuleNameAndAlias) |> String.join "\n") ++ """
 import Platform
-import ElmWebServer exposing (..)
+import Platform.WebServer exposing (..)
 
 
 type alias DeserializedState =
@@ -1317,7 +1317,7 @@ type State
 
 
 type BackendEvent
-    = HttpRequestEvent ElmWebServer.HttpRequestEventStruct
+    = HttpRequestEvent Platform.WebServer.HttpRequestEventStruct
     | TaskCompleteEvent TaskCompleteEventStruct
     | PosixTimeHasArrivedEvent { posixTimeMilli : Int }
     | InitStateEvent
@@ -1713,7 +1713,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                 |> withCompleteHttpResponsesAdded [ respondToHttpRequest ]
             )
 
-        ElmWebServer.CreateVolatileProcess createVolatileProcess ->
+        Platform.WebServer.CreateVolatileProcess createVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -1731,7 +1731,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                     ]
             )
 
-        ElmWebServer.RequestToVolatileProcess requestToVolatileProcess ->
+        Platform.WebServer.RequestToVolatileProcess requestToVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -1753,7 +1753,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                     ]
             )
 
-        ElmWebServer.TerminateVolatileProcess terminateVolatileProcess ->
+        Platform.WebServer.TerminateVolatileProcess terminateVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore

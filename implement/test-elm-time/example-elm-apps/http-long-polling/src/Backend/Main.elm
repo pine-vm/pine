@@ -6,23 +6,23 @@ module Backend.Main exposing
 import Base64
 import Bytes
 import Bytes.Encode
-import ElmWebServer
+import Platform.WebServer
 
 
 type alias State =
     { posixTimeMilli : Int
-    , httpRequestsToRespondTo : List ElmWebServer.HttpRequestEventStruct
+    , httpRequestsToRespondTo : List Platform.WebServer.HttpRequestEventStruct
     }
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions state =
     let
         nextCompletionPosixTimeMilli =
@@ -42,7 +42,7 @@ subscriptions state =
     }
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -54,7 +54,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     state |> updateForHttpResponses
 
 
-updateForHttpResponses : State -> ( State, ElmWebServer.Commands State )
+updateForHttpResponses : State -> ( State, Platform.WebServer.Commands State )
 updateForHttpResponses state =
     ( state
     , state
@@ -78,17 +78,17 @@ updateForHttpResponses state =
                     }
                 }
             )
-        |> List.map ElmWebServer.RespondToHttpRequest
+        |> List.map Platform.WebServer.RespondToHttpRequest
     )
 
 
-getHttpRequestsWithCompletionTimes : State -> List ( ElmWebServer.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
+getHttpRequestsWithCompletionTimes : State -> List ( Platform.WebServer.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
 getHttpRequestsWithCompletionTimes state =
     state.httpRequestsToRespondTo
         |> List.map (\requestEvent -> ( requestEvent, completionTimeForHttpRequest requestEvent ))
 
 
-completionTimeForHttpRequest : ElmWebServer.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
+completionTimeForHttpRequest : Platform.WebServer.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
 completionTimeForHttpRequest httpRequest =
     let
         delayMilliseconds =

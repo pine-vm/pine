@@ -10,8 +10,8 @@ import Bytes.Encode
 import CompilationInterface.ElmMake
 import CompilationInterface.GenerateJsonCoders
 import Dict
-import ElmWebServer
 import Json.Encode
+import Platform.WebServer
 import Url
 import Url.Parser exposing ((</>))
 
@@ -24,7 +24,7 @@ type Route
     = EntryRoute (Maybe Int)
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init =
         ( { store = Dict.empty }
@@ -34,14 +34,14 @@ backendMain =
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         bodyFromString =
@@ -82,7 +82,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
         continueWithStaticHttpResponse httpResponse =
             ( stateBefore
-            , [ ElmWebServer.RespondToHttpRequest
+            , [ Platform.WebServer.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -103,7 +103,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                 |> Dict.map (\_ entry -> { length = String.length entry })
                     in
                     ( stateBefore
-                    , [ ElmWebServer.RespondToHttpRequest
+                    , [ Platform.WebServer.RespondToHttpRequest
                             { httpRequestId = httpRequestEvent.httpRequestId
                             , response =
                                 { statusCode = 200
@@ -126,7 +126,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                             case stateBefore.store |> Dict.get entryId of
                                 Nothing ->
                                     ( stateBefore
-                                    , [ ElmWebServer.RespondToHttpRequest
+                                    , [ Platform.WebServer.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 404
@@ -139,7 +139,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                                 Just entry ->
                                     ( stateBefore
-                                    , [ ElmWebServer.RespondToHttpRequest
+                                    , [ Platform.WebServer.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 httpResponseOkWithStringContent entry
@@ -159,7 +159,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                             of
                                 Nothing ->
                                     ( stateBefore
-                                    , [ ElmWebServer.RespondToHttpRequest
+                                    , [ Platform.WebServer.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 400
@@ -176,7 +176,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                             stateBefore.store |> Dict.insert entryId entry
                                     in
                                     ( { stateBefore | store = store }
-                                    , [ ElmWebServer.RespondToHttpRequest
+                                    , [ Platform.WebServer.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 200
@@ -189,7 +189,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                         _ ->
                             ( stateBefore
-                            , [ ElmWebServer.RespondToHttpRequest
+                            , [ Platform.WebServer.RespondToHttpRequest
                                     { httpRequestId = httpRequestEvent.httpRequestId
                                     , response =
                                         { statusCode = 405

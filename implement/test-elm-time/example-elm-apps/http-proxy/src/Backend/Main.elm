@@ -6,17 +6,17 @@ module Backend.Main exposing
 import Backend.HttpViaVolatileProcess as HttpViaVolatileProcess
 import Base64
 import Bytes.Encode
-import ElmWebServer
 import Json.Decode
+import Platform.WebServer
 
 
 type alias State =
     { createVolatileProcessResult : Maybe (Result String { processId : String })
-    , httpRequestToForward : Maybe ElmWebServer.HttpRequestEventStruct
+    , httpRequestToForward : Maybe Platform.WebServer.HttpRequestEventStruct
     }
 
 
-backendMain : ElmWebServer.WebServerConfig State
+backendMain : Platform.WebServer.WebServerConfig State
 backendMain =
     { init =
         ( { createVolatileProcessResult = Nothing
@@ -28,14 +28,14 @@ backendMain =
     }
 
 
-subscriptions : State -> ElmWebServer.Subscriptions State
+subscriptions : State -> Platform.WebServer.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : ElmWebServer.HttpRequestEventStruct -> State -> ( State, ElmWebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent event stateBefore =
     let
         state =
@@ -44,7 +44,7 @@ updateForHttpRequestEvent event stateBefore =
     ( state, state |> httpRequestForwardRequestsFromState )
 
 
-httpRequestForwardRequestsFromState : State -> ElmWebServer.Commands State
+httpRequestForwardRequestsFromState : State -> Platform.WebServer.Commands State
 httpRequestForwardRequestsFromState state =
     case state.httpRequestToForward of
         Nothing ->
@@ -53,14 +53,14 @@ httpRequestForwardRequestsFromState state =
         Just httpRequestToForward ->
             case state.createVolatileProcessResult of
                 Nothing ->
-                    [ ElmWebServer.CreateVolatileProcess
+                    [ Platform.WebServer.CreateVolatileProcess
                         { programCode = HttpViaVolatileProcess.programCode
                         , update = updateForCreateVolatileProcess
                         }
                     ]
 
                 Just (Err createVolatileProcessErr) ->
-                    [ ElmWebServer.RespondToHttpRequest
+                    [ Platform.WebServer.RespondToHttpRequest
                         { httpRequestId = httpRequestToForward.httpRequestId
                         , response =
                             { statusCode = 500
@@ -84,7 +84,7 @@ httpRequestForwardRequestsFromState state =
                     in
                     case maybeForwardTo of
                         Nothing ->
-                            [ ElmWebServer.RespondToHttpRequest
+                            [ Platform.WebServer.RespondToHttpRequest
                                 { httpRequestId = httpRequestToForward.httpRequestId
                                 , response =
                                     { statusCode = 400
@@ -107,7 +107,7 @@ httpRequestForwardRequestsFromState state =
                                     , bodyAsBase64 = httpRequestToForward.request.bodyAsBase64
                                     }
                             in
-                            [ ElmWebServer.RequestToVolatileProcess
+                            [ Platform.WebServer.RequestToVolatileProcess
                                 { processId = createVolatileProcessOk.processId
                                 , request = HttpViaVolatileProcess.requestToVolatileProcess httpRequest
                                 , update = updateForRequestToVolatileProcess
@@ -115,7 +115,7 @@ httpRequestForwardRequestsFromState state =
                             ]
 
 
-updateForCreateVolatileProcess : ElmWebServer.CreateVolatileProcessResult -> State -> ( State, ElmWebServer.Commands State )
+updateForCreateVolatileProcess : Platform.WebServer.CreateVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
 updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
     let
         createVolatileProcessResult =
@@ -128,7 +128,7 @@ updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
     ( state, state |> httpRequestForwardRequestsFromState )
 
 
-updateForRequestToVolatileProcess : ElmWebServer.RequestToVolatileProcessResult -> State -> ( State, ElmWebServer.Commands State )
+updateForRequestToVolatileProcess : Platform.WebServer.RequestToVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
 updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
     case stateBefore.httpRequestToForward of
         Nothing ->
@@ -138,7 +138,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
             let
                 httpResponse =
                     case requestToVolatileProcessResponse of
-                        Err ElmWebServer.ProcessNotFound ->
+                        Err Platform.WebServer.ProcessNotFound ->
                             { statusCode = 500
                             , bodyAsBase64 = bodyBase64FromString "Error running in volatile process: ProcessNotFound"
                             , headersToAdd = []
@@ -179,7 +179,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                             }
             in
             ( { stateBefore | httpRequestToForward = Nothing }
-            , [ ElmWebServer.RespondToHttpRequest
+            , [ Platform.WebServer.RespondToHttpRequest
                     { httpRequestId = httpRequestToForward.httpRequestId
                     , response = httpResponse
                     }
