@@ -27,7 +27,7 @@ public class PublicAppState
 
     readonly public System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
 
-    readonly WebAppAndElmAppConfig webAppAndElmAppConfig;
+    readonly ServerAndElmAppConfig serverAndElmAppConfig;
     readonly Func<DateTimeOffset> getDateTimeOffset;
 
     readonly System.Threading.Timer notifyTimeHasArrivedTimer;
@@ -38,14 +38,14 @@ public class PublicAppState
     InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStructure? nextTimeToNotify = null;
 
     public PublicAppState(
-        WebAppAndElmAppConfig webAppAndElmAppConfig,
+        ServerAndElmAppConfig serverAndElmAppConfig,
         Func<DateTimeOffset> getDateTimeOffset)
     {
-        this.webAppAndElmAppConfig = webAppAndElmAppConfig;
+        this.serverAndElmAppConfig = serverAndElmAppConfig;
         this.getDateTimeOffset = getDateTimeOffset;
 
-        if (webAppAndElmAppConfig.InitOrMigrateCmds != null)
-            ForwardTasksFromResponseCmds(webAppAndElmAppConfig.InitOrMigrateCmds);
+        if (serverAndElmAppConfig.InitOrMigrateCmds != null)
+            ForwardTasksFromResponseCmds(serverAndElmAppConfig.InitOrMigrateCmds);
 
         notifyTimeHasArrivedTimer = new System.Threading.Timer(
             callback: _ =>
@@ -124,7 +124,7 @@ public class PublicAppState
             app.UseDeveloperExceptionPage();
         }
 
-        if (webAppAndElmAppConfig.WebAppConfiguration?.letsEncryptOptions != null)
+        if (serverAndElmAppConfig.ServerConfig?.letsEncryptOptions != null)
             app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
 
         app.Lifetime.ApplicationStopping.Register(() =>
@@ -133,13 +133,13 @@ public class PublicAppState
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
         });
 
-        app.Run(async context =>
+        app.Run((async context =>
         {
-            await Asp.MiddlewareFromWebAppConfig(
-                webAppAndElmAppConfig.WebAppConfiguration,
+            await Asp.MiddlewareFromWebServerConfig(
+                serverAndElmAppConfig.ServerConfig,
                 context,
                 () => Run(context));
-        });
+        }));
 
         return app;
     }
@@ -148,7 +148,7 @@ public class PublicAppState
         IServiceCollection services,
         ILogger logger)
     {
-        var letsEncryptOptions = webAppAndElmAppConfig.WebAppConfiguration?.letsEncryptOptions;
+        var letsEncryptOptions = serverAndElmAppConfig.ServerConfig?.letsEncryptOptions;
 
         if (letsEncryptOptions == null)
         {
@@ -183,7 +183,7 @@ public class PublicAppState
 
         var preparedProcessEvent = PrepareProcessEventAndResultingRequests(httpRequestInterfaceEvent);
 
-        if (webAppAndElmAppConfig.WebAppConfiguration?.httpRequestEventSizeLimit < preparedProcessEvent.serializedInterfaceEvent?.Length)
+        if (serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit < preparedProcessEvent.serializedInterfaceEvent?.Length)
         {
             context.Response.StatusCode = StatusCodes.Status413RequestEntityTooLarge;
             await context.Response.WriteAsync("Request is too large.");
@@ -238,7 +238,7 @@ public class PublicAppState
 
             if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
                 throw new TimeoutException(
-                    "The app did not return a HTTP response within " +
+                    "The app did not return an HTTP response within " +
                     (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
                     " seconds.");
 
@@ -275,7 +275,7 @@ public class PublicAppState
 
             try
             {
-                var serializedResponse = webAppAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+                var serializedResponse = serverAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
 
                 try
                 {
@@ -426,8 +426,8 @@ public class PublicAppState
     byte[]? GetBlobWithSHA256(byte[] sha256)
     {
         var matchFromSourceComposition =
-            webAppAndElmAppConfig?.SourceComposition == null ? null :
-            Composition.FindComponentByHash(webAppAndElmAppConfig.SourceComposition, sha256);
+            serverAndElmAppConfig?.SourceComposition == null ? null :
+            Composition.FindComponentByHash(serverAndElmAppConfig.SourceComposition, sha256);
 
         if (matchFromSourceComposition != null)
         {
@@ -491,8 +491,8 @@ public class PublicAppState
     }
 }
 
-public record WebAppAndElmAppConfig(
-    WebAppConfigurationJsonStructure? WebAppConfiguration,
+public record ServerAndElmAppConfig(
+    WebServerConfigJson? ServerConfig,
     Func<string, string> ProcessEventInElmApp,
     PineValue SourceComposition,
     InterfaceToHost.AppEventResponseStructure? InitOrMigrateCmds);

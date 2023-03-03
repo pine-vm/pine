@@ -46,7 +46,7 @@ public class TestWebServer
         Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
             persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
         IEnumerable<string> ReadStoredReductionFileRelativePaths()
@@ -131,7 +131,7 @@ public class TestWebServer
         var webAppSource =
             Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
@@ -179,10 +179,10 @@ public class TestWebServer
                 .Select(indexInBatch => "Batch " + batchIndex + ", Event " + indexInBatch).ToList())
                 .ToList();
 
-        var webAppConfig =
+        var deploymentFiles =
             TestSetup.WithWebServerConfigJson(
                 TestSetup.CounterElmWebApp,
-                new WebAppConfigurationJsonStructure
+                new WebServerConfigJson
                 (
                     singleRateLimitWindowPerClientIPv4Address: new RateLimitWindow
                     (
@@ -192,8 +192,8 @@ public class TestWebServer
                 ));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState:
-            Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)),
+            deployAppAndInitElmState:
+            Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)),
             persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
@@ -278,16 +278,16 @@ public class TestWebServer
     {
         const int requestSizeLimit = 20_000;
 
-        var webAppConfig =
+        var deploymentFiles =
             TestSetup.WithWebServerConfigJson(
                 TestSetup.StringBuilderElmWebApp,
-                new WebAppConfigurationJsonStructure
+                new WebServerConfigJson
                 {
                     httpRequestEventSizeLimit = requestSizeLimit,
                 });
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppConfig)));
+            deployAppAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)));
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
@@ -343,7 +343,7 @@ public class TestWebServer
                 new StringContent(state, System.Text.Encoding.UTF8));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
+            deployAppAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
             adminPassword: adminPassword);
 
         using (var server = testSetup.StartWebHost())
@@ -412,7 +412,7 @@ public class TestWebServer
         // This name needs to be consistent with the code in Elm app CrossPropagateHttpHeadersToAndFromBody.
         const string appSpecificHttpResponseHeaderName = "response-header-name";
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody);
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
@@ -474,7 +474,7 @@ public class TestWebServer
 
         echoServer.Start();
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.HttpProxyWebApp);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestElmWebAppHttpServer.HttpProxyWebApp);
 
         using var server = testSetup.StartWebHost();
 
@@ -558,7 +558,7 @@ public class TestWebServer
     [TestMethod]
     public void Web_host_sends_HTTP_response_only_after_write_to_history()
     {
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
 
         async System.Threading.Tasks.Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
         {
@@ -636,11 +636,11 @@ public class TestWebServer
 
         Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
-        var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
+        var deploymentZipArchive = ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
 
-        var webAppConfigTree =
+        var deploymentTree =
             Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive).ToImmutableList());
+                ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList());
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup();
 
@@ -651,7 +651,7 @@ public class TestWebServer
             {
                 var deployAppConfigResponse = adminClient.PostAsync(
                     StartupAdminInterface.PathApiDeployAndInitAppState,
-                    new ByteArrayContent(webAppConfigZipArchive)).Result;
+                    new ByteArrayContent(deploymentZipArchive)).Result;
 
                 Assert.IsTrue(deployAppConfigResponse.IsSuccessStatusCode, "deploy response IsSuccessStatusCode");
 
@@ -666,7 +666,7 @@ public class TestWebServer
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 CollectionAssert.AreEqual(
-                    Composition.GetHashSorted(webAppConfigTree).ToArray(),
+                    Composition.GetHashSorted(deploymentTree).ToArray(),
                     Composition.GetHashSorted(responseAppConfigTree).ToArray(),
                     "Get the same configuration back.");
             }
@@ -688,7 +688,7 @@ public class TestWebServer
             {
                 var deployHttpResponse = adminClient.PostAsync(
                     StartupAdminInterface.PathApiDeployAndInitAppState,
-                    new ByteArrayContent(webAppConfigZipArchive)).Result;
+                    new ByteArrayContent(deploymentZipArchive)).Result;
             }
         }
 
@@ -701,7 +701,7 @@ public class TestWebServer
             {
                 var deployHttpResponse = adminClient.PostAsync(
                     StartupAdminInterface.PathApiDeployAndMigrateAppState,
-                    new ByteArrayContent(webAppConfigZipArchive)).Result;
+                    new ByteArrayContent(deploymentZipArchive)).Result;
 
                 Assert.IsTrue(deployHttpResponse.IsSuccessStatusCode, "deploy response IsSuccessStatusCode");
             }
@@ -723,12 +723,12 @@ public class TestWebServer
     [TestMethod]
     public void Web_host_prevents_damaging_backend_state_with_invalid_migration()
     {
-        var webAppConfigFiles = TestSetup.GetElmAppFromExampleName("test-prevent-damage-by-migrate-webapp");
+        var deploymentFiles = TestSetup.GetElmAppFromExampleName("test-prevent-damage-by-migrate-webapp");
 
-        var webAppConfigZipArchive = ZipArchive.ZipArchiveFromEntries(webAppConfigFiles);
+        var deploymentZipArchive = ZipArchive.ZipArchiveFromEntries(deploymentFiles);
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(webAppConfigFiles));
+            deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(deploymentFiles));
 
         using var server = testSetup.StartWebHost();
 
@@ -760,7 +760,7 @@ public class TestWebServer
         {
             var migrateHttpResponse = adminClient.PostAsync(
                 StartupAdminInterface.PathApiDeployAndMigrateAppState,
-                new ByteArrayContent(webAppConfigZipArchive)).Result;
+                new ByteArrayContent(deploymentZipArchive)).Result;
 
             Assert.AreEqual(
                 HttpStatusCode.BadRequest,
@@ -800,7 +800,7 @@ public class TestWebServer
         {
             var migrateHttpResponse = adminClient.PostAsync(
                 StartupAdminInterface.PathApiDeployAndMigrateAppState,
-                new ByteArrayContent(webAppConfigZipArchive)).Result;
+                new ByteArrayContent(deploymentZipArchive)).Result;
 
             Assert.IsTrue(
                 migrateHttpResponse.IsSuccessStatusCode,
@@ -821,15 +821,15 @@ public class TestWebServer
     [TestMethod]
     public void Web_host_supports_deploy_app_config_and_migrate_elm_app_state()
     {
-        var initialWebAppConfig = TestElmWebAppHttpServer.CounterWebApp;
+        var initialDeployment = TestElmWebAppHttpServer.CounterWebApp;
 
-        var migrateAndSecondApp =
+        var migrateAndSecondDeployment =
             TestSetup.GetElmAppFromExampleName("migrate-from-int-to-string-builder-web-app");
 
-        var migrateAndSecondAppWebAppConfigZipArchive =
-            ZipArchive.ZipArchiveFromEntries(migrateAndSecondApp);
+        var migrateAndSecondDeploymentZipArchive =
+            ZipArchive.ZipArchiveFromEntries(migrateAndSecondDeployment);
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: initialWebAppConfig);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: initialDeployment);
 
         using var server = testSetup.StartWebHost();
 
@@ -837,9 +837,9 @@ public class TestWebServer
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
                 new (int addition, int expectedResponse)[]
                 {
-                                (0, 0),
-                                (1, 1),
-                                (13, 14),
+                    (0, 0),
+                    (1, 1),
+                    (13, 14),
                 }).ToList();
 
         foreach (var (serializedEvent, expectedResponse) in counterEventsAndExpectedResponses)
@@ -857,7 +857,7 @@ public class TestWebServer
         {
             var deployAppConfigAndMigrateElmStateResponse = adminClient.PostAsync(
                 StartupAdminInterface.PathApiDeployAndMigrateAppState,
-                new ByteArrayContent(migrateAndSecondAppWebAppConfigZipArchive)).Result;
+                new ByteArrayContent(migrateAndSecondDeploymentZipArchive)).Result;
 
             Assert.IsTrue(
                 deployAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode,
@@ -905,7 +905,7 @@ public class TestWebServer
         var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
 
         using var server = testSetup.StartWebHost();
 
@@ -994,7 +994,7 @@ public class TestWebServer
 
         using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             adminPassword: originalHostAdminPassword,
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
         {
             using var server = testSetup.StartWebHost();
 
@@ -1090,7 +1090,7 @@ public class TestWebServer
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
 
         int countFilesInProcessFileStore() =>
             testSetup.BuildProcessStoreFileStoreReaderInFileDirectory()
@@ -1179,7 +1179,7 @@ public class TestWebServer
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
 
         using (var server = testSetup.StartWebHost())
         {
@@ -1268,7 +1268,7 @@ public class TestWebServer
         using (var originalTestSetup = WebHostAdminInterfaceTestSetup.Setup(
             fileStore: fileStore,
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppConfigAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
         {
             using var server = originalTestSetup.StartWebHost();
 
@@ -1355,7 +1355,7 @@ public class TestWebServer
     {
         var appSourceFiles = TestSetup.GetElmAppFromExampleName("http-long-polling");
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
 
         using var server = testSetup.StartWebHost();
 
@@ -1395,7 +1395,7 @@ public class TestWebServer
     {
         var appSourceFiles = TestSetup.GetElmAppFromExampleName("volatile-process-from-local-blob");
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 

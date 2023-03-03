@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-02-28";
+    static public string AppVersionId => "2023-03-03";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -2275,44 +2275,6 @@ public class Program
         };
 
         return (commandName, checkInstallation);
-    }
-
-    static public void BuildConfiguration(
-        string sourcePath,
-        string outputOption)
-    {
-        var buildResult =
-            Platform.WebServer.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                sourcePath: sourcePath);
-
-        var configZipArchive = buildResult.configZipArchive;
-
-        var configZipArchiveFileId =
-            CommonConversion.StringBase16(CommonConversion.HashSHA256(configZipArchive));
-
-        var webAppConfigFileId =
-            CommonConversion.StringBase16(
-                Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                    ZipArchive.EntriesFromZipArchive(configZipArchive)))));
-
-        Console.WriteLine(
-            "I built zip archive " + configZipArchiveFileId + " containing web app config " + webAppConfigFileId + ".");
-
-        if (outputOption == null)
-        {
-            Console.WriteLine("I did not see a path for output, so I don't attempt to save the configuration to a file.");
-        }
-        else
-        {
-            var directory = Path.GetDirectoryName(outputOption);
-
-            if (0 < directory?.Length)
-                Directory.CreateDirectory(directory);
-
-            File.WriteAllBytes(outputOption, configZipArchive);
-
-            Console.WriteLine("I saved zip archive " + configZipArchiveFileId + " to '" + outputOption + "'");
-        }
     }
 
     static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-time-tool", "report");

@@ -54,14 +54,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         TreeNodeWithStringPath? DeployAppConfigAndInitElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null);
 
-    static public ProcessFromElm019Code.PreparedProcess ProcessFromWebAppConfig(
-        TreeNodeWithStringPath appConfig,
+    static public ProcessFromElm019Code.PreparedProcess ProcessFromDeployment(
+        TreeNodeWithStringPath deployment,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
-        var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(appConfig);
+        var deploymentFiles = Composition.TreeToFlatDictionaryWithPathComparer(deployment);
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
-            sourceFiles: sourceFiles,
+            sourceFiles: deploymentFiles,
             ElmAppInterfaceConfig.Default)
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
@@ -230,7 +230,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 if (compositionLogRecord.reduction != null)
                 {
                     var prepareProcessResult =
-                        ProcessFromWebAppConfig(
+                        ProcessFromDeployment(
                             compositionLogRecord.reduction.Value.appConfigAsTree,
                             overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
@@ -338,7 +338,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             var elmAppStateBefore = processBefore.lastElmAppVolatileProcess?.GetSerializedState();
 
             var prepareProcessResult =
-                ProcessFromWebAppConfig(deployAppConfigAndMigrateElmAppState, overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+                ProcessFromDeployment(deployAppConfigAndMigrateElmAppState, overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
@@ -377,7 +377,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             var appConfig = compositionEvent.DeployAppConfigAndInitElmAppState;
 
             var prepareProcessResult =
-                ProcessFromWebAppConfig(
+                ProcessFromDeployment(
                     appConfig,
                     overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 

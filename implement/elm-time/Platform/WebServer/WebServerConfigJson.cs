@@ -1,6 +1,9 @@
 namespace ElmTime.Platform.WebServer;
 
-public record WebAppConfigurationJsonStructure(
+/// <summary>
+/// Structure of the optional 'web-server.json' file to configure a web server.
+/// </summary>
+public record WebServerConfigJson(
     RateLimitWindow? singleRateLimitWindowPerClientIPv4Address = null,
     int? httpRequestEventSizeLimit = null,
     FluffySpoon.AspNet.LetsEncrypt.LetsEncryptOptions? letsEncryptOptions = null);

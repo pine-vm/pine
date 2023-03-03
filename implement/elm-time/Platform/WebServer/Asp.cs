@@ -23,12 +23,12 @@ static public class Asp
         services.AddSingleton(new ClientsRateLimitStateContainer());
     }
 
-    static public async Task MiddlewareFromWebAppConfig(
-        WebAppConfigurationJsonStructure? webAppConfig, HttpContext context, Func<Task> next) =>
-        await RateLimitMiddlewareFromWebAppConfig(webAppConfig, context, next);
+    static public async Task MiddlewareFromWebServerConfig(
+        WebServerConfigJson? serverConfig, HttpContext context, Func<Task> next) =>
+        await RateLimitMiddlewareFromWebServerConfig(serverConfig, context, next);
 
-    static async Task RateLimitMiddlewareFromWebAppConfig(
-        WebAppConfigurationJsonStructure? webAppConfig,
+    static async Task RateLimitMiddlewareFromWebServerConfig(
+        WebServerConfigJson? serverConfig,
         HttpContext context,
         Func<Task> next)
     {
@@ -50,7 +50,7 @@ static public class Asp
 
         var clientRateLimitState =
             rateLimitFromClientId.GetOrAdd(
-                ClientId(), _ => BuildRateLimitContainerForClient(webAppConfig));
+                ClientId(), _ => BuildRateLimitContainerForClient(serverConfig));
 
         if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
         {
@@ -63,7 +63,7 @@ static public class Asp
         return;
     }
 
-    static IMutableRateLimit BuildRateLimitContainerForClient(WebAppConfigurationJsonStructure? jsonStructure)
+    static IMutableRateLimit BuildRateLimitContainerForClient(WebServerConfigJson? jsonStructure)
     {
         if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
             return new MutableRateLimitAlwaysPassing();

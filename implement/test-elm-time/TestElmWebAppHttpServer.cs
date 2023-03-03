@@ -40,7 +40,7 @@ public class TestElmWebAppHttpServer
 
         Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: CounterWebApp);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: CounterWebApp);
 
         foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
         {

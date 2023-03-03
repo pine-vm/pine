@@ -59,11 +59,11 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         Func<DateTimeOffset>? persistentProcessHostDateTime = null,
         string? adminPassword = null,
         IFileStore? fileStore = null,
-        PineValue? deployAppConfigAndInitElmState = null) =>
+        PineValue? deployAppAndInitElmState = null) =>
         Setup(
             adminPassword: adminPassword,
             fileStore: fileStore,
-            deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
+            deployAppAndInitElmState: deployAppAndInitElmState,
             webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
             persistentProcessHostDateTime: persistentProcessHostDateTime);
 
@@ -71,7 +71,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
         string? adminPassword = null,
         IFileStore? fileStore = null,
-        PineValue? deployAppConfigAndInitElmState = null,
+        PineValue? deployAppAndInitElmState = null,
         string? adminWebHostUrlOverride = null,
         string? publicWebHostUrlOverride = null,
         Func<DateTimeOffset>? persistentProcessHostDateTime = null)
@@ -82,7 +82,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             testDirectory,
             adminPassword: adminPassword,
             fileStore: fileStore,
-            deployAppConfigAndInitElmState: deployAppConfigAndInitElmState,
+            deployAppAndInitElmState: deployAppAndInitElmState,
             webHostBuilderMap: webHostBuilderMap,
             adminWebHostUrlOverride: adminWebHostUrlOverride,
             publicWebHostUrlOverride: publicWebHostUrlOverride,
@@ -134,7 +134,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         string testDirectory,
         string? adminPassword,
         IFileStore? fileStore,
-        PineValue? deployAppConfigAndInitElmState,
+        PineValue? deployAppAndInitElmState,
         Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
         string? adminWebHostUrlOverride,
         string? publicWebHostUrlOverride,
@@ -150,7 +150,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         this.adminWebHostUrlOverride = adminWebHostUrlOverride;
         this.publicWebHostUrlOverride = publicWebHostUrlOverride;
 
-        if (deployAppConfigAndInitElmState != null)
+        if (deployAppAndInitElmState != null)
         {
             var compositionLogEvent =
                 new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
@@ -158,7 +158,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                     DeployAppConfigAndInitElmAppState =
                         new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16(Composition.GetHash(deployAppConfigAndInitElmState))
+                            HashBase16 = CommonConversion.StringBase16(Composition.GetHash(deployAppAndInitElmState))
                         }
                 };
 
@@ -168,7 +168,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                 getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
                 fileStore);
 
-            processStoreWriter.StoreComponent(deployAppConfigAndInitElmState);
+            processStoreWriter.StoreComponent(deployAppAndInitElmState);
 
             processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
         }

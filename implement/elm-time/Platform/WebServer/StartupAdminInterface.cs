@@ -39,11 +39,11 @@ public class StartupAdminInterface
 
     static public string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
-    static public IImmutableList<string> JsonFilePathDefault => ImmutableList.Create("web-server.json");
+    static public IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
 
-    static public IImmutableList<IImmutableList<string>> JsonFilePathAlternatives =
+    static public IImmutableList<IImmutableList<string>> WebServerConfigFilePathAlternatives =>
         ImmutableList.Create(
-            JsonFilePathDefault,
+            WebServerConfigFilePathDefault,
 
             /*
              * Support smooth migration of projects with backwards compatibility here:
@@ -188,23 +188,23 @@ public class StartupAdminInterface
                     var appConfigFilesNamesAndContents =
                         appConfigTree.EnumerateBlobsTransitive();
 
-                    var webAppConfigurationFile =
+                    var webServerConfigFile =
                         appConfigFilesNamesAndContents
-                        .Where(filePathAndContent => JsonFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
+                        .Where(filePathAndContent => WebServerConfigFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
                         .Select(filePathAndContent => filePathAndContent.blobContent)
                         .Cast<ReadOnlyMemory<byte>?>()
                         .FirstOrDefault();
 
-                    var webAppConfiguration =
-                        webAppConfigurationFile == null
+                    var webServerConfig =
+                        webServerConfigFile == null
                         ?
                         null
                         :
-                        System.Text.Json.JsonSerializer.Deserialize<WebAppConfigurationJsonStructure>(Encoding.UTF8.GetString(webAppConfigurationFile.Value.Span));
+                        System.Text.Json.JsonSerializer.Deserialize<WebServerConfigJson>(Encoding.UTF8.GetString(webServerConfigFile.Value.Span));
 
-                    var webAppAndElmAppConfig =
-                        new WebAppAndElmAppConfig(
-                            WebAppConfiguration: webAppConfiguration,
+                    var serverAndElmAppConfig =
+                        new ServerAndElmAppConfig(
+                            ServerConfig: webServerConfig,
                             ProcessEventInElmApp: serializedEvent =>
                             {
                                 lock (avoidConcurrencyLock)
@@ -223,7 +223,7 @@ public class StartupAdminInterface
                         );
 
                     var publicAppState = new PublicAppState(
-                        webAppAndElmAppConfig: webAppAndElmAppConfig,
+                        serverAndElmAppConfig: serverAndElmAppConfig,
                         getDateTimeOffset: getDateTimeOffset);
 
                     var appBuilder = WebApplication.CreateBuilder();
@@ -309,12 +309,12 @@ public class StartupAdminInterface
                     var memoryStream = new MemoryStream();
                     context.Request.Body.CopyTo(memoryStream);
 
-                    var webAppConfigZipArchive = memoryStream.ToArray();
+                    var deploymentZipArchive = memoryStream.ToArray();
 
                     {
                         try
                         {
-                            var filesFromZipArchive = ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive).ToImmutableList();
+                            var filesFromZipArchive = ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList();
 
                             if (filesFromZipArchive.Count < 1)
                                 throw new Exception("Contains no files.");
@@ -327,27 +327,27 @@ public class StartupAdminInterface
                         }
                     }
 
-                    var appConfigTree =
+                    var deploymentTree =
                         Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                            ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive));
+                            ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
 
-                    var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
+                    var deploymentPineValue = Composition.FromTreeWithStringPath(deploymentTree);
 
-                    var appConfigHashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent));
+                    var deploymentHashBase16 = CommonConversion.StringBase16(Composition.GetHash(deploymentPineValue));
 
-                    logger.LogInformation("Got request to deploy app config " + appConfigHashBase16);
+                    logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
 
-                    processStoreWriter.StoreComponent(appConfigComponent);
+                    processStoreWriter.StoreComponent(deploymentPineValue);
 
-                    var appConfigValueInFile =
+                    var deploymentEventValueInFile =
                         new ValueInFileStructure
                         {
-                            HashBase16 = appConfigHashBase16
+                            HashBase16 = deploymentHashBase16
                         };
 
                     var compositionLogEvent =
                         CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
-                            appConfigValueInFile: appConfigValueInFile,
+                            appConfigValueInFile: deploymentEventValueInFile,
                             initElmAppState: initElmAppState);
 
                     await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
@@ -488,10 +488,10 @@ public class StartupAdminInterface
                             var memoryStream = new MemoryStream();
                             context.Request.Body.CopyTo(memoryStream);
 
-                            var webAppConfigZipArchive = memoryStream.ToArray();
+                            var historyZipArchive = memoryStream.ToArray();
 
                             var replacementFiles =
-                                ZipArchive.EntriesFromZipArchive(webAppConfigZipArchive)
+                                ZipArchive.EntriesFromZipArchive(historyZipArchive)
                                 .Select(filePathAndContent =>
                                     (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
                                     , filePathAndContent.content))

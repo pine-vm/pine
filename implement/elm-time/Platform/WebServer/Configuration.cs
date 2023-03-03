@@ -40,15 +40,15 @@ static public class Configuration
                 ? null
                 : new FileStoreFromSystemIOFile(processStoreSeparateReaderDirectoryPath))));
 
-    static public IWebHostBuilder WithWebAppConfigurationZipArchive(
+    static public IWebHostBuilder WithDeployZipArchive(
         this IWebHostBuilder orig,
         byte[] zipArchive) =>
-        orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new WebAppConfigurationZipArchive(zipArchive)));
+        orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new DeployZipArchive(zipArchive)));
 
-    static public IWebHostBuilder WithWebAppConfigurationZipArchiveFromFilePath(
+    static public IWebHostBuilder WithDeployZipArchiveFromFilePath(
         this IWebHostBuilder orig,
-        string webAppConfigurationFilePath) =>
-        orig.WithWebAppConfigurationZipArchive(System.IO.File.ReadAllBytes(webAppConfigurationFilePath));
+        string deployFilePath) =>
+        orig.WithDeployZipArchive(System.IO.File.ReadAllBytes(deployFilePath));
 
     static public IWebHostBuilder WithSettingAdminPassword(
         this IWebHostBuilder orig,
@@ -78,4 +78,4 @@ public record FileStoreForProcessStore(IFileStore fileStore);
 
 public record FileStoreForProcessStoreReader(IFileStore? fileStore);
 
-public record WebAppConfigurationZipArchive(byte[] zipArchive);
+public record DeployZipArchive(byte[] zipArchive);

@@ -51,7 +51,7 @@ a =
     in
     b + c
 ";
-            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource);
+            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
             using var server = testSetup.StartWebHost();
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 

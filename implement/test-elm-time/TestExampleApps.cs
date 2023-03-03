@@ -15,7 +15,7 @@ public class TestExampleApps
                 TestSetup.GetElmAppFromDirectoryPath(
                     ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "minimal-backend-hello-world")));
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppConfigAndInitElmState: webAppSource);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 

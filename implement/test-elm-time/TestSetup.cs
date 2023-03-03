@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using ElmTime;
 using ElmTime.Platform.WebServer;
-using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
 using ElmTime.ProcessStore;
 using Pine;
 
@@ -60,16 +59,16 @@ public class TestSetup
        GetElmAppFromExampleName("http-proxy");
 
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServerConfigJson(
-        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalWebServerConfig,
-        WebAppConfigurationJsonStructure jsonStructure)
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalDeploymentFiles,
+        WebServerConfigJson jsonStructure)
     {
         return
             jsonStructure == null ?
-            originalWebServerConfig.RemoveRange(StartupAdminInterface.JsonFilePathAlternatives)
+            originalDeploymentFiles.RemoveRange(StartupAdminInterface.WebServerConfigFilePathAlternatives)
             :
-            originalWebServerConfig
+            originalDeploymentFiles
             .SetItem(
-                StartupAdminInterface.JsonFilePathDefault,
+                StartupAdminInterface.WebServerConfigFilePathDefault,
                 System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 
