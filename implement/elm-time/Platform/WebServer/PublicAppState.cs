@@ -133,13 +133,13 @@ public class PublicAppState
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
         });
 
-        app.Run((async context =>
+        app.Run(async context =>
         {
             await Asp.MiddlewareFromWebServerConfig(
                 serverAndElmAppConfig.ServerConfig,
                 context,
-                () => Run(context));
-        }));
+                () => HandleRequestAsync(context));
+        });
 
         return app;
     }
@@ -165,7 +165,7 @@ public class PublicAppState
         Asp.ConfigureServices(services);
     }
 
-    async System.Threading.Tasks.Task Run(HttpContext context)
+    async System.Threading.Tasks.Task HandleRequestAsync(HttpContext context)
     {
         var currentDateTime = getDateTimeOffset();
         var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
@@ -194,55 +194,71 @@ public class PublicAppState
 
         var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
 
-        while (true)
+        InterfaceToHost.HttpResponse? GetResponseFromAppOrTimeout(TimeSpan timeout)
         {
             if (appTaskCompleteHttpResponse.TryRemove(httpRequestId, out var httpResponse))
             {
-                var headerContentType =
-                    httpResponse.headersToAdd
-                    ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
-                    ?.values?.FirstOrDefault();
-
-                context.Response.StatusCode = httpResponse.statusCode;
-
-                foreach (var headerToAdd in httpResponse.headersToAdd.EmptyIfNull())
-                    context.Response.Headers[headerToAdd.name] = new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
-
-                if (headerContentType != null)
-                    context.Response.ContentType = headerContentType;
-
-                ReadOnlyMemory<byte>? contentAsByteArray = null;
-
-                if (httpResponse?.bodyAsBase64 != null)
-                {
-                    var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
-
-                    if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
-                    {
-                        throw new FormatException(
-                            "Failed to convert from base64. bytesWritten=" + bytesWritten +
-                            ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
-                            httpResponse.bodyAsBase64);
-                    }
-
-                    contentAsByteArray = buffer.AsMemory(0, bytesWritten);
-                }
-
-                context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
-
-                if (contentAsByteArray != null)
-                    await context.Response.Body.WriteAsync(contentAsByteArray.Value);
-
-                break;
+                return httpResponse;
             }
 
-            if (60 <= waitForHttpResponseClock.Elapsed.TotalSeconds)
-                throw new TimeoutException(
-                    "The app did not return an HTTP response within " +
-                    (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
-                    " seconds.");
+            if (timeout <= waitForHttpResponseClock.Elapsed)
+                return new InterfaceToHost.HttpResponse(
+                    statusCode: 500,
+                    bodyAsBase64: Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        "The app did not return an HTTP response within " +
+                        (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
+                        " seconds.")),
+                    headersToAdd: Array.Empty<InterfaceToHost.HttpHeader>());
 
-            System.Threading.Thread.Sleep(100);
+            return null;
+        }
+
+        while (true)
+        {
+            var httpResponse = GetResponseFromAppOrTimeout(TimeSpan.FromSeconds(60));
+
+            if (httpResponse is null)
+            {
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(30));
+                continue;
+            }
+
+            var headerContentType =
+                httpResponse.headersToAdd
+                ?.FirstOrDefault(header => header.name?.ToLowerInvariant() == "content-type")
+                ?.values?.FirstOrDefault();
+
+            context.Response.StatusCode = httpResponse.statusCode;
+
+            foreach (var headerToAdd in httpResponse.headersToAdd.EmptyIfNull())
+                context.Response.Headers[headerToAdd.name] = new Microsoft.Extensions.Primitives.StringValues(headerToAdd.values);
+
+            if (headerContentType != null)
+                context.Response.ContentType = headerContentType;
+
+            ReadOnlyMemory<byte>? contentAsByteArray = null;
+
+            if (httpResponse?.bodyAsBase64 != null)
+            {
+                var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
+
+                if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
+                {
+                    throw new FormatException(
+                        "Failed to convert from base64. bytesWritten=" + bytesWritten +
+                        ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
+                        httpResponse.bodyAsBase64);
+                }
+
+                contentAsByteArray = buffer.AsMemory(0, bytesWritten);
+            }
+
+            context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
+
+            if (contentAsByteArray != null)
+                await context.Response.Body.WriteAsync(contentAsByteArray.Value);
+
+            break;
         }
     }
 
