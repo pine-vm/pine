@@ -94,7 +94,7 @@ static public class Asp
         (
             method: httpRequest.Method,
             uri: httpRequest.GetDisplayUrl(),
-            bodyAsBase64: Convert.ToBase64String(httpRequestBody),
+            bodyAsBase64: Maybe.NothingFromNull(Convert.ToBase64String(httpRequestBody)),
             headers: httpHeaders
         );
     }

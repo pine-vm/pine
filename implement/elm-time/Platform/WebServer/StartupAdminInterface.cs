@@ -57,6 +57,11 @@ public class StartupAdminInterface
     public StartupAdminInterface(ILogger<StartupAdminInterface> logger)
     {
         this.logger = logger;
+
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (sender, eventArgs) =>
+        {
+            logger.LogError(eventArgs.Exception, "Unobserved task exception in sender {Sender}", sender?.ToString());
+        };
     }
 
     public static void ConfigureServices(IServiceCollection services)

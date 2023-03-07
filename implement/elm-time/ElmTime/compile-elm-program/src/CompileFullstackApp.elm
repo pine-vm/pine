@@ -2440,6 +2440,29 @@ elmModulesDictFromAppFiles =
         >> Dict.fromList
 
 
+elmModulesDictFromModuleTexts : (List String -> List String) -> List String -> Result String (Dict.Dict (List String) SourceParsedElmModule)
+elmModulesDictFromModuleTexts filePathFromModuleName =
+    List.map
+        (\moduleText ->
+            parseElmModuleText moduleText
+                |> Result.map (Tuple.pair moduleText)
+                |> Result.mapError (parserDeadEndsToString moduleText)
+        )
+        >> Result.Extra.combine
+        >> Result.map
+            (List.map
+                (\( moduleText, moduleSyntax ) ->
+                    ( filePathFromModuleName (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleSyntax.moduleDefinition))
+                    , { fileText = moduleText
+                      , parsedSyntax = moduleSyntax
+                      , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleSyntax.moduleDefinition)
+                      }
+                    )
+                )
+                >> Dict.fromList
+            )
+
+
 parseJsonCodingFunctionType :
     Elm.Syntax.Signature.Signature
     -> Result String { isDecoder : Bool, typeAnnotation : Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation }

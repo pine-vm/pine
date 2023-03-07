@@ -1,76 +1,89 @@
-﻿using System;
+﻿using Pine;
+using Pine.Json;
+using System.Text.Json.Serialization;
 
 namespace ElmTime.Platform.WebServer.InterfaceToHost;
 
-public record AppEventStructure(
-    ArrivedAtTimeEventStructure? ArrivedAtTimeEvent = null,
-    HttpRequestEvent? HttpRequestEvent = null,
-    ResultFromTaskWithId? TaskCompleteEvent = null,
-    object? InitStateEvent = null,
-    string? SetStateEvent = null,
-    string? MigrateStateEvent = null)
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record StateShimRequestStruct
 {
-    static public readonly System.Text.Json.JsonSerializerOptions JsonSerializerSettings = new()
-    {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
-    };
+    public record AppEventShimRequest(BackendEventStruct AppEvent)
+        : StateShimRequestStruct;
+
+    public record InitStateEvent : StateShimRequestStruct;
+
+    public record SetStateEvent(string State)
+        : StateShimRequestStruct;
+
+    public record MigrateStateEvent(string State)
+        : StateShimRequestStruct;
+
+    public string SerializeToJsonString() =>
+        System.Text.Json.JsonSerializer.Serialize(this);
 }
 
-public record ResponseOverSerialInterface(string? DecodeEventError = null, AppEventResponseStructure? DecodeEventSuccess = null);
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record StateShimResponseStruct
+{
+    public record AppEventShimResponse(BackendEventResponseStruct Response)
+        : StateShimResponseStruct;
+}
 
-public record AppEventResponseStructure(
-    NotifyWhenPosixTimeHasArrivedRequestStructure notifyWhenPosixTimeHasArrived,
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record BackendEventStruct
+{
+    public record PosixTimeHasArrivedEvent(PosixTimeHasArrivedEventStruct Structure)
+        : BackendEventStruct;
+
+    public record HttpRequestEvent(HttpRequestEventStruct Struct)
+        : BackendEventStruct;
+
+    public record TaskCompleteEvent(ResultFromTaskWithId Result)
+        : BackendEventStruct;
+}
+
+public record BackendEventResponseStruct(
+    Maybe<NotifyWhenPosixTimeHasArrivedRequestStruct> notifyWhenPosixTimeHasArrived,
     StartTask[] startTasks,
     HttpResponseRequest[] completeHttpResponses,
     Maybe<Result<string, object>> migrateResult);
 
-public record HttpRequestEvent(long posixTimeMilli, string httpRequestId, HttpRequestContext requestContext, HttpRequest request);
+public record HttpRequestEventStruct(
+    long posixTimeMilli,
+    string httpRequestId,
+    HttpRequestContext requestContext,
+    HttpRequest request);
 
-public record HttpRequestContext(string? clientAddress);
+public record HttpRequestContext(Maybe<string> clientAddress);
 
-public record HttpRequest(string method, string uri, string bodyAsBase64, HttpHeader[] headers);
+public record HttpRequest(string method, string uri, Maybe<string> bodyAsBase64, HttpHeader[] headers);
 
 public record HttpHeader(string name, string[] values);
 
 public record HttpResponseRequest(string httpRequestId, HttpResponse response);
 
-public record HttpResponse(int statusCode, string bodyAsBase64, HttpHeader[] headersToAdd);
+public record HttpResponse(int statusCode, Maybe<string> bodyAsBase64, HttpHeader[] headersToAdd);
 
-public record ArrivedAtTimeEventStructure(long posixTimeMilli);
+public record PosixTimeHasArrivedEventStruct(long posixTimeMilli);
 
-public record NotifyWhenPosixTimeHasArrivedRequestStructure(long minimumPosixTimeMilli);
-
-public record Result<ErrT, OkT>(ErrT? Err = default, OkT? Ok = default)
-{
-    public Pine.Result<ErrT, OkT> AsPineResult()
-    {
-        if (Ok is OkT ok)
-            return Pine.Result<ErrT, OkT>.ok(ok);
-
-        if (Err is ErrT err)
-            return Pine.Result<ErrT, OkT>.err(err);
-
-        throw new NotImplementedException();
-    }
-}
-
-public record Maybe<JustT>(object? Nothing = default, JustT? Just = default)
-{
-    public Pine.Maybe<JustT> AsPineMaybe()
-    {
-        if (Just is JustT just)
-            return Pine.Maybe<JustT>.just(just);
-
-        return Pine.Maybe<JustT>.nothing();
-    }
-}
+public record NotifyWhenPosixTimeHasArrivedRequestStruct(long minimumPosixTimeMilli);
 
 public record ResultFromTaskWithId(string taskId, TaskResult taskResult);
 
-public record TaskResult(
-    Result<CreateVolatileProcessErrorStructure, CreateVolatileProcessComplete>? CreateVolatileProcessResponse = null,
-    Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete>? RequestToVolatileProcessResponse = null,
-    object? CompleteWithoutResult = null);
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record TaskResult
+{
+    public record CreateVolatileProcessResponse(
+        Result<CreateVolatileProcessErrorStructure, CreateVolatileProcessComplete> Result)
+        : TaskResult;
+
+    public record RequestToVolatileProcessResponse(
+        Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete> Result)
+        : TaskResult;
+
+    public record CompleteWithoutResult()
+        : TaskResult;
+}
 
 public record CreateVolatileProcessErrorStructure(string exceptionToString);
 
@@ -78,14 +91,25 @@ public record CreateVolatileProcessComplete(string processId);
 
 public record RequestToVolatileProcessError(object ProcessNotFound);
 
-public record RequestToVolatileProcessComplete(string? exceptionToString, string? returnValueToString, long durationInMilliseconds);
+public record RequestToVolatileProcessComplete(
+    Maybe<string> exceptionToString,
+    Maybe<string> returnValueToString,
+    long durationInMilliseconds);
 
 public record StartTask(string taskId, Task task);
 
-public record Task(
-    CreateVolatileProcessStruct? CreateVolatileProcess = null,
-    RequestToVolatileProcessStruct? RequestToVolatileProcess = null,
-    TerminateVolatileProcessStruct? TerminateVolatileProcess = null);
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record Task
+{
+    public record CreateVolatileProcess(CreateVolatileProcessStruct Create)
+        : Task;
+
+    public record RequestToVolatileProcess(RequestToVolatileProcessStruct RequestTo)
+        : Task;
+
+    public record TerminateVolatileProcess(TerminateVolatileProcessStruct Terminate)
+        : Task;
+}
 
 public record CreateVolatileProcessStruct(string programCode);
 

@@ -168,7 +168,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null)
             .Reverse();
 
-    static public (PersistentProcessLiveRepresentation? process, InterfaceToHost.AppEventResponseStructure? initOrMigrateCmds)
+    static public (PersistentProcessLiveRepresentation? process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
         LoadFromStoreAndRestoreProcess(
         IProcessStoreReader storeReader,
         Action<string> logger,
@@ -200,7 +200,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         return processLiveRepresentation;
     }
 
-    static public (PersistentProcessLiveRepresentation process, InterfaceToHost.AppEventResponseStructure? initOrMigrateCmds)
+    static public (PersistentProcessLiveRepresentation process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
         RestoreFromCompositionEventSequence(
         IEnumerable<CompositionLogRecordWithResolvedDependencies> compositionLogRecords,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
@@ -239,9 +239,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState.Span);
 
                     var setStateResponse =
-                        AttemptProcessEvent(
+                        AttemptProcessRequest(
                             newElmAppProcess,
-                            new InterfaceToHost.AppEventStructure { SetStateEvent = elmAppStateAsString })
+                            new InterfaceToHost.StateShimRequestStruct.SetStateEvent(elmAppStateAsString))
                         .Extract(error => throw new Exception("Failed to set state: " + error));
 
                     processRepresentationDuringRestore.lastElmAppVolatileProcess?.Dispose();
@@ -299,7 +299,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     record PersistentProcessLiveRepresentationDuringRestore(
         ProcessAppConfig? lastAppConfig,
         IDisposableProcessWithStringInterface? lastElmAppVolatileProcess,
-        InterfaceToHost.AppEventResponseStructure? initOrMigrateCmds);
+        InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds);
 
     static Result<string, PersistentProcessLiveRepresentationDuringRestore> ApplyCompositionEvent(
         CompositionEventWithResolvedDependencies compositionEvent,
@@ -328,7 +328,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             var projectedElmAppState = Encoding.UTF8.GetString(setElmAppState);
 
             return
-                AttemptProcessEvent(processBefore.lastElmAppVolatileProcess, new InterfaceToHost.AppEventStructure { SetStateEvent = projectedElmAppState })
+                AttemptProcessRequest(
+                    processBefore.lastElmAppVolatileProcess,
+                    new InterfaceToHost.StateShimRequestStruct.SetStateEvent(projectedElmAppState))
                 .MapError(error => "Set state function in the hosted app returned an error: " + error)
                 .Map(_ => processBefore);
         }
@@ -337,24 +339,25 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             var elmAppStateBefore = processBefore.lastElmAppVolatileProcess?.GetSerializedState();
 
+            if (elmAppStateBefore is null)
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err("No state from previous app");
+
             var prepareProcessResult =
                 ProcessFromDeployment(deployAppConfigAndMigrateElmAppState, overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
-            var migrateEventResult = AttemptProcessEvent(
+            var migrateEventResult = AttemptProcessRequest(
                 newElmAppProcess,
-                new InterfaceToHost.AppEventStructure(MigrateStateEvent: elmAppStateBefore));
+                new InterfaceToHost.StateShimRequestStruct.MigrateStateEvent(elmAppStateBefore));
 
             return
                 migrateEventResult
                 .MapError(error => "Failed to process the event in the hosted app: " + error)
-                .AndThen(migrateEventOk =>
-                migrateEventOk.migrateResult
-                .AsPineMaybe()
+                .Map(shimResponse => ((InterfaceToHost.StateShimResponseStruct.AppEventShimResponse)shimResponse).Response)
+                .AndThen(migrateEventOk => migrateEventOk.migrateResult
                 .Map(migrationAttempted =>
                 migrationAttempted
-                .AsPineResult()
                 .MapError(error => "Migration function in the hosted app returned an error: " + error)
                 .Map(migrationOk =>
                 {
@@ -383,9 +386,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
-            var initEventResult = AttemptProcessEvent(
+            var initEventResult = AttemptProcessRequest(
                 newElmAppProcess,
-                new InterfaceToHost.AppEventStructure(InitStateEvent: new()));
+                new InterfaceToHost.StateShimRequestStruct.InitStateEvent());
 
             return
                 initEventResult
@@ -400,7 +403,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                             Composition.FromTreeWithStringPath(appConfig),
                             prepareProcessResult.buildArtifacts),
                         lastElmAppVolatileProcess: newElmAppProcess,
-                        initEventOk);
+                        ((InterfaceToHost.StateShimResponseStruct.AppEventShimResponse)initEventOk).Response);
                 });
         }
 
@@ -408,31 +411,26 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
 
-    static Result<string, InterfaceToHost.AppEventResponseStructure> AttemptProcessEvent(
+    static Result<string, InterfaceToHost.StateShimResponseStruct> AttemptProcessRequest(
         IProcessWithStringInterface process,
-        InterfaceToHost.AppEventStructure appEvent)
+        InterfaceToHost.StateShimRequestStruct stateShimRequest)
     {
-        var serializedInterfaceEvent =
-            JsonSerializer.Serialize(appEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
+        var serializedInterfaceEvent = stateShimRequest.SerializeToJsonString();
 
         var eventResponseSerial = process.ProcessEvent(serializedInterfaceEvent);
 
         try
         {
             var eventResponse =
-                JsonSerializer.Deserialize<InterfaceToHost.ResponseOverSerialInterface>(eventResponseSerial)!;
+                JsonSerializer.Deserialize<Result<string, InterfaceToHost.StateShimResponseStruct>>(eventResponseSerial)!;
 
-            if (eventResponse.DecodeEventSuccess == null)
-            {
-                return Result<string, InterfaceToHost.AppEventResponseStructure>.err(
-                    "Hosted app failed to decode the event: " + eventResponse.DecodeEventError);
-            }
-
-            return Result<string, InterfaceToHost.AppEventResponseStructure>.ok(eventResponse.DecodeEventSuccess);
+            return
+                eventResponse
+                .MapError(decodeErr => "Hosted app failed to decode the event: " + decodeErr);
         }
         catch (Exception parseException)
         {
-            return Result<string, InterfaceToHost.AppEventResponseStructure>.err(
+            return Result<string, InterfaceToHost.StateShimResponseStruct>.err(
                 "Failed to parse event response from the app. Looks like the loaded elm app is not compatible with the interface.\nI got following response from the app:\n" +
                 eventResponseSerial + "\nException: " + parseException.ToString());
         }

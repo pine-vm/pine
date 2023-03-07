@@ -198,8 +198,14 @@ public class TestWebServer
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
-            .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
-            .WhereNotNull()
+            .SelectMany(processEvent => processEvent switch
+            {
+                ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
+                httpRequestEvent.Struct.request.bodyAsBase64
+                .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64)).WithDefault(ImmutableList<string>.Empty),
+
+                _ => ImmutableList<string>.Empty
+            })
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         HttpResponseMessage PostStringContentToPublicApp(string requestContent)
@@ -291,8 +297,15 @@ public class TestWebServer
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
-            .Select(processEvent => processEvent?.HttpRequestEvent?.request?.bodyAsBase64)
-            .WhereNotNull()
+            .SelectMany(processEvent => processEvent switch
+            {
+                ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
+                httpRequestEvent.Struct.request.bodyAsBase64
+                .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64))
+                .WithDefault(ImmutableList<string>.Empty),
+
+                _ => ImmutableList<string>.Empty
+            })
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         HttpResponseMessage PostStringContentToPublicApp(string requestContent)
@@ -503,7 +516,7 @@ public class TestWebServer
 
             Assert.AreEqual(
                 Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
-                echoRequestStructure.bodyAsBase64?.ToLowerInvariant(),
+                echoRequestStructure.bodyAsBase64.WithDefault("").ToLowerInvariant(),
                 "Request body is propagated.");
 
             var echoCustomHeaderValues =

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
@@ -180,11 +181,11 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     public ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
         new(BuildProcessStoreFileStoreReaderInFileDirectory());
 
-    public IEnumerable<ElmTime.Platform.WebServer.InterfaceToHost.AppEventStructure> EnumerateStoredUpdateElmAppStateForEvents()
+    public IEnumerable<ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct> EnumerateStoredUpdateElmAppStateForEvents()
     {
         var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-        ElmTime.Platform.WebServer.InterfaceToHost.AppEventStructure eventLogEntry(
+        ElmTime.Platform.WebServer.InterfaceToHost.StateShimRequestStruct eventLogEntry(
             ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
         {
             var component =
@@ -202,7 +203,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
             var eventString = Encoding.UTF8.GetString(blobComponent.Bytes.Span);
 
-            return JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.AppEventStructure>(eventString)!;
+            return JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.StateShimRequestStruct>(eventString)!;
         }
 
         return
@@ -212,6 +213,13 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             .Select(r => JsonSerializer.Deserialize<ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>(r)!)
             .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
             .WhereNotNull()
-            .Select(eventLogEntry);
+            .Select(eventLogEntry)
+            .SelectMany(stateShimEvent => stateShimEvent switch
+            {
+                ElmTime.Platform.WebServer.InterfaceToHost.StateShimRequestStruct.AppEventShimRequest backendEvent =>
+                ImmutableList.Create(backendEvent.AppEvent),
+
+                _ => ImmutableList<ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct>.Empty
+            });
     }
 }

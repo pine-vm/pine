@@ -35,7 +35,7 @@ public class PublicAppState
     readonly object nextTimeToNotifyLock = new();
 
     DateTimeOffset? lastAppEventTimeHasArrived = null;
-    InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStructure? nextTimeToNotify = null;
+    InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStruct? nextTimeToNotify = null;
 
     public PublicAppState(
         ServerAndElmAppConfig serverAndElmAppConfig,
@@ -176,10 +176,7 @@ public class PublicAppState
         var httpRequestEvent =
             await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
 
-        var httpRequestInterfaceEvent = new InterfaceToHost.AppEventStructure
-        {
-            HttpRequestEvent = httpRequestEvent,
-        };
+        var httpRequestInterfaceEvent = new InterfaceToHost.BackendEventStruct.HttpRequestEvent(httpRequestEvent);
 
         var preparedProcessEvent = PrepareProcessEventAndResultingRequests(httpRequestInterfaceEvent);
 
@@ -204,10 +201,10 @@ public class PublicAppState
             if (timeout <= waitForHttpResponseClock.Elapsed)
                 return new InterfaceToHost.HttpResponse(
                     statusCode: 500,
-                    bodyAsBase64: Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                    bodyAsBase64: Maybe.NothingFromNull(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
                         "The app did not return an HTTP response within " +
                         (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
-                        " seconds.")),
+                        " seconds."))),
                     headersToAdd: Array.Empty<InterfaceToHost.HttpHeader>());
 
             return null;
@@ -238,15 +235,15 @@ public class PublicAppState
 
             ReadOnlyMemory<byte>? contentAsByteArray = null;
 
-            if (httpResponse?.bodyAsBase64 != null)
+            if (httpResponse.bodyAsBase64.WithDefault(null) is string responseBodyAsBase64)
             {
-                var buffer = new byte[httpResponse.bodyAsBase64.Length * 3 / 4];
+                var buffer = new byte[responseBodyAsBase64.Length * 3 / 4];
 
-                if (!Convert.TryFromBase64String(httpResponse.bodyAsBase64, buffer, out var bytesWritten))
+                if (!Convert.TryFromBase64String(responseBodyAsBase64, buffer, out var bytesWritten))
                 {
                     throw new FormatException(
                         "Failed to convert from base64. bytesWritten=" + bytesWritten +
-                        ", input.length=" + httpResponse.bodyAsBase64.Length + ", input:\n" +
+                        ", input.length=" + responseBodyAsBase64.Length + ", input:\n" +
                         httpResponse.bodyAsBase64);
                 }
 
@@ -268,21 +265,20 @@ public class PublicAppState
 
         lastAppEventTimeHasArrived = currentTime;
 
-        ProcessEventAndResultingRequests(new InterfaceToHost.AppEventStructure
-        {
-            ArrivedAtTimeEvent = new InterfaceToHost.ArrivedAtTimeEventStructure
+        ProcessEventAndResultingRequests(new InterfaceToHost.BackendEventStruct.PosixTimeHasArrivedEvent
+        (new InterfaceToHost.PosixTimeHasArrivedEventStruct
             (
                 posixTimeMilli: currentTime.ToUnixTimeMilliseconds()
             )
-        });
+        ));
     }
 
     (string serializedInterfaceEvent, Action processEventAndResultingRequests) PrepareProcessEventAndResultingRequests(
-        InterfaceToHost.AppEventStructure interfaceEvent)
+        InterfaceToHost.BackendEventStruct interfaceEvent)
     {
         var serializedInterfaceEvent =
-            System.Text.Json.JsonSerializer.Serialize(
-                interfaceEvent, InterfaceToHost.AppEventStructure.JsonSerializerSettings);
+            new InterfaceToHost.StateShimRequestStruct.AppEventShimRequest(interfaceEvent)
+            .SerializeToJsonString();
 
         var processEvent = new Action(() =>
         {
@@ -296,17 +292,18 @@ public class PublicAppState
                 try
                 {
                     var structuredResponse =
-                        System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.ResponseOverSerialInterface>(
+                        System.Text.Json.JsonSerializer.Deserialize<Result<string, InterfaceToHost.StateShimResponseStruct>>(
                             serializedResponse)!;
 
-                    if (structuredResponse.DecodeEventSuccess == null)
-                    {
-                        throw new Exception("Hosted app failed to decode the event: " + structuredResponse.DecodeEventError);
-                    }
+                    var structuredResponseOk =
+                        structuredResponse.Extract(decodeErr => throw new Exception("Hosted app failed to decode the event: " + decodeErr));
 
-                    var notifyWhenPosixTimeHasArrived = structuredResponse.DecodeEventSuccess.notifyWhenPosixTimeHasArrived;
+                    var backendEventResponse =
+                    ((InterfaceToHost.StateShimResponseStruct.AppEventShimResponse)structuredResponseOk).Response;
 
-                    if (notifyWhenPosixTimeHasArrived != null)
+                    var notifyWhenPosixTimeHasArrived = backendEventResponse.notifyWhenPosixTimeHasArrived.WithDefault(null);
+
+                    if (notifyWhenPosixTimeHasArrived is not null)
                     {
                         System.Threading.Tasks.Task.Run(() =>
                         {
@@ -317,7 +314,7 @@ public class PublicAppState
                         });
                     }
 
-                    ForwardTasksFromResponseCmds(structuredResponse.DecodeEventSuccess);
+                    ForwardTasksFromResponseCmds(backendEventResponse);
                 }
                 catch (Exception parseException)
                 {
@@ -339,104 +336,126 @@ public class PublicAppState
     {
         var taskResult = PerformProcessTask(taskWithId.task);
 
-        var interfaceEvent = new InterfaceToHost.AppEventStructure
-        {
-            TaskCompleteEvent = new InterfaceToHost.ResultFromTaskWithId
+        var interfaceEvent = new InterfaceToHost.BackendEventStruct.TaskCompleteEvent
             (
-                taskId: taskWithId.taskId,
-                taskResult: taskResult
-            )
-        };
+                Result: new InterfaceToHost.ResultFromTaskWithId
+                (
+                    taskId: taskWithId.taskId,
+                    taskResult: taskResult
+                )
+            );
 
         ProcessEventAndResultingRequests(interfaceEvent);
     }
 
-    void ProcessEventAndResultingRequests(InterfaceToHost.AppEventStructure interfaceEvent)
+    void ProcessEventAndResultingRequests(InterfaceToHost.BackendEventStruct interfaceEvent)
     {
         var prepareProcessEvent = PrepareProcessEventAndResultingRequests(interfaceEvent);
 
         prepareProcessEvent.processEventAndResultingRequests();
     }
 
-    void ForwardTasksFromResponseCmds(InterfaceToHost.AppEventResponseStructure response)
+    System.Threading.Tasks.Task ForwardTasksFromResponseCmds(InterfaceToHost.BackendEventResponseStruct response)
     {
-        foreach (var startTask in response.startTasks)
-        {
-            System.Threading.Tasks.Task.Run(() => PerformProcessTaskAndFeedbackEvent(startTask), applicationStoppingCancellationTokenSource.Token);
-        }
+        var startTasks =
+            response.startTasks
+            .Select(startTask => System.Threading.Tasks.Task.Run(() => PerformProcessTaskAndFeedbackEvent(startTask), applicationStoppingCancellationTokenSource.Token));
 
         foreach (var completeHttpResponse in response.completeHttpResponses)
         {
             appTaskCompleteHttpResponse[completeHttpResponse.httpRequestId] = completeHttpResponse.response;
         }
+
+        return System.Threading.Tasks.Task.WhenAll(startTasks);
     }
 
-    InterfaceToHost.TaskResult PerformProcessTask(InterfaceToHost.Task task)
+    InterfaceToHost.TaskResult PerformProcessTask(InterfaceToHost.Task task) =>
+        task switch
+        {
+            InterfaceToHost.Task.CreateVolatileProcess create =>
+            PerformProcessTaskCreateVolatileProcess(create.Create),
+
+            InterfaceToHost.Task.RequestToVolatileProcess requestTo =>
+            new InterfaceToHost.TaskResult.RequestToVolatileProcessResponse(PerformProcessTaskRequestToVolatileProcess(requestTo.RequestTo)),
+
+            InterfaceToHost.Task.TerminateVolatileProcess terminate =>
+            PerformProcessTaskTerminateVolatileProcess(terminate.Terminate),
+
+            _ => throw new NotImplementedException("Unexpected task structure.")
+        };
+
+    InterfaceToHost.TaskResult PerformProcessTaskCreateVolatileProcess(InterfaceToHost.CreateVolatileProcessStruct createVolatileProcess)
     {
-        var createVolatileProcess = task?.CreateVolatileProcess;
-        var requestToVolatileProcess = task?.RequestToVolatileProcess;
-        var terminateVolatileProcess = task?.TerminateVolatileProcess;
-
-        if (createVolatileProcess != null)
+        try
         {
-            try
-            {
-                var volatileProcess = new VolatileProcess(GetBlobWithSHA256, createVolatileProcess.programCode);
+            var volatileProcess = new VolatileProcess(GetBlobWithSHA256, createVolatileProcess.programCode);
 
-                var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
+            var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
 
-                volatileProcesses[volatileProcessId] = volatileProcess;
+            volatileProcesses[volatileProcessId] = volatileProcess;
 
-                var completeStructure = new InterfaceToHost.CreateVolatileProcessComplete
+            var completeStructure = new InterfaceToHost.CreateVolatileProcessComplete
+            (
+                processId: volatileProcessId
+            );
+
+            return new InterfaceToHost.TaskResult.CreateVolatileProcessResponse
+            (
+                Result: Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.ok(completeStructure)
+            );
+        }
+        catch (Exception createVolatileProcessException)
+        {
+            return new InterfaceToHost.TaskResult.CreateVolatileProcessResponse
+            (
+                Result: Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.err
                 (
-                    processId: volatileProcessId
-                );
+                    new InterfaceToHost.CreateVolatileProcessErrorStructure
+                    (
+                        exceptionToString: createVolatileProcessException.ToString()
+                    )
+                )
+            );
+        }
+    }
 
-                return new InterfaceToHost.TaskResult
-                {
-                    CreateVolatileProcessResponse = new InterfaceToHost.Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>
-                    {
-                        Ok = completeStructure,
-                    },
-                };
-            }
-            catch (Exception createVolatileProcessException)
-            {
-                return new InterfaceToHost.TaskResult
+    Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
+        PerformProcessTaskRequestToVolatileProcess(
+        InterfaceToHost.RequestToVolatileProcessStruct requestToVolatileProcess)
+    {
+        if (!volatileProcesses.TryGetValue(requestToVolatileProcess.processId, out var volatileProcess))
+        {
+            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>.err
+            (
+                new InterfaceToHost.RequestToVolatileProcessError
                 (
-                    CreateVolatileProcessResponse:
-                    new InterfaceToHost.Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>
-                    {
-                        Err = new InterfaceToHost.CreateVolatileProcessErrorStructure
-                        (
-                            exceptionToString: createVolatileProcessException.ToString()
-                        ),
-                    }
-                );
-            }
+                    ProcessNotFound: new object()
+                )
+            );
         }
 
-        if (terminateVolatileProcess != null)
-        {
-            volatileProcesses.TryRemove(terminateVolatileProcess.processId, out var volatileProcess);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            return new InterfaceToHost.TaskResult
-            {
-                CompleteWithoutResult = new object(),
-            };
-        }
+        var fromVolatileProcessResult = volatileProcess.ProcessRequest(requestToVolatileProcess.request);
 
-        if (requestToVolatileProcess != null)
-        {
-            var response = PerformProcessTaskRequestToVolatileProcess(requestToVolatileProcess);
+        stopwatch.Stop();
 
-            return new InterfaceToHost.TaskResult
-            {
-                RequestToVolatileProcessResponse = response,
-            };
-        }
+        return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>.ok
+        (
+            new InterfaceToHost.RequestToVolatileProcessComplete
+            (
+                exceptionToString: Maybe.NothingFromNull(fromVolatileProcessResult.Exception?.ToString()),
+                returnValueToString: Maybe.NothingFromNull(fromVolatileProcessResult.ReturnValue?.ToString()),
+                durationInMilliseconds: stopwatch.ElapsedMilliseconds
+            )
+        );
+    }
 
-        throw new NotImplementedException("Unexpected task structure.");
+    InterfaceToHost.TaskResult PerformProcessTaskTerminateVolatileProcess(InterfaceToHost.TerminateVolatileProcessStruct terminateVolatileProcess)
+    {
+        volatileProcesses.TryRemove(terminateVolatileProcess.processId, out var volatileProcess);
+
+        return new InterfaceToHost.TaskResult.CompleteWithoutResult();
     }
 
     byte[]? GetBlobWithSHA256(byte[] sha256)
@@ -456,50 +475,18 @@ public class PublicAppState
         return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();
     }
 
-    InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
-        PerformProcessTaskRequestToVolatileProcess(
-        InterfaceToHost.RequestToVolatileProcessStruct requestToVolatileProcess)
-    {
-        if (!volatileProcesses.TryGetValue(requestToVolatileProcess.processId, out var volatileProcess))
-        {
-            return new InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
-            (
-                Err: new InterfaceToHost.RequestToVolatileProcessError
-                (
-                    ProcessNotFound: new object()
-                )
-            );
-        }
-
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        var fromVolatileProcessResult = volatileProcess.ProcessRequest(requestToVolatileProcess.request);
-
-        stopwatch.Stop();
-
-        return new InterfaceToHost.Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
-        {
-            Ok = new InterfaceToHost.RequestToVolatileProcessComplete
-            (
-                exceptionToString: fromVolatileProcessResult.Exception?.ToString(),
-                returnValueToString: fromVolatileProcessResult.ReturnValue?.ToString(),
-                durationInMilliseconds: stopwatch.ElapsedMilliseconds
-            )
-        };
-    }
-
-    static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEvent> AsPersistentProcessInterfaceHttpRequestEvent(
+    static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEventStruct> AsPersistentProcessInterfaceHttpRequestEvent(
         HttpContext httpContext,
         string httpRequestId,
         DateTimeOffset time)
     {
-        return new InterfaceToHost.HttpRequestEvent
+        return new InterfaceToHost.HttpRequestEventStruct
         (
             posixTimeMilli: time.ToUnixTimeMilliseconds(),
             httpRequestId: httpRequestId,
             requestContext: new InterfaceToHost.HttpRequestContext
             (
-                clientAddress: httpContext.Connection.RemoteIpAddress?.ToString()
+                clientAddress: Maybe.NothingFromNull(httpContext.Connection.RemoteIpAddress?.ToString())
             ),
 
             request: await Asp.AsPersistentProcessInterfaceHttpRequest(httpContext.Request)
@@ -511,4 +498,4 @@ public record ServerAndElmAppConfig(
     WebServerConfigJson? ServerConfig,
     Func<string, string> ProcessEventInElmApp,
     PineValue SourceComposition,
-    InterfaceToHost.AppEventResponseStructure? InitOrMigrateCmds);
+    InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds);
