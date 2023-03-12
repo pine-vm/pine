@@ -90,14 +90,20 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                     if (reduction != null)
                     {
                         compositionChain.Pop();
-                        process.SetSerializedState(reduction.ReducedValueLiteralString!);
+                        StateShim.StateShim.SetSerializedState(process, stateJson: reduction.ReducedValueLiteralString!)
+                            .Extract(err => throw new Exception(err));
                         lastStateHash = reduction.ReducedCompositionHash;
                     }
 
                     foreach (var followingComposition in compositionChain)
                     {
                         if (followingComposition.composition.SetStateLiteralString != null)
-                            process.SetSerializedState(followingComposition.composition.SetStateLiteralString);
+                        {
+                            StateShim.StateShim.SetSerializedState(
+                                process,
+                                stateJson: followingComposition.composition.SetStateLiteralString!)
+                                .Extract(err => throw new Exception(err));
+                        }
 
                         foreach (var appendedEvent in followingComposition.composition.AppendedEventsLiteralString.EmptyIfNull())
                             process.ProcessEvent(appendedEvent);
@@ -163,11 +169,15 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
     {
         lock (process)
         {
+            var serializedState =
+                StateShim.StateShim.GetSerializedState(process)
+                .Extract(err => throw new Exception("Failed to get serialized state: " + err));
+
             return
                 new ReductionRecord
                 (
                     ReducedCompositionHash: lastStateHash,
-                    ReducedValueLiteralString: process.GetSerializedState()
+                    ReducedValueLiteralString: serializedState
                 );
         }
     }
@@ -176,7 +186,8 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
     {
         lock (process)
         {
-            process.SetSerializedState(state);
+            StateShim.StateShim.SetSerializedState(process, stateJson: state)
+                .Extract(err => throw new Exception(err));
 
             var compositionRecord = new CompositionRecordInFile
             (
@@ -194,52 +205,4 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
             return (serializedCompositionRecord, compositionHash);
         }
     }
-}
-
-public class PersistentProcessWithControlFlowOverStoreWriter : IDisposableProcessWithStringInterface
-{
-    IPersistentProcess process;
-
-    IProcessStoreWriter storeWriter;
-
-    public PersistentProcessWithControlFlowOverStoreWriter(
-        IPersistentProcess process,
-        IProcessStoreWriter storeWriter)
-    {
-        this.process = process;
-        this.storeWriter = storeWriter;
-    }
-
-    public string ProcessEvent(string serializedEvent)
-    {
-        lock (process)
-        {
-            var (responses, (serializedCompositionRecord, serializedCompositionRecordHash)) =
-                process.ProcessEvents(new[] { serializedEvent });
-
-            var response = responses.Single();
-
-            storeWriter.AppendSerializedCompositionRecord(serializedCompositionRecord);
-            storeWriter.StoreReduction(process.ReductionRecordForCurrentState());
-
-            return response;
-        }
-    }
-
-    string IProcess<string, string>.GetSerializedState() => process.ReductionRecordForCurrentState().ReducedValueLiteralString!;
-
-    string? IProcess<string, string>.SetSerializedState(string serializedState)
-    {
-        lock (process)
-        {
-            var (serializedCompositionRecord, serializedCompositionRecordHash) =
-                process.SetState(serializedState);
-
-            storeWriter.AppendSerializedCompositionRecord(serializedCompositionRecord);
-
-            return null;
-        }
-    }
-
-    public void Dispose() => (process as IDisposable)?.Dispose();
 }

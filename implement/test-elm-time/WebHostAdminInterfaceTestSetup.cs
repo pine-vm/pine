@@ -185,7 +185,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     {
         var processStoreReader = BuildProcessStoreReaderInFileDirectory();
 
-        ElmTime.Platform.WebServer.InterfaceToHost.StateShimRequestStruct eventLogEntry(
+        ElmTime.StateShim.InterfaceToHost.StateShimRequestStruct eventLogEntry(
             ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
         {
             var component =
@@ -203,7 +203,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
             var eventString = Encoding.UTF8.GetString(blobComponent.Bytes.Span);
 
-            return JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.StateShimRequestStruct>(eventString)!;
+            return JsonSerializer.Deserialize<ElmTime.StateShim.InterfaceToHost.StateShimRequestStruct>(eventString)!;
         }
 
         return
@@ -216,8 +216,16 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             .Select(eventLogEntry)
             .SelectMany(stateShimEvent => stateShimEvent switch
             {
-                ElmTime.Platform.WebServer.InterfaceToHost.StateShimRequestStruct.AppEventShimRequest backendEvent =>
-                ImmutableList.Create(backendEvent.AppEvent),
+                ElmTime.StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest applyFunctionRequest =>
+                applyFunctionRequest.ApplyFunction.functionName switch
+                {
+                    "processEvent" =>
+                    ImmutableList.Create(
+                        JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct>(
+                            applyFunctionRequest.ApplyFunction.arguments.serializedArgumentsJson.Single())),
+
+                    _ => ImmutableList<ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct>.Empty
+                },
 
                 _ => ImmutableList<ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct>.Empty
             });

@@ -50,8 +50,9 @@ type alias BackendRootModuleConfig =
     , stateEncodeFunction : ( List String, String )
     , stateDecodeFunction : ( List String, String )
     , stateShimRequestDecodeFunction : ( List String, String )
-    , stateShimResponseEncodeFunction : ( List String, String )
-    , stateFromStringExpression : String
+    , stateShimResponseEncodeSerialFunction : ( List String, String )
+    , backendEventDecodeFunction : ( List String, String )
+    , backendEventResponseEncodeFunction : ( List String, String )
     , migrateFromStringExpression : String
     }
 
@@ -68,13 +69,6 @@ type alias MigrationConfig =
 type alias ElmAppInterfaceConvention =
     { serializeStateFunctionName : String
     , deserializeStateFunctionName : String
-    }
-
-
-elmAppInterfaceConvention : ElmAppInterfaceConvention
-elmAppInterfaceConvention =
-    { serializeStateFunctionName = "interfaceToHost_serializeState"
-    , deserializeStateFunctionName = "interfaceToHost_deserializeState"
     }
 
 
@@ -111,10 +105,14 @@ supportingTypesModules :
             (LocatedInSourceFiles String)
             { modules : Dict.Dict (List String) SourceParsedElmModule
             , stateShimRequestType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
-            , stateShimResponseType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
+            , stateShimResponseResultType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
+            , backendEventType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
+            , backendResponseEventType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
             }
 supportingTypesModules originalSourceModules =
     [ stateShimTypesModuleText
+    , stateShimModuleText
+    , webServerShimModuleText
     , webServerShimTypesModuleText
     ]
         |> CompileFullstackApp.elmModulesDictFromModuleTexts CompileFullstackApp.filePathFromElmModuleName
@@ -159,17 +157,24 @@ supportingTypesModules originalSourceModules =
                                     syntaxNodeFromEmptyRange =
                                         Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange
 
+                                    fakeTypeAnnotationFromLocalName localName =
+                                        Elm.Syntax.TypeAnnotation.Typed (syntaxNodeFromEmptyRange ( [], localName )) []
+
                                     stateShimRequestFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
                                     stateShimRequestFakeTypeAnnotation =
-                                        Elm.Syntax.TypeAnnotation.Typed (syntaxNodeFromEmptyRange ( [], "StateShimRequest" )) []
+                                        fakeTypeAnnotationFromLocalName "StateShimRequest"
 
                                     backendEventResponseFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
                                     backendEventResponseFakeTypeAnnotation =
-                                        Elm.Syntax.TypeAnnotation.Typed (syntaxNodeFromEmptyRange ( [], "BackendEventResponseStruct" )) []
+                                        fakeTypeAnnotationFromLocalName "BackendEventResponseStruct"
 
-                                    stateShimResponseFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
-                                    stateShimResponseFakeTypeAnnotation =
-                                        Elm.Syntax.TypeAnnotation.Typed (syntaxNodeFromEmptyRange ( [], "StateShimResponse" )) []
+                                    stateShimResponseResultFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
+                                    stateShimResponseResultFakeTypeAnnotation =
+                                        fakeTypeAnnotationFromLocalName "ResponseOverSerialInterface"
+
+                                    backendEventFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
+                                    backendEventFakeTypeAnnotation =
+                                        fakeTypeAnnotationFromLocalName "BackendEvent"
                                 in
                                 CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
                                     (Dict.union typesModules originalSourceModules)
@@ -180,15 +185,33 @@ supportingTypesModules originalSourceModules =
                                         (\stateShimRequestType ->
                                             CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
                                                 (Dict.union typesModules originalSourceModules)
-                                                ( ( stateShimTypesModuleFilePath, stateShimTypesModule.parsedSyntax )
-                                                , syntaxNodeFromEmptyRange stateShimResponseFakeTypeAnnotation
+                                                ( ( webServerShimTypesModuleFilePath, webServerShimTypesModule.parsedSyntax )
+                                                , syntaxNodeFromEmptyRange backendEventResponseFakeTypeAnnotation
                                                 )
-                                                |> Result.map
-                                                    (\stateShimResponseType ->
-                                                        { modules = typesModules
-                                                        , stateShimRequestType = stateShimRequestType
-                                                        , stateShimResponseType = stateShimResponseType
-                                                        }
+                                                |> Result.andThen
+                                                    (\backendResponseEventType ->
+                                                        CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                                                            (Dict.union typesModules originalSourceModules)
+                                                            ( ( stateShimTypesModuleFilePath, stateShimTypesModule.parsedSyntax )
+                                                            , syntaxNodeFromEmptyRange stateShimResponseResultFakeTypeAnnotation
+                                                            )
+                                                            |> Result.andThen
+                                                                (\stateShimResponseResultType ->
+                                                                    CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                                                                        (Dict.union typesModules originalSourceModules)
+                                                                        ( ( webServerShimTypesModuleFilePath, webServerShimTypesModule.parsedSyntax )
+                                                                        , syntaxNodeFromEmptyRange backendEventFakeTypeAnnotation
+                                                                        )
+                                                                        |> Result.map
+                                                                            (\backendEventType ->
+                                                                                { modules = typesModules
+                                                                                , stateShimRequestType = stateShimRequestType
+                                                                                , stateShimResponseResultType = stateShimResponseResultType
+                                                                                , backendEventType = backendEventType
+                                                                                , backendResponseEventType = backendResponseEventType
+                                                                                }
+                                                                            )
+                                                                )
                                                     )
                                         )
             )
@@ -258,13 +281,17 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                                         |> Maybe.withDefault Dict.empty
                                                                     )
                                                                 |> Dict.union (Tuple.second supportingTypes.stateShimRequestType)
-                                                                |> Dict.union (Tuple.second supportingTypes.stateShimResponseType)
+                                                                |> Dict.union (Tuple.second supportingTypes.backendResponseEventType)
+                                                                |> Dict.union (Tuple.second supportingTypes.stateShimResponseResultType)
+                                                                |> Dict.union (Tuple.second supportingTypes.backendEventType)
 
                                                         typeToGenerateSerializersFor : List ElmTypeAnnotation
                                                         typeToGenerateSerializersFor =
                                                             stateType.stateTypeAnnotation
                                                                 :: Tuple.first supportingTypes.stateShimRequestType
-                                                                :: Tuple.first supportingTypes.stateShimResponseType
+                                                                :: Tuple.first supportingTypes.backendResponseEventType
+                                                                :: Tuple.first supportingTypes.stateShimResponseResultType
+                                                                :: Tuple.first supportingTypes.backendEventType
                                                                 :: typeToGenerateSerializersForMigration
 
                                                         modulesToAdd =
@@ -292,8 +319,14 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                         stateShimRequestFunctionsNamesInGeneratedModules =
                                                             buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimRequestType)
 
-                                                        stateShimResponseFunctionsNamesInGeneratedModules =
-                                                            buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseType)
+                                                        backendEventResponseFunctionsNamesInGeneratedModules =
+                                                            buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.backendResponseEventType)
+
+                                                        stateShimResponseResultFunctionsNamesInGeneratedModules =
+                                                            buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
+
+                                                        backendEventFunctionsNamesInGeneratedModules =
+                                                            buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.backendEventType)
 
                                                         stateEncodeFunction =
                                                             ( generateSerializersResult.generatedModuleName
@@ -310,9 +343,19 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                             , stateShimRequestFunctionsNamesInGeneratedModules.decodeFunction.name
                                                             )
 
-                                                        stateShimResponseEncodeFunction =
+                                                        stateShimResponseEncodeSerialFunction =
                                                             ( generateSerializersResult.generatedModuleName
-                                                            , stateShimResponseFunctionsNamesInGeneratedModules.encodeFunction.name
+                                                            , stateShimResponseResultFunctionsNamesInGeneratedModules.encodeFunction.name
+                                                            )
+
+                                                        backendEventResponseEncodeFunction =
+                                                            ( generateSerializersResult.generatedModuleName
+                                                            , backendEventResponseFunctionsNamesInGeneratedModules.encodeFunction.name
+                                                            )
+
+                                                        backendEventDecodeFunction =
+                                                            ( generateSerializersResult.generatedModuleName
+                                                            , backendEventFunctionsNamesInGeneratedModules.decodeFunction.name
                                                             )
 
                                                         ( migrateFromStringExpressionFromGenerateModuleName, typeToGenerateSerializersForMigration ) =
@@ -337,13 +380,6 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                                     , [ migrationConfig.inputType, migrationConfig.returnType ]
                                                                     )
 
-                                                        stateFromStringExpression =
-                                                            [ "Json.Decode.decodeString "
-                                                                ++ String.join "." (generateSerializersResult.generatedModuleName ++ [ stateFunctionsNamesInGeneratedModules.decodeFunction.name ])
-                                                            , ">> Result.mapError Json.Decode.errorToString"
-                                                            ]
-                                                                |> String.join "\n"
-
                                                         rootElmModuleText =
                                                             composeBackendRootElmModuleText
                                                                 { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
@@ -362,8 +398,9 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                                 , stateEncodeFunction = stateEncodeFunction
                                                                 , stateDecodeFunction = stateDecodeFunction
                                                                 , stateShimRequestDecodeFunction = stateShimRequestDecodeFunction
-                                                                , stateShimResponseEncodeFunction = stateShimResponseEncodeFunction
-                                                                , stateFromStringExpression = stateFromStringExpression
+                                                                , stateShimResponseEncodeSerialFunction = stateShimResponseEncodeSerialFunction
+                                                                , backendEventResponseEncodeFunction = backendEventResponseEncodeFunction
+                                                                , backendEventDecodeFunction = backendEventDecodeFunction
                                                                 , migrateFromStringExpression =
                                                                     generateSerializersResult.generatedModuleName
                                                                         |> migrateFromStringExpressionFromGenerateModuleName
@@ -574,17 +611,23 @@ composeBackendRootElmModuleTextPlatformWebServer config =
             config.rootModuleNameBeforeLowering ++ "." ++ config.mainDeclarationName
 
         functionAliases =
-            [ ( "jsonEncodeDeserializedState"
+            [ ( "jsonEncodeWebServerAppState"
               , config.stateEncodeFunction
               )
-            , ( "jsonDecodeDeserializedState"
+            , ( "jsonDecodeWebServerAppState"
               , config.stateDecodeFunction
               )
             , ( "jsonDecodeStateShimRequest"
               , config.stateShimRequestDecodeFunction
               )
-            , ( "jsonEncodeStateShimResponse"
-              , config.stateShimResponseEncodeFunction
+            , ( "jsonEncodeStateShimResultResponse"
+              , config.stateShimResponseEncodeSerialFunction
+              )
+            , ( "jsonDecodeBackendEvent"
+              , config.backendEventDecodeFunction
+              )
+            , ( "jsonEncodeBackendEventResponse"
+              , config.backendEventResponseEncodeFunction
               )
             ]
 
@@ -602,10 +645,8 @@ composeBackendRootElmModuleTextPlatformWebServer config =
         ++ config.interfaceToHostRootModuleName
         ++ """ exposing
     ( State
-    , interfaceToHost_deserializeState
     , interfaceToHost_initState
     , interfaceToHost_processEvent
-    , interfaceToHost_serializeState
     , main
     )
 
@@ -617,27 +658,88 @@ import """
         ++ """
 import Platform
 import Platform.WebServer
+import Backend.Generated.StateShim exposing (StateShimConfig, StateShimState)
 import Backend.Generated.StateShimTypes exposing (..)
 import Backend.Generated.WebServerShimTypes exposing (..)
+import Backend.Generated.WebServerShim
 
-type alias DeserializedState =
+
+type alias WebServerAppState =
     ("""
         ++ buildTypeAnnotationText config.stateTypeAnnotation
         ++ """)
 
 
-type alias DeserializedStateWithTaskFramework =
-    { stateLessFramework : DeserializedState
-    , nextTaskIndex : Int
-    , posixTimeMilli : Int
-    , createVolatileProcessTasks : Dict.Dict TaskId (Platform.WebServer.CreateVolatileProcessResult -> DeserializedState -> ( DeserializedState, Platform.WebServer.Commands DeserializedState ))
-    , requestToVolatileProcessTasks : Dict.Dict TaskId (Platform.WebServer.RequestToVolatileProcessResult -> DeserializedState -> ( DeserializedState, Platform.WebServer.Commands DeserializedState ))
-    , terminateVolatileProcessTasks : Dict.Dict TaskId ()
-    }
+configurationInit =
+    """
+        ++ mainDeclarationNameQualifiedName
+        ++ """.init
 
 
-initDeserializedStateWithTaskFramework : DeserializedState -> DeserializedStateWithTaskFramework
-initDeserializedStateWithTaskFramework stateLessFramework =
+configurationSubscriptions =
+    """
+        ++ mainDeclarationNameQualifiedName
+        ++ """.subscriptions
+
+
+config_exposedFunctions : Dict.Dict String (Backend.Generated.StateShim.ExposedFunctionRecord WebServerAppStateWithTaskFramework)
+config_exposedFunctions =
+    [ ( "init"
+      , { description = { hasAppStateParam = False, resultContainsAppState = True }
+        , handler =
+            configurationInit
+                |> (\\( appState, commands ) ->
+                        Backend.Generated.WebServerShim.backendEventResponseFromRuntimeTasksAndSubscriptions
+                            configurationSubscriptions
+                            commands
+                            (initWebServerAppStateWithTaskFramework appState)
+                   )
+                |> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Json.Encode.encode 0)
+                |> Tuple.mapFirst Just
+                |> Tuple.mapSecond Just
+                |> Ok
+                |> always
+        }
+      )
+    , ( "processEvent"
+      , { description = { hasAppStateParam = True, resultContainsAppState = True }
+        , handler =
+            Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
+                jsonDecodeBackendEvent
+                (\\backendEvent ->
+                    Backend.Generated.WebServerShim.processWebServerEvent configurationSubscriptions backendEvent
+                        >> Tuple.mapFirst Just
+                        >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Json.Encode.encode 0 >> Just)
+                        >> Ok
+                )
+        }
+      )
+    , ( "migrate"
+      , { description = { hasAppStateParam = False, resultContainsAppState = True }
+        , handler =
+            Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument
+                Json.Decode.string
+                (migrateFromStringPackageWebServerShim
+                    >> Result.map
+                        (Tuple.mapFirst Just
+                            >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Json.Encode.encode 0 >> Just)
+                        )
+                )
+        }
+      )    ]
+        |> Dict.fromList
+
+
+type alias State =
+    StateShimState WebServerAppStateWithTaskFramework
+
+
+type alias WebServerAppStateWithTaskFramework =
+    WebServerShimState WebServerAppState
+
+
+initWebServerAppStateWithTaskFramework : WebServerAppState -> WebServerAppStateWithTaskFramework
+initWebServerAppStateWithTaskFramework stateLessFramework =
     { stateLessFramework = stateLessFramework
     , nextTaskIndex = 0
     , posixTimeMilli = 0
@@ -647,40 +749,17 @@ initDeserializedStateWithTaskFramework stateLessFramework =
     }
 
 
-type State
-    = DeserializeFailed String
-    | DeserializeSuccessful DeserializedStateWithTaskFramework
-
-
 interfaceToHost_initState =
-    """
-        ++ mainDeclarationNameQualifiedName
-        ++ """.init
-        |> Tuple.first
-        |> initDeserializedStateWithTaskFramework
-        |> DeserializeSuccessful
+    Backend.Generated.StateShim.init
 
 
-interfaceToHost_processEvent hostEvent stateBefore =
-    case stateBefore of
-        DeserializeFailed _ ->
-            ( stateBefore, "[]" )
-
-        DeserializeSuccessful deserializedState ->
-            deserializedState
-                |> wrapForSerialInterface_processEvent """
-        ++ mainDeclarationNameQualifiedName
-        ++ """.subscriptions hostEvent
-                |> Tuple.mapFirst DeserializeSuccessful
-
-
-interfaceToHost_serializeState =
-    jsonEncodeState >> Json.Encode.encode 0
-
-
-interfaceToHost_deserializeState =
-    deserializeState
-
+interfaceToHost_processEvent : String -> State -> ( State, String )
+interfaceToHost_processEvent =
+    wrapForSerialInterface_processEvent
+        { jsonDecodeWebServerAppState = jsonDecodeWebServerAppState |> Json.Decode.map initWebServerAppStateWithTaskFramework
+        , jsonEncodeWebServerAppState = .stateLessFramework >> jsonEncodeWebServerAppState
+        , exposedFunctions = config_exposedFunctions
+        }
 
 
 -- Support function-level dead code elimination (https://elm-lang.org/blog/small-assets-without-the-headache) Elm code needed to inform the Elm compiler about our entry points.
@@ -692,8 +771,6 @@ main =
         { init = always ( interfaceToHost_initState, Cmd.none )
         , update =
             { a = interfaceToHost_processEvent
-            , b = interfaceToHost_serializeState
-            , c = interfaceToHost_deserializeState
             }
                 |> always ( interfaceToHost_initState, Cmd.none )
                 |> always
@@ -702,67 +779,12 @@ main =
         }
 
 
-
--- Inlined helpers -->
-
-
-{-| Turn a `Result e a` to an `a`, by applying the conversion
-function specified to the `e`.
--}
-result_Extra_Extract : (e -> a) -> Result e a -> a
-result_Extra_Extract f x =
-    case x of
-        Ok a ->
-            a
-
-        Err e ->
-            f e
-
-
-
--- Remember and communicate errors from state deserialization -->
-
-
-jsonEncodeState : State -> Json.Encode.Value
-jsonEncodeState state =
-    case state of
-        DeserializeFailed error ->
-            [ ( "Interface_DeserializeFailed"
-              , [ ( "error", error |> Json.Encode.string ) ] |> Json.Encode.object
-              )
-            ]
-                |> Json.Encode.object
-
-        DeserializeSuccessful deserializedState ->
-            deserializedState.stateLessFramework |> jsonEncodeDeserializedState
-
-
-deserializeState : String -> State
-deserializeState serializedState =
-    serializedState
-        |> Json.Decode.decodeString jsonDecodeState
-        |> Result.mapError Json.Decode.errorToString
-        |> result_Extra_Extract DeserializeFailed
-
-
-jsonDecodeState : Json.Decode.Decoder State
-jsonDecodeState =
-    Json.Decode.oneOf
-        [ Json.Decode.field "Interface_DeserializeFailed" (Json.Decode.field "error" Json.Decode.string |> Json.Decode.map DeserializeFailed)
-        , jsonDecodeDeserializedState |> Json.Decode.map (initDeserializedStateWithTaskFramework >> DeserializeSuccessful)
-        ]
-
-
-
-----
-
-
 wrapForSerialInterface_processEvent :
-    (DeserializedState -> Platform.WebServer.Subscriptions DeserializedState)
+    StateShimConfig appState
     -> String
-    -> DeserializedStateWithTaskFramework
-    -> ( DeserializedStateWithTaskFramework, String )
-wrapForSerialInterface_processEvent subscriptions serializedEvent stateBefore =
+    -> StateShimState appState
+    -> ( StateShimState appState, String )
+wrapForSerialInterface_processEvent config serializedEvent stateBefore =
     let
         ( state, response ) =
             case serializedEvent |> Json.Decode.decodeString jsonDecodeStateShimRequest of
@@ -774,25 +796,344 @@ wrapForSerialInterface_processEvent subscriptions serializedEvent stateBefore =
 
                 Ok hostEvent ->
                     stateBefore
-                        |> processEvent subscriptions hostEvent
+                        |> Backend.Generated.StateShim.processEvent config hostEvent
                         |> Tuple.mapSecond Ok
     in
-    ( state, response |> encodeResponseOverSerialInterface |> Json.Encode.encode 0 )
+    ( state, response |> jsonEncodeStateShimResultResponse |> Json.Encode.encode 0 )
+
+
+migrateFromString : String -> Result String ( WebServerAppState, Platform.WebServer.Commands WebServerAppState )
+migrateFromString =
+"""
+        ++ indentElmCodeLines 2 config.migrateFromStringExpression
+        ++ """
+
+
+migrateFromStringPackageWebServerShim :
+    String
+    -> Result String ( WebServerShimState WebServerAppState, Backend.Generated.WebServerShimTypes.BackendEventResponseStruct )
+migrateFromStringPackageWebServerShim =
+    migrateFromString
+        >> Result.map
+            (\\( appState, appCommands ) ->
+                appState
+                    |> initWebServerAppStateWithTaskFramework
+                    |> Backend.Generated.WebServerShim.backendEventResponseFromRuntimeTasksAndSubscriptions
+                        configurationSubscriptions
+                        appCommands
+            )
+
+
+"""
+        ++ functionsAliasesText
+
+
+stateShimModuleText : String
+stateShimModuleText =
+    String.trimLeft """
+module Backend.Generated.StateShim exposing (..)
+
+import Backend.Generated.StateShimTypes exposing (..)
+import Dict
+import Json.Decode
+import Json.Encode
+
+
+type alias StateShimConfig appState =
+    { exposedFunctions : Dict.Dict String (ExposedFunctionRecord appState)
+    , jsonEncodeWebServerAppState : appState -> Json.Encode.Value
+    , jsonDecodeWebServerAppState : Json.Decode.Decoder appState
+    }
+
+
+type alias StateShimState appState =
+    { branches : Dict.Dict String appState }
+
+
+type alias ExposedFunctionHandler appState =
+    ApplyFunctionArguments (Maybe appState) -> Result String ( Maybe appState, Maybe String )
+
+
+type alias ExposedFunctionRecord appState =
+    { description : ExposedFunctionDescription
+    , handler : ExposedFunctionHandler appState
+    }
+
+
+init : StateShimState appState
+init =
+    { branches = Dict.empty }
 
 
 processEvent :
-    (DeserializedState -> Platform.WebServer.Subscriptions DeserializedState)
+    StateShimConfig appState
     -> StateShimRequest
-    -> DeserializedStateWithTaskFramework
-    -> ( DeserializedStateWithTaskFramework, StateShimResponse )
-processEvent subscriptions hostEvent stateBefore =
+    -> StateShimState appState
+    -> ( StateShimState appState, StateShimResponse )
+processEvent config hostEvent stateBefore =
+    case hostEvent of
+        ListExposedFunctionsShimRequest ->
+            ( stateBefore
+            , config.exposedFunctions
+                |> Dict.toList
+                |> List.map (Tuple.mapSecond .description)
+                |> List.map
+                    (\\( functionName, functionDescription ) ->
+                        { functionName = functionName, functionDescription = functionDescription }
+                    )
+                |> ListExposedFunctionsShimResponse
+            )
+
+        ApplyFunctionShimRequest applyFunction ->
+            let
+                returnError errorText =
+                    ( stateBefore
+                    , errorText
+                        |> Err
+                        |> ApplyFunctionShimResponse
+                    )
+            in
+            case config.exposedFunctions |> Dict.get applyFunction.functionName of
+                Nothing ->
+                    returnError ("None of the exposed functions matches name '" ++ applyFunction.functionName ++ "'")
+
+                Just exposedFunction ->
+                    let
+                        resolveStateSourceResult =
+                            applyFunction.arguments.stateArgument
+                                |> Maybe.map (resolveStateSource config stateBefore >> Result.map Just)
+                                |> Maybe.withDefault (Ok Nothing)
+                    in
+                    case resolveStateSourceResult of
+                        Err err ->
+                            returnError ("Failed to resolve state source: " ++ err)
+
+                        Ok stateArgument ->
+                            case
+                                exposedFunction.handler
+                                    { stateArgument = stateArgument
+                                    , serializedArgumentsJson = applyFunction.arguments.serializedArgumentsJson
+                                    }
+                            of
+                                Err err ->
+                                    returnError err
+
+                                Ok ( maybeFunctionResultState, maybeFunctionResultOther ) ->
+                                    let
+                                        updateStateResult =
+                                            case applyFunction.stateDestinationBranches of
+                                                [] ->
+                                                    Ok stateBefore
+
+                                                destBranches ->
+                                                    case maybeFunctionResultState of
+                                                        Nothing ->
+                                                            Err "Function did not return a new state"
+
+                                                        Just newAppState ->
+                                                            stateBefore
+                                                                |> setStateOnBranches destBranches newAppState
+                                                                |> Ok
+                                    in
+                                    case updateStateResult of
+                                        Err err ->
+                                            returnError err
+
+                                        Ok state ->
+                                            ( state
+                                            , ApplyFunctionShimResponse (Ok { resultLessStateJson = maybeFunctionResultOther })
+                                            )
+
+        SerializeStateShimRequest stateSource ->
+            case resolveStateSource config stateBefore stateSource of
+                Err err ->
+                    ( stateBefore
+                    , ("Failed to resolve state source: " ++ err)
+                        |> Err
+                        |> SerializeStateShimResponse
+                    )
+
+                Ok appState ->
+                    ( stateBefore
+                    , appState
+                        |> config.jsonEncodeWebServerAppState
+                        |> Json.Encode.encode 0
+                        |> Ok
+                        |> SerializeStateShimResponse
+                    )
+
+        SetBranchesStateShimRequest stateSource branches ->
+            case resolveStateSource config stateBefore stateSource of
+                Err err ->
+                    ( stateBefore
+                    , ("Failed to resolve state source: " ++ err)
+                        |> Err
+                        |> SetBranchesStateShimResponse
+                    )
+
+                Ok appState ->
+                    ( setStateOnBranches branches appState stateBefore
+                    , "" |> Ok |> SetBranchesStateShimResponse
+                    )
+
+
+setStateOnBranches : List String -> appState -> StateShimState appState -> StateShimState appState
+setStateOnBranches branches appState stateBefore =
+    { stateBefore
+        | branches =
+            branches
+                |> List.foldl
+                    (\\branchName -> Dict.insert branchName appState)
+                    stateBefore.branches
+    }
+
+
+resolveStateSource : StateShimConfig appState -> StateShimState appState -> StateSource -> Result String appState
+resolveStateSource config shimState stateSource =
+    case stateSource of
+        SerializedJsonStateSource stateJson ->
+            stateJson
+                |> Json.Decode.decodeString config.jsonDecodeWebServerAppState
+                |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode: ")
+
+        BranchStateSource branchName ->
+            case Dict.get branchName shimState.branches of
+                Nothing ->
+                    Err ("Branch named '" ++ branchName ++ "' does not exist")
+
+                Just appState ->
+                    Ok appState
+
+
+exposedFunctionExpectingSingleArgument :
+    Json.Decode.Decoder arg
+    -> (arg -> Result String ( Maybe appState, Maybe String ))
+    -> ExposedFunctionHandler appState
+exposedFunctionExpectingSingleArgument argumentDecoder funcAfterDecode genericArguments =
+    case genericArguments.serializedArgumentsJson of
+        [ singleArgumentJson ] ->
+            case Json.Decode.decodeString argumentDecoder singleArgumentJson of
+                Err err ->
+                    Err ("Failed to JSON decode argument: " ++ Json.Decode.errorToString err)
+
+                Ok argument ->
+                    funcAfterDecode argument
+
+        serializedArgumentsJson ->
+            Err
+                ("Unexpected number of arguments: "
+                    ++ String.fromInt (List.length serializedArgumentsJson)
+                    ++ " instead of 1"
+                )
+
+
+exposedFunctionExpectingSingleArgumentAndAppState :
+    Json.Decode.Decoder arg
+    -> (arg -> appState -> Result String ( Maybe appState, Maybe String ))
+    -> ExposedFunctionHandler appState
+exposedFunctionExpectingSingleArgumentAndAppState argumentDecoder funcAfterDecode genericArguments =
+    case genericArguments.stateArgument of
+        Nothing ->
+            Err "Type mismatch: Missing state argument"
+
+        Just appState ->
+            case genericArguments.serializedArgumentsJson of
+                [ singleArgumentJson ] ->
+                    case Json.Decode.decodeString argumentDecoder singleArgumentJson of
+                        Err err ->
+                            Err ("Failed to JSON decode argument: " ++ Json.Decode.errorToString err)
+
+                        Ok argument ->
+                            funcAfterDecode argument appState
+
+                serializedArgumentsJson ->
+                    Err
+                        ("Unexpected number of arguments: "
+                            ++ String.fromInt (List.length serializedArgumentsJson)
+                            ++ " instead of 1"
+                        )
+
+"""
+
+
+stateShimTypesModuleText : String
+stateShimTypesModuleText =
+    String.trimLeft """
+module Backend.Generated.StateShimTypes exposing (..)
+
+
+type alias ResponseOverSerialInterface =
+    Result String StateShimResponse
+
+
+type StateShimRequest
+    = ListExposedFunctionsShimRequest
+    | ApplyFunctionShimRequest ApplyFunctionShimRequestStruct
+    | SerializeStateShimRequest StateSource
+    | SetBranchesStateShimRequest StateSource (List String)
+
+
+type StateShimResponse
+    = ListExposedFunctionsShimResponse (List { functionName : String, functionDescription : ExposedFunctionDescription })
+    | ApplyFunctionShimResponse (Result String FunctionApplicationResult)
+    | SerializeStateShimResponse (Result String String)
+    | SetBranchesStateShimResponse (Result String String)
+
+
+type alias ApplyFunctionShimRequestStruct =
+    { functionName : String
+    , arguments : ApplyFunctionArguments (Maybe StateSource)
+    , stateDestinationBranches : List String
+    }
+
+
+type alias ApplyFunctionArguments state =
+    { stateArgument : state
+    , serializedArgumentsJson : List String
+    }
+
+
+type StateSource
+    = SerializedJsonStateSource String
+    | BranchStateSource String
+
+
+type alias ExposedFunctionDescription =
+    { hasAppStateParam : Bool
+    , resultContainsAppState : Bool
+    }
+
+
+type alias FunctionApplicationResult =
+    { resultLessStateJson : Maybe String
+    }
+
+"""
+
+
+webServerShimModuleText : String
+webServerShimModuleText =
+    String.trimLeft """
+module Backend.Generated.WebServerShim exposing (..)
+
+import Backend.Generated.WebServerShimTypes exposing (..)
+import Dict
+import Platform.WebServer
+
+
+processWebServerEvent :
+    (appState -> Platform.WebServer.Subscriptions appState)
+    -> Backend.Generated.WebServerShimTypes.BackendEvent
+    -> WebServerShimState appState
+    -> ( WebServerShimState appState, Backend.Generated.WebServerShimTypes.BackendEventResponseStruct )
+processWebServerEvent subscriptions hostEvent stateBefore =
     let
         maybeEventPosixTimeMilli =
             case hostEvent of
-                AppEventShimRequest (HttpRequestEvent httpRequestEvent) ->
+                HttpRequestEvent httpRequestEvent ->
                     Just httpRequestEvent.posixTimeMilli
 
-                AppEventShimRequest (PosixTimeHasArrivedEvent posixTimeHasArrivedEvent) ->
+                PosixTimeHasArrivedEvent posixTimeHasArrivedEvent ->
                     Just posixTimeHasArrivedEvent.posixTimeMilli
 
                 _ ->
@@ -806,15 +1147,15 @@ processEvent subscriptions hostEvent stateBefore =
                 Just eventPosixTimeMilli ->
                     { stateBefore | posixTimeMilli = max stateBefore.posixTimeMilli eventPosixTimeMilli }
     in
-    processEventLessRememberTime subscriptions hostEvent state
+    processWebServerEventLessRememberTime subscriptions hostEvent state
 
 
-processEventLessRememberTime :
-    (DeserializedState -> Platform.WebServer.Subscriptions DeserializedState)
-    -> StateShimRequest
-    -> DeserializedStateWithTaskFramework
-    -> ( DeserializedStateWithTaskFramework, StateShimResponse )
-processEventLessRememberTime subscriptions hostEvent stateBefore =
+processWebServerEventLessRememberTime :
+    (appState -> Platform.WebServer.Subscriptions appState)
+    -> Backend.Generated.WebServerShimTypes.BackendEvent
+    -> WebServerShimState appState
+    -> ( WebServerShimState appState, Backend.Generated.WebServerShimTypes.BackendEventResponseStruct )
+processWebServerEventLessRememberTime subscriptions hostEvent stateBefore =
     let
         continueWithState newState =
             ( newState
@@ -823,7 +1164,6 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
 
         discardEvent =
             continueWithState stateBefore
-                |> Tuple.mapSecond AppEventShimResponse
 
         continueWithUpdateToTasks updateToTasks stateBeforeUpdateToTasks =
             let
@@ -836,13 +1176,12 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                 { stateBeforeUpdateToTasks | stateLessFramework = stateLessFramework }
     in
     case hostEvent of
-        AppEventShimRequest (HttpRequestEvent httpRequestEvent) ->
+        HttpRequestEvent httpRequestEvent ->
             continueWithUpdateToTasks
                 ((subscriptions stateBefore.stateLessFramework).httpRequest httpRequestEvent)
                 stateBefore
-                |> Tuple.mapSecond AppEventShimResponse
 
-        AppEventShimRequest (PosixTimeHasArrivedEvent posixTimeHasArrivedEvent) ->
+        PosixTimeHasArrivedEvent posixTimeHasArrivedEvent ->
             case (subscriptions stateBefore.stateLessFramework).posixTimeIsPast of
                 Nothing ->
                     discardEvent
@@ -855,9 +1194,8 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                         continueWithUpdateToTasks
                             (posixTimeIsPastSub.update { currentPosixTimeMilli = posixTimeHasArrivedEvent.posixTimeMilli })
                             stateBefore
-                            |> Tuple.mapSecond AppEventShimResponse
 
-        AppEventShimRequest (TaskCompleteEvent taskCompleteEvent) ->
+        TaskCompleteEvent taskCompleteEvent ->
             case taskCompleteEvent.taskResult of
                 CreateVolatileProcessResponse createVolatileProcessResponse ->
                     case Dict.get taskCompleteEvent.taskId stateBefore.createVolatileProcessTasks of
@@ -871,7 +1209,6 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                                     | createVolatileProcessTasks =
                                         stateBefore.createVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
                                 }
-                                |> Tuple.mapSecond AppEventShimResponse
 
                 RequestToVolatileProcessResponse requestToVolatileProcessResponse ->
                     case Dict.get taskCompleteEvent.taskId stateBefore.requestToVolatileProcessTasks of
@@ -885,7 +1222,6 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                                     | requestToVolatileProcessTasks =
                                         stateBefore.requestToVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
                                 }
-                                |> Tuple.mapSecond AppEventShimResponse
 
                 CompleteWithoutResult ->
                     continueWithState
@@ -893,77 +1229,13 @@ processEventLessRememberTime subscriptions hostEvent stateBefore =
                             | terminateVolatileProcessTasks =
                                 stateBefore.terminateVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
                         }
-                        |> Tuple.mapSecond AppEventShimResponse
-
-        InitStateEvent ->
-            continueWithUpdateToTasks (always """
-        ++ mainDeclarationNameQualifiedName
-        ++ """.init) stateBefore
-                |> Tuple.mapSecond AppEventShimResponse
-
-        SetStateEvent stateString ->
-            let
-                ( ( state, responseBeforeAddingMigrateResult ), migrateResult ) =
-                    case setStateFromString stateString of
-                        Err migrateError ->
-                            ( continueWithState
-                                stateBefore
-                            , Err migrateError
-                            )
-
-                        Ok appState ->
-                            ( continueWithUpdateToTasks
-                                (always ( appState, [] ))
-                                stateBefore
-                            , Ok ()
-                            )
-            in
-            ( state
-            , { responseBeforeAddingMigrateResult | migrateResult = Just migrateResult }
-            )
-                |> Tuple.mapSecond AppEventShimResponse
-
-        MigrateStateEvent stateString ->
-            let
-                ( ( state, responseBeforeAddingMigrateResult ), migrateResult ) =
-                    case migrateFromString stateString of
-                        Err migrateError ->
-                            ( continueWithState
-                                stateBefore
-                            , Err migrateError
-                            )
-
-                        Ok stateAndCmds ->
-                            ( continueWithUpdateToTasks
-                                (always stateAndCmds)
-                                stateBefore
-                            , Ok ()
-                            )
-            in
-            ( state
-            , { responseBeforeAddingMigrateResult | migrateResult = Just migrateResult }
-            )
-                |> Tuple.mapSecond AppEventShimResponse
-
-
-setStateFromString : String -> Result String DeserializedState
-setStateFromString =
-"""
-        ++ indentElmCodeLines 2 config.stateFromStringExpression
-        ++ """
-
-migrateFromString : String -> Result String ( DeserializedState, Platform.WebServer.Commands DeserializedState )
-migrateFromString =
-"""
-        ++ indentElmCodeLines 2 config.migrateFromStringExpression
-        ++ """
 
 
 backendEventResponseFromRuntimeTasksAndSubscriptions :
-    (DeserializedState -> Platform.WebServer.Subscriptions DeserializedState)
-    -> List (Platform.WebServer.Command DeserializedState)
-    -> DeserializedStateWithTaskFramework
-    -> ( DeserializedStateWithTaskFramework, BackendEventResponseStruct )
+    (appState -> Platform.WebServer.Subscriptions appState)
+    -> List (Platform.WebServer.Command appState)
+    -> WebServerShimState appState
+    -> ( WebServerShimState appState, BackendEventResponseStruct )
 backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBefore =
     tasks
         |> List.foldl
@@ -980,21 +1252,10 @@ backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBe
         |> Tuple.mapSecond concatBackendEventResponse
 
 
-backendEventResponseFromSubscriptions : Platform.WebServer.Subscriptions DeserializedState -> BackendEventResponseStruct
-backendEventResponseFromSubscriptions subscriptions =
-    { startTasks = []
-    , completeHttpResponses = []
-    , notifyWhenPosixTimeHasArrived =
-        subscriptions.posixTimeIsPast
-            |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
-    , migrateResult = Nothing
-    }
-
-
 backendEventResponseFromRuntimeTask :
-    Platform.WebServer.Command DeserializedState
-    -> DeserializedStateWithTaskFramework
-    -> ( DeserializedStateWithTaskFramework, BackendEventResponseStruct )
+    Platform.WebServer.Command appState
+    -> WebServerShimState appState
+    -> ( WebServerShimState appState, BackendEventResponseStruct )
 backendEventResponseFromRuntimeTask task stateBefore =
     let
         createTaskId stateBeforeCreateTaskId =
@@ -1076,25 +1337,13 @@ backendEventResponseFromRuntimeTask task stateBefore =
             )
 
 
-concatBackendEventResponse : List BackendEventResponseStruct -> BackendEventResponseStruct
-concatBackendEventResponse responses =
-    let
-        notifyWhenPosixTimeHasArrived =
-            responses
-                |> List.filterMap .notifyWhenPosixTimeHasArrived
-                |> List.map .minimumPosixTimeMilli
-                |> List.minimum
-                |> Maybe.map (\\posixTimeMilli -> { minimumPosixTimeMilli = posixTimeMilli })
-
-        startTasks =
-            responses |> List.concatMap .startTasks
-
-        completeHttpResponses =
-            responses |> List.concatMap .completeHttpResponses
-    in
-    { notifyWhenPosixTimeHasArrived = notifyWhenPosixTimeHasArrived
-    , startTasks = startTasks
-    , completeHttpResponses = completeHttpResponses
+backendEventResponseFromSubscriptions : Platform.WebServer.Subscriptions appState -> BackendEventResponseStruct
+backendEventResponseFromSubscriptions subscriptions =
+    { startTasks = []
+    , completeHttpResponses = []
+    , notifyWhenPosixTimeHasArrived =
+        subscriptions.posixTimeIsPast
+            |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
     , migrateResult = Nothing
     }
 
@@ -1121,45 +1370,27 @@ withCompleteHttpResponsesAdded httpResponsesToAdd responseBefore =
     { responseBefore | completeHttpResponses = responseBefore.completeHttpResponses ++ httpResponsesToAdd }
 
 
-encodeResponseOverSerialInterface : ResponseOverSerialInterface -> Json.Encode.Value
-encodeResponseOverSerialInterface responseOverSerialInterface =
-    (case responseOverSerialInterface of
-        Err error ->
-            ( "Err", error |> Json.Encode.string )
+concatBackendEventResponse : List BackendEventResponseStruct -> BackendEventResponseStruct
+concatBackendEventResponse responses =
+    let
+        notifyWhenPosixTimeHasArrived =
+            responses
+                |> List.filterMap .notifyWhenPosixTimeHasArrived
+                |> List.map .minimumPosixTimeMilli
+                |> List.minimum
+                |> Maybe.map (\\posixTimeMilli -> { minimumPosixTimeMilli = posixTimeMilli })
 
-        Ok response ->
-            ( "Ok", response |> jsonEncodeStateShimResponse )
-    )
-        |> Tuple.mapSecond (List.singleton >> Json.Encode.list identity)
-        |> List.singleton
-        |> Json.Encode.object
+        startTasks =
+            responses |> List.concatMap .startTasks
 
-
-"""
-        ++ functionsAliasesText
-
-
-stateShimTypesModuleText : String
-stateShimTypesModuleText =
-    String.trimLeft """
-module Backend.Generated.StateShimTypes exposing (..)
-
-import Backend.Generated.WebServerShimTypes
-
-
-type alias ResponseOverSerialInterface =
-    Result String StateShimResponse
-
-
-type StateShimRequest
-    = AppEventShimRequest Backend.Generated.WebServerShimTypes.BackendEvent
-    | InitStateEvent
-    | SetStateEvent String
-    | MigrateStateEvent String
-
-
-type StateShimResponse
-    = AppEventShimResponse Backend.Generated.WebServerShimTypes.BackendEventResponseStruct
+        completeHttpResponses =
+            responses |> List.concatMap .completeHttpResponses
+    in
+    { notifyWhenPosixTimeHasArrived = notifyWhenPosixTimeHasArrived
+    , startTasks = startTasks
+    , completeHttpResponses = completeHttpResponses
+    , migrateResult = Nothing
+    }
 
 """
 
@@ -1169,7 +1400,30 @@ webServerShimTypesModuleText =
     String.trimLeft """
 module Backend.Generated.WebServerShimTypes exposing (..)
 
+import Dict
 import Platform.WebServer
+
+
+type alias WebServerShimState appState =
+    { stateLessFramework : appState
+    , nextTaskIndex : Int
+    , posixTimeMilli : Int
+    , createVolatileProcessTasks :
+        Dict.Dict
+            TaskId
+            (Platform.WebServer.CreateVolatileProcessResult
+             -> appState
+             -> ( appState, Platform.WebServer.Commands appState )
+            )
+    , requestToVolatileProcessTasks :
+        Dict.Dict
+            TaskId
+            (Platform.WebServer.RequestToVolatileProcessResult
+             -> appState
+             -> ( appState, Platform.WebServer.Commands appState )
+            )
+    , terminateVolatileProcessTasks : Dict.Dict TaskId ()
+    }
 
 
 type alias ExposedFunctionArguments =

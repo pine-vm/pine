@@ -24,10 +24,6 @@ namespace ElmTime
 
         public const string ProcessSerializedEventFunctionName = "interfaceToHost_processEvent";
 
-        public const string SerializeStateFunctionName = "interfaceToHost_serializeState";
-
-        public const string DeserializeStateFunctionName = "interfaceToHost_deserializeState";
-
         static public IImmutableList<string> CompilationInterfaceModuleNamePrefixes => ImmutableList.Create("CompilationInterface");
     }
 

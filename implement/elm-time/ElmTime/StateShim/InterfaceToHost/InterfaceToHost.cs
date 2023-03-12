@@ -1,0 +1,68 @@
+﻿using Pine;
+using Pine.Json;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+
+namespace ElmTime.StateShim.InterfaceToHost;
+
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record StateShimRequestStruct
+{
+    public record ListExposedFunctionsShimRequest : StateShimRequestStruct;
+
+    public record ApplyFunctionShimRequest(ApplyFunctionShimRequestStruct ApplyFunction)
+        : StateShimRequestStruct;
+
+    public record SerializeStateShimRequest(StateSource StateSource)
+        : StateShimRequestStruct;
+
+    public record SetBranchesStateShimRequest(StateSource StateSource, IReadOnlyList<string> Branches)
+        : StateShimRequestStruct;
+
+    public string SerializeToJsonString() =>
+        System.Text.Json.JsonSerializer.Serialize(this);
+}
+
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record StateShimResponseStruct
+{
+    public record AppEventShimResponse(FunctionApplicationResult FunctionApplicationResult)
+        : StateShimResponseStruct;
+
+    public record ListExposedFunctionsShimResponse(IReadOnlyList<NamedExposedFunction> Functions)
+        : StateShimResponseStruct;
+
+    public record ApplyFunctionShimResponse(Result<string, FunctionApplicationResult> Result)
+        : StateShimResponseStruct;
+
+    public record SerializeStateShimResponse(Result<string, string> Result)
+        : StateShimResponseStruct;
+
+    public record SetBranchesStateShimResponse(Result<string, string> Result)
+        : StateShimResponseStruct;
+}
+
+public record ApplyFunctionShimRequestStruct(
+    string functionName,
+    ApplyFunctionArguments<Maybe<StateSource>> arguments,
+    IReadOnlyList<string> stateDestinationBranches);
+
+public record ApplyFunctionArguments<StateT>(
+    StateT stateArgument,
+    IReadOnlyList<string> serializedArgumentsJson);
+
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract record StateSource
+{
+    public record SerializedJsonStateSource(string JSON) : StateSource;
+
+    public record BranchStateSource(string Branch) : StateSource;
+}
+
+public record FunctionApplicationResult(Maybe<string> resultLessStateJson);
+
+public record NamedExposedFunction(string functionName, ExposedFunctionDescription functionDescription);
+
+public record ExposedFunctionDescription(
+    bool hasAppStateParam,
+    bool resultContainsAppState);

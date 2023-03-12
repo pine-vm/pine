@@ -5,31 +5,6 @@ using System.Text.Json.Serialization;
 namespace ElmTime.Platform.WebServer.InterfaceToHost;
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
-public abstract record StateShimRequestStruct
-{
-    public record AppEventShimRequest(BackendEventStruct AppEvent)
-        : StateShimRequestStruct;
-
-    public record InitStateEvent : StateShimRequestStruct;
-
-    public record SetStateEvent(string State)
-        : StateShimRequestStruct;
-
-    public record MigrateStateEvent(string State)
-        : StateShimRequestStruct;
-
-    public string SerializeToJsonString() =>
-        System.Text.Json.JsonSerializer.Serialize(this);
-}
-
-[JsonConverter(typeof(JsonConverterForChoiceType))]
-public abstract record StateShimResponseStruct
-{
-    public record AppEventShimResponse(BackendEventResponseStruct Response)
-        : StateShimResponseStruct;
-}
-
-[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record BackendEventStruct
 {
     public record PosixTimeHasArrivedEvent(PosixTimeHasArrivedEventStruct Structure)
@@ -45,8 +20,7 @@ public abstract record BackendEventStruct
 public record BackendEventResponseStruct(
     Maybe<NotifyWhenPosixTimeHasArrivedRequestStruct> notifyWhenPosixTimeHasArrived,
     StartTask[] startTasks,
-    HttpResponseRequest[] completeHttpResponses,
-    Maybe<Result<string, object>> migrateResult);
+    HttpResponseRequest[] completeHttpResponses);
 
 public record HttpRequestEventStruct(
     long posixTimeMilli,

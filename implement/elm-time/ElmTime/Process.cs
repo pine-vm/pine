@@ -12,10 +12,6 @@ namespace ElmTime;
 public interface IProcess<EventT, ResponseT>
 {
     ResponseT ProcessEvent(EventT serializedEvent);
-
-    string GetSerializedState();
-
-    string? SetSerializedState(string serializedState);
 }
 
 public interface IProcessWithStringInterface : IProcess<string, string>
@@ -63,35 +59,6 @@ public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
 
         return jsReturnValue.ToString()!;
     }
-
-    public string GetSerializedState()
-    {
-        /*
-        Avoid high memory usage as described in exploration 2020-02-02:
-        Use specialized implementation based on `CallFunction` instead of `Evaluate`.
-
-        return EvaluateInJsEngineAndReturnResultAsString(getSerializedStateJsExpression);
-        */
-
-        var jsReturnValue = javascriptEngine.CallFunction(ProcessFromElm019Code.getSerializedStateJsFunctionName);
-
-        return jsReturnValue.ToString()!;
-    }
-
-    public string? SetSerializedState(string serializedState)
-    {
-        /*
-        Avoid high memory usage as described in exploration 2020-02-02:
-        Use specialized implementation based on `CallFunction` instead of `Evaluate`.
-
-        return EvaluateInJsEngineAndReturnResultAsString(ProcessFromElm019Code.setSerializedStateJsStatement(serializedState));
-        */
-
-        var jsReturnValue = javascriptEngine.CallFunction(
-            ProcessFromElm019Code.setSerializedStateJsFunctionName, serializedState);
-
-        return jsReturnValue?.ToString();
-    }
 }
 
 public class ProcessFromElm019Code
@@ -129,9 +96,7 @@ public class ProcessFromElm019Code
             BuildAppJavascript(
                 javascriptFromElmMake,
                 pathToFunctionCommonStart + ElmAppInterfaceConvention.ProcessSerializedEventFunctionName,
-                pathToFunctionCommonStart + ElmAppInterfaceConvention.InitialStateFunctionName,
-                pathToFunctionCommonStart + ElmAppInterfaceConvention.SerializeStateFunctionName,
-                pathToFunctionCommonStart + ElmAppInterfaceConvention.DeserializeStateFunctionName);
+                pathToFunctionCommonStart + ElmAppInterfaceConvention.InitialStateFunctionName);
 
         return
             new PreparedProcess(
@@ -187,27 +152,7 @@ public class ProcessFromElm019Code
 
     public const string serializedEventFunctionPublishedSymbol = "serializedEvent";
 
-    public const string serializeStateJsFunctionPublishedSymbol = "serializeState";
-
-    public const string deserializeStateJsFunctionPublishedSymbol = "deserializeState";
-
     public const string processEventSyncronousJsFunctionName = "processEventAndUpdateState";
-
-    public const string getSerializedStateJsFunctionName = "getSerializedState";
-
-    public const string setSerializedStateJsFunctionName = "setSerializedState";
-
-    public const string getSerializedStateJsExpression = serializeStateJsFunctionPublishedSymbol + "(" + appStateJsVarName + ")";
-
-    static public string setSerializedStateJsStatement(string serializedState) =>
-        appStateJsVarName +
-        " = " + deserializeStateJsFunctionPublishedSymbol +
-        "(" + AsJavascriptExpression(serializedState) + ");";
-
-    static public string setSerializedStateJsStatementFromSerializedStateParameterName(string serializedStateParamName) =>
-        appStateJsVarName +
-        " = " + deserializeStateJsFunctionPublishedSymbol +
-        "(" + serializedStateParamName + ");";
 
     static public string AsJavascriptExpression(string originalString) =>
         JsonSerializer.Serialize(originalString);
@@ -222,49 +167,33 @@ public class ProcessFromElm019Code
     static string BuildAppJavascript(
         string javascriptFromElmMake,
         string pathToSerializedEventFunction,
-        string pathToInitialStateFunction,
-        string pathToSerializeStateFunction,
-        string pathToDeserializeStateFunction)
+        string pathToInitialStateFunction)
     {
         var javascriptMinusCrashes = JavascriptMinusCrashes(javascriptFromElmMake);
 
         var listFunctionToPublish =
             new[]
             {
-                    (functionNameInElm: pathToSerializedEventFunction,
-                    publicName: serializedEventFunctionPublishedSymbol,
-                    arity: 2),
+                (functionNameInElm: pathToSerializedEventFunction,
+                publicName: serializedEventFunctionPublishedSymbol,
+                arity: 2),
 
-                    (functionNameInElm: pathToInitialStateFunction,
-                    publicName: initStateJsFunctionPublishedSymbol,
-                    arity: 0),
-
-                    (functionNameInElm: pathToSerializeStateFunction,
-                    publicName: serializeStateJsFunctionPublishedSymbol,
-                    arity: 1),
-
-                    (functionNameInElm: pathToDeserializeStateFunction,
-                    publicName: deserializeStateJsFunctionPublishedSymbol,
-                    arity: 1),
+                (functionNameInElm: pathToInitialStateFunction,
+                publicName: initStateJsFunctionPublishedSymbol,
+                arity: 0),
             };
 
         var JavaScriptFunctionsLines = new[]
         {
-                "var " + processEventSyncronousJsFunctionName + " = function(eventSerial){",
-                "var newStateAndResponse = " + serializedEventFunctionPublishedSymbol + "(eventSerial," + appStateJsVarName + ");",
-                appStateJsVarName + " = newStateAndResponse.a;",
-                "return newStateAndResponse.b;",
-                "}",
-                "var " + getSerializedStateJsFunctionName + " = function(){",
-                "return " + getSerializedStateJsExpression + ";",
-                "}",
-                "var " + setSerializedStateJsFunctionName + " = function(serializedState){",
-                setSerializedStateJsStatementFromSerializedStateParameterName("serializedState"),
-                "}",
-            };
+            "var " + processEventSyncronousJsFunctionName + " = function(eventSerial){",
+            "var newStateAndResponse = " + serializedEventFunctionPublishedSymbol + "(eventSerial," + appStateJsVarName + ");",
+            appStateJsVarName + " = newStateAndResponse.a;",
+            "return newStateAndResponse.b;",
+            "}",
+        };
 
         var processEventAndUpdateStateFunctionJavascript =
-            String.Join(Environment.NewLine, JavaScriptFunctionsLines);
+            string.Join(Environment.NewLine, JavaScriptFunctionsLines);
 
         return
             PublishFunctionsFromJavascriptFromElmMake(
@@ -290,7 +219,7 @@ public class ProcessFromElm019Code
                     publicName = functionToPublish.publicName,
                     expression =
                         BuildElmFunctionPublicationExpression(
-                            appFunctionSymbolMap(functionToPublish.functionNameInElm), functionToPublish.arity)
+                            AppFunctionSymbolMap(functionToPublish.functionNameInElm), functionToPublish.arity)
                 })
             .ToList();
 
@@ -338,6 +267,6 @@ public class ProcessFromElm019Code
             string.Join("", paramNameList.Select(paramName => "(" + paramName + ")"));
     }
 
-    static string appFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
+    static string AppFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
         "$author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
 }

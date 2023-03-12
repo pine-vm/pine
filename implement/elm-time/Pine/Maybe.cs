@@ -54,6 +54,14 @@ public abstract record Maybe<JustT>
             _ => throw new NotImplementedException()
         };
 
+    public Result<ErrT, JustT> ToResult<ErrT>(ErrT defaultErr) =>
+        this switch
+        {
+            Nothing _ => Result<ErrT, JustT>.err(defaultErr),
+            Just just => Result<ErrT, JustT>.ok(just.Value),
+            _ => throw new NotImplementedException()
+        };
+
     /// <summary>
     /// Provide a default value, turning an optional value into a normal value.
     /// </summary>

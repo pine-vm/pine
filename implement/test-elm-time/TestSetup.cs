@@ -101,7 +101,7 @@ public class TestSetup
         return compilationResult.result.compiledFiles;
     }
 
-    static public ElmTime.ProcessStore.IProcessStoreReader EmptyProcessStoreReader() =>
+    static public IProcessStoreReader EmptyProcessStoreReader() =>
         new ProcessStoreReaderFromDelegates
         (
             EnumerateSerializedCompositionsRecordsReverseDelegate: () => Array.Empty<byte[]>(),
@@ -112,7 +112,7 @@ public class TestSetup
 record ProcessStoreReaderFromDelegates(
     Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate,
     Func<byte[], ReductionRecord?> GetReductionDelegate)
-    : ElmTime.ProcessStore.IProcessStoreReader
+    : IProcessStoreReader
 {
     public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
         EnumerateSerializedCompositionsRecordsReverseDelegate();

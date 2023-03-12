@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using FluffySpoon.AspNet.LetsEncrypt;
 using Microsoft.AspNetCore.Builder;
@@ -277,7 +278,13 @@ public class PublicAppState
         InterfaceToHost.BackendEventStruct interfaceEvent)
     {
         var serializedInterfaceEvent =
-            new InterfaceToHost.StateShimRequestStruct.AppEventShimRequest(interfaceEvent)
+            new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
+                new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
+                    functionName: "processEvent",
+                    arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
+                        stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.just(new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")),
+                        serializedArgumentsJson: ImmutableList.Create(System.Text.Json.JsonSerializer.Serialize(interfaceEvent))),
+                    stateDestinationBranches: ImmutableList.Create("main")))
             .SerializeToJsonString();
 
         var processEvent = new Action(() =>
@@ -291,15 +298,26 @@ public class PublicAppState
 
                 try
                 {
-                    var structuredResponse =
-                        System.Text.Json.JsonSerializer.Deserialize<Result<string, InterfaceToHost.StateShimResponseStruct>>(
+                    var stateShimResponse =
+                        System.Text.Json.JsonSerializer.Deserialize<Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>>(
                             serializedResponse)!;
 
-                    var structuredResponseOk =
-                        structuredResponse.Extract(decodeErr => throw new Exception("Hosted app failed to decode the event: " + decodeErr));
+                    var backendEventResponseSerial =
+                        stateShimResponse
+                        .AndThen(decodeOk => decodeOk switch
+                        {
+                            StateShim.InterfaceToHost.StateShimResponseStruct.ApplyFunctionShimResponse applyFunctionResponse =>
+                            applyFunctionResponse.Result,
+
+                            _ =>
+                            Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
+                                "Unexpected type of response: " + System.Text.Json.JsonSerializer.Serialize(decodeOk))
+                        })
+                        .AndThen(applyFunctionOk => applyFunctionOk.resultLessStateJson.ToResult("Apply function response is missing resultLessStateJson"))
+                        .Extract(err => throw new Exception("Hosted app failed to decode the event: " + err));
 
                     var backendEventResponse =
-                    ((InterfaceToHost.StateShimResponseStruct.AppEventShimResponse)structuredResponseOk).Response;
+                    System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.BackendEventResponseStruct>(backendEventResponseSerial);
 
                     var notifyWhenPosixTimeHasArrived = backendEventResponse.notifyWhenPosixTimeHasArrived.WithDefault(null);
 
@@ -378,11 +396,26 @@ public class PublicAppState
             InterfaceToHost.Task.RequestToVolatileProcess requestTo =>
             new InterfaceToHost.TaskResult.RequestToVolatileProcessResponse(PerformProcessTaskRequestToVolatileProcess(requestTo.RequestTo)),
 
-            InterfaceToHost.Task.TerminateVolatileProcess terminate =>
-            PerformProcessTaskTerminateVolatileProcess(terminate.Terminate),
+            InterfaceToHost.Task.TerminateVolatileProcess terminate => PerformProcessTaskTerminateVolatileProcess(terminate.Terminate),
 
             _ => throw new NotImplementedException("Unexpected task structure.")
         };
+    byte[]? GetBlobWithSHA256(byte[] sha256)
+    {
+        var matchFromSourceComposition =
+            serverAndElmAppConfig?.SourceComposition == null ? null :
+            Composition.FindComponentByHash(serverAndElmAppConfig.SourceComposition, sha256);
+
+        if (matchFromSourceComposition != null)
+        {
+            if (matchFromSourceComposition is not PineValue.BlobValue matchFromSourceCompositionBlobs)
+                throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
+
+            return matchFromSourceCompositionBlobs.Bytes.ToArray();
+        }
+
+        return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();
+    }
 
     InterfaceToHost.TaskResult PerformProcessTaskCreateVolatileProcess(InterfaceToHost.CreateVolatileProcessStruct createVolatileProcess)
     {
@@ -456,23 +489,6 @@ public class PublicAppState
         volatileProcesses.TryRemove(terminateVolatileProcess.processId, out var volatileProcess);
 
         return new InterfaceToHost.TaskResult.CompleteWithoutResult();
-    }
-
-    byte[]? GetBlobWithSHA256(byte[] sha256)
-    {
-        var matchFromSourceComposition =
-            serverAndElmAppConfig?.SourceComposition == null ? null :
-            Composition.FindComponentByHash(serverAndElmAppConfig.SourceComposition, sha256);
-
-        if (matchFromSourceComposition != null)
-        {
-            if (matchFromSourceComposition is not PineValue.BlobValue matchFromSourceCompositionBlobs)
-                throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
-
-            return matchFromSourceCompositionBlobs.Bytes.ToArray();
-        }
-
-        return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();
     }
 
     static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEventStruct> AsPersistentProcessInterfaceHttpRequestEvent(
