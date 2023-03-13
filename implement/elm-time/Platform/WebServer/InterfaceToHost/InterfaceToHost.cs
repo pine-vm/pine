@@ -1,5 +1,6 @@
 ﻿using Pine;
 using Pine.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace ElmTime.Platform.WebServer.InterfaceToHost;
@@ -57,6 +58,30 @@ public abstract record TaskResult
 
     public record CompleteWithoutResult()
         : TaskResult;
+
+    public static Result<string, TaskResult> From_2023_02_27(_2023_02_27.TaskResult taskResult)
+    {
+        if (taskResult.CreateVolatileProcessResponse is _2023_02_27.Result<CreateVolatileProcessErrorStructure, CreateVolatileProcessComplete> createVolatileProcessResponse)
+            return
+                Result<string, TaskResult>.ok(
+                    new CreateVolatileProcessResponse(createVolatileProcessResponse.AsPineResult()));
+
+        if (taskResult.RequestToVolatileProcessResponse is _2023_02_27.Result<RequestToVolatileProcessError, _2023_02_27.RequestToVolatileProcessComplete> requestToVolatileProcessResponse)
+            return
+                Result<string, TaskResult>.ok(
+                    new RequestToVolatileProcessResponse(
+                        requestToVolatileProcessResponse.AsPineResult()
+                        .Map(requestOk => new RequestToVolatileProcessComplete(
+                            exceptionToString: Maybe.NothingFromNull(requestOk.exceptionToString),
+                            returnValueToString: Maybe.NothingFromNull(requestOk.returnValueToString),
+                            durationInMilliseconds: requestOk.durationInMilliseconds))));
+
+        if (taskResult.CompleteWithoutResult is not null)
+            return
+                Result<string, TaskResult>.ok(new CompleteWithoutResult());
+
+        return Result<string, TaskResult>.err("Unexpected shape of _2023_02_27.TaskResult: " + JsonSerializer.Serialize(taskResult));
+    }
 }
 
 public record CreateVolatileProcessErrorStructure(string exceptionToString);

@@ -275,17 +275,9 @@ public class PublicAppState
     }
 
     (string serializedInterfaceEvent, Action processEventAndResultingRequests) PrepareProcessEventAndResultingRequests(
-        InterfaceToHost.BackendEventStruct interfaceEvent)
+        InterfaceToHost.BackendEventStruct appEvent)
     {
-        var serializedInterfaceEvent =
-            new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
-                new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
-                    functionName: "processEvent",
-                    arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
-                        stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.just(new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")),
-                        serializedArgumentsJson: ImmutableList.Create(System.Text.Json.JsonSerializer.Serialize(interfaceEvent))),
-                    stateDestinationBranches: ImmutableList.Create("main")))
-            .SerializeToJsonString();
+        var serializedAppEvent = System.Text.Json.JsonSerializer.Serialize(appEvent);
 
         var processEvent = new Action(() =>
         {
@@ -294,52 +286,30 @@ public class PublicAppState
 
             try
             {
-                var serializedResponse = serverAndElmAppConfig.ProcessEventInElmApp(serializedInterfaceEvent);
+                var processEventResponse = serverAndElmAppConfig.ProcessEventInElmApp(serializedAppEvent);
 
-                try
+                var backendEventResponseSerial =
+                    processEventResponse
+                    .AndThen(applyFunctionOk => applyFunctionOk.resultLessStateJson.ToResult("Apply function response is missing resultLessStateJson"))
+                    .Extract(err => throw new Exception("Failed to process event in Elm app: " + err));
+
+                var backendEventResponse =
+                System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.BackendEventResponseStruct>(backendEventResponseSerial);
+
+                var notifyWhenPosixTimeHasArrived = backendEventResponse.notifyWhenPosixTimeHasArrived.WithDefault(null);
+
+                if (notifyWhenPosixTimeHasArrived is not null)
                 {
-                    var stateShimResponse =
-                        System.Text.Json.JsonSerializer.Deserialize<Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>>(
-                            serializedResponse)!;
-
-                    var backendEventResponseSerial =
-                        stateShimResponse
-                        .AndThen(decodeOk => decodeOk switch
-                        {
-                            StateShim.InterfaceToHost.StateShimResponseStruct.ApplyFunctionShimResponse applyFunctionResponse =>
-                            applyFunctionResponse.Result,
-
-                            _ =>
-                            Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
-                                "Unexpected type of response: " + System.Text.Json.JsonSerializer.Serialize(decodeOk))
-                        })
-                        .AndThen(applyFunctionOk => applyFunctionOk.resultLessStateJson.ToResult("Apply function response is missing resultLessStateJson"))
-                        .Extract(err => throw new Exception("Hosted app failed to decode the event: " + err));
-
-                    var backendEventResponse =
-                    System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.BackendEventResponseStruct>(backendEventResponseSerial);
-
-                    var notifyWhenPosixTimeHasArrived = backendEventResponse.notifyWhenPosixTimeHasArrived.WithDefault(null);
-
-                    if (notifyWhenPosixTimeHasArrived is not null)
+                    System.Threading.Tasks.Task.Run(() =>
                     {
-                        System.Threading.Tasks.Task.Run(() =>
+                        lock (nextTimeToNotifyLock)
                         {
-                            lock (nextTimeToNotifyLock)
-                            {
-                                nextTimeToNotify = notifyWhenPosixTimeHasArrived;
-                            }
-                        });
-                    }
+                            nextTimeToNotify = notifyWhenPosixTimeHasArrived;
+                        }
+                    });
+                }
 
-                    ForwardTasksFromResponseCmds(backendEventResponse);
-                }
-                catch (Exception parseException)
-                {
-                    throw new Exception(
-                        "Failed to parse event response from app. Looks like the loaded elm app is not compatible with the interface.\nResponse from app follows:\n" + serializedResponse,
-                        parseException);
-                }
+                ForwardTasksFromResponseCmds(backendEventResponse);
             }
             catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
             {
@@ -347,7 +317,7 @@ public class PublicAppState
             }
         });
 
-        return (serializedInterfaceEvent, processEvent);
+        return (serializedAppEvent, processEvent);
     }
 
     void PerformProcessTaskAndFeedbackEvent(InterfaceToHost.StartTask taskWithId)
@@ -512,6 +482,6 @@ public class PublicAppState
 
 public record ServerAndElmAppConfig(
     WebServerConfigJson? ServerConfig,
-    Func<string, string> ProcessEventInElmApp,
+    Func<string, Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>> ProcessEventInElmApp,
     PineValue SourceComposition,
     InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds);

@@ -1,5 +1,6 @@
 ﻿using Pine;
 using Pine.Json;
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -49,7 +50,13 @@ public record ApplyFunctionShimRequestStruct(
 
 public record ApplyFunctionArguments<StateT>(
     StateT stateArgument,
-    IReadOnlyList<string> serializedArgumentsJson);
+    IReadOnlyList<string> serializedArgumentsJson)
+{
+    public ApplyFunctionArguments<NewStateT> MapStateArgument<NewStateT>(Func<StateT, NewStateT> map) =>
+        new ApplyFunctionArguments<NewStateT>(
+            stateArgument: map(stateArgument),
+            serializedArgumentsJson: serializedArgumentsJson);
+}
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record StateSource

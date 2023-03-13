@@ -12,7 +12,8 @@ namespace ElmTime.Platform.WebServer;
 
 public interface IPersistentProcess
 {
-    string ProcessElmAppEvent(IProcessStoreWriter storeWriter, string serializedEvent);
+    Result<string, StateShim.InterfaceToHost.FunctionApplicationResult> ProcessElmAppEvent(
+        IProcessStoreWriter storeWriter, string serializedEvent);
 
     (ProvisionalReductionRecordInFile? reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter);
 }
@@ -309,13 +310,35 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     {
         if (compositionEvent.UpdateElmAppStateForEvent is byte[] updateElmAppStateForEvent)
         {
-            if (processBefore.lastElmAppVolatileProcess == null)
-                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
+            return
+                TranslateUpdateElmAppEventFromStore(updateElmAppStateForEvent)
+                .MapError(err => "Failed to migrate event update Elm app event string to current version: " + err)
+                .AndThen(updateElmAppEvent =>
+                {
+                    var eventStateShimRequest =
+                        new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
+                            new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
+                                functionName: updateElmAppEvent.functionName,
+                                arguments: updateElmAppEvent.arguments.MapStateArgument(takesState =>
+                                takesState ?
+                                Maybe<StateShim.InterfaceToHost.StateSource>.just(
+                                    new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")) :
+                                    Maybe<StateShim.InterfaceToHost.StateSource>.nothing()),
+                                stateDestinationBranches: ImmutableList.Create("main")));
 
-            processBefore.lastElmAppVolatileProcess.ProcessEvent(
-                Encoding.UTF8.GetString(updateElmAppStateForEvent));
+                    var eventString = JsonSerializer.Serialize<StateShim.InterfaceToHost.StateShimRequestStruct>(eventStateShimRequest);
 
-            return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
+                    if (processBefore.lastElmAppVolatileProcess == null)
+                        return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
+
+                    var processEventReturnValue =
+                        processBefore.lastElmAppVolatileProcess.ProcessEvent(eventString);
+
+                    var processEventResult =
+                        JsonSerializer.Deserialize<Result<string, object>>(processEventReturnValue);
+
+                    return processEventResult.Map(_ => processBefore);
+                });
         }
 
         if (compositionEvent.SetElmAppState is byte[] setElmAppState)
@@ -442,6 +465,83 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
             "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
+    }
+
+    record UpdateElmAppStateForEvent(
+        string functionName,
+        StateShim.InterfaceToHost.ApplyFunctionArguments<bool> arguments);
+
+    static Result<string, UpdateElmAppStateForEvent> TranslateUpdateElmAppEventFromStore(
+        Span<byte> updateElmAppEventFromStore)
+    {
+        var asString = Encoding.UTF8.GetString(updateElmAppEventFromStore);
+
+        Result<string, UpdateElmAppStateForEvent> continueWithWebServerEvent(InterfaceToHost.BackendEventStruct webServerEvent) =>
+            Result<string, UpdateElmAppStateForEvent>.ok(new UpdateElmAppStateForEvent(
+                    functionName: "processEvent",
+                    arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<bool>(
+                        stateArgument: true,
+                        serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Serialize(webServerEvent)))));
+        try
+        {
+            var webServerEvent = JsonSerializer.Deserialize<InterfaceToHost.BackendEventStruct>(asString);
+
+            return continueWithWebServerEvent(webServerEvent);
+        }
+        catch (JsonException)
+        {
+        }
+
+        try
+        {
+            var webServerEvent_2023_02_27 = JsonSerializer.Deserialize<InterfaceToHost._2023_02_27.AppEventStructure>(asString);
+
+            return
+                webServerEvent_2023_02_27 switch
+                {
+                    InterfaceToHost._2023_02_27.AppEventStructure webServerEvent when webServerEvent.ArrivedAtTimeEvent is InterfaceToHost._2023_02_27.ArrivedAtTimeEventStructure arrivedAtTime =>
+                    continueWithWebServerEvent(
+                        new InterfaceToHost.BackendEventStruct.PosixTimeHasArrivedEvent(
+                            new InterfaceToHost.PosixTimeHasArrivedEventStruct(posixTimeMilli: arrivedAtTime.posixTimeMilli))),
+
+                    InterfaceToHost._2023_02_27.AppEventStructure webServerEvent
+                    when webServerEvent.HttpRequestEvent is InterfaceToHost._2023_02_27.HttpRequestEvent httpRequestEvent =>
+
+                    continueWithWebServerEvent(
+                        new InterfaceToHost.BackendEventStruct.HttpRequestEvent(
+                            new InterfaceToHost.HttpRequestEventStruct(
+                                posixTimeMilli: httpRequestEvent.posixTimeMilli,
+                                httpRequestId: httpRequestEvent.httpRequestId,
+                                requestContext: new InterfaceToHost.HttpRequestContext(
+                                    clientAddress: Maybe.NothingFromNull(httpRequestEvent.requestContext.clientAddress)),
+                                request: new InterfaceToHost.HttpRequest(
+                                    method: httpRequestEvent.request.method,
+                                    uri: httpRequestEvent.request.uri,
+                                    bodyAsBase64: Maybe.NothingFromNull(httpRequestEvent.request.bodyAsBase64),
+                                    headers: httpRequestEvent.request.headers)))),
+
+                    InterfaceToHost._2023_02_27.AppEventStructure webServerEvent
+                    when webServerEvent.TaskCompleteEvent is InterfaceToHost._2023_02_27.ResultFromTaskWithId taskCompleteEvent =>
+
+                    InterfaceToHost.TaskResult.From_2023_02_27(taskCompleteEvent.taskResult)
+                    .AndThen(taskResult =>
+                    continueWithWebServerEvent(
+                        new InterfaceToHost.BackendEventStruct.TaskCompleteEvent(
+                            new InterfaceToHost.ResultFromTaskWithId(
+                                taskId: taskCompleteEvent.taskId,
+                                taskResult: taskResult)))),
+
+                    _ =>
+                    Result<string, UpdateElmAppStateForEvent>.err(
+                        "Unexpected structure in webServerEvent_2023_02_27: " +
+                        JsonSerializer.Serialize(webServerEvent_2023_02_27))
+                };
+        }
+        catch (JsonException)
+        {
+        }
+
+        return Result<string, UpdateElmAppStateForEvent>.err("Did not match any expected shape");
     }
 
     static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> AttemptProcessRequest(
@@ -573,19 +673,29 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
-    public string ProcessElmAppEvent(IProcessStoreWriter storeWriter, string serializedEvent)
+    public Result<string, StateShim.InterfaceToHost.FunctionApplicationResult> ProcessElmAppEvent(
+        IProcessStoreWriter storeWriter, string serializedAppEvent)
     {
         lock (processLock)
         {
-            var elmAppResponse =
-                lastElmAppVolatileProcess!.ProcessEvent(serializedEvent);
+            var serializedInterfaceEvent =
+                new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
+                    new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
+                        functionName: "processEvent",
+                        arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
+                            stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.just(new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")),
+                            serializedArgumentsJson: ImmutableList.Create(serializedAppEvent)),
+                        stateDestinationBranches: ImmutableList.Create("main")))
+                .SerializeToJsonString();
+
+            var responseString = lastElmAppVolatileProcess!.ProcessEvent(serializedInterfaceEvent);
 
             var compositionEvent =
                 new CompositionLogRecordInFile.CompositionEvent
                 {
                     UpdateElmAppStateForEvent = new ValueInFileStructure
                     {
-                        LiteralStringUtf8 = serializedEvent
+                        LiteralStringUtf8 = serializedAppEvent
                     }
                 };
 
@@ -593,7 +703,25 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
 
-            return elmAppResponse!;
+            try
+            {
+                return
+                    JsonSerializer.Deserialize<Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>>(responseString)
+                    .AndThen(responseOk => responseOk switch
+                    {
+                        StateShim.InterfaceToHost.StateShimResponseStruct.ApplyFunctionShimResponse applyFunctionResponse =>
+                        applyFunctionResponse.Result,
+
+                        _ =>
+                        Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
+                            "Unexpected type of response: " + responseString)
+                    });
+            }
+            catch (Exception e)
+            {
+                return Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
+                    "Failed to parse response string: " + e.ToString());
+            }
         }
     }
 
