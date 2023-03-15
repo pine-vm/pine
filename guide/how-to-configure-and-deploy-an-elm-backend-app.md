@@ -272,7 +272,7 @@ Since these features are optional to use, in the simplest case, this file is not
 
 ## Running a Server With an Elm-Time Process
 
-At the beginning of this guide, we ran a server and deployed an app in a single command. But combining these two operations is not necessary. Deployments are part of the process history, which means the last deployment follows from the state of the process store. (To learn more about the persistence, see [persistence-in-elm-time.md](./persistence-in-elm-time.md))
+At the beginning of this guide, we ran a server and deployed an app in a single command. But combining these two operations is not necessary. Deployments are part of the process history, which means the last deployment follows from the state of the process store. (To learn more about the persistence, see [persistence-of-application-state-in-elm-time.md](./persistence-of-application-state-in-elm-time.md))
 
 When running a server, we want to configure two aspects: The location where to persist the process state, and the password to access the admin interface.
 On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the file system.
