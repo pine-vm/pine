@@ -32,38 +32,37 @@ public class Program
         {
             Name = "elm-time",
             Description = "Elm-Time - runtime environment for Elm.\nTo get help or report an issue, see https://github.com/elm-time/elm-time/discussions",
+            HelpTextGenerator =
+            new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false }
         };
-
-        app.HelpTextGenerator =
-            new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false };
 
         app.VersionOption(template: "-v|--version", shortFormVersion: "version " + AppVersionId);
 
-        var installCmd = app.Command("install", installCmd =>
+        var installCommand = app.Command("install", installCommand =>
         {
             var (commandName, checkInstallation) = CheckIfExecutableIsRegisteredOnPath();
 
-            installCmd.Description = "Install the '" + commandName + "' command for the current user account.";
-            installCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            installCommand.Description = "Install the '" + commandName + "' command for the current user account.";
+            installCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            installCmd.OnExecute(() =>
+            installCommand.OnExecute(() =>
             {
                 checkInstallation().registerExecutableDirectoryOnPath();
             });
         });
 
-        var runServerCmd = AddRunServerCmd(app);
+        var runServerCommand = AddRunServerCommand(app);
 
-        var deployAppCmd = AddDeployCmd(app);
-        var copyAppStateCmd = AddCopyAppStateCmd(app);
-        var copyProcessCmd = AddCopyProcessCmd(app);
-        var truncateProcessHistoryCmd = AddTruncateProcessHistoryCmd(app);
+        var deployCommand = AddDeployCommand(app);
+        var copyAppStateCommand = AddCopyAppStateCommand(app);
+        var copyProcessCommand = AddCopyProcessCommand(app);
+        var truncateProcessHistoryCommand = AddTruncateProcessHistoryCommand(app);
 
-        var compileAppCmd = AddCompileCmd(app);
-        var enterInteractiveCmd = AddInteractiveCmd(app);
-        var describeCmd = AddDescribeCmd(app);
-        var elmTestRsCmd = AddElmTestRsCmd(app);
-        var makeCmd = AddMakeCmd(app);
+        var compileCommand = AddCompileCommand(app);
+        var interactiveCommand = AddInteractiveCommand(app);
+        var describeCommand = AddDescribeCommand(app);
+        var elmTestRsCommand = AddElmTestRsCommand(app);
+        var makeCommand = AddMakeCommand(app);
 
         var runCacheServerCmd = AddRunCacheServerCmd(app);
 
@@ -111,40 +110,40 @@ public class Program
                 Array.Empty<CommandLineApplication>() :
                 new[]
                 {
-                        installCmd,
+                    installCommand,
                 };
 
             var commonCmdGroups = new[]
             {
-                    new
+                new
+                {
+                    title = "Set up your development environment:",
+                    commands = setupGroupCommands,
+                },
+                new
+                {
+                    title = "Operate servers and maintain live systems:",
+                    commands = new[]
                     {
-                        title = "Set up your development environment:",
-                        commands = setupGroupCommands,
-                    },
-                    new
+                        runServerCommand,
+                        deployCommand,
+                        copyAppStateCommand,
+                        copyProcessCommand,
+                        truncateProcessHistoryCommand,
+                    }
+                },
+                new
+                {
+                    title = "Develop and learn:",
+                    commands = new[]
                     {
-                        title = "Operate servers and maintain live systems:",
-                        commands = new[]
-                        {
-                            runServerCmd,
-                            deployAppCmd,
-                            copyAppStateCmd,
-                            copyProcessCmd,
-                            truncateProcessHistoryCmd,
-                        }
-                    },
-                    new
-                    {
-                        title = "Develop and learn:",
-                        commands = new[]
-                        {
-                            compileAppCmd,
-                            enterInteractiveCmd,
-                            describeCmd,
-                            elmTestRsCmd,
-                            makeCmd,
-                        }
-                    },
+                        compileCommand,
+                        interactiveCommand,
+                        describeCommand,
+                        elmTestRsCommand,
+                        makeCommand,
+                    }
+                },
             }
             .Where(group => 0 < group.commands.Length)
             .Select(group => new
@@ -200,11 +199,11 @@ public class Program
                 var overviewText =
                     string.Join("\n\n", new[]
                     {
-                            app.Description,
-                            "Usage: " + elmFsCommandName + " [command] [options]",
-                            "These are common elm-time commands used in various situations:",
-                            string.Join("\n\n", groupsTexts),
-                            "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.",
+                        app.Description,
+                        "Usage: " + elmFsCommandName + " [command] [options]",
+                        "These are common elm-time commands used in various situations:",
+                        string.Join("\n\n", groupsTexts),
+                        "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.",
                     });
 
                 Console.WriteLine(overviewText);
@@ -244,23 +243,23 @@ public class Program
         return executeAndGuideInCaseOfException();
     }
 
-    static CommandLineApplication AddRunServerCmd(CommandLineApplication app) =>
-        app.Command("run-server", runServerCmd =>
+    static CommandLineApplication AddRunServerCommand(CommandLineApplication app) =>
+        app.Command("run-server", runServerCommand =>
         {
-            runServerCmd.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
-            runServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            runServerCommand.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
+            runServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
 
-            var processStoreOption = runServerCmd.Option("--process-store", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
-            var deletePreviousProcessOption = runServerCmd.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
-            var adminUrlsOption = runServerCmd.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
-            var adminPasswordOption = runServerCmd.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
-            var publicAppUrlsOption = runServerCmd.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
-            var copyProcessOption = runServerCmd.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
-            var deployOption = runServerCmd.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
+            var processStoreOption = runServerCommand.Option("--process-store", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
+            var deletePreviousProcessOption = runServerCommand.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
+            var adminUrlsOption = runServerCommand.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
+            var adminPasswordOption = runServerCommand.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
+            var publicAppUrlsOption = runServerCommand.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
+            var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
+            var deployOption = runServerCommand.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
 
-            runServerCmd.OnExecute(() =>
+            runServerCommand.OnExecute(() =>
             {
                 var processStorePath = processStoreOption.Value();
 
@@ -408,20 +407,20 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddDeployCmd(CommandLineApplication app) =>
-        app.Command("deploy", deployCmd =>
+    static CommandLineApplication AddDeployCommand(CommandLineApplication app) =>
+        app.Command("deploy", deployCommand =>
         {
-            deployCmd.Description = "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.";
-            deployCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            deployCommand.Description = "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.";
+            deployCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var sourceArgument = deployCmd.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
+            var sourceArgument = deployCommand.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
 
-            var siteArgument = ProcessSiteArgumentOnCommand(deployCmd);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(deployCmd);
+            var siteArgument = ProcessSiteArgumentOnCommand(deployCommand);
+            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(deployCommand);
 
-            var initAppStateOption = deployCmd.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
+            var initAppStateOption = deployCommand.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
 
-            deployCmd.OnExecute(() =>
+            deployCommand.OnExecute(() =>
             {
                 var site = siteArgument.Value!;
                 var sitePassword = passwordFromSite(site);
@@ -445,19 +444,19 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddCopyAppStateCmd(CommandLineApplication app) =>
-        app.Command("copy-app-state", copyAppStateCmd =>
+    static CommandLineApplication AddCopyAppStateCommand(CommandLineApplication app) =>
+        app.Command("copy-app-state", copyAppStateCommand =>
         {
-            copyAppStateCmd.Description = "Copy the state of an Elm backend app.";
-            copyAppStateCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            copyAppStateCommand.Description = "Copy the state of an Elm backend app.";
+            copyAppStateCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var sourceArgument = copyAppStateCmd.Argument("source", "Can be a URL to an admin interface or a file with a serialized representation.").IsRequired(allowEmptyStrings: false);
-            var destinationArgument = copyAppStateCmd.Argument("destination", "Can be a URL to an admin interface or a file path.");
+            var sourceArgument = copyAppStateCommand.Argument("source", "Can be a URL to an admin interface or a file with a serialized representation.").IsRequired(allowEmptyStrings: false);
+            var destinationArgument = copyAppStateCommand.Argument("destination", "Can be a URL to an admin interface or a file path.");
 
-            var passwordFromSource = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCmd, "source");
-            var passwordFromDestination = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCmd, "destination");
+            var passwordFromSource = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCommand, "source");
+            var passwordFromDestination = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCommand, "destination");
 
-            copyAppStateCmd.OnExecute(() =>
+            copyAppStateCommand.OnExecute(() =>
             {
                 var source = sourceArgument.Value!;
                 var sourcePassword = passwordFromSource(source);
@@ -488,16 +487,16 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddCopyProcessCmd(CommandLineApplication app) =>
-        app.Command("copy-process", copyProcessCmd =>
+    static CommandLineApplication AddCopyProcessCommand(CommandLineApplication app) =>
+        app.Command("copy-process", copyProcessCommand =>
         {
-            copyProcessCmd.Description = "Copy all files needed to restore a process and store them in a zip archive.";
-            copyProcessCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            copyProcessCommand.Description = "Copy all files needed to restore a process and store them in a zip archive.";
+            copyProcessCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var siteArgument = ProcessSiteArgumentOnCommand(copyProcessCmd);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyProcessCmd);
+            var siteArgument = ProcessSiteArgumentOnCommand(copyProcessCommand);
+            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyProcessCommand);
 
-            copyProcessCmd.OnExecute(() =>
+            copyProcessCommand.OnExecute(() =>
             {
                 var site = MapSiteForCommandLineArgument(siteArgument.Value!);
                 var sitePassword = passwordFromSite(site);
@@ -526,16 +525,16 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddTruncateProcessHistoryCmd(CommandLineApplication app) =>
-        app.Command("truncate-process-history", truncateProcessHistoryCmd =>
+    static CommandLineApplication AddTruncateProcessHistoryCommand(CommandLineApplication app) =>
+        app.Command("truncate-process-history", truncateProcessHistoryCommand =>
         {
-            truncateProcessHistoryCmd.Description = "Remove parts of the process history that are not needed to restore the process.";
-            truncateProcessHistoryCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            truncateProcessHistoryCommand.Description = "Remove parts of the process history that are not needed to restore the process.";
+            truncateProcessHistoryCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var siteArgument = ProcessSiteArgumentOnCommand(truncateProcessHistoryCmd);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(truncateProcessHistoryCmd);
+            var siteArgument = ProcessSiteArgumentOnCommand(truncateProcessHistoryCommand);
+            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(truncateProcessHistoryCommand);
 
-            truncateProcessHistoryCmd.OnExecute(() =>
+            truncateProcessHistoryCommand.OnExecute(() =>
             {
                 var site = siteArgument.Value!;
                 var sitePassword = passwordFromSite(site);
@@ -557,15 +556,15 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddCompileCmd(CommandLineApplication app) =>
-        app.Command("compile", compileCmd =>
+    static CommandLineApplication AddCompileCommand(CommandLineApplication app) =>
+        app.Command("compile", compileCommand =>
         {
-            compileCmd.Description = "Compile app source code the same way as would be done when deploying.";
-            compileCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            compileCommand.Description = "Compile app source code the same way as would be done when deploying.";
+            compileCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var sourceArgument = compileCmd.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
+            var sourceArgument = compileCommand.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
 
-            compileCmd.OnExecute(() =>
+            compileCommand.OnExecute(() =>
             {
                 var compileReport = CompileAppAndSaveCompositionToZipArchive(sourceArgument.Value!).report;
 
@@ -580,21 +579,21 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddElmTestRsCmd(CommandLineApplication app) =>
-        app.Command("elm-test-rs", elmTestCmd =>
+    static CommandLineApplication AddElmTestRsCommand(CommandLineApplication app) =>
+        app.Command("elm-test-rs", elmTestRsCommand =>
         {
-            elmTestCmd.Description = "Compile and run tests using the interface of elm-test-rs. The compilation integrates interfaces such as SourceFiles.";
-            elmTestCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            elmTestRsCommand.Description = "Compile and run tests using the interface of elm-test-rs. The compilation integrates interfaces such as SourceFiles.";
+            elmTestRsCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var sourceArgument = elmTestCmd.Argument("source", "path to the Elm project containing the tests to run");
+            var sourceArgument = elmTestRsCommand.Argument("source", "path to the Elm project containing the tests to run");
 
             var elmTestRsOutputOption =
-                elmTestCmd.Option(
+                elmTestRsCommand.Option(
                     "--elm-test-rs-output",
                     "Where to save the output (via stdout and stderr) from the elm-test-rs tool.",
                     CommandOptionType.SingleValue);
 
-            elmTestCmd.OnExecute(() =>
+            elmTestRsCommand.OnExecute(() =>
             {
                 var elmTestResult = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
 
@@ -602,7 +601,7 @@ public class Program
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
-                    File.WriteAllText(filePath, text ?? "", System.Text.Encoding.UTF8);
+                    File.WriteAllText(filePath, text ?? "", Encoding.UTF8);
                     Console.WriteLine("Saved " + text?.Length + " characters to " + filePath);
                 }
 
@@ -780,34 +779,34 @@ public class Program
         }
     }
 
-    static CommandLineApplication AddInteractiveCmd(CommandLineApplication app) =>
-        app.Command("interactive", interactiveCmd =>
+    static CommandLineApplication AddInteractiveCommand(CommandLineApplication app) =>
+        app.Command("interactive", interactiveCommand =>
         {
-            interactiveCmd.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
+            interactiveCommand.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
 
             var contextAppOption =
-                interactiveCmd
+                interactiveCommand
                 .Option(
                     template: "--context-app",
                     description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
                     optionType: CommandOptionType.SingleValue);
 
             var initStepsOption =
-                interactiveCmd
+                interactiveCommand
                 .Option(
                     template: "--init-steps",
                     description: "Path to a list of submissions to start the session with.",
                     optionType: CommandOptionType.SingleValue);
 
             var enableInspectionOption =
-                interactiveCmd
+                interactiveCommand
                 .Option(
                     template: "--enable-inspection",
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
 
             var elmEngineOption =
-                interactiveCmd
+                interactiveCommand
                 .Option(
                     template: "--elm-engine",
                     description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineType>()) + "). Defaults to " + ElmInteractive.IInteractiveSession.DefaultImplementation,
@@ -815,7 +814,7 @@ public class Program
                     inherited: true);
 
             var submitOption =
-                interactiveCmd.Option(
+                interactiveCommand.Option(
                     template: "--submit",
                     description: "Option to submit a string as if entered during the interactive session.",
                     optionType: CommandOptionType.MultipleValue);
@@ -829,7 +828,7 @@ public class Program
             }
 
             var testCommand =
-                interactiveCmd.Command("test", testCmd =>
+                interactiveCommand.Command("test", testCmd =>
                 {
                     testCmd.Description = "Test the interactive automatically with given scenarios and reports timings.";
 
@@ -1014,7 +1013,7 @@ public class Program
                     });
                 });
 
-            interactiveCmd.OnExecute(() =>
+            interactiveCommand.OnExecute(() =>
             {
                 var elmEngineType = parseElmEngineTypeFromOption();
 
@@ -1143,26 +1142,26 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddDescribeCmd(CommandLineApplication app) =>
-        app.Command("describe", describeCmd =>
+    static CommandLineApplication AddDescribeCommand(CommandLineApplication app) =>
+        app.Command("describe", describeCommand =>
         {
-            describeCmd.Description = "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.";
-            describeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            describeCommand.Description = "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.";
+            describeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var sourcePathParameter =
-                describeCmd
+                describeCommand
                 .Argument("source-path", "Path to the artifact. This can be a local directory or a URL.")
                 .IsRequired(allowEmptyStrings: false, errorMessage: "The source argument is missing. From where should I load the artifact?");
 
             var listBlobsOption =
-                describeCmd.Option("--list-blobs", "List blobs in the artifact", CommandOptionType.NoValue);
+                describeCommand.Option("--list-blobs", "List blobs in the artifact", CommandOptionType.NoValue);
 
             var compileZipArchiveOption =
-            describeCmd.Option(
+            describeCommand.Option(
                 "--compile-zip-archive", "Bundle the composition into a zip-archive.",
                 CommandOptionType.SingleOrNoValue);
 
-            describeCmd.OnExecute(() =>
+            describeCommand.OnExecute(() =>
             {
                 var sourcePath = sourcePathParameter.Value!;
 
@@ -1208,41 +1207,41 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddMakeCmd(CommandLineApplication app) =>
-        app.Command("make", makeCmd =>
+    static CommandLineApplication AddMakeCommand(CommandLineApplication app) =>
+        app.Command("make", makeCommand =>
         {
-            makeCmd.Description = "The `make` command compiles Elm code into JS or HTML.";
-            makeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            makeCommand.Description = "The `make` command compiles Elm code into JS, HTML, or other files.";
+            makeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var pathToElmFileArgument =
-            makeCmd.Argument("path-to-elm-file", "path to the Elm module file to compile")
+            makeCommand.Argument("path-to-elm-file", "path to the Elm module file to compile")
             .IsRequired(allowEmptyStrings: false);
 
             var outputOption =
-            makeCmd.Option(
+            makeCommand.Option(
                 "--output",
                 "Specify the name of the resulting HTML or JS file.",
                 CommandOptionType.SingleValue);
 
             var inputDirectoryOption =
-            makeCmd.Option(
+            makeCommand.Option(
                 "--input-directory",
                 "Specify the input directory containing the Elm files. Defaults to the current working directory.",
                 CommandOptionType.SingleValue);
 
             var debugOption =
-            makeCmd.Option(
+            makeCommand.Option(
                 "--debug",
                 description: "Turn on the time-travelling debugger.",
                 CommandOptionType.NoValue);
 
             var optimizeOption =
-            makeCmd.Option(
+            makeCommand.Option(
                 "--optimize",
                 description: "Turn on optimizations to make code smaller and faster.",
                 CommandOptionType.NoValue);
 
-            makeCmd.OnExecute(() =>
+            makeCommand.OnExecute(() =>
             {
                 var inputDirectory = inputDirectoryOption.Value() ?? Environment.CurrentDirectory;
 
@@ -1386,7 +1385,6 @@ public class Program
                 });
             });
     }
-
 
     static public IEnumerable<string> DescribeCompositionForHumans(
         TreeNodeWithStringPath composition,
@@ -1605,7 +1603,7 @@ public class Program
             if (!LooksLikeLocalSite(site))
             {
                 var deployAddress =
-                    (site.TrimEnd('/')) +
+                    site.TrimEnd('/') +
                     (initElmAppState
                     ?
                     Platform.WebServer.StartupAdminInterface.PathApiDeployAndInitAppState
@@ -1732,7 +1730,7 @@ public class Program
         {
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                 "Basic",
-                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(password))));
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(password))));
         }
 
         setHttpClientPassword(defaultPassword);
@@ -1785,7 +1783,7 @@ public class Program
     {
         var uri = new Uri(uriString);
 
-        if (!uri.Authority.Contains(":"))
+        if (!uri.Authority.Contains(':'))
             return WithPort(uri, defaultPort);
 
         return uri;
@@ -2287,7 +2285,7 @@ public class Program
 
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
-        File.WriteAllBytes(filePath, System.Text.Encoding.UTF8.GetBytes(reportContent));
+        File.WriteAllBytes(filePath, Encoding.UTF8.GetBytes(reportContent));
 
         Console.WriteLine("Saved report to file '" + filePath + "'.");
     }
