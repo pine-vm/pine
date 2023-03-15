@@ -39,6 +39,8 @@ public class StartupAdminInterface
 
     static public string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
+    static public string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db/";
+
     static public IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
 
     static public IImmutableList<IImmutableList<string>> WebServerConfigFilePathAlternatives =>
@@ -358,6 +360,18 @@ public class StartupAdminInterface
                     await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
                 }
 
+                Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> applyFunctionOnDatabase(
+                    AdminInterface.ApplyFunctionOnDatabaseRequest request)
+                {
+                    lock (avoidConcurrencyLock)
+                    {
+                        if (publicAppHost?.processLiveRepresentation is null)
+                            return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err("No application deployed.");
+
+                        return publicAppHost.processLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
+                    }
+                }
+
                 var apiRoutes = new[]
                 {
                     new ApiRoute
@@ -517,6 +531,29 @@ public class StartupAdminInterface
 
                             context.Response.StatusCode = 200;
                             await context.Response.WriteAsync("Successfully replaced the process history.");
+                        })
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiApplyFunctionOnDatabase,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        .Add("post", async (context, publicAppHost) =>
+                        {
+                            try
+                            {
+                                var applyFunctionRequest =
+                                    await context.Request.ReadFromJsonAsync<AdminInterface.ApplyFunctionOnDatabaseRequest>();
+
+                                var result = applyFunctionOnDatabase(applyFunctionRequest);
+
+                                context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
+                                await context.Response.WriteAsJsonAsync(result);
+                            }
+                            catch (Exception ex)
+                            {
+                                context.Response.StatusCode = 422;
+                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex.ToString());
+                            }
                         })
                     ),
                 };

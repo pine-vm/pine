@@ -151,6 +151,9 @@ public record CompositionLogRecordInFile(
     ValueInFileStructure? UpdateElmAppStateForEvent = null,
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ValueInFileStructure? ApplyFunctionOnElmAppState = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ValueInFileStructure? SetElmAppState = null,
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -177,6 +180,10 @@ public record CompositionLogRecordInFile(
                 DeployAppConfigAndMigrateElmAppState = appConfigValueInFile,
             };
     }
+
+    public record ApplyFunctionOnStateEvent(
+        string functionName,
+        IReadOnlyList<string> serializedArgumentsJson);
 }
 
 public record ProvisionalReductionRecordInFile(

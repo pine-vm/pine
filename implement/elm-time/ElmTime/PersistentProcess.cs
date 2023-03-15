@@ -90,7 +90,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                     if (reduction != null)
                     {
                         compositionChain.Pop();
-                        StateShim.StateShim.SetSerializedState(process, stateJson: reduction.ReducedValueLiteralString!)
+                        StateShim.StateShim.SetAppStateOnMainBranch(process, stateJson: reduction.ReducedValueLiteralString!)
                             .Extract(err => throw new Exception(err));
                         lastStateHash = reduction.ReducedCompositionHash;
                     }
@@ -99,7 +99,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                     {
                         if (followingComposition.composition.SetStateLiteralString != null)
                         {
-                            StateShim.StateShim.SetSerializedState(
+                            StateShim.StateShim.SetAppStateOnMainBranch(
                                 process,
                                 stateJson: followingComposition.composition.SetStateLiteralString!)
                                 .Extract(err => throw new Exception(err));
@@ -170,7 +170,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         lock (process)
         {
             var serializedState =
-                StateShim.StateShim.GetSerializedState(process)
+                StateShim.StateShim.GetAppStateFromMainBranch(process)
                 .Extract(err => throw new Exception("Failed to get serialized state: " + err));
 
             return
@@ -186,7 +186,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
     {
         lock (process)
         {
-            StateShim.StateShim.SetSerializedState(process, stateJson: state)
+            StateShim.StateShim.SetAppStateOnMainBranch(process, stateJson: state)
                 .Extract(err => throw new Exception(err));
 
             var compositionRecord = new CompositionRecordInFile

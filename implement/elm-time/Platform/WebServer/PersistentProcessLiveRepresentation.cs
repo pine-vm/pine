@@ -15,7 +15,8 @@ public interface IPersistentProcess
     Result<string, StateShim.InterfaceToHost.FunctionApplicationResult> ProcessElmAppEvent(
         IProcessStoreWriter storeWriter, string serializedEvent);
 
-    (ProvisionalReductionRecordInFile? reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(IProcessStoreWriter storeWriter);
+    (ProvisionalReductionRecordInFile? reductionRecord, StoreProvisionalReductionReport report) StoreReductionRecordForCurrentState(
+        IProcessStoreWriter storeWriter);
 }
 
 public record struct StoreProvisionalReductionReport(
@@ -52,6 +53,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     public record struct CompositionEventWithResolvedDependencies(
         byte[]? UpdateElmAppStateForEvent = null,
         byte[]? SetElmAppState = null,
+        byte[]? ApplyFunctionOnElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndInitElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null);
 
@@ -240,10 +242,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState.Span);
 
                     var setStateResponse =
-                        StateShim.StateShim.SetSerializedState(
-                            process: newElmAppProcess,
-                            stateJson: elmAppStateAsString,
-                            branchName: "main")
+                        StateShim.StateShim.SetAppStateOnMainBranch(process: newElmAppProcess, stateJson: elmAppStateAsString)
                         .Extract(error => throw new Exception("Failed to set state: " + error));
 
                     processRepresentationDuringRestore.lastElmAppVolatileProcess?.Dispose();
@@ -341,6 +340,24 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 });
         }
 
+        if (compositionEvent.ApplyFunctionOnElmAppState is byte[] applyFunctionOnElmAppStateSerial)
+        {
+            var applyFunctionOnElmAppState =
+                JsonSerializer.Deserialize<CompositionLogRecordInFile.ApplyFunctionOnStateEvent>(applyFunctionOnElmAppStateSerial);
+
+            if (processBefore.lastElmAppVolatileProcess is null)
+                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err("Process is null, no app deployed");
+
+            return
+                StateShim.StateShim.ApplyFunctionOnMainBranch(
+                    process: processBefore.lastElmAppVolatileProcess,
+                    new AdminInterface.ApplyFunctionOnDatabaseRequest(
+                        functionName: applyFunctionOnElmAppState.functionName,
+                        serializedArgumentsJson: applyFunctionOnElmAppState.serializedArgumentsJson,
+                        commitResultingState: true))
+                .Map(_ => processBefore);
+        }
+
         if (compositionEvent.SetElmAppState is byte[] setElmAppState)
         {
             if (processBefore.lastElmAppVolatileProcess == null)
@@ -352,10 +369,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             var projectedElmAppState = Encoding.UTF8.GetString(setElmAppState);
 
             return
-                StateShim.StateShim.SetSerializedState(
+                StateShim.StateShim.SetAppStateOnMainBranch(
                     process: processBefore.lastElmAppVolatileProcess,
-                    stateJson: projectedElmAppState,
-                    branchName: "main")
+                    stateJson: projectedElmAppState)
                 .MapError(error => "Set state function in the hosted app returned an error: " + error)
                 .Map(_ => processBefore);
         }
@@ -366,7 +382,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 processBefore.lastElmAppVolatileProcess is null ?
                 null
                 :
-                StateShim.StateShim.GetSerializedState(processBefore.lastElmAppVolatileProcess)
+                StateShim.StateShim.GetAppStateFromMainBranch(processBefore.lastElmAppVolatileProcess)
                 .Extract(err => throw new Exception("Failed to get serialized state: " + err));
 
             if (elmAppStateBefore is null)
@@ -615,6 +631,15 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             };
         }
 
+        if (compositionEvent.ApplyFunctionOnElmAppState is not null)
+        {
+            return new CompositionEventWithResolvedDependencies
+            {
+                ApplyFunctionOnElmAppState =
+                    loadComponentFromValueInFileStructureAndAssertIsBlob(compositionEvent.ApplyFunctionOnElmAppState).ToArray(),
+            };
+        }
+
         if (compositionEvent.SetElmAppState != null)
         {
             return new CompositionEventWithResolvedDependencies
@@ -678,50 +703,65 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     {
         lock (processLock)
         {
-            var serializedInterfaceEvent =
-                new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
-                    new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
+            return
+                StateShim.StateShim.ApplyFunctionOnMainBranch(
+                    process: lastElmAppVolatileProcess,
+                    new AdminInterface.ApplyFunctionOnDatabaseRequest(
                         functionName: "processEvent",
-                        arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
-                            stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.just(new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")),
-                            serializedArgumentsJson: ImmutableList.Create(serializedAppEvent)),
-                        stateDestinationBranches: ImmutableList.Create("main")))
-                .SerializeToJsonString();
-
-            var responseString = lastElmAppVolatileProcess!.ProcessEvent(serializedInterfaceEvent);
-
-            var compositionEvent =
-                new CompositionLogRecordInFile.CompositionEvent
+                        serializedArgumentsJson: ImmutableList.Create(serializedAppEvent),
+                        commitResultingState: true))
+                .Map(applyFunctionSuccess =>
                 {
-                    UpdateElmAppStateForEvent = new ValueInFileStructure
+                    var compositionEvent =
+                        new CompositionLogRecordInFile.CompositionEvent
+                        {
+                            UpdateElmAppStateForEvent = new ValueInFileStructure
+                            {
+                                LiteralStringUtf8 = serializedAppEvent
+                            }
+                        };
+
+                    var recordHash = storeWriter.AppendCompositionLogRecord(compositionEvent);
+
+                    lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
+
+                    return applyFunctionSuccess.functionApplicationResult;
+                });
+        }
+    }
+
+    public Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
+        IProcessStoreWriter storeWriter,
+        AdminInterface.ApplyFunctionOnDatabaseRequest request)
+    {
+        lock (processLock)
+        {
+            return
+                StateShim.StateShim.ApplyFunctionOnMainBranch(lastElmAppVolatileProcess, request)
+                .Map(applyFunctionSuccess =>
+                {
+                    if (applyFunctionSuccess.changedState)
                     {
-                        LiteralStringUtf8 = serializedAppEvent
+                        var applyFunctionRecord = new CompositionLogRecordInFile.ApplyFunctionOnStateEvent(
+                            functionName: request.functionName,
+                            serializedArgumentsJson: request.serializedArgumentsJson);
+
+                        var compositionEvent =
+                            new CompositionLogRecordInFile.CompositionEvent
+                            {
+                                ApplyFunctionOnElmAppState = new ValueInFileStructure
+                                {
+                                    LiteralStringUtf8 = JsonSerializer.Serialize(applyFunctionRecord)
+                                }
+                            };
+
+                        var recordHash = storeWriter.AppendCompositionLogRecord(compositionEvent);
+
+                        lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
                     }
-                };
 
-            var recordHash = storeWriter.AppendCompositionLogRecord(compositionEvent);
-
-            lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
-
-            try
-            {
-                return
-                    JsonSerializer.Deserialize<Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>>(responseString)
-                    .AndThen(responseOk => responseOk switch
-                    {
-                        StateShim.InterfaceToHost.StateShimResponseStruct.ApplyFunctionShimResponse applyFunctionResponse =>
-                        applyFunctionResponse.Result,
-
-                        _ =>
-                        Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
-                            "Unexpected type of response: " + responseString)
-                    });
-            }
-            catch (Exception e)
-            {
-                return Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
-                    "Failed to parse response string: " + e.ToString());
-            }
+                    return applyFunctionSuccess;
+                });
         }
     }
 
@@ -751,7 +791,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             elmAppState =
                 lastElmAppVolatileProcess is null ?
                 null :
-                StateShim.StateShim.GetSerializedState(lastElmAppVolatileProcess)
+                StateShim.StateShim.GetAppStateFromMainBranch(lastElmAppVolatileProcess)
                 .Extract(err => throw new Exception("Failed to get serialized state: " + err));
 
             report.serializeElmAppStateTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds;
