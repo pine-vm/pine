@@ -111,7 +111,9 @@ public class StateShim
 
                 if (!matchingFunctions.Any())
                     return Result<string, NamedExposedFunction>.err(
-                        "None of the exposed function matches name '" + request.functionName + "'");
+                        "None of the exposed functions matches name '" + request.functionName +
+                        "'. This app only exposes the following " + exposedFunctions.Count + " functions: "
+                        + string.Join(", ", exposedFunctions.Select(ef => ef.functionName)));
 
                 return
                 Result<string, NamedExposedFunction>.ok(matchingFunctions.First());

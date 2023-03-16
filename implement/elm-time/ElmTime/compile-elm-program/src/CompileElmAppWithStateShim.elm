@@ -594,7 +594,14 @@ processEvent config hostEvent stateBefore =
             in
             case config.exposedFunctions |> Dict.get applyFunction.functionName of
                 Nothing ->
-                    returnError ("None of the exposed functions matches name '" ++ applyFunction.functionName ++ "'")
+                    returnError
+                        ("None of the exposed functions matches name '"
+                            ++ applyFunction.functionName
+                            ++ "'. This app only exposes the following "
+                            ++ String.fromInt (Dict.size config.exposedFunctions)
+                            ++ " functions: "
+                            ++ String.join ", " (Dict.keys config.exposedFunctions)
+                        )
 
                 Just exposedFunction ->
                     let
