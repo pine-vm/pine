@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-03-15";
+    static public string AppVersionId => "2023-03-16";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -56,6 +56,7 @@ public class Program
         var deployCommand = AddDeployCommand(app);
         var copyAppStateCommand = AddCopyAppStateCommand(app);
         var copyProcessCommand = AddCopyProcessCommand(app);
+        var applyFunctionCommand = AddApplyFunctionCommand(app);
         var truncateProcessHistoryCommand = AddTruncateProcessHistoryCommand(app);
 
         var compileCommand = AddCompileCommand(app);
@@ -129,6 +130,7 @@ public class Program
                         deployCommand,
                         copyAppStateCommand,
                         copyProcessCommand,
+                        applyFunctionCommand,
                         truncateProcessHistoryCommand,
                     }
                 },
@@ -524,6 +526,65 @@ public class Program
                 Console.WriteLine("Saved process archive to file '" + filePath + "'.");
             });
         });
+
+    static CommandLineApplication AddApplyFunctionCommand(CommandLineApplication app) =>
+        app.Command("apply-function", applyFunctionCommand =>
+    {
+        applyFunctionCommand.Description = "Apply an Elm function on the database containing the state of an Elm app.";
+        applyFunctionCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+        var siteArgument = ProcessSiteArgumentOnCommand(applyFunctionCommand);
+        var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(applyFunctionCommand);
+        var functionNameArgument = applyFunctionCommand.Argument("function-name", "Name of the function to apply.").IsRequired();
+        var argumentOption = applyFunctionCommand.Option(
+            "--argument",
+            "an argument for the function, encoded as JSON. Can be either a literal or a file name.",
+            optionType: CommandOptionType.MultipleValue);
+
+        var commitResultingStateOption = applyFunctionCommand.Option(
+            "--commit-resulting-state",
+            "If the function produces a new application database state, this option allows committing that new state to the database.",
+            CommandOptionType.NoValue);
+
+        applyFunctionCommand.OnExecute(() =>
+        {
+            var site = siteArgument.Value!;
+            var sitePassword = passwordFromSite(site);
+
+            var serializedArgumentsJson = argumentOption.Values.Select(LoadArgumentFromUserInterfaceAsJsonOrFileTextContext).ToImmutableList();
+
+            var applyFunctionReport =
+                ApplyFunction(
+                    site: site,
+                    functionName: functionNameArgument.Value,
+                    serializedArgumentsJson: serializedArgumentsJson,
+                    commitResultingState: commitResultingStateOption.HasValue(),
+                    siteDefaultPassword: sitePassword,
+                    promptForPasswordOnConsole: true);
+
+            WriteReportToFileInReportDirectory(
+                reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    applyFunctionReport,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    }),
+                reportKind: "apply-function.json");
+        });
+    });
+
+    static string LoadArgumentFromUserInterfaceAsJsonOrFileTextContext(string argumentFromCLI)
+    {
+        try
+        {
+            var asJson = System.Text.Json.JsonSerializer.Deserialize<object>(argumentFromCLI);
+
+            return argumentFromCLI;
+        }
+        catch { }
+
+        return File.ReadAllText(argumentFromCLI);
+    }
 
     static CommandLineApplication AddTruncateProcessHistoryCommand(CommandLineApplication app) =>
         app.Command("truncate-process-history", truncateProcessHistoryCommand =>
@@ -1553,14 +1614,22 @@ public class Program
         string sourceCompositionId,
         SourceSummaryStructure sourceSummary,
         string filteredSourceCompositionId,
-        DeployAppReport.ResponseFromServerStruct? responseFromServer,
+        ResponseFromServerReport? responseFromServer,
         string? deployException,
-        int totalTimeSpentMilli)
-    {
-        public record ResponseFromServerStruct(
-            int? statusCode,
-            object body);
-    }
+        int totalTimeSpentMilli);
+
+
+    public record ApplyFunctionReport(
+        string site,
+        AdminInterface.ApplyFunctionOnDatabaseRequest applyFunctionRequest,
+        string beginTime,
+        ResponseFromServerReport? responseFromServer,
+        string? runtimeException,
+        int totalTimeSpentMilli);
+
+    public record ResponseFromServerReport(
+        int? statusCode,
+        object body);
 
     static public DeployAppReport DeployApp(
         string sourcePath,
@@ -1594,7 +1663,7 @@ public class Program
         Console.WriteLine(
             "Built app config " + filteredSourceCompositionId + " from " + sourceCompositionId + ".");
 
-        DeployAppReport.ResponseFromServerStruct? responseFromServer = null;
+        ResponseFromServerReport? responseFromServer = null;
 
         Exception? deployException = null;
 
@@ -1644,7 +1713,7 @@ public class Program
                 }
                 catch { }
 
-                responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                responseFromServer = new ResponseFromServerReport
                 (
                     statusCode: (int)httpResponse.StatusCode,
                     body: responseBodyReport
@@ -1684,7 +1753,7 @@ public class Program
                         compositionLogEvent,
                         processStoreFileStore);
 
-                responseFromServer = new DeployAppReport.ResponseFromServerStruct
+                responseFromServer = new ResponseFromServerReport
                 (
                     statusCode: statusCode,
                     body: responseReport
@@ -1709,6 +1778,92 @@ public class Program
             filteredSourceCompositionId: filteredSourceCompositionId,
             responseFromServer: responseFromServer,
             deployException: deployException?.ToString(),
+            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+        );
+    }
+
+    static public ApplyFunctionReport ApplyFunction(
+        string site,
+        string functionName,
+        IReadOnlyList<string> serializedArgumentsJson,
+        bool commitResultingState,
+        string? siteDefaultPassword,
+        bool promptForPasswordOnConsole)
+    {
+        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        ResponseFromServerReport? responseFromServer = null;
+
+        Exception? runtimeException = null;
+
+        var applyFunctionRequest =
+            new AdminInterface.ApplyFunctionOnDatabaseRequest(
+                functionName: functionName,
+                serializedArgumentsJson: serializedArgumentsJson,
+                commitResultingState: commitResultingState);
+
+        try
+        {
+            if (LooksLikeLocalSite(site))
+            {
+                throw new NotImplementedException("Not implemented for local site");
+            }
+
+            var applyAddress =
+                site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiApplyFunctionOnDatabase;
+
+            Console.WriteLine("Attempting to apply function '" + functionName + "' at '" + applyAddress + "'...");
+
+            var httpResponse = AttemptHttpRequest(() =>
+            {
+                var httpContent = System.Net.Http.Json.JsonContent.Create(applyFunctionRequest);
+
+                return new System.Net.Http.HttpRequestMessage
+                {
+                    Method = System.Net.Http.HttpMethod.Post,
+                    RequestUri = MapUriForForAdminInterface(applyAddress),
+                    Content = httpContent,
+                };
+            },
+            defaultPassword: siteDefaultPassword,
+            promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
+
+            var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+            Console.WriteLine(
+                "Server response: " + httpResponse.StatusCode + "\n" + responseContentString);
+
+            object responseBodyReport = responseContentString;
+
+            try
+            {
+                responseBodyReport =
+                    System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(responseContentString)!;
+            }
+            catch { }
+
+            responseFromServer = new ResponseFromServerReport
+            (
+                statusCode: (int)httpResponse.StatusCode,
+                body: responseBodyReport
+            );
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Failed with exception: " + e.Message);
+
+            runtimeException = e;
+        }
+
+        return new ApplyFunctionReport
+        (
+            site: site,
+            applyFunctionRequest: applyFunctionRequest,
+            beginTime: beginTime,
+            responseFromServer: responseFromServer,
+            runtimeException: runtimeException?.ToString(),
             totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
         );
     }
@@ -1826,7 +1981,7 @@ public class Program
         AppStateSummary? appStateSummary = null,
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        ResponseFromServerStruct? destinationResponseFromServer = null,
+        ResponseFromServerReport? destinationResponseFromServer = null,
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         string? destinationFileReport = null,
@@ -1836,8 +1991,6 @@ public class Program
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         object? error = null);
-
-    public record ResponseFromServerStruct(int? statusCode, object body);
 
     public record AppStateSummary(string hash, int length);
 
@@ -1933,7 +2086,7 @@ public class Program
 
     }
 
-    static ResponseFromServerStruct SetElmAppStateViaAdminInterface(
+    static ResponseFromServerReport SetElmAppStateViaAdminInterface(
         string site,
         string? siteDefaultPassword,
         byte[] elmAppStateSerialized,
@@ -1978,7 +2131,7 @@ public class Program
         }
         catch { }
 
-        return new ResponseFromServerStruct
+        return new ResponseFromServerReport
         (
             statusCode: (int)httpResponse.StatusCode,
             body: responseBodyReport
@@ -2016,13 +2169,8 @@ public class Program
     record TruncateProcessHistoryReport(
         string beginTime,
         string site,
-        TruncateProcessHistoryReport.ResponseFromServerStruct responseFromServer,
-        int totalTimeSpentMilli)
-    {
-        public record ResponseFromServerStruct(
-            int? statusCode,
-            object body);
-    }
+        ResponseFromServerReport responseFromServer,
+        int totalTimeSpentMilli);
 
     static TruncateProcessHistoryReport TruncateProcessHistory(
         string site,
@@ -2061,7 +2209,7 @@ public class Program
         }
         catch { }
 
-        var responseFromServer = new TruncateProcessHistoryReport.ResponseFromServerStruct
+        var responseFromServer = new ResponseFromServerReport
         (
             statusCode: (int)httpResponse.StatusCode,
             body: responseBodyReport
