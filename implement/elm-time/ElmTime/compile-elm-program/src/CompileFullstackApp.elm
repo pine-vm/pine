@@ -397,6 +397,12 @@ loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFil
                     (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonCoders")
                     (mapJsonCodersModuleText context)
                     files
+                    |> Result.andThen
+                        (mapElmModuleWithNameIfExists
+                            locatedInSourceFilesFromJustFilePath
+                            (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonConverters")
+                            (mapJsonCodersModuleText context)
+                        )
             )
             (Ok sourceFiles)
 
@@ -3310,7 +3316,12 @@ parseAndMapElmModuleText mapDependingOnParsing moduleText =
 
 {-| Consider restricting the interface of `mapElmModuleWithNameIfExists` to not support arbitrary changes to app code but only addition of expose syntax.
 -}
-mapElmModuleWithNameIfExists : ({ filePath : List String } -> String -> err) -> String -> (( AppFiles, List String, String ) -> Result err ( AppFiles, String )) -> AppFiles -> Result err AppFiles
+mapElmModuleWithNameIfExists :
+    ({ filePath : List String } -> String -> err)
+    -> String
+    -> (( AppFiles, List String, String ) -> Result err ( AppFiles, String ))
+    -> AppFiles
+    -> Result err AppFiles
 mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCode =
     let
         elmModuleFilePath =

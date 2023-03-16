@@ -8,7 +8,7 @@ import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import Json.Decode
 import Json.Encode
 import Platform.WebServer
@@ -48,7 +48,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     ( stateBefore
                     , 200
                     , stateBefore
-                        |> CompilationInterface.GenerateJsonCoders.encodeBackendState
+                        |> CompilationInterface.GenerateJsonConverters.encodeBackendState
                         |> Json.Encode.encode 0
                     )
 
@@ -57,7 +57,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         httpRequestEvent.request.bodyAsBase64
                             |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                             |> Maybe.withDefault "Missing HTTP body"
-                            |> Json.Decode.decodeString CompilationInterface.GenerateJsonCoders.decodeBackendState
+                            |> Json.Decode.decodeString CompilationInterface.GenerateJsonConverters.decodeBackendState
                     of
                         Err decodeErr ->
                             ( stateBefore

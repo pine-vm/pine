@@ -189,7 +189,11 @@ type alias SourceParsedElmModule =
     }
 
 
-type alias EntryPointType =
+type alias EntryPointClass =
+    SourceParsedElmModule -> Result { supportedDeclarationNames : Set.Set String } ProcessEntryPoint
+
+
+type alias ProcessEntryPoint =
     CompileEntryPointConfig
     -> AppFiles
     ->
@@ -200,20 +204,113 @@ type alias EntryPointType =
 
 type alias CompileEntryPointConfig =
     { compilationRootFilePath : List String
-    , compilationRootModuleName : List String
+    , compilationRootModule : SourceParsedElmModule
     , interfaceToHostRootModuleName : List String
     , originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
     }
+
+
+defaultEntryPoints : List EntryPointClass
+defaultEntryPoints =
+    [ entryPointClassFromSetOfEquallyProcessedFunctionNames
+        (Set.singleton "blobMain")
+        (\_ entryPointConfig ->
+            loweredForBlobEntryPoint entryPointConfig
+                >> Result.map
+                    (\( compiledFiles, entryPoint ) ->
+                        { compiledFiles = compiledFiles
+                        , rootModuleEntryPointKind = BlobMakeEntryPoint entryPoint
+                        }
+                    )
+        )
+    , entryPointClassFromSetOfEquallyProcessedFunctionNames
+        (Set.singleton "main")
+        (\_ entryPointConfig compiledFiles ->
+            Ok
+                { compiledFiles = compiledFiles
+                , rootModuleEntryPointKind =
+                    ClassicMakeEntryPoint
+                        { elmMakeJavaScriptFunctionName =
+                            ((entryPointConfig.compilationRootModule.parsedSyntax.moduleDefinition
+                                |> Elm.Syntax.Node.value
+                                |> Elm.Syntax.Module.moduleName
+                             )
+                                ++ [ "main" ]
+                            )
+                                |> String.join "."
+                        }
+                }
+        )
+    ]
+
+
+entryPointClassFromSetOfEquallyProcessedFunctionNames :
+    Set.Set String
+    -> (Elm.Syntax.Expression.Function -> ProcessEntryPoint)
+    -> EntryPointClass
+entryPointClassFromSetOfEquallyProcessedFunctionNames supportedDeclarationNames processEntryPoint sourceModule =
+    entryPointClassFromSetOfEquallyProcessedNames
+        supportedDeclarationNames
+        (\declaration ->
+            case declaration of
+                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                    processEntryPoint functionDeclaration
+
+                _ ->
+                    \config _ ->
+                        Err
+                            [ LocatedInSourceFiles
+                                { filePath = config.compilationRootFilePath
+                                , locationInModuleText = Elm.Syntax.Range.emptyRange
+                                }
+                                (OtherCompilationError "Is not a function declaration")
+                            ]
+        )
+        sourceModule
+
+
+entryPointClassFromSetOfEquallyProcessedNames :
+    Set.Set String
+    -> (Elm.Syntax.Declaration.Declaration -> ProcessEntryPoint)
+    -> EntryPointClass
+entryPointClassFromSetOfEquallyProcessedNames supportedDeclarationNames processEntryPoint sourceModule =
+    let
+        declarationsNames =
+            sourceModule.parsedSyntax.declarations
+                |> List.map Elm.Syntax.Node.value
+                |> List.filterMap
+                    (\declaration ->
+                        case declaration of
+                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                Just
+                                    ( Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                                    , declaration
+                                    )
+
+                            _ ->
+                                Nothing
+                    )
+    in
+    case
+        declarationsNames
+            |> List.filter (Tuple.first >> Set.member >> (|>) supportedDeclarationNames)
+            |> List.head
+    of
+        Nothing ->
+            Err { supportedDeclarationNames = supportedDeclarationNames }
+
+        Just ( _, declaration ) ->
+            Ok (processEntryPoint declaration)
 
 
 {-| This function returns an Err if the needed dependencies for ElmMake are not yet in the arguments.
 The integrating software can then perform the ElmMake, insert it into the dependencies dict and retry.
 -}
 asCompletelyLoweredElmApp :
-    Dict.Dict String EntryPointType
+    List EntryPointClass
     -> CompilationArguments
     -> Result (List LocatedCompilationError) CompilationIterationSuccess
-asCompletelyLoweredElmApp entryPointTypeFromDeclarationName arguments =
+asCompletelyLoweredElmApp entryPointClasses arguments =
     let
         sourceModules =
             elmModulesDictFromAppFiles arguments.sourceFiles
@@ -250,51 +347,21 @@ asCompletelyLoweredElmApp entryPointTypeFromDeclarationName arguments =
                     )
                 |> Set.fromList
 
-        containsBackend =
-            -- TODO: Reuse the entry point kind found by loweredForCompilationRoot
-            findModuleByName [ "Backend", "Main" ] sourceModules /= Nothing
-
-        modulesToAddForBackendDepdendencies =
-            if containsBackend then
-                Set.fromList modulesToAddForBase64Coding
-
-            else
-                Set.empty
-
         modulesToAdd =
             usedCompilationInterfaceModules
                 |> Set.toList
                 |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
                 |> List.concat
-                |> Set.fromList
-                |> Set.union modulesToAddForBackendDepdendencies
-                |> Set.toList
     in
-    modulesToAdd
-        |> List.foldl
-            (\moduleToAdd prevFiles ->
-                moduleToAdd
-                    |> parseElmModuleText
-                    |> Result.map
-                        (\moduleToAddSyntax ->
-                            let
-                                filePath =
-                                    filePathFromElmModuleName
-                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
-                            in
-                            prevFiles
-                                |> Dict.insert filePath (fileContentFromString moduleToAdd)
-                        )
-                    |> Result.withDefault prevFiles
-            )
-            arguments.sourceFiles
+    arguments.sourceFiles
+        |> addModulesFromTextToAppFiles modulesToAdd
         |> loweredForSourceFiles arguments.compilationInterfaceElmModuleNamePrefixes
         |> Result.andThen (loweredForJsonCoders { originalSourceModules = sourceModules } arguments.compilationInterfaceElmModuleNamePrefixes)
         |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
         |> Result.andThen (loweredForElmMake arguments.compilationInterfaceElmModuleNamePrefixes arguments.dependencies)
         |> Result.andThen
             (loweredForCompilationRoot
-                entryPointTypeFromDeclarationName
+                entryPointClasses
                 { originalSourceModules = sourceModules
                 , compilationRootFilePath = arguments.compilationRootFilePath
                 , interfaceToHostRootModuleName = arguments.interfaceToHostRootModuleName
@@ -330,6 +397,12 @@ loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFil
                     (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonCoders")
                     (mapJsonCodersModuleText context)
                     files
+                    |> Result.andThen
+                        (mapElmModuleWithNameIfExists
+                            locatedInSourceFilesFromJustFilePath
+                            (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonConverters")
+                            (mapJsonCodersModuleText context)
+                        )
             )
             (Ok sourceFiles)
 
@@ -348,35 +421,8 @@ loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceF
             (Ok sourceFiles)
 
 
-defaultEntryPoints : Dict.Dict String EntryPointType
-defaultEntryPoints =
-    [ ( "blobMain"
-      , \entryPointConfig ->
-            loweredForBlobEntryPoint entryPointConfig
-                >> Result.map
-                    (\( compiledFiles, entryPoint ) ->
-                        { compiledFiles = compiledFiles
-                        , rootModuleEntryPointKind = BlobMakeEntryPoint entryPoint
-                        }
-                    )
-      )
-    , ( "main"
-      , \entryPointConfig compiledFiles ->
-            Ok
-                { compiledFiles = compiledFiles
-                , rootModuleEntryPointKind =
-                    ClassicMakeEntryPoint
-                        { elmMakeJavaScriptFunctionName =
-                            String.join "." (entryPointConfig.compilationRootModuleName ++ [ "main" ])
-                        }
-                }
-      )
-    ]
-        |> Dict.fromList
-
-
 loweredForCompilationRoot :
-    Dict.Dict String EntryPointType
+    List EntryPointClass
     ->
         { compilationRootFilePath : List String
         , interfaceToHostRootModuleName : List String
@@ -384,7 +430,7 @@ loweredForCompilationRoot :
         }
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) CompilationIterationSuccess
-loweredForCompilationRoot entryPointTypeFromDeclarationName config sourceFiles =
+loweredForCompilationRoot entryPointClasses config sourceFiles =
     case Dict.get config.compilationRootFilePath config.originalSourceModules of
         Nothing ->
             Err
@@ -397,40 +443,33 @@ loweredForCompilationRoot entryPointTypeFromDeclarationName config sourceFiles =
 
         Just compilationRootModule ->
             let
-                declarationsNames =
-                    compilationRootModule.parsedSyntax.declarations
-                        |> List.map Elm.Syntax.Node.value
-                        |> List.filterMap
-                            (\declaration ->
-                                case declaration of
-                                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                        Just (Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name)
-
-                                    _ ->
-                                        Nothing
-                            )
+                entryPointMatchesResults =
+                    entryPointClasses
+                        |> List.map ((|>) compilationRootModule)
             in
-            case
-                declarationsNames
-                    |> List.filterMap (Dict.get >> (|>) entryPointTypeFromDeclarationName)
-                    |> List.head
-            of
+            case entryPointMatchesResults |> List.filterMap Result.toMaybe |> List.head of
                 Nothing ->
+                    let
+                        allSupportedDeclarationNames =
+                            entryPointMatchesResults
+                                |> List.map (Result.Extra.unpack .supportedDeclarationNames (always Set.empty))
+                                |> List.foldl Set.union Set.empty
+                    in
                     Ok
                         { compiledFiles = sourceFiles
                         , rootModuleEntryPointKind =
                             Err
                                 ("Found no declaration of an entry point. I only support the following "
-                                    ++ String.fromInt (Dict.size entryPointTypeFromDeclarationName)
+                                    ++ String.fromInt (Set.size allSupportedDeclarationNames)
                                     ++ " names for entry points declarations: "
-                                    ++ String.join ", " (Dict.keys entryPointTypeFromDeclarationName)
+                                    ++ String.join ", " (Set.toList allSupportedDeclarationNames)
                                 )
                         }
 
                 Just buildEntryPoint ->
                     buildEntryPoint
                         { compilationRootFilePath = config.compilationRootFilePath
-                        , compilationRootModuleName = compilationRootModule.moduleName
+                        , compilationRootModule = compilationRootModule
                         , interfaceToHostRootModuleName = config.interfaceToHostRootModuleName
                         , originalSourceModules = config.originalSourceModules
                         }
@@ -447,29 +486,9 @@ loweredForBlobEntryPoint :
     CompileEntryPointConfig
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
-loweredForBlobEntryPoint { compilationRootFilePath, compilationRootModuleName } sourceFiles =
-    case Dict.get compilationRootFilePath sourceFiles of
-        Nothing ->
-            Err
-                [ LocatedInSourceFiles
-                    { filePath = compilationRootFilePath
-                    , locationInModuleText = Elm.Syntax.Range.emptyRange
-                    }
-                    (OtherCompilationError "File not found")
-                ]
-
-        Just fileBefore ->
-            fileBefore
-                |> stringFromFileContent
-                |> Result.fromMaybe
-                    [ LocatedInSourceFiles
-                        { filePath = compilationRootFilePath, locationInModuleText = Elm.Syntax.Range.emptyRange }
-                        (OtherCompilationError "Failed to decode file content as string")
-                    ]
-                |> Result.andThen
-                    (\rootModuleText ->
-                        [ rootModuleText
-                        , String.trim """
+loweredForBlobEntryPoint { compilationRootFilePath, compilationRootModule } sourceFiles =
+    ([ compilationRootModule.fileText
+     , String.trim """
 blob_main_as_base64 : String
 blob_main_as_base64 =
     blobMain
@@ -487,26 +506,34 @@ main =
         , subscriptions = always Sub.none
         }
 """
-                        ]
-                            |> String.join "\n\n"
-                            |> addImportsInElmModuleText [ ( [ "Base64" ], Nothing ) ]
-                            |> Result.mapError
-                                (\err ->
-                                    [ LocatedInSourceFiles
-                                        { filePath = compilationRootFilePath, locationInModuleText = Elm.Syntax.Range.emptyRange }
-                                        (OtherCompilationError ("Failed to add import: " ++ err))
-                                    ]
-                                )
-                    )
-                |> Result.map
-                    (\rootModuleText ->
-                        ( sourceFiles
-                            |> updateFileContentAtPath (always (fileContentFromString rootModuleText)) compilationRootFilePath
-                        , { elmMakeJavaScriptFunctionName =
-                                String.join "." (compilationRootModuleName ++ [ "blob_main_as_base64" ])
-                          }
+     ]
+        |> String.join "\n\n"
+        |> addImportsInElmModuleText [ ( [ "Base64" ], Nothing ) ]
+        |> Result.mapError
+            (\err ->
+                [ LocatedInSourceFiles
+                    { filePath = compilationRootFilePath
+                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                    }
+                    (OtherCompilationError ("Failed to add import: " ++ err))
+                ]
+            )
+    )
+        |> Result.map
+            (\rootModuleText ->
+                ( sourceFiles
+                    |> updateFileContentAtPath (always (fileContentFromString rootModuleText)) compilationRootFilePath
+                , { elmMakeJavaScriptFunctionName =
+                        ((compilationRootModule.parsedSyntax.moduleDefinition
+                            |> Elm.Syntax.Node.value
+                            |> Elm.Syntax.Module.moduleName
+                         )
+                            ++ [ "blob_main_as_base64" ]
                         )
-                    )
+                            |> String.join "."
+                  }
+                )
+            )
 
 
 sourceFileFunctionNameStart : String
@@ -1156,6 +1183,36 @@ type LeafElmTypeStruct
     | MaybeLeaf
     | ResultLeaf
     | DictLeaf
+
+
+parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation :
+    Dict.Dict (List String) SourceParsedElmModule
+    -> ( ( List String, Elm.Syntax.File.File ), Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Result (LocatedInSourceFiles String) ( List ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
+parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation modules ( ( currentModuleFilePath, currentModule ), typeAnnotationNode ) =
+    case Elm.Syntax.Node.value typeAnnotationNode of
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation inputNode returnNode ->
+            parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation
+                modules
+                ( ( currentModuleFilePath, currentModule ), inputNode )
+                |> Result.andThen
+                    (\( parsedInput, parsedInputDeps ) ->
+                        parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation
+                            modules
+                            ( ( currentModuleFilePath, currentModule ), returnNode )
+                            |> Result.map
+                                (\( parsedReturn, parsedReturnDeps ) ->
+                                    ( parsedInput ++ parsedReturn
+                                    , Dict.union parsedInputDeps parsedReturnDeps
+                                    )
+                                )
+                    )
+
+        _ ->
+            parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                modules
+                ( ( currentModuleFilePath, currentModule ), typeAnnotationNode )
+                |> Result.map (Tuple.mapFirst List.singleton)
 
 
 parseElmTypeAndDependenciesRecursivelyFromAnnotation :
@@ -2419,6 +2476,29 @@ elmModulesDictFromAppFiles =
         >> Dict.fromList
 
 
+elmModulesDictFromModuleTexts : (List String -> List String) -> List String -> Result String (Dict.Dict (List String) SourceParsedElmModule)
+elmModulesDictFromModuleTexts filePathFromModuleName =
+    List.map
+        (\moduleText ->
+            parseElmModuleText moduleText
+                |> Result.map (Tuple.pair moduleText)
+                |> Result.mapError (parserDeadEndsToString moduleText)
+        )
+        >> Result.Extra.combine
+        >> Result.map
+            (List.map
+                (\( moduleText, moduleSyntax ) ->
+                    ( filePathFromModuleName (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleSyntax.moduleDefinition))
+                    , { fileText = moduleText
+                      , parsedSyntax = moduleSyntax
+                      , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleSyntax.moduleDefinition)
+                      }
+                    )
+                )
+                >> Dict.fromList
+            )
+
+
 parseJsonCodingFunctionType :
     Elm.Syntax.Signature.Signature
     -> Result String { isDecoder : Bool, typeAnnotation : Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation }
@@ -3236,7 +3316,12 @@ parseAndMapElmModuleText mapDependingOnParsing moduleText =
 
 {-| Consider restricting the interface of `mapElmModuleWithNameIfExists` to not support arbitrary changes to app code but only addition of expose syntax.
 -}
-mapElmModuleWithNameIfExists : ({ filePath : List String } -> String -> err) -> String -> (( AppFiles, List String, String ) -> Result err ( AppFiles, String )) -> AppFiles -> Result err AppFiles
+mapElmModuleWithNameIfExists :
+    ({ filePath : List String } -> String -> err)
+    -> String
+    -> (( AppFiles, List String, String ) -> Result err ( AppFiles, String ))
+    -> AppFiles
+    -> Result err AppFiles
 mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCode =
     let
         elmModuleFilePath =
@@ -3792,6 +3877,28 @@ filePathRepresentationInFunctionName =
                     '_'
             )
         >> String.fromList
+
+
+addModulesFromTextToAppFiles : List String -> AppFiles -> AppFiles
+addModulesFromTextToAppFiles modulesToAdd sourceFiles =
+    modulesToAdd
+        |> List.foldl
+            (\moduleToAdd prevFiles ->
+                moduleToAdd
+                    |> parseElmModuleText
+                    |> Result.map
+                        (\moduleToAddSyntax ->
+                            let
+                                filePath =
+                                    filePathFromElmModuleName
+                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
+                            in
+                            prevFiles
+                                |> Dict.insert filePath (fileContentFromString moduleToAdd)
+                        )
+                    |> Result.withDefault prevFiles
+            )
+            sourceFiles
 
 
 filePathFromElmModuleName : List String -> List String
