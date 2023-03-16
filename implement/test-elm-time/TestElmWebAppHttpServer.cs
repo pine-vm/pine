@@ -11,6 +11,9 @@ public class TestElmWebAppHttpServer
     static public PineValue CounterWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
 
+    static public PineValue CalculatorWebApp =>
+        TestSetup.AppConfigComponentFromFiles(TestSetup.CalculatorWebApp);
+
     static public PineValue StringBuilderWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.StringBuilderElmWebApp);
 

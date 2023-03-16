@@ -46,6 +46,9 @@ public class TestSetup
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =
         GetElmAppFromExampleName("counter-webapp");
 
+    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CalculatorWebApp =
+        GetElmAppFromExampleName("calculator-webapp");
+
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =
         GetElmAppFromExampleName("read-source-file-webapp");
 

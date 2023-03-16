@@ -637,25 +637,45 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                         else
                                             ( False, List.reverse functionArgumentsReversed )
 
+                                    localJsonConverterFunctionFromTypeAnnotation { isDecoder } typeAnnotation =
+                                        let
+                                            converterFunctions =
+                                                buildJsonCodingFunctionsForTypeAnnotation typeAnnotation
+
+                                            nameSuffix =
+                                                if isDecoder then
+                                                    converterFunctions.decodeFunction
+
+                                                else
+                                                    converterFunctions.encodeFunction
+                                        in
+                                        ( "expose_param_" ++ nameSuffix.name
+                                        , ( { isDecoder = isDecoder }, typeAnnotation )
+                                        )
+
                                     argumentsJsonDecoders =
                                         functionArgumentsLessState
-                                            |> List.map
-                                                (\argumentTypeAnnotation ->
-                                                    let
-                                                        converterFunctions =
-                                                            buildJsonCodingFunctionsForTypeAnnotation argumentTypeAnnotation
-                                                    in
-                                                    ( "expose_param_" ++ converterFunctions.decodeFunction.name
-                                                    , argumentTypeAnnotation
-                                                    )
-                                                )
+                                            |> List.map (localJsonConverterFunctionFromTypeAnnotation { isDecoder = True })
+
+                                    returnTypeJsonEncoders =
+                                        if returnTypeAnnotation == backendStateType then
+                                            []
+
+                                        else
+                                            [ localJsonConverterFunctionFromTypeAnnotation
+                                                { isDecoder = False }
+                                                returnTypeAnnotation
+                                            ]
+
+                                    returnTypeEncoderFunction =
+                                        returnTypeJsonEncoders |> List.head |> Maybe.map Tuple.first
 
                                     jsonConverterDeclarations =
-                                        argumentsJsonDecoders
+                                        (argumentsJsonDecoders ++ returnTypeJsonEncoders)
                                             |> List.map
                                                 (Tuple.mapSecond
-                                                    (\typeAnnotation ->
-                                                        { isDecoder = True
+                                                    (\( { isDecoder }, typeAnnotation ) ->
+                                                        { isDecoder = isDecoder
                                                         , typeAnnotation = typeAnnotation
                                                         , dependencies = Tuple.second exposedFunctionTypeAnnotation
                                                         }
@@ -673,6 +693,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                             , hasAppStateParam = hasAppStateParam
                                             , appStateType = backendStateType
                                             , returnType = returnTypeAnnotation
+                                            , returnTypeEncoderFunction = returnTypeEncoderFunction
                                             }
                                 in
                                 Ok
@@ -696,20 +717,44 @@ buildExposedFunctionHandlerExpression :
     , hasAppStateParam : Bool
     , appStateType : ElmTypeAnnotation
     , returnType : ElmTypeAnnotation
+    , returnTypeEncoderFunction : Maybe String
     }
     -> { expression : String, resultContainsAppState : Bool }
 buildExposedFunctionHandlerExpression config =
     case config.parameterDecoderFunctions of
         [ singleParameterDecoderFunction ] ->
             let
-                ( returnValueMap, resultContainsAppState ) =
+                returnValueEncodeExpression =
+                    case config.returnTypeEncoderFunction of
+                        Nothing ->
+                            "always (Nothing, Just \"Serializing response not implemented\")"
+
+                        Just returnTypeEncoderFunction ->
+                            returnTypeEncoderFunction ++ " >> Json.Encode.encode 0 >> Just >> Tuple.pair Nothing"
+
+                ( funcAfterDecode, resultContainsAppState ) =
                     if config.returnType == config.appStateType then
-                        ( "Just >> Tuple.pair >> (|>) Nothing"
+                        ( [ "(\\firstArg shimStateBefore ->"
+                          , "{ shimStateBefore"
+                          , "| stateLessFramework ="
+                          , "    " ++ config.exposedFunctionQualifiedName ++ " firstArg shimStateBefore.stateLessFramework"
+                          , "}"
+                          , "|> (Just >> Tuple.pair >> (|>) Nothing)"
+                          , "|> Ok"
+                          , ")"
+                          ]
+                            |> String.join "\n"
                         , True
                         )
 
                     else
-                        ( "always (Nothing, Just \"Serializing response not implemented\")"
+                        ( [ "(\\firstArg shimStateBefore ->"
+                          , config.exposedFunctionQualifiedName ++ " firstArg shimStateBefore.stateLessFramework"
+                          , "|> (" ++ returnValueEncodeExpression ++ ")"
+                          , "|> Ok"
+                          , ")"
+                          ]
+                            |> String.join "\n"
                         , False
                         )
             in
@@ -720,14 +765,7 @@ buildExposedFunctionHandlerExpression config =
                   else
                     "Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument"
                 , singleParameterDecoderFunction
-                , "(\\firstArg shimStateBefore ->"
-                , "{ shimStateBefore"
-                , "| stateLessFramework ="
-                , "    " ++ config.exposedFunctionQualifiedName ++ " firstArg shimStateBefore.stateLessFramework"
-                , "}"
-                , "|> " ++ returnValueMap
-                , "|> Ok"
-                , ")"
+                , funcAfterDecode
                 ]
                     |> String.join "\n"
             , resultContainsAppState = resultContainsAppState
