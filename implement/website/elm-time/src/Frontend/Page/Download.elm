@@ -1,4 +1,4 @@
-module Frontend.Page.Downloads exposing (..)
+module Frontend.Page.Download exposing (..)
 
 import Element
 import Element.Background
@@ -43,14 +43,14 @@ dockerImageUrl =
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-02-27/elm-time-bin-v2023-02-27-linux-x64.zip"
-    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-02-27/elm-time-bin-v2023-02-27-win10-x64.zip"
+    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-03-16/elm-time-bin-v2023-03-16-linux-x64.zip"
+    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-03-16/elm-time-bin-v2023-03-16-win10-x64.zip"
     }
 
 
 view : Element.Device -> Element.Element e
 view device =
-    [ [ Element.text "Download the Elm-Time pre-built binaries for your platform, and start developing today." ]
+    [ [ Element.text "Download the pre-built Elm-Time binaries for your platform, and start developing today." ]
         |> Element.paragraph
             (Element.width Element.fill
                 :: Visuals.headingAttributes 3

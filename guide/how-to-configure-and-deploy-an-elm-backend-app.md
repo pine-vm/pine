@@ -5,7 +5,7 @@ The backend includes a web server and a database persisting the application stat
 
 ## Installing and Registering the `elm-time` Command
 
-In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads in the releases section at https://github.com/elm-time/elm-time/releases
+In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads at <https://elm-time.org/downloads> and <https://github.com/elm-time/elm-time/releases>
 
 Here are direct links to the downloads, containing the `elm-time` executable file in a zip archive:
 
@@ -35,12 +35,12 @@ I copied the executable file to '/bin/elm-time'. You will be able to use the 'el
 As part of a deployment, Elm-Time compiles the app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing backend and frontend: https://github.com/elm-time/elm-time/tree/56e788f7fbcf723443714c9263f4af9ece9c0933/implement/example-apps/docker-image-default-app
+Here is an example app containing backend and frontend: https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/56e788f7fbcf723443714c9263f4af9ece9c0933/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -49,9 +49,9 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427
-The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/ae3c34a3a883e9f4266d4288c59cd3623f2f1377/implement/example-apps/docker-image-default-app
-Loaded source composition deaed99fea5a584b211381e8427c0bfc41175ec2d5d6b1cfb18f2d719c3d8967 from 'https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app'.
+This path points to commit 5b9728ea2ce0909097d211aea67e37f3db19c20d
+The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/ec2bf67cd7a53925bff6b29176a5e1d24e674e11/implement/example-apps/docker-image-default-app
+Loaded source composition 62dbd3bd1732fa33c1187b180932f1560cd4b4fe449d0dedce9bd5a1ce049a71 from 'https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app'.
 Starting the web server with the admin interface...
 info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Begin to build the process live representation.
@@ -82,19 +82,19 @@ This section covers the conventions for structuring the app code so that we can 
 
 ### `Backend.Main` Elm Module
 
-The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `backendMain`:
+The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `webServerMain`:
 
 ```Elm
-backendMain : Platform.WebServer.WebServerConfig ()
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig ()
+webServerMain =
 [...]
 ```
 
 As we can see in the example apps, we compose the backend from an `init` value and an `subscriptions` function:
 
 ```Elm
-backendMain : Platform.WebServer.WebServerConfig ()
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig ()
+webServerMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
     }
@@ -172,7 +172,7 @@ Backend apps often use the output from `elm make` send the frontend to web brows
         else
 ```
 
-### `CompilationInterface.GenerateJsonCoders` Elm Module
+### `CompilationInterface.GenerateJsonConverters` Elm Module
 
 This module provides automatically generated JSON encoders and decoders for Elm types.
 
@@ -183,7 +183,7 @@ In this module, we can freely choose the names for functions, as we only need ty
 ```Elm
 jsonEncodeMessageToClient : FrontendBackendInterface.MessageToClient -> Json.Encode.Value
 jsonEncodeMessageToClient =
-    always (Json.Encode.string "The compiler replaces this value.")
+    always (Json.Encode.string "The compiler replaces this declaration.")
 ```
 
 To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
@@ -191,7 +191,7 @@ To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
 ```Elm
 jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
 jsonDecodeMessageToClient =
-    Json.Decode.fail "The compiler replaces this value."
+    Json.Decode.fail "The compiler replaces this declaration."
 ```
 
 ### `CompilationInterface.SourceFiles` Elm Module
@@ -200,10 +200,13 @@ The `SourceFiles` module provides access to the app source code files.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/94c2551500ab48cc5c0743adf8dac0c386604203/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
+The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
+
+{-| For documentation of the compilation interface, see <https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md#compilationinterfacesourcefiles-elm-module>
+-}
 
 
 type FileTreeNode blobStructure
@@ -211,24 +214,24 @@ type FileTreeNode blobStructure
     | TreeNode (List ( String, FileTreeNode blobStructure ))
 
 
-file____src_monarch_js : { base64 : String }
-file____src_monarch_js =
-    { base64 = "The compiler replaces this value." }
-
-
-file____static_favicon_svg : { base64 : String }
-file____static_favicon_svg =
-    { base64 = "The compiler replaces this value." }
+file_tree____static : FileTreeNode { base64 : String }
+file_tree____static =
+    TreeNode []
 
 
 file____src_Backend_VolatileProcess_csx : { utf8 : String }
 file____src_Backend_VolatileProcess_csx =
-    { utf8 = "The compiler replaces this value." }
+    { utf8 = "The compiler replaces this declaration." }
 
 
-file_tree____elm_core_modules : FileTreeNode { utf8 : String }
-file_tree____elm_core_modules =
-    TreeNode []
+file_tree____elm_core_modules_implicit_import : FileTreeNode { utf8 : String }
+file_tree____elm_core_modules_implicit_import =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
+
+
+file_tree____elm_core_modules_explicit_import : FileTreeNode { utf8 : String }
+file_tree____elm_core_modules_explicit_import =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
 ```
 
 To map the source file path to a name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
@@ -263,11 +266,11 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-time/elm-time/blob/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-time/elm-time/blob/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
 
-### `elm-web-server.json`
+### `web-server.json`
 
-The `elm-web-server.json` file is where we can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
+The `web-server.json` file is where we can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
 Since these features are optional to use, in the simplest case, this file is not present at all.
 
 ## Running a Server With an Elm-Time Process
@@ -324,7 +327,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/f0d6ce07465ef0ddc4bdbd1f0cef3ab01978f427/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
@@ -367,7 +370,7 @@ docker  run  --mount source=your-docker-volume-name,destination=/elm-time/proces
 
 ## Support HTTPS
 
-The Elm-Time web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `elm-web-server.json` file as follows:
+The Elm-Time web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `web-server.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {

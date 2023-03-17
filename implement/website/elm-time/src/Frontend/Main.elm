@@ -8,7 +8,7 @@ import Element
 import Element.Background
 import Element.Font
 import FontAwesome.Styles
-import Frontend.Page.Downloads
+import Frontend.Page.Download
 import Frontend.Page.Home
 import Frontend.Visuals as Visuals
 import Html.Attributes
@@ -20,7 +20,7 @@ import Url.Parser
 
 type Page
     = HomePage
-    | DownloadsPage
+    | DownloadPage
 
 
 type Event
@@ -49,7 +49,7 @@ linkToSourceCodeRepository =
 
 topNavigationElements : List Page
 topNavigationElements =
-    [ HomePage, DownloadsPage ]
+    [ HomePage, DownloadPage ]
 
 
 main : Program () State Event
@@ -153,7 +153,8 @@ routeParser =
 routes : List ( String, Page )
 routes =
     [ ( "home", HomePage )
-    , ( "downloads", DownloadsPage )
+    , ( "download", DownloadPage )
+    , ( "downloads", DownloadPage )
     ]
 
 
@@ -227,8 +228,8 @@ viewPageMainContent page device =
         HomePage ->
             viewHomePage
 
-        DownloadsPage ->
-            Frontend.Page.Downloads.view device
+        DownloadPage ->
+            Frontend.Page.Download.view device
 
 
 viewHomePage : Element.Element e
@@ -331,8 +332,8 @@ titleFromPage page =
         HomePage ->
             "Home"
 
-        DownloadsPage ->
-            "Downloads"
+        DownloadPage ->
+            "Download"
 
 
 linkToPage : List (Element.Attribute e) -> { label : Element.Element e, page : Page } -> Element.Element e

@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , backendMain
+    , webServerMain
     )
 
 import Base64
@@ -12,8 +12,8 @@ type alias State =
     ()
 
 
-backendMain : Platform.WebServer.WebServerConfig ()
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig ()
+webServerMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
     }
