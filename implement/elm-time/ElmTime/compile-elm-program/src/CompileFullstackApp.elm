@@ -320,6 +320,7 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
             [ ( "SourceFiles", modulesToAddForBytesCoding )
             , ( "ElmMake", modulesToAddForBytesCoding )
             , ( "GenerateJsonCoders", modulesToAddForBase64Coding )
+            , ( "GenerateJsonConverters", modulesToAddForBase64Coding )
             ]
                 |> Dict.fromList
 
