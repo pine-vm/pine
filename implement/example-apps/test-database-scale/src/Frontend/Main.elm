@@ -2,7 +2,7 @@ module Frontend.Main exposing (Event(..), State, init, main, update, view)
 
 import Browser
 import Browser.Navigation as Navigation
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import Dict
 import FrontendBackendInterface
 import Html
@@ -71,7 +71,7 @@ cmdRequestGetDirectory =
         , expect =
             Http.expectJson
                 (GetDirectoryResult >> BackendResponse)
-                CompilationInterface.GenerateJsonCoders.jsonDecodeGetDirectoryResponse
+                CompilationInterface.GenerateJsonConverters.jsonDecodeGetDirectoryResponse
         }
 
 

@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , backendMain
+    , webServerMain
     )
 
 import Base64
@@ -8,7 +8,7 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import CompilationInterface.ElmMake
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import Dict
 import Json.Encode
 import Platform.WebServer
@@ -24,8 +24,8 @@ type Route
     = EntryRoute (Maybe Int)
 
 
-backendMain : Platform.WebServer.WebServerConfig State
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig State
+webServerMain =
     { init =
         ( { store = Dict.empty }
         , []
@@ -109,7 +109,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                 { statusCode = 200
                                 , bodyAsBase64 =
                                     responseDict
-                                        |> CompilationInterface.GenerateJsonCoders.jsonEncodeGetDirectoryResponse
+                                        |> CompilationInterface.GenerateJsonConverters.jsonEncodeGetDirectoryResponse
                                         |> Json.Encode.encode 0
                                         |> Bytes.Encode.string
                                         |> Bytes.Encode.encode

@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , backendMain
+    , webServerMain
     )
 
 import Backend.HttpViaVolatileProcess as HttpViaVolatileProcess
@@ -16,8 +16,8 @@ type alias State =
     }
 
 
-backendMain : Platform.WebServer.WebServerConfig State
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig State
+webServerMain =
     { init =
         ( { createVolatileProcessResult = Nothing
           , httpRequestToForward = Nothing

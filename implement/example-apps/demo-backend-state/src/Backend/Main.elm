@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , backendMain
+    , webServerMain
     )
 
 import Array
@@ -9,7 +9,7 @@ import Base64
 import Bytes.Encode
 import Common
 import CompilationInterface.ElmMake
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import Dict
 import Json.Encode
 import ListDict
@@ -22,8 +22,8 @@ type alias State =
     Backend.State.State
 
 
-backendMain : Platform.WebServer.WebServerConfig State
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig State
+webServerMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
@@ -65,7 +65,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         ++ (state.httpRequestsCount |> String.fromInt)
                         ++ " HTTP requests."
                     , "Here is a serialized representation of the backend state:"
-                    , state |> CompilationInterface.GenerateJsonCoders.jsonEncodeBackendState |> Json.Encode.encode 4
+                    , state |> CompilationInterface.GenerateJsonConverters.jsonEncodeBackendState |> Json.Encode.encode 4
                     ]
                         |> String.join "\n"
                         |> Bytes.Encode.string

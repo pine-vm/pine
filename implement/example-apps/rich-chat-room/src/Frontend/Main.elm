@@ -3,7 +3,7 @@ module Frontend.Main exposing (Event(..), State, init, main, update, view)
 import Browser
 import Browser.Dom
 import Browser.Navigation as Navigation
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
@@ -103,12 +103,12 @@ requestToBackendCmd : FrontendBackendInterface.RequestFromUser -> Cmd Event
 requestToBackendCmd request =
     let
         jsonDecoder =
-            CompilationInterface.GenerateJsonCoders.jsonDecodeMessageToClient
+            CompilationInterface.GenerateJsonConverters.jsonDecodeMessageToClient
                 |> Json.Decode.map (\messageFromBackend -> { originatingRequest = request, messageFromBackend = messageFromBackend })
     in
     Http.post
         { url = Url.Builder.relative (FrontendBackendInterface.ApiRoute |> FrontendBackendInterface.urlPathFromRoute) []
-        , body = Http.jsonBody (request |> CompilationInterface.GenerateJsonCoders.jsonEncodeRequestFromUser)
+        , body = Http.jsonBody (request |> CompilationInterface.GenerateJsonConverters.jsonEncodeRequestFromUser)
         , expect = Http.expectJson RequestToBackendResult jsonDecoder
         }
 

@@ -1,4 +1,4 @@
-module CompilationInterface.GenerateJsonCoders exposing
+module CompilationInterface.GenerateJsonConverters exposing
     ( decodeMixedRecord
     , encodeMixedRecord
     , testsValueToInterface

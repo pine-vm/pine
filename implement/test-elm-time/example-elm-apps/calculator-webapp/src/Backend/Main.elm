@@ -9,7 +9,7 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import Calculator
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import Json.Decode
 import Json.Encode
 import Platform.WebServer
@@ -52,7 +52,7 @@ updateForHttpRequestEvent httpRequestEvent stateBeforeCountHttpRequest =
                 httpRequestEvent.request.bodyAsBase64
                     |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                     |> Maybe.withDefault "Missing HTTP body"
-                    |> Json.Decode.decodeString CompilationInterface.GenerateJsonCoders.jsonDecodeCalculatorOperation
+                    |> Json.Decode.decodeString CompilationInterface.GenerateJsonConverters.jsonDecodeCalculatorOperation
             of
                 Err error ->
                     ( stateBefore
@@ -78,7 +78,7 @@ updateForHttpRequestEvent httpRequestEvent stateBeforeCountHttpRequest =
                     in
                     ( stateAfterCalculatorOperation
                     , stateAfterCalculatorOperation
-                        |> CompilationInterface.GenerateJsonCoders.jsonEncodeBackendState
+                        |> CompilationInterface.GenerateJsonConverters.jsonEncodeBackendState
                         |> Json.Encode.encode 0
                         |> Ok
                     )

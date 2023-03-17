@@ -4,7 +4,7 @@ import Base64
 import Bytes
 import Bytes.Encode
 import Common
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import FileTreeInWorkspace as FileTreeInWorkspace
 import Flate
 import FrontendBackendInterface
@@ -200,7 +200,7 @@ jsonEncodeProjectStateDescription projectStateDescription =
         LiteralProjectState literalProjectState ->
             Json.Encode.object
                 [ ( "version_2020_12"
-                  , CompilationInterface.GenerateJsonCoders.jsonEncodeFileTreeNode literalProjectState
+                  , CompilationInterface.GenerateJsonConverters.jsonEncodeFileTreeNode literalProjectState
                   )
                 ]
 
@@ -210,7 +210,7 @@ jsonEncodeProjectStateDescription projectStateDescription =
         DiffProjectState_Version_2021_01 diffProjectState ->
             Json.Encode.object
                 [ ( "version_2021_01"
-                  , CompilationInterface.GenerateJsonCoders.jsonEncodeProjectState_2021_01 diffProjectState
+                  , CompilationInterface.GenerateJsonConverters.jsonEncodeProjectState_2021_01 diffProjectState
                   )
                 ]
 
@@ -219,10 +219,10 @@ jsonDecodeProjectStateDescription : Json.Decode.Decoder ProjectStateDescriptionI
 jsonDecodeProjectStateDescription =
     Json.Decode.oneOf
         [ Json.Decode.field "version_2020_12"
-            CompilationInterface.GenerateJsonCoders.jsonDecodeFileTreeNode
+            CompilationInterface.GenerateJsonConverters.jsonDecodeFileTreeNode
             |> Json.Decode.map LiteralProjectState
         , Json.Decode.field "version_2021_01"
-            CompilationInterface.GenerateJsonCoders.jsonDecodeProjectState_2021_01
+            CompilationInterface.GenerateJsonConverters.jsonDecodeProjectState_2021_01
             |> Json.Decode.map DiffProjectState_Version_2021_01
         ]
 

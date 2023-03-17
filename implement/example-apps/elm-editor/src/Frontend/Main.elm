@@ -17,7 +17,7 @@ import Browser.Navigation as Navigation
 import Bytes
 import Bytes.Encode
 import Common
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import CompileFullstackApp
 import Dict
 import Element
@@ -581,7 +581,7 @@ update event stateBefore =
                             case workspaceEvent of
                                 MonacoEditorEvent monacoEditorEventJson ->
                                     monacoEditorEventJson
-                                        |> Json.Decode.decodeValue CompilationInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
+                                        |> Json.Decode.decodeValue CompilationInterface.GenerateJsonConverters.jsonDecodeMessageFromMonacoEditor
                                         |> (==) (Ok Frontend.MonacoEditor.DidFocusEditorWidgetEvent)
 
                                 _ ->
@@ -872,7 +872,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
         MonacoEditorEvent monacoEditorEvent ->
             case
                 monacoEditorEvent
-                    |> Json.Decode.decodeValue CompilationInterface.GenerateJsonCoders.jsonDecodeMessageFromMonacoEditor
+                    |> Json.Decode.decodeValue CompilationInterface.GenerateJsonConverters.jsonDecodeMessageFromMonacoEditor
             of
                 Err decodeError ->
                     ( { stateBefore | decodeMessageFromMonacoEditorError = Just decodeError }, Cmd.none )
@@ -1650,14 +1650,14 @@ requestToApiCmd :
 requestToApiCmd request jsonDecoderSpecialization eventConstructor =
     let
         jsonDecoder =
-            CompilationInterface.GenerateJsonCoders.jsonDecodeResponseStructure
+            CompilationInterface.GenerateJsonConverters.jsonDecodeResponseStructure
                 |> Json.Decode.andThen jsonDecoderSpecialization
     in
     Http.post
         { url = Url.Builder.absolute [ "api" ] []
         , body =
             Http.jsonBody
-                (request |> CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure)
+                (request |> CompilationInterface.GenerateJsonConverters.jsonEncodeRequestStructure)
         , expect = Http.Detailed.expectJson eventConstructor jsonDecoder
         }
 
@@ -3535,35 +3535,35 @@ titlebarMenuEntryLabel menuEntry =
 setTextInMonacoEditorCmd : String -> Cmd WorkspaceEventStructure
 setTextInMonacoEditorCmd =
     Frontend.MonacoEditor.SetValue
-        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd WorkspaceEventStructure
 revealPositionInCenterInMonacoEditorCmd =
     Frontend.MonacoEditor.RevealPositionInCenter
-        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 setModelMarkersInMonacoEditorCmd : List Frontend.MonacoEditor.EditorMarker -> Cmd WorkspaceEventStructure
 setModelMarkersInMonacoEditorCmd =
     Frontend.MonacoEditor.SetModelMarkers
-        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 provideCompletionItemsInMonacoEditorCmd : List Frontend.MonacoEditor.MonacoCompletionItem -> Cmd WorkspaceEventStructure
 provideCompletionItemsInMonacoEditorCmd =
     Frontend.MonacoEditor.ProvideCompletionItemsEvent
-        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 
 provideHoverInMonacoEditorCmd : List String -> Cmd WorkspaceEventStructure
 provideHoverInMonacoEditorCmd =
     Frontend.MonacoEditor.ProvideHoverEvent
-        >> CompilationInterface.GenerateJsonCoders.jsonEncodeMessageToMonacoEditor
+        >> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         >> sendMessageToMonacoFrame
 
 

@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , backendMain
+    , webServerMain
     )
 
 import Base64
@@ -8,7 +8,7 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import CompilationInterface.ElmMake
-import CompilationInterface.GenerateJsonCoders as GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters as GenerateJsonConverters
 import CompilationInterface.SourceFiles
 import Conversation exposing (UserId)
 import Dict
@@ -51,8 +51,8 @@ type alias UserProfile =
     }
 
 
-backendMain : Platform.WebServer.WebServerConfig State
-backendMain =
+webServerMain : Platform.WebServer.WebServerConfig State
+webServerMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
@@ -114,7 +114,7 @@ processPendingHttpRequests stateBefore =
                                             { statusCode = 200
                                             , bodyAsBase64 =
                                                 responseToClient
-                                                    |> GenerateJsonCoders.jsonEncodeMessageToClient
+                                                    |> GenerateJsonConverters.jsonEncodeMessageToClient
                                                     |> Json.Encode.encode 0
                                                     |> encodeStringToBytes
                                                     |> Base64.fromBytes
@@ -193,7 +193,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                 httpRequestEvent.request.bodyAsBase64
                     |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                     |> Maybe.withDefault "Missing HTTP body"
-                    |> Json.Decode.decodeString GenerateJsonCoders.jsonDecodeRequestFromUser
+                    |> Json.Decode.decodeString GenerateJsonConverters.jsonDecodeRequestFromUser
             of
                 Err decodeError ->
                     let

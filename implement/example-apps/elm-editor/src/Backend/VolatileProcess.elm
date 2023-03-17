@@ -4,7 +4,7 @@ module Backend.VolatileProcess exposing
     , volatileProcessProgramCode
     )
 
-import CompilationInterface.GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters
 import CompilationInterface.SourceFiles
 import FrontendBackendInterface
 import Json.Decode
@@ -21,12 +21,12 @@ type alias ResponseStructure =
 
 jsonDecodeResponseStructure : Json.Decode.Decoder ResponseStructure
 jsonDecodeResponseStructure =
-    CompilationInterface.GenerateJsonCoders.jsonDecodeResponseStructure
+    CompilationInterface.GenerateJsonConverters.jsonDecodeResponseStructure
 
 
 jsonEncodeRequestStructure : RequestStructure -> Json.Encode.Value
 jsonEncodeRequestStructure =
-    CompilationInterface.GenerateJsonCoders.jsonEncodeRequestStructure
+    CompilationInterface.GenerateJsonConverters.jsonEncodeRequestStructure
 
 
 requestToVolatileProcess : RequestStructure -> String

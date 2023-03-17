@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import CompilationInterface.GenerateJsonCoders as GenerateJsonCoders
+import CompilationInterface.GenerateJsonConverters as GenerateJsonConverters
 import Json.Decode
 import Json.Encode
 import OpaqueChoiceType
@@ -17,7 +17,7 @@ tests =
             , opaqueChoiceType = OpaqueChoiceType.constructTagA
             , list_custom_type = []
             }
-                |> GenerateJsonCoders.encodeMixedRecord
+                |> GenerateJsonConverters.encodeMixedRecord
                 |> Json.Encode.encode 0
       }
     , { testName = "Choice type tag with one parameter"
@@ -27,7 +27,7 @@ tests =
             , opaqueChoiceType = OpaqueChoiceType.constructTagA
             , list_custom_type = [ Structures.CustomTagWithOneParameter 13 ]
             }
-                |> GenerateJsonCoders.encodeMixedRecord
+                |> GenerateJsonConverters.encodeMixedRecord
                 |> Json.Encode.encode 0
       }
     , { testName = "Choice type tag with two parameters"
@@ -37,15 +37,15 @@ tests =
             , opaqueChoiceType = OpaqueChoiceType.constructTagA
             , list_custom_type = [ Structures.CustomTagWithTwoParameters "first arg" 17 ]
             }
-                |> GenerateJsonCoders.encodeMixedRecord
+                |> GenerateJsonConverters.encodeMixedRecord
                 |> Json.Encode.encode 0
       }
     , { testName = "Choice type tag with two parameters - roundtrip"
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithTwoParameters":["first arg",19]}]}"""
       , derived =
             """{"int"   : 7 , "opaqueChoiceType" : { "TagA" : []}, "list_custom_type":[{"CustomTagWithTwoParameters":["first arg",19]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
@@ -53,8 +53,8 @@ tests =
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithMaybeInstance":[{"Just":[37]}]}]}"""
       , derived =
             """{"int" :     7, "opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithMaybeInstance":[{"Just":[37]}]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
@@ -62,8 +62,8 @@ tests =
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithMaybeInstance":[{"Nothing":[]}]}]}"""
       , derived =
             """{"int" :     7, "opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithMaybeInstance":[{"Nothing":[]}]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
@@ -71,8 +71,8 @@ tests =
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithResultInstance":[{"Ok":[37]}]}]}"""
       , derived =
             """{"int" :     7, "opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithResultInstance":[{"Ok":[37]}]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
@@ -80,8 +80,8 @@ tests =
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithResultInstance":[{"Err":["error string"]}]}]}"""
       , derived =
             """{"int" :     7, "opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithResultInstance":[{"Err":["error string"]}]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
@@ -91,8 +91,8 @@ tests =
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithMaybeInstance":[{"Just":[37]}]}]}"""
       , derived =
             """{"int" :     7, "opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithMaybeInstance":[{"Just":37}]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
@@ -102,13 +102,13 @@ tests =
       , expected = """{"int":7,"opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithResultInstance":[{"Ok":[37]}]}]}"""
       , derived =
             """{"int" :     7, "opaqueChoiceType":{"TagA":[]},"list_custom_type":[{"CustomTagWithResultInstance":[{"Ok":37}]}]}"""
-                |> Json.Decode.decodeString GenerateJsonCoders.decodeMixedRecord
-                |> Result.map (GenerateJsonCoders.encodeMixedRecord >> Json.Encode.encode 0)
+                |> Json.Decode.decodeString GenerateJsonConverters.decodeMixedRecord
+                |> Result.map (GenerateJsonConverters.encodeMixedRecord >> Json.Encode.encode 0)
                 |> Result.mapError Json.Decode.errorToString
                 |> Result.Extra.merge
       }
     ]
-        |> GenerateJsonCoders.testsValueToInterface
+        |> GenerateJsonConverters.testsValueToInterface
         |> Json.Encode.encode 0
 
 
