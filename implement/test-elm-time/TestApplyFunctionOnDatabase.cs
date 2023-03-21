@@ -30,10 +30,7 @@ public class TestApplyFunctionOnDatabase
 
             using var adminClient = testSetup.BuildAdminInterfaceHttpClient();
 
-            adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                "Basic",
-                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                    ElmTime.Platform.WebServer.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+            testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(adminClient);
 
             {
                 var additionViaPublicInterface = 1234;
@@ -124,10 +121,7 @@ public class TestApplyFunctionOnDatabase
 
         using var adminClient = testSetup.BuildAdminInterfaceHttpClient();
 
-        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                ElmTime.Platform.WebServer.Configuration.BasicAuthenticationForAdmin(adminPassword))));
+        testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(adminClient);
 
         {
             var additionViaPublicInterface = 1234;

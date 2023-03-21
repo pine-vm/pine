@@ -1346,7 +1346,7 @@ public class TestWebServer
             PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                 new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(testDirectory)),
-                    _ => { }).process!)
+                    logger: null).process!)
         {
             var restoredProcessLastDeployedAppComponent = restoredProcess.lastAppConfig.appConfigComponent;
 

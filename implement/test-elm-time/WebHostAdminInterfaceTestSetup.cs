@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
@@ -55,6 +54,12 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
         return webHost;
     }
+
+    public PersistentProcessLiveRepresentation? BranchProcess() =>
+        PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
+            storeReader: new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(fileStore),
+            logger: null)
+        .process;
 
     static public WebHostAdminInterfaceTestSetup Setup(
         Func<DateTimeOffset>? persistentProcessHostDateTime = null,

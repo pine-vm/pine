@@ -20,6 +20,9 @@ public abstract record StateShimRequestStruct
     public record SetBranchesStateShimRequest(StateSource StateSource, IReadOnlyList<string> Branches)
         : StateShimRequestStruct;
 
+    public record EstimateSerializedStateLengthShimRequest(StateSource StateSource)
+        : StateShimRequestStruct;
+
     public string SerializeToJsonString() =>
         System.Text.Json.JsonSerializer.Serialize(this);
 }
@@ -40,6 +43,9 @@ public abstract record StateShimResponseStruct
         : StateShimResponseStruct;
 
     public record SetBranchesStateShimResponse(Result<string, string> Result)
+        : StateShimResponseStruct;
+
+    public record EstimateSerializedStateLengthShimResponse(Result<string, long> Result)
         : StateShimResponseStruct;
 }
 

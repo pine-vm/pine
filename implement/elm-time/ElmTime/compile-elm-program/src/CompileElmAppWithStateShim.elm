@@ -683,6 +683,26 @@ processEvent config hostEvent stateBefore =
                     , "" |> Ok |> SetBranchesStateShimResponse
                     )
 
+        EstimateSerializedStateLengthShimRequest stateSource ->
+            case resolveStateSource config stateBefore stateSource of
+                Err err ->
+                    ( stateBefore
+                    , ("Failed to resolve state source: " ++ err)
+                        |> Err
+                        |> EstimateSerializedStateLengthShimResponse
+                    )
+
+                Ok appState ->
+                    ( stateBefore
+                    , appState
+                        |> config.appStateLessShim
+                        |> config.jsonEncodeAppState
+                        |> Json.Encode.encode 0
+                        |> String.length
+                        |> Ok
+                        |> EstimateSerializedStateLengthShimResponse
+                    )
+
 
 setStateOnBranches : List String -> appState -> StateShimState appState -> StateShimState appState
 setStateOnBranches branches appState stateBefore =
@@ -779,6 +799,7 @@ type StateShimRequest
     | ApplyFunctionShimRequest ApplyFunctionShimRequestStruct
     | SerializeStateShimRequest StateSource
     | SetBranchesStateShimRequest StateSource (List String)
+    | EstimateSerializedStateLengthShimRequest StateSource
 
 
 type StateShimResponse
@@ -786,6 +807,7 @@ type StateShimResponse
     | ApplyFunctionShimResponse (Result String FunctionApplicationResult)
     | SerializeStateShimResponse (Result String String)
     | SetBranchesStateShimResponse (Result String String)
+    | EstimateSerializedStateLengthShimResponse (Result String Int)
 
 
 type alias ApplyFunctionShimRequestStruct =

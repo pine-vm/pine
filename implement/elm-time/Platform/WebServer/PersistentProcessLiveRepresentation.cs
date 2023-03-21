@@ -174,7 +174,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     static public (PersistentProcessLiveRepresentation? process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
         LoadFromStoreAndRestoreProcess(
         IProcessStoreReader storeReader,
-        Action<string> logger,
+        Action<string>? logger,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
     {
         var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -740,7 +740,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 StateShim.StateShim.ApplyFunctionOnMainBranch(lastElmAppVolatileProcess, request)
                 .Map(applyFunctionSuccess =>
                 {
-                    if (applyFunctionSuccess.changedState)
+                    if (applyFunctionSuccess.changedState && request.commitResultingState)
                     {
                         var applyFunctionRecord = new CompositionLogRecordInFile.ApplyFunctionOnStateEvent(
                             functionName: request.functionName,
@@ -762,6 +762,15 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                     return applyFunctionSuccess;
                 });
+        }
+    }
+
+    public Result<string, long> EstimateSerializedStateLengthOnMainBranch()
+    {
+        lock (processLock)
+        {
+            return
+                StateShim.StateShim.EstimateSerializedStateLengthOnMainBranch(lastElmAppVolatileProcess);
         }
     }
 
