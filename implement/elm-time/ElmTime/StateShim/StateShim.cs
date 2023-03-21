@@ -164,6 +164,64 @@ public class StateShim
             });
     }
 
+    static public Result<string, IReadOnlyList<string>> ListBranches(
+        IProcess<string, string> process)
+    {
+        return
+            ProcessStateShimRequest(
+                process,
+                new StateShimRequestStruct.ListBranchesShimRequest())
+            .AndThen(responseOk => responseOk switch
+            {
+                StateShimResponseStruct.ListBranchesShimResponse listBranchesResponse =>
+                Result<string, IReadOnlyList<string>>.ok(listBranchesResponse.BranchesNames),
+
+                _ =>
+                Result<string, IReadOnlyList<string>>.err(
+                    "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
+            });
+    }
+
+    static public Result<string, string> SetBranchesState(
+        IProcess<string, string> process,
+        StateSource stateSource,
+        IReadOnlyList<string> branches)
+    {
+        return
+            ProcessStateShimRequest(
+                process,
+                new StateShimRequestStruct.SetBranchesStateShimRequest(StateSource: stateSource, Branches: branches))
+            .AndThen(responseOk => responseOk switch
+            {
+                StateShimResponseStruct.SetBranchesStateShimResponse setBranchesResponse =>
+                setBranchesResponse.Result,
+
+                _ =>
+                Result<string, string>.err(
+                    "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
+            });
+    }
+
+
+    static public Result<string, RemoveBranchesShimResponseStruct> RemoveBranches(
+        IProcess<string, string> process,
+        IReadOnlyList<string> branches)
+    {
+        return
+            ProcessStateShimRequest(
+                process,
+                new StateShimRequestStruct.RemoveBranchesShimRequest(BranchesNames: branches))
+            .AndThen(responseOk => responseOk switch
+            {
+                StateShimResponseStruct.RemoveBranchesShimResponse removeBranchesResponse =>
+                Result<string, RemoveBranchesShimResponseStruct>.ok(removeBranchesResponse.ResponseStruct),
+
+                _ =>
+                Result<string, RemoveBranchesShimResponseStruct>.err(
+                    "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
+            });
+    }
+
     static public Result<string, StateShimResponseStruct> ProcessStateShimRequest(
        IProcess<string, string> process,
        StateShimRequestStruct stateShimRequest)

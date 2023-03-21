@@ -23,6 +23,12 @@ public abstract record StateShimRequestStruct
     public record EstimateSerializedStateLengthShimRequest(StateSource StateSource)
         : StateShimRequestStruct;
 
+    public record ListBranchesShimRequest()
+        : StateShimRequestStruct;
+
+    public record RemoveBranchesShimRequest(IReadOnlyList<string> BranchesNames)
+        : StateShimRequestStruct;
+
     public string SerializeToJsonString() =>
         System.Text.Json.JsonSerializer.Serialize(this);
 }
@@ -47,6 +53,12 @@ public abstract record StateShimResponseStruct
 
     public record EstimateSerializedStateLengthShimResponse(Result<string, long> Result)
         : StateShimResponseStruct;
+
+    public record ListBranchesShimResponse(IReadOnlyList<string> BranchesNames)
+        : StateShimResponseStruct;
+
+    public record RemoveBranchesShimResponse(RemoveBranchesShimResponseStruct ResponseStruct)
+        : StateShimResponseStruct;
 }
 
 public record ApplyFunctionShimRequestStruct(
@@ -63,6 +75,9 @@ public record ApplyFunctionArguments<StateT>(
             stateArgument: map(stateArgument),
             serializedArgumentsJson: serializedArgumentsJson);
 }
+
+public record RemoveBranchesShimResponseStruct(int removedCount);
+
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record StateSource

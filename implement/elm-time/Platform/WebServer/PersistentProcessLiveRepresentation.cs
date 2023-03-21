@@ -769,8 +769,34 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     {
         lock (processLock)
         {
-            return
-                StateShim.StateShim.EstimateSerializedStateLengthOnMainBranch(lastElmAppVolatileProcess);
+            return StateShim.StateShim.EstimateSerializedStateLengthOnMainBranch(lastElmAppVolatileProcess);
+        }
+    }
+
+    public Result<string, IReadOnlyList<string>> ListBranches()
+    {
+        lock (processLock)
+        {
+            return StateShim.StateShim.ListBranches(lastElmAppVolatileProcess);
+        }
+    }
+
+    public Result<string, string> SetBranchesState(
+        StateShim.InterfaceToHost.StateSource stateSource,
+        IReadOnlyList<string> branches)
+    {
+        lock (processLock)
+        {
+            return StateShim.StateShim.SetBranchesState(lastElmAppVolatileProcess, stateSource, branches: branches);
+        }
+    }
+
+    public Result<string, StateShim.InterfaceToHost.RemoveBranchesShimResponseStruct> RemoveBranches(
+        IReadOnlyList<string> branches)
+    {
+        lock (processLock)
+        {
+            return StateShim.StateShim.RemoveBranches(lastElmAppVolatileProcess, branches: branches);
         }
     }
 

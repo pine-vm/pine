@@ -703,6 +703,26 @@ processEvent config hostEvent stateBefore =
                         |> EstimateSerializedStateLengthShimResponse
                     )
 
+        ListBranchesShimRequest ->
+            ( stateBefore
+            , stateBefore.branches
+                |> Dict.keys
+                |> ListBranchesShimResponse
+            )
+
+        RemoveBranchesShimRequest branchesToRemove ->
+            let
+                branches =
+                    stateBefore.branches
+                        |> Dict.filter (List.member >> (|>) branchesToRemove >> not >> always)
+
+                removedCount =
+                    Dict.size stateBefore.branches - Dict.size branches
+            in
+            ( { stateBefore | branches = branches }
+            , RemoveBranchesShimResponse { removedCount = removedCount }
+            )
+
 
 setStateOnBranches : List String -> appState -> StateShimState appState -> StateShimState appState
 setStateOnBranches branches appState stateBefore =
@@ -800,6 +820,8 @@ type StateShimRequest
     | SerializeStateShimRequest StateSource
     | SetBranchesStateShimRequest StateSource (List String)
     | EstimateSerializedStateLengthShimRequest StateSource
+    | ListBranchesShimRequest
+    | RemoveBranchesShimRequest (List String)
 
 
 type StateShimResponse
@@ -808,6 +830,8 @@ type StateShimResponse
     | SerializeStateShimResponse (Result String String)
     | SetBranchesStateShimResponse (Result String String)
     | EstimateSerializedStateLengthShimResponse (Result String Int)
+    | ListBranchesShimResponse (List String)
+    | RemoveBranchesShimResponse { removedCount : Int }
 
 
 type alias ApplyFunctionShimRequestStruct =

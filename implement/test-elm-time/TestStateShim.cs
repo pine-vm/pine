@@ -1,8 +1,10 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using ElmTime.StateShim.InterfaceToHost;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Json;
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Text.Json;
 
 namespace TestElmTime;
@@ -11,7 +13,7 @@ namespace TestElmTime;
 public class TestStateShim
 {
     [TestMethod]
-    public void Estimate_serialized_state_length_from_calculator()
+    public void Test_state_shim_with_calculator_app()
     {
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             deployAppAndInitElmState: TestElmWebAppHttpServer.CalculatorWebApp);
@@ -51,6 +53,40 @@ public class TestStateShim
         var estimatedStateLengthGrowth = secondEstimatedStateLength - firstEstimatedStateLength;
 
         Assert.IsTrue(3 < estimatedStateLengthGrowth);
+
+        {
+            var newBranchesNames = Enumerable.Range(0, 3).Select(i => "test-branch-" + i).ToImmutableList();
+
+            var originalBranchesNames = calculatorProcess.ListBranches().Extract(err => throw new Exception(err));
+
+            var originalBranchName = originalBranchesNames.Single();
+
+            Assert.AreEqual(1, originalBranchesNames.Count);
+
+            {
+                var setBranchesResult =
+                    calculatorProcess.SetBranchesState(
+                        new StateSource.BranchStateSource(originalBranchName),
+                        newBranchesNames);
+
+                var branchesNames = calculatorProcess.ListBranches().Extract(err => throw new Exception(err));
+
+                Assert.AreEqual(1 + newBranchesNames.Count, branchesNames.Count);
+            }
+
+            {
+                var removeBranchesResult =
+                    calculatorProcess.RemoveBranches(newBranchesNames.Take(1).ToImmutableList());
+
+                var removeBranchesResultOk = removeBranchesResult.Extract(err => throw new Exception(err));
+
+                Assert.AreEqual(1, removeBranchesResultOk.removedCount);
+
+                var branchesNames = calculatorProcess.ListBranches().Extract(err => throw new Exception(err));
+
+                Assert.AreEqual(1 + newBranchesNames.Count - 1, branchesNames.Count);
+            }
+        }
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
