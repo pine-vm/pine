@@ -4,9 +4,13 @@ import Browser
 import Browser.Navigation as Navigation
 import CompilationInterface.GenerateJsonConverters
 import Dict
+import Element
+import Element.Background
+import Element.Font
+import Element.Input
+import Element.Region
 import FrontendBackendInterface
 import Html
-import Html.Events
 import Http
 import Random
 import Random.Char
@@ -16,7 +20,7 @@ import Url
 
 batchConfigDefault : BatchConfig
 batchConfigDefault =
-    { count = 1000, size = 5000 }
+    { count = 1000, elementSize = 5000 }
 
 
 main : Program () State Event
@@ -34,17 +38,19 @@ main =
 type alias State =
     { navigationKey : Navigation.Key
     , getDirectoryResult : Maybe (Result Http.Error FrontendBackendInterface.GetDirectoryResponse)
+    , batchConfig : BatchConfig
     }
 
 
 type alias BatchConfig =
-    { count : Int, size : Int }
+    { count : Int, elementSize : Int }
 
 
 type Event
     = UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | UserInputGetDirectory
+    | UserInputConfigureBatch BatchConfig
     | UserInputAppendBatch BatchConfig
     | BackendResponse BackendResponseStructure
     | TaskPostEntry Int String
@@ -59,6 +65,7 @@ init : () -> Url.Url -> Navigation.Key -> ( State, Cmd Event )
 init _ _ navigationKey =
     ( { navigationKey = navigationKey
       , getDirectoryResult = Nothing
+      , batchConfig = batchConfigDefault
       }
     , Cmd.none
     )
@@ -115,6 +122,11 @@ update event stateBefore =
             , cmdRequestGetDirectory
             )
 
+        UserInputConfigureBatch batchConfig ->
+            ( { stateBefore | batchConfig = batchConfig }
+            , Cmd.none
+            )
+
         UserInputAppendBatch batchConfig ->
             let
                 lastEntryId =
@@ -131,7 +143,7 @@ update event stateBefore =
                                         Maybe.withDefault 0 lastEntryId + 1 + entryIdOffset
 
                                     randomGenerator =
-                                        Random.String.string batchConfig.size (Random.Char.char 32 126)
+                                        Random.String.string batchConfig.elementSize (Random.Char.char 32 126)
                                 in
                                 Random.generate (TaskPostEntry entryId) randomGenerator
                             )
@@ -151,29 +163,32 @@ view state =
     let
         body =
             [ globalStylesHtmlElement
-            , Html.div []
-                [ viewDirectory state ]
-            , Html.div []
-                [ Html.button [ Html.Events.onClick UserInputGetDirectory ] [ Html.text "Get Directory" ] ]
-            , Html.div []
-                [ viewFormAppend state ]
+                |> Element.html
+            , viewDirectory state
+            , Element.Input.button buttonStyle
+                { onPress = Just UserInputGetDirectory
+                , label = Element.text "Get Directory"
+                }
+            , viewFormConfigureAndAppendBatch state
             ]
+                |> Element.column [ Element.spacing 20 ]
+                |> Element.layout []
     in
     { title = "Test Database Scale"
-    , body = body
+    , body = [ body ]
     }
 
 
-viewDirectory : State -> Html.Html Event
+viewDirectory : State -> Element.Element Event
 viewDirectory state =
     case state.getDirectoryResult of
         Nothing ->
-            Html.text "Directory not fetched yet."
+            Element.text "Directory not fetched yet."
 
         Just getDirectoryResult ->
             case getDirectoryResult of
                 Err httpErr ->
-                    Html.text (describeHttpError httpErr)
+                    Element.text (describeHttpError httpErr)
 
                 Ok directory ->
                     let
@@ -185,12 +200,63 @@ viewDirectory state =
                         ++ " items with an aggregate size of "
                         ++ (aggregateSize |> String.fromInt)
                     )
-                        |> Html.text
+                        |> Element.text
 
 
-viewFormAppend : State -> Html.Html Event
-viewFormAppend _ =
-    Html.button [ Html.Events.onClick (UserInputAppendBatch batchConfigDefault) ] [ Html.text "Append Batch" ]
+viewFormConfigureAndAppendBatch : State -> Element.Element Event
+viewFormConfigureAndAppendBatch state =
+    [ Element.text "Configure Batch"
+        |> Element.el [ Element.Region.heading 3 ]
+    , viewFormConfigureBatch state
+    , viewFormAppendBatch state
+    ]
+        |> Element.column [ Element.spacing 10 ]
+
+
+viewFormConfigureBatch : State -> Element.Element Event
+viewFormConfigureBatch state =
+    let
+        batchConfig =
+            state.batchConfig
+    in
+    [ [ Element.text "count"
+      , Element.Input.text []
+            { onChange =
+                \countText ->
+                    UserInputConfigureBatch
+                        { batchConfig
+                            | count = countText |> String.toInt |> Maybe.withDefault batchConfig.count
+                        }
+            , text = String.fromInt batchConfig.count
+            , placeholder = Nothing
+            , label = Element.Input.labelHidden "batch count"
+            }
+      ]
+        |> Element.row [ Element.spacing 10 ]
+    , [ Element.text "element size"
+      , Element.Input.text []
+            { onChange =
+                \sizeText ->
+                    UserInputConfigureBatch
+                        { batchConfig
+                            | elementSize = sizeText |> String.toInt |> Maybe.withDefault batchConfig.elementSize
+                        }
+            , text = String.fromInt batchConfig.elementSize
+            , placeholder = Nothing
+            , label = Element.Input.labelHidden "element size"
+            }
+      ]
+        |> Element.row [ Element.spacing 10 ]
+    ]
+        |> Element.column []
+
+
+viewFormAppendBatch : State -> Element.Element Event
+viewFormAppendBatch state =
+    Element.Input.button buttonStyle
+        { onPress = Just (UserInputAppendBatch state.batchConfig)
+        , label = Element.text "Append Batch"
+        }
 
 
 describeHttpError : Http.Error -> String
@@ -210,6 +276,16 @@ describeHttpError httpError =
 
         Http.BadBody errorMessage ->
             "BadPayload: " ++ errorMessage
+
+
+buttonStyle : List (Element.Attribute a)
+buttonStyle =
+    [ Element.Background.color (Element.rgb255 14 99 156)
+    , Element.mouseOver
+        [ Element.Background.color (Element.rgb255 17 119 187) ]
+    , Element.Font.color (Element.rgb 1 1 1)
+    , Element.paddingXY 10 5
+    ]
 
 
 globalStylesHtmlElement : Html.Html a

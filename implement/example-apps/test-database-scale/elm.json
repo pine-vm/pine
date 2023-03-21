@@ -16,7 +16,8 @@
             "elm/random": "1.0.0",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
-            "elm-community/random-extra": "3.2.0"
+            "elm-community/random-extra": "3.2.0",
+            "mdgriffith/elm-ui": "1.1.8"
         },
         "indirect": {
             "elm/file": "1.0.5",
