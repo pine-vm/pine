@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using ElmTime;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
-using Pine;
 
 namespace TestElmTime
 {
