@@ -12,7 +12,8 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
 
-    readonly Lazy<IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
+    readonly Lazy<IJsEngine> compileElmPreparedJsEngine =
+        new(ElmInteractive.PrepareJsEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
 
     ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
@@ -49,7 +50,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                     var resultWithCache =
                         ElmInteractive.CompileInteractiveEnvironment(
-                            evalElmPreparedJsEngine.Value,
+                            compileElmPreparedJsEngine.Value,
                             appCodeTree: appCodeTree,
                             lastCompilationCache with
                             {
@@ -69,7 +70,7 @@ public class InteractiveSessionPine : IInteractiveSession
         finally
         {
             // Build JS engine and warm-up anyway.
-            System.Threading.Tasks.Task.Run(() => evalElmPreparedJsEngine.Value.Evaluate("0"));
+            System.Threading.Tasks.Task.Run(() => compileElmPreparedJsEngine.Value.Evaluate("0"));
         }
     }
 
@@ -103,7 +104,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                     var compileSubmissionResult =
                         ElmInteractive.CompileInteractiveSubmission(
-                            evalElmPreparedJsEngine.Value,
+                            compileElmPreparedJsEngine.Value,
                             environment: buildPineEvalContextOk,
                             submission: submission,
                             addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry),
@@ -155,7 +156,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                                 var parseSubmissionResponseResult =
                                     ElmInteractive.SubmissionResponseFromResponsePineValue(
-                                        evalElmPreparedJsEngine.Value,
+                                        compileElmPreparedJsEngine.Value,
                                         response: evalResultListComponent.Elements[1]);
 
                                 logDuration("parse-result");
@@ -172,7 +173,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     void IDisposable.Dispose()
     {
-        if (evalElmPreparedJsEngine.IsValueCreated)
-            evalElmPreparedJsEngine.Value?.Dispose();
+        if (compileElmPreparedJsEngine.IsValueCreated)
+            compileElmPreparedJsEngine.Value?.Dispose();
     }
 }

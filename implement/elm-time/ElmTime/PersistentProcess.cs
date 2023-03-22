@@ -32,10 +32,14 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         IProcessStoreReader storeReader,
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmAppFiles,
         Action<string> logger,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         var prepareProcessResult =
-            ProcessFromElm019Code.ProcessFromElmCodeFiles(elmAppFiles, overrideElmAppInterfaceConfig);
+            ProcessFromElm019Code.ProcessFromElmCodeFiles(
+                elmAppFiles,
+                overrideElmAppInterfaceConfig,
+                overrideJsEngineFactory: overrideJsEngineFactory);
 
         process = prepareProcessResult.startProcess();
 

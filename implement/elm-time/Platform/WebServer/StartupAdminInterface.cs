@@ -97,6 +97,8 @@ public class StartupAdminInterface
 
         var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
+        var jsEngineFactory = app.ApplicationServices.GetService<Func<IJsEngine>>();
+
         var adminPassword = configuration?.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
         object avoidConcurrencyLock = new();
@@ -140,7 +142,8 @@ public class StartupAdminInterface
                 var restoreProcessResult =
                     PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                         new ProcessStoreReaderInFileStore(processStoreFileStore),
-                        logger: logEntry => logger.LogInformation(logEntry));
+                        logger: logEntry => logger.LogInformation(logEntry),
+                        overrideJsEngineFactory: jsEngineFactory);
 
                 var processLiveRepresentation = restoreProcessResult.process;
 

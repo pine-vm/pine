@@ -9,14 +9,23 @@ namespace ElmTime.ElmInteractive;
 
 public class InteractiveSessionJavaScript : IInteractiveSession
 {
+    public enum JavaScriptEngineFlavor
+    {
+        Jint = 1,
+        V8 = 2,
+    }
+
     readonly TreeNodeWithStringPath? appCodeTree;
 
-    readonly Lazy<IJsEngine> evalElmPreparedJsEngine = new(ElmInteractive.PrepareJsEngineToEvaluateElm);
+    readonly Lazy<IJsEngine> evalElmPreparedJsEngine;
 
     readonly IList<string> previousSubmissions = new List<string>();
 
-    public InteractiveSessionJavaScript(TreeNodeWithStringPath? appCodeTree)
+    public InteractiveSessionJavaScript(
+        TreeNodeWithStringPath? appCodeTree,
+        JavaScriptEngineFlavor javaScriptEngineFlavor)
     {
+        evalElmPreparedJsEngine = new Lazy<IJsEngine>(() => ElmInteractive.PrepareJsEngineToEvaluateElm(javaScriptEngineFlavor));
         this.appCodeTree = appCodeTree;
     }
 

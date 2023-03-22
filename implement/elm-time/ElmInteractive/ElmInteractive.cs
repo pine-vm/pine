@@ -604,9 +604,19 @@ public class ElmInteractive
                 fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
     }
 
-    static public IJsEngine PrepareJsEngineToEvaluateElm()
+    static public IJsEngine PrepareJsEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
+        PrepareJsEngineToEvaluateElm(
+            jsEngineFactory: javaScriptEngineFlavor switch
+            {
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JsEngineJint.Create,
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 => JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine,
+
+                _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
+            });
+
+    static public IJsEngine PrepareJsEngineToEvaluateElm(Func<IJsEngine> jsEngineFactory)
     {
-        var javascriptEngine = IJsEngine.BuildJsEngine();
+        var javascriptEngine = jsEngineFactory();
 
         javascriptEngine.Evaluate(JavascriptToEvaluateElm.Value);
 

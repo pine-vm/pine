@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-03-21";
+    static public string AppVersionId => "2023-03-22";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -260,6 +260,7 @@ public class Program
             var publicAppUrlsOption = runServerCommand.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
             var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
             var deployOption = runServerCommand.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
+            var elmEngineOption = AddElmEngineOptionOnCommand(runServerCommand, defaultEngine: ElmInteractive.ElmEngineType.JavaScript_Jint);
 
             runServerCommand.OnExecute(() =>
             {
@@ -386,12 +387,22 @@ public class Program
                         processStoreFileStore.SetFileContent(filePath, fileContent);
                 }
 
+                var jsEngineFactory =
+                    elmEngineOption.parseElmEngineTypeFromOption() switch
+                    {
+                        ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJint.Create),
+                        ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
+
+                        object other => throw new NotImplementedException("Engine type not implemented here: " + other.ToString())
+                    };
+
                 var webHostBuilder =
                     Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
                     .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                     .UseUrls(adminInterfaceUrls)
                     .UseStartup<Platform.WebServer.StartupAdminInterface>()
                     .WithSettingPublicWebHostUrls(publicAppUrls)
+                    .WithJsEngineFactory(jsEngineFactory)
                     .WithProcessStoreFileStore(processStoreFileStore);
 
                 if (adminPasswordOption.HasValue())
@@ -866,27 +877,13 @@ public class Program
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
 
-            var elmEngineOption =
-                interactiveCommand
-                .Option(
-                    template: "--elm-engine",
-                    description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineType>()) + "). Defaults to " + ElmInteractive.IInteractiveSession.DefaultImplementation,
-                    optionType: CommandOptionType.SingleValue,
-                    inherited: true);
+            var elmEngineOption = AddElmEngineOptionOnCommand(interactiveCommand, defaultEngine: ElmInteractive.IInteractiveSession.DefaultImplementation);
 
             var submitOption =
                 interactiveCommand.Option(
                     template: "--submit",
                     description: "Option to submit a string as if entered during the interactive session.",
                     optionType: CommandOptionType.MultipleValue);
-
-            ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
-            {
-                if (elmEngineOption?.Value() is string implementationAsString)
-                    return Enum.Parse<ElmInteractive.ElmEngineType>(implementationAsString, ignoreCase: true);
-
-                return ElmInteractive.IInteractiveSession.DefaultImplementation;
-            }
 
             var testCommand =
                 interactiveCommand.Command("test", testCmd =>
@@ -1012,7 +1009,7 @@ public class Program
                             ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                                 namedDistinctScenarios,
                                 namedScenario => namedScenario.Value.loadedScenario.component,
-                                parseElmEngineTypeFromOption());
+                                elmEngineOption.parseElmEngineTypeFromOption());
 
                         var allSteps =
                             scenariosResults
@@ -1076,7 +1073,7 @@ public class Program
 
             interactiveCommand.OnExecute(() =>
             {
-                var elmEngineType = parseElmEngineTypeFromOption();
+                var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
                 Console.WriteLine(
                     "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
@@ -1550,6 +1547,28 @@ public class Program
         cmd
         .Argument("process-site", "Path to the admin interface of the server running the process.")
         .IsRequired(allowEmptyStrings: false);
+
+    static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption) AddElmEngineOptionOnCommand(
+        CommandLineApplication cmd,
+        ElmInteractive.ElmEngineType defaultEngine)
+    {
+        var elmEngineOption =
+            cmd.Option(
+                template: "--elm-engine",
+                description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineType>()) + "). Defaults to " + defaultEngine,
+                optionType: CommandOptionType.SingleValue,
+                inherited: true);
+
+        ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
+        {
+            if (elmEngineOption?.Value() is string implementationAsString)
+                return Enum.Parse<ElmInteractive.ElmEngineType>(implementationAsString, ignoreCase: true);
+
+            return defaultEngine;
+        }
+
+        return (elmEngineOption, parseElmEngineTypeFromOption);
+    }
 
     static public string ElmMakeHomeDirectoryPath =>
         Path.Combine(Filesystem.CacheDirectory, "elm-make-home");

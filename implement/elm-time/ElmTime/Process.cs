@@ -22,13 +22,15 @@ public interface IDisposableProcessWithStringInterface : IProcessWithStringInter
 {
 }
 
-public class ProcessHostedWithV8 : IDisposableProcessWithStringInterface
+public class ProcessHostedWithJsEngine : IDisposableProcessWithStringInterface
 {
     readonly IJsEngine javascriptEngine;
 
-    public ProcessHostedWithV8(string javascriptPreparedToRun)
+    public ProcessHostedWithJsEngine(
+        string javascriptPreparedToRun,
+        IJsEngine javascriptEngine)
     {
-        javascriptEngine = IJsEngine.DefaultBuildJsEngine();
+        this.javascriptEngine = javascriptEngine;
 
         javascriptEngine.Evaluate(javascriptPreparedToRun);
 
@@ -73,12 +75,17 @@ public class ProcessFromElm019Code
 
     static public PreparedProcess ProcessFromElmCodeFiles(
         IReadOnlyCollection<(IReadOnlyList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null) =>
-        ProcessFromElmCodeFiles(Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles), overrideElmAppInterfaceConfig);
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        Func<IJsEngine>? overrideJsEngineFactory = null) =>
+        ProcessFromElmCodeFiles(
+            Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles),
+            overrideElmAppInterfaceConfig,
+            overrideJsEngineFactory);
 
     static public PreparedProcess ProcessFromElmCodeFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
@@ -103,7 +110,9 @@ public class ProcessFromElm019Code
                 buildArtifacts: new BuildArtifacts(
                     javaScriptFromElmMake: javascriptFromElmMake,
                     javaScriptPreparedToRun: javascriptPreparedToRun),
-                startProcess: () => new ProcessHostedWithV8(javascriptPreparedToRun));
+                startProcess: () => new ProcessHostedWithJsEngine(
+                    javascriptPreparedToRun,
+                    javascriptEngine: overrideJsEngineFactory?.Invoke() ?? new JsEngineJint()));
     }
 
     [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]

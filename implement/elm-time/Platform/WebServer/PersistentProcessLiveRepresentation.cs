@@ -59,7 +59,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
     static public ProcessFromElm019Code.PreparedProcess ProcessFromDeployment(
         TreeNodeWithStringPath deployment,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         var deploymentFiles = Composition.TreeToFlatDictionaryWithPathComparer(deployment);
 
@@ -73,7 +74,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         return
             ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 loweredAppFiles.compiledFiles,
-                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                overrideJsEngineFactory: overrideJsEngineFactory);
     }
 
     PersistentProcessLiveRepresentation(
@@ -175,7 +177,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         LoadFromStoreAndRestoreProcess(
         IProcessStoreReader storeReader,
         Action<string>? logger,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -196,7 +199,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         var processLiveRepresentation = RestoreFromCompositionEventSequence(
             compositionEventsFromLatestReduction,
-            overrideElmAppInterfaceConfig);
+            overrideElmAppInterfaceConfig,
+            overrideJsEngineFactory);
 
         logger?.Invoke("Restored the process state in " + (int)restoreStopwatch.Elapsed.TotalSeconds + " seconds.");
 
@@ -206,7 +210,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     static public (PersistentProcessLiveRepresentation process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
         RestoreFromCompositionEventSequence(
         IEnumerable<CompositionLogRecordWithResolvedDependencies> compositionLogRecords,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null)
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         var firstCompositionLogRecord =
             compositionLogRecords.FirstOrDefault();
@@ -235,7 +240,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     var prepareProcessResult =
                         ProcessFromDeployment(
                             compositionLogRecord.reduction.Value.appConfigAsTree,
-                            overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+                            overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                            overrideJsEngineFactory: overrideJsEngineFactory);
 
                     var newElmAppProcess = prepareProcessResult.startProcess();
 
@@ -274,7 +280,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     ApplyCompositionEvent(
                         compositionLogRecord.composition!.Value,
                         processRepresentationDuringRestore,
-                        overrideElmAppInterfaceConfig)
+                        overrideElmAppInterfaceConfig,
+                        overrideJsEngineFactory: overrideJsEngineFactory)
                     .Extract(error => throw new Exception("Failed to apply composition event: " + error));
             }
             finally
@@ -305,7 +312,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     static Result<string, PersistentProcessLiveRepresentationDuringRestore> ApplyCompositionEvent(
         CompositionEventWithResolvedDependencies compositionEvent,
         PersistentProcessLiveRepresentationDuringRestore processBefore,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig,
+        Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         if (compositionEvent.UpdateElmAppStateForEvent is byte[] updateElmAppStateForEvent)
         {
@@ -389,7 +397,10 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err("No state from previous app");
 
             var prepareProcessResult =
-                ProcessFromDeployment(deployAppConfigAndMigrateElmAppState, overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+                ProcessFromDeployment(
+                    deployAppConfigAndMigrateElmAppState,
+                    overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                    overrideJsEngineFactory: overrideJsEngineFactory);
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
@@ -437,7 +448,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             var prepareProcessResult =
                 ProcessFromDeployment(
                     appConfig,
-                    overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig);
+                    overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                    overrideJsEngineFactory: overrideJsEngineFactory);
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 

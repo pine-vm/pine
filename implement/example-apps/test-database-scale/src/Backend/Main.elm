@@ -4,8 +4,6 @@ module Backend.Main exposing
     )
 
 import Base64
-import Bytes
-import Bytes.Decode
 import Bytes.Encode
 import CompilationInterface.ElmMake
 import CompilationInterface.GenerateJsonConverters
@@ -17,7 +15,7 @@ import Url.Parser exposing ((</>))
 
 
 type alias State =
-    { store : Dict.Dict Int String }
+    { store : Dict.Dict Int { entryBase64 : String } }
 
 
 type Route
@@ -44,17 +42,11 @@ subscriptions _ =
 updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
-        bodyFromString =
-            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
         staticContentHttpHeaders { contentType, contentEncoding } =
             { cacheMaxAgeMinutes = Just (60 * 24)
             , contentType = contentType
             , contentEncoding = contentEncoding
             }
-
-        httpResponseOkWithStringContent stringContent httpResponseHeaders =
-            httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
 
         httpResponseOkWithBodyAsBase64 bodyAsBase64 contentConfig =
             { statusCode = 200
@@ -100,7 +92,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     let
                         responseDict =
                             stateBefore.store
-                                |> Dict.map (\_ entry -> { length = String.length entry })
+                                |> Dict.map (\_ entry -> { length = (String.length entry.entryBase64 // 4) * 3 })
                     in
                     ( stateBefore
                     , [ Platform.WebServer.RespondToHttpRequest
@@ -142,7 +134,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                     , [ Platform.WebServer.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
-                                                httpResponseOkWithStringContent entry
+                                                httpResponseOkWithBodyAsBase64 (Just entry.entryBase64)
                                                     { cacheMaxAgeMinutes = Nothing
                                                     , contentType = "text/html"
                                                     , contentEncoding = Nothing
@@ -152,11 +144,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                     )
 
                         "post" ->
-                            case
-                                httpRequestEvent.request.bodyAsBase64
-                                    |> Maybe.andThen Base64.toBytes
-                                    |> Maybe.andThen decodeBytesToString
-                            of
+                            case httpRequestEvent.request.bodyAsBase64 of
                                 Nothing ->
                                     ( stateBefore
                                     , [ Platform.WebServer.RespondToHttpRequest
@@ -170,10 +158,10 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                       ]
                                     )
 
-                                Just entry ->
+                                Just entryContentBase64 ->
                                     let
                                         store =
-                                            stateBefore.store |> Dict.insert entryId entry
+                                            stateBefore.store |> Dict.insert entryId { entryBase64 = entryContentBase64 }
                                     in
                                     ( { stateBefore | store = store }
                                     , [ Platform.WebServer.RespondToHttpRequest
@@ -220,8 +208,3 @@ routeFromUrl =
             , Url.Parser.map (EntryRoute Nothing) (Url.Parser.s "api" </> Url.Parser.s "entry")
             ]
         )
-
-
-decodeBytesToString : Bytes.Bytes -> Maybe String
-decodeBytesToString bytes =
-    bytes |> Bytes.Decode.decode (Bytes.Decode.string (bytes |> Bytes.width))
