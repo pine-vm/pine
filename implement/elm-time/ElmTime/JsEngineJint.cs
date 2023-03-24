@@ -1,4 +1,4 @@
-﻿using Jint;
+using Jint;
 using Jint.Native;
 using Jint.Runtime;
 using System;
@@ -12,14 +12,14 @@ public class JsEngineJint : IJsEngine
 {
     public record FunctionDelegateIntoHost(
         string delegatedJavaScriptFunctionName,
-        Func<string, Esprima.Ast.Expression, Esprima.Ast.Expression> buildWrapperJavaScript,
-        Func<JsValue, JsValue[], JsValue> hostFunc);
+        Func<string, Esprima.Ast.Node, Esprima.Ast.Expression> buildWrapperJavaScript,
+        Func<Engine, JsValue, JsValue[], JsValue> hostFunc);
 
     readonly Engine engine = new();
 
     readonly IReadOnlyList<FunctionDelegateIntoHost> functionDelegatesIntoHost;
 
-    readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Expression, Esprima.Ast.Expression>> evalAstRewriterDeclarationReplacements;
+    readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> evalAstRewriterDeclarationReplacements;
 
     public JsEngineJint(IReadOnlyList<FunctionDelegateIntoHost>? functionDelegatesIntoHost)
     {
@@ -31,7 +31,7 @@ public class JsEngineJint : IJsEngine
                 engine,
                 engine.Realm,
                 name: new JsString("delegating_" + functionDelegate.delegatedJavaScriptFunctionName + "_into_host"),
-                func: functionDelegate.hostFunc);
+                func: (jsThis, jsArguments) => functionDelegate.hostFunc(engine, jsThis, jsArguments));
 
             engine.SetValue(functionDelegate.delegatedJavaScriptFunctionName + "_delegate_to_host", functionJint);
         }
@@ -41,7 +41,7 @@ public class JsEngineJint : IJsEngine
             .ToImmutableDictionary(
                 keySelector: functionDelegate => functionDelegate.delegatedJavaScriptFunctionName,
                 elementSelector: functionDelegate =>
-                new Func<Esprima.Ast.Expression, Esprima.Ast.Expression>(originalExpression =>
+                new Func<Esprima.Ast.Node, Esprima.Ast.Expression>(originalExpression =>
                     functionDelegate.buildWrapperJavaScript(
                         functionDelegate.delegatedJavaScriptFunctionName + "_delegate_to_host",
                         originalExpression))
@@ -87,9 +87,9 @@ public class JsEngineJint : IJsEngine
 
     class AstRewriter : Esprima.Utils.AstRewriter
     {
-        readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Expression, Esprima.Ast.Expression>> declarationReplacements;
+        readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements;
 
-        public AstRewriter(IReadOnlyDictionary<string, Func<Esprima.Ast.Expression, Esprima.Ast.Expression>> declarationReplacements)
+        public AstRewriter(IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements)
         {
             this.declarationReplacements = declarationReplacements;
         }
@@ -111,6 +111,20 @@ public class JsEngineJint : IJsEngine
 
                         return variableDeclarator.UpdateWith(identifier, init: replacement) as T;
                     }
+                }
+            }
+
+            if (node is Esprima.Ast.FunctionDeclaration functionDeclaration)
+            {
+                if (declarationReplacements.TryGetValue(functionDeclaration.Id.Name, out var buildReplacement))
+                {
+                    var replacement = buildReplacement(functionDeclaration);
+
+                    return new Esprima.Ast.VariableDeclaration(
+                        Esprima.Ast.NodeList.Create(
+                            new[] { new Esprima.Ast.VariableDeclarator(functionDeclaration.Id, replacement) }),
+                        Esprima.Ast.VariableDeclarationKind.Var)
+                        as T;
                 }
             }
 
