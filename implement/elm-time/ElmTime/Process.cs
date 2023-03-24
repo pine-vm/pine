@@ -112,7 +112,7 @@ public class ProcessFromElm019Code
                     javaScriptPreparedToRun: javascriptPreparedToRun),
                 startProcess: () => new ProcessHostedWithJsEngine(
                     javascriptPreparedToRun,
-                    javascriptEngine: overrideJsEngineFactory?.Invoke() ?? new JsEngineJint()));
+                    javascriptEngine: overrideJsEngineFactory?.Invoke() ?? JsEngineJintOptimizedForElmApps.Create()));
     }
 
     [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]

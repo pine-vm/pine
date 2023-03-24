@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-03-23";
+    static public string AppVersionId => "2023-03-24";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -390,7 +390,7 @@ public class Program
                 var jsEngineFactory =
                     elmEngineOption.parseElmEngineTypeFromOption() switch
                     {
-                        ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJint.Create),
+                        ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJintOptimizedForElmApps.Create),
                         ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
 
                         object other => throw new NotImplementedException("Engine type not implemented here: " + other.ToString())

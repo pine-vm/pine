@@ -608,7 +608,7 @@ public class ElmInteractive
         PrepareJsEngineToEvaluateElm(
             jsEngineFactory: javaScriptEngineFlavor switch
             {
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JsEngineJint.Create,
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JsEngineJintOptimizedForElmApps.Create,
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 => JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine,
 
                 _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)

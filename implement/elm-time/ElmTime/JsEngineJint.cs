@@ -4,23 +4,22 @@ using Jint.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
-using System.Reflection;
-using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 
 namespace ElmTime;
 
 public class JsEngineJint : IJsEngine
 {
+    public record FunctionDelegateIntoHost(
+        string delegatedJavaScriptFunctionName,
+        Func<string, Esprima.Ast.Expression, Esprima.Ast.Expression> buildWrapperJavaScript,
+        Func<JsValue, JsValue[], JsValue> hostFunc);
+
     readonly Engine engine = new();
 
     readonly IReadOnlyList<FunctionDelegateIntoHost> functionDelegatesIntoHost;
 
-    public JsEngineJint()
-        :
-        this(DefaultShortcutsIntoHost)
-    {
-    }
+    readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Expression, Esprima.Ast.Expression>> evalAstRewriterDeclarationReplacements;
 
     public JsEngineJint(IReadOnlyList<FunctionDelegateIntoHost>? functionDelegatesIntoHost)
     {
@@ -34,11 +33,20 @@ public class JsEngineJint : IJsEngine
                 name: new JsString("delegating_" + functionDelegate.delegatedJavaScriptFunctionName + "_into_host"),
                 func: functionDelegate.hostFunc);
 
-            engine.SetValue(functionDelegate.delegatedJavaScriptFunctionName + "_host", functionJint);
+            engine.SetValue(functionDelegate.delegatedJavaScriptFunctionName + "_delegate_to_host", functionJint);
         }
-    }
 
-    static public JsEngineJint Create() => new();
+        evalAstRewriterDeclarationReplacements =
+            this.functionDelegatesIntoHost
+            .ToImmutableDictionary(
+                keySelector: functionDelegate => functionDelegate.delegatedJavaScriptFunctionName,
+                elementSelector: functionDelegate =>
+                new Func<Esprima.Ast.Expression, Esprima.Ast.Expression>(originalExpression =>
+                    functionDelegate.buildWrapperJavaScript(
+                        functionDelegate.delegatedJavaScriptFunctionName + "_delegate_to_host",
+                        originalExpression))
+                );
+    }
 
     public object CallFunction(string functionName, params object[] args)
     {
@@ -47,51 +55,19 @@ public class JsEngineJint : IJsEngine
 
     public object Evaluate(string expression)
     {
-        var expressionWithDelegateToHost = expression;
+        var parser = new Esprima.JavaScriptParser();
 
-        foreach (var functionDelegateIntoHost in functionDelegatesIntoHost)
-        {
-            expressionWithDelegateToHost =
-                PatchForFunctionDelegate(
-                    functionDelegateIntoHost,
-                    hostFunctionName: functionDelegateIntoHost.delegatedJavaScriptFunctionName + "_host",
-                    originalExpression: expressionWithDelegateToHost);
-        }
+        var parsedExpression = parser.ParseScript(expression);
 
-        var jintValue = engine.Evaluate(expressionWithDelegateToHost);
+        var rewriter = new AstRewriter(evalAstRewriterDeclarationReplacements);
+
+        var rewrittenAst = rewriter.VisitAndConvert(parsedExpression, allowNull: false);
+
+        var jintValue = engine.Evaluate(rewrittenAst);
 
         var dotnetValue = CastToDotnetType(jintValue);
 
         return dotnetValue;
-    }
-
-    static string PatchForFunctionDelegate(
-        FunctionDelegateIntoHost functionDelegateIntoHost,
-        string hostFunctionName,
-        string originalExpression)
-    {
-        var regexPattern =
-            "var\\s+" + Regex.Escape(functionDelegateIntoHost.delegatedJavaScriptFunctionName) + "\\s*=\\s*(function.*?\n\\};)";
-
-        var regexMatch = Regex.Match(originalExpression, regexPattern, RegexOptions.Singleline);
-
-        if (!regexMatch.Success)
-            return originalExpression;
-
-        var beforeFunctionDeclaration = originalExpression[..regexMatch.Groups[1].Index];
-        var afterFunctionDeclaration = originalExpression[(regexMatch.Groups[1].Index + regexMatch.Groups[1].Length)..];
-
-        var replacement = functionDelegateIntoHost.wrapperJavaScript(hostFunctionName);
-
-        var expression =
-            beforeFunctionDeclaration +
-            replacement +
-            PatchForFunctionDelegate(
-                functionDelegateIntoHost,
-                hostFunctionName,
-                afterFunctionDeclaration);
-
-        return expression;
     }
 
     static object CastToDotnetType(JsValue jintValue)
@@ -109,41 +85,37 @@ public class JsEngineJint : IJsEngine
     {
     }
 
-    public record FunctionDelegateIntoHost(
-        string delegatedJavaScriptFunctionName,
-        Func<string, string> wrapperJavaScript,
-        Func<JsValue, JsValue[], JsValue> hostFunc);
-
-    static IReadOnlyList<FunctionDelegateIntoHost> DefaultShortcutsIntoHost = BuildDefaultShortcutsIntoHost().ToImmutableList();
-
-    static IEnumerable<FunctionDelegateIntoHost> BuildDefaultShortcutsIntoHost()
+    class AstRewriter : Esprima.Utils.AstRewriter
     {
-        yield return new FunctionDelegateIntoHost(
-            // <https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Decode.elm#L8-L10>
-            delegatedJavaScriptFunctionName: "$danfishgold$base64_bytes$Decode$fromBytes",
-            wrapperJavaScript: hostFuncName => "function (dataView) { return $elm$core$Maybe$Just(" + hostFuncName + "(dataView.buffer)); }",
-            hostFunc: (_, arguments) =>
+        readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Expression, Esprima.Ast.Expression>> declarationReplacements;
+
+        public AstRewriter(IReadOnlyDictionary<string, Func<Esprima.Ast.Expression, Esprima.Ast.Expression>> declarationReplacements)
+        {
+            this.declarationReplacements = declarationReplacements;
+        }
+
+        public override T VisitAndConvert<T>(T node, bool allowNull = false, [CallerMemberName] string? callerName = null)
+        {
+            /*
+             * Elm compiler emits code as follows:
+             * var $danfishgold$base64_bytes$Decode$fromBytes = function (bytes) {
+             * ...
+             * */
+            if (node is Esprima.Ast.VariableDeclarator variableDeclarator)
             {
-                var argument = arguments.Single();
+                if (variableDeclarator.Id is Esprima.Ast.Identifier identifier)
+                {
+                    if (declarationReplacements.TryGetValue(identifier.Name, out var buildReplacement))
+                    {
+                        var replacement = buildReplacement(variableDeclarator.Init);
 
-                return new JsString(Base64_from_arrayBuffer(argument));
-            });
-    }
+                        return variableDeclarator.UpdateWith(identifier, init: replacement) as T;
+                    }
+                }
+            }
 
-    static string Base64_from_arrayBuffer(object argumentFromJs)
-    {
-        var asJintObject = (Jint.Native.Object.ObjectInstance)argumentFromJs;
-
-        var argumentType = asJintObject.GetType();
-
-        var propertyArrayBufferData =
-            argumentType.GetProperty(
-                "ArrayBufferData",
-                bindingAttr: BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
-        var bufferBytes = (byte[])propertyArrayBufferData.GetMethod.Invoke(argumentFromJs, null);
-
-        return Convert.ToBase64String(bufferBytes);
+            return base.VisitAndConvert(node, allowNull, callerName);
+        }
     }
 
     class DelegatingFunctionInstance : Jint.Native.Function.FunctionInstance
