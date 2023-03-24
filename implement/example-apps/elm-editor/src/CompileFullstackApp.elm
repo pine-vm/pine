@@ -1184,6 +1184,7 @@ type LeafElmTypeStruct
     | MaybeLeaf
     | ResultLeaf
     | DictLeaf
+    | JsonEncodeValueLeaf
 
 
 parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation :
@@ -1938,6 +1939,11 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                 DictLeaf ->
                     continueWithLocalNameAndCommonPrefix jsonCodeDictFunctionNameCommonPart
 
+                JsonEncodeValueLeaf ->
+                    { encodeExpression = encodeValueExpression
+                    , decodeExpression = "Json.Decode.value"
+                    }
+
 
 jsonCodingFunctionFromChoiceType :
     { choiceTypeName : String, encodeValueExpression : String, typeArgLocalName : String }
@@ -2211,6 +2217,9 @@ buildTypeAnnotationText typeAnnotation =
                 DictLeaf ->
                     "Dict.Dict"
 
+                JsonEncodeValueLeaf ->
+                    "Json.Encode.Value"
+
 
 parseElmTypeLeavesNames : Dict.Dict String LeafElmTypeStruct
 parseElmTypeLeavesNames =
@@ -2225,6 +2234,7 @@ parseElmTypeLeavesNames =
     , ( "Result", ResultLeaf )
     , ( "Maybe", MaybeLeaf )
     , ( "Dict.Dict", DictLeaf )
+    , ( "Json.Encode.Value", JsonEncodeValueLeaf )
     ]
         |> Dict.fromList
 

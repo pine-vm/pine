@@ -738,9 +738,9 @@ setStateOnBranches branches appState stateBefore =
 resolveStateSource : StateShimConfig appState appStateLessShim -> StateShimState appState -> StateSource -> Result String appState
 resolveStateSource config shimState stateSource =
     case stateSource of
-        SerializedJsonStateSource stateJson ->
+        JsonStateSource stateJson ->
             stateJson
-                |> Json.Decode.decodeString config.jsonDecodeAppState
+                |> Json.Decode.decodeValue config.jsonDecodeAppState
                 |> Result.map config.initAppShimState
                 |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode: ")
 
@@ -760,7 +760,7 @@ exposedFunctionExpectingSingleArgument :
 exposedFunctionExpectingSingleArgument argumentDecoder funcAfterDecode genericArguments =
     case genericArguments.serializedArgumentsJson of
         [ singleArgumentJson ] ->
-            case Json.Decode.decodeString argumentDecoder singleArgumentJson of
+            case Json.Decode.decodeValue argumentDecoder singleArgumentJson of
                 Err err ->
                     Err ("Failed to JSON decode argument: " ++ Json.Decode.errorToString err)
 
@@ -787,7 +787,7 @@ exposedFunctionExpectingSingleArgumentAndAppState argumentDecoder funcAfterDecod
         Just appState ->
             case genericArguments.serializedArgumentsJson of
                 [ singleArgumentJson ] ->
-                    case Json.Decode.decodeString argumentDecoder singleArgumentJson of
+                    case Json.Decode.decodeValue argumentDecoder singleArgumentJson of
                         Err err ->
                             Err ("Failed to JSON decode argument: " ++ Json.Decode.errorToString err)
 
@@ -808,6 +808,8 @@ stateShimTypesModuleText : String
 stateShimTypesModuleText =
     String.trimLeft """
 module Backend.Generated.StateShimTypes exposing (..)
+
+import Json.Encode
 
 
 type alias ResponseOverSerialInterface =
@@ -843,12 +845,12 @@ type alias ApplyFunctionShimRequestStruct =
 
 type alias ApplyFunctionArguments state =
     { stateArgument : state
-    , serializedArgumentsJson : List String
+    , serializedArgumentsJson : List Json.Encode.Value
     }
 
 
 type StateSource
-    = SerializedJsonStateSource String
+    = JsonStateSource Json.Encode.Value
     | BranchStateSource String
 
 

@@ -17,18 +17,20 @@ public class StateShim
     static public Result<string, string> SetAppStateOnMainBranch(
         IProcess<string, string> process,
         string stateJson) =>
-        SetAppState(process: process, stateJson: stateJson, branchName: "main");
+        SetAppState(process: process, stateJsonString: stateJson, branchName: "main");
 
     static public Result<string, string> SetAppState(
         IProcess<string, string> process,
-        string stateJson,
+        string stateJsonString,
         string branchName)
     {
+        var stateJson = JsonSerializer.Deserialize<JsonElement>(stateJsonString);
+
         return
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.SetBranchesStateShimRequest(
-                    new StateSource.SerializedJsonStateSource(stateJson), Branches: ImmutableList.Create(branchName)))
+                    new StateSource.JsonStateSource(stateJson), Branches: ImmutableList.Create(branchName)))
             .AndThen(decodeOk => decodeOk switch
             {
                 StateShimResponseStruct.SetBranchesStateShimResponse setBranchesResponse =>
@@ -84,6 +86,11 @@ public class StateShim
         IProcess<string, string> process,
         AdminInterface.ApplyFunctionOnDatabaseRequest request)
     {
+        var serializedArgumentsJson =
+            request.serializedArgumentsJson
+            .Select(asString => JsonSerializer.Deserialize<JsonElement>(asString))
+            .ToImmutableList();
+
         return
             ListExposedFunctions(process)
             .AndThen(exposedFunctions =>
@@ -114,7 +121,7 @@ public class StateShim
                     functionName: matchingFunction.functionName,
                     arguments: new ApplyFunctionArguments<Maybe<StateSource>>(
                         stateArgument: stateArgument,
-                        serializedArgumentsJson: request.serializedArgumentsJson),
+                        serializedArgumentsJson: serializedArgumentsJson),
                     stateDestinationBranches: stateDestinationBranches);
 
                 try

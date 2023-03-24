@@ -315,7 +315,7 @@ exposedFunctionsFromMigrationConfig _ =
       , { description = { hasAppStateParam = False, resultContainsAppState = True }
         , handlerExpression = """
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument
-    Json.Decode.string
+    Json.Decode.value
     (migrateFromStringPackageWebServerShim
         >> Result.map
             (Tuple.mapFirst Just
@@ -362,7 +362,7 @@ parseMigrationConfig { originalSourceModules } =
                             , rootModuleSupportingFunctions =
                                 [ """
 migrateFromStringPackageWebServerShim =
-    Json.Decode.decodeString jsonDecodeMigratePreviousState
+    Json.Decode.decodeValue jsonDecodeMigratePreviousState
         >> Result.mapError Json.Decode.errorToString
         >> Result.map """ ++ String.join "." (appStateMigrationInterfaceModuleName ++ [ appStateMigrationInterfaceFunctionName ]) ++ """
         >> Result.map

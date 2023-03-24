@@ -411,7 +411,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         functionName: "migrate",
                         arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
                             stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                            serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Serialize(elmAppStateBefore))),
+                            serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Deserialize<JsonElement>(elmAppStateBefore))),
                         stateDestinationBranches: ImmutableList.Create("main"))));
 
             return
@@ -460,7 +460,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         functionName: "init",
                         arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
                             stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                            serializedArgumentsJson: ImmutableList<string>.Empty),
+                            serializedArgumentsJson: ImmutableList<JsonElement>.Empty),
                         stateDestinationBranches: ImmutableList.Create("main"))));
 
             return
@@ -506,10 +506,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         Result<string, UpdateElmAppStateForEvent> continueWithWebServerEvent(InterfaceToHost.BackendEventStruct webServerEvent) =>
             Result<string, UpdateElmAppStateForEvent>.ok(new UpdateElmAppStateForEvent(
-                    functionName: "processEvent",
-                    arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<bool>(
-                        stateArgument: true,
-                        serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Serialize(webServerEvent)))));
+                functionName: "processEvent",
+                arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<bool>(
+                    stateArgument: true,
+                    serializedArgumentsJson: ImmutableList.Create(
+                        JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(webServerEvent))))));
         try
         {
             var webServerEvent = JsonSerializer.Deserialize<InterfaceToHost.BackendEventStruct>(asString);

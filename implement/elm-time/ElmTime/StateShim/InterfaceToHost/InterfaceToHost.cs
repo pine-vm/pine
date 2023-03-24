@@ -2,6 +2,7 @@
 using Pine.Json;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace ElmTime.StateShim.InterfaceToHost;
@@ -68,7 +69,7 @@ public record ApplyFunctionShimRequestStruct(
 
 public record ApplyFunctionArguments<StateT>(
     StateT stateArgument,
-    IReadOnlyList<string> serializedArgumentsJson)
+    IReadOnlyList<JsonElement> serializedArgumentsJson)
 {
     public ApplyFunctionArguments<NewStateT> MapStateArgument<NewStateT>(Func<StateT, NewStateT> map) =>
         new ApplyFunctionArguments<NewStateT>(
@@ -82,7 +83,7 @@ public record RemoveBranchesShimResponseStruct(int removedCount);
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record StateSource
 {
-    public record SerializedJsonStateSource(string JSON) : StateSource;
+    public record JsonStateSource(JsonElement Json) : StateSource;
 
     public record BranchStateSource(string Branch) : StateSource;
 }
