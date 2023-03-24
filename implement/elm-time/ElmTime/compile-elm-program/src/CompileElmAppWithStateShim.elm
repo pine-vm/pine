@@ -550,7 +550,7 @@ type alias StateShimState appState =
 
 
 type alias ExposedFunctionHandler appState =
-    ApplyFunctionArguments (Maybe appState) -> Result String ( Maybe appState, Maybe String )
+    ApplyFunctionArguments (Maybe appState) -> Result String ( Maybe appState, Maybe Json.Encode.Value )
 
 
 type alias ExposedFunctionRecord appState =
@@ -664,7 +664,6 @@ processEvent config hostEvent stateBefore =
                     , appState
                         |> config.appStateLessShim
                         |> config.jsonEncodeAppState
-                        |> Json.Encode.encode 0
                         |> Ok
                         |> SerializeStateShimResponse
                     )
@@ -755,7 +754,7 @@ resolveStateSource config shimState stateSource =
 
 exposedFunctionExpectingSingleArgument :
     Json.Decode.Decoder arg
-    -> (arg -> Result String ( Maybe appState, Maybe String ))
+    -> (arg -> Result String ( Maybe appState, Maybe Json.Encode.Value ))
     -> ExposedFunctionHandler appState
 exposedFunctionExpectingSingleArgument argumentDecoder funcAfterDecode genericArguments =
     case genericArguments.serializedArgumentsJson of
@@ -777,7 +776,7 @@ exposedFunctionExpectingSingleArgument argumentDecoder funcAfterDecode genericAr
 
 exposedFunctionExpectingSingleArgumentAndAppState :
     Json.Decode.Decoder arg
-    -> (arg -> appState -> Result String ( Maybe appState, Maybe String ))
+    -> (arg -> appState -> Result String ( Maybe appState, Maybe Json.Encode.Value ))
     -> ExposedFunctionHandler appState
 exposedFunctionExpectingSingleArgumentAndAppState argumentDecoder funcAfterDecode genericArguments =
     case genericArguments.stateArgument of
@@ -829,7 +828,7 @@ type StateShimRequest
 type StateShimResponse
     = ListExposedFunctionsShimResponse (List { functionName : String, functionDescription : ExposedFunctionDescription })
     | ApplyFunctionShimResponse (Result String FunctionApplicationResult)
-    | SerializeStateShimResponse (Result String String)
+    | SerializeStateShimResponse (Result String Json.Encode.Value)
     | SetBranchesStateShimResponse (Result String String)
     | EstimateSerializedStateLengthShimResponse (Result String Int)
     | ListBranchesShimResponse (List String)
@@ -861,7 +860,7 @@ type alias ExposedFunctionDescription =
 
 
 type alias FunctionApplicationResult =
-    { resultLessStateJson : Maybe String
+    { resultLessStateJson : Maybe Json.Encode.Value
     }
 
 """

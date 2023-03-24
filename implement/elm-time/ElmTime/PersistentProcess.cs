@@ -94,7 +94,9 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                     if (reduction != null)
                     {
                         compositionChain.Pop();
-                        StateShim.StateShim.SetAppStateOnMainBranch(process, stateJson: reduction.ReducedValueLiteralString!)
+                        StateShim.StateShim.SetAppStateOnMainBranch(
+                            process,
+                            stateJson: JsonSerializer.Deserialize<JsonElement>(reduction.ReducedValueLiteralString)!)
                             .Extract(err => throw new Exception(err));
                         lastStateHash = reduction.ReducedCompositionHash;
                     }
@@ -105,7 +107,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                         {
                             StateShim.StateShim.SetAppStateOnMainBranch(
                                 process,
-                                stateJson: followingComposition.composition.SetStateLiteralString!)
+                                stateJson: JsonSerializer.Deserialize<JsonElement>(followingComposition.composition.SetStateLiteralString!))
                                 .Extract(err => throw new Exception(err));
                         }
 
@@ -173,15 +175,17 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
     {
         lock (process)
         {
-            var serializedState =
+            var appState =
                 StateShim.StateShim.GetAppStateFromMainBranch(process)
-                .Extract(err => throw new Exception("Failed to get serialized state: " + err));
+                .Extract(err => throw new Exception("Failed to get app state: " + err));
+
+            var appStateSerialized = appState.ToString();
 
             return
                 new ReductionRecord
                 (
                     ReducedCompositionHash: lastStateHash,
-                    ReducedValueLiteralString: serializedState
+                    ReducedValueLiteralString: appStateSerialized
                 );
         }
     }
@@ -190,7 +194,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
     {
         lock (process)
         {
-            StateShim.StateShim.SetAppStateOnMainBranch(process, stateJson: state)
+            StateShim.StateShim.SetAppStateOnMainBranch(process, stateJson: JsonSerializer.Deserialize<JsonElement>(state))
                 .Extract(err => throw new Exception(err));
 
             var compositionRecord = new CompositionRecordInFile

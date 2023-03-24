@@ -228,7 +228,7 @@ config_init
                 commands
                 (Backend.Generated.WebServerShim.initWebServerShimState appState)
         )
-    |> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Json.Encode.encode 0)
+    |> Tuple.mapSecond jsonEncodeBackendEventResponse
     |> Tuple.mapFirst Just
     |> Tuple.mapSecond Just
     |> Ok
@@ -244,7 +244,7 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
     (\\backendEvent ->
         Backend.Generated.WebServerShim.processWebServerEvent config_subscriptions backendEvent
             >> Tuple.mapFirst Just
-            >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Json.Encode.encode 0 >> Just)
+            >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Just)
             >> Ok
     )
 """
@@ -319,7 +319,7 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument
     (migrateFromStringPackageWebServerShim
         >> Result.map
             (Tuple.mapFirst Just
-                >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Json.Encode.encode 0 >> Just)
+                >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Just)
             )
     )
 """
@@ -730,7 +730,7 @@ buildExposedFunctionHandlerExpression config =
                             "always (Nothing, Just \"Serializing response not implemented\")"
 
                         Just returnTypeEncoderFunction ->
-                            returnTypeEncoderFunction ++ " >> Json.Encode.encode 0 >> Just >> Tuple.pair Nothing"
+                            returnTypeEncoderFunction ++ " >> Just >> Tuple.pair Nothing"
 
                 ( funcAfterDecode, resultContainsAppState ) =
                     if config.returnType == config.appStateType then

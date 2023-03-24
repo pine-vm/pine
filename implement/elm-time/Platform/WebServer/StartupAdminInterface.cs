@@ -463,30 +463,30 @@ public class StartupAdminInterface
                         })
                         .Add("post", async (context, publicAppHost) =>
                         {
-                            if (publicAppHost == null)
-                            {
-                                context.Response.StatusCode = 400;
-                                await context.Response.WriteAsync("Not possible because there is no app (state).");
-                                return;
-                            }
+                            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
-                            var elmAppStateToSet = new StreamReader(context.Request.Body, Encoding.UTF8).ReadToEndAsync().Result;
+                            var elmAppStateToSet = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(context.Request.Body);
 
-                            var elmAppStateComponent = PineValue.Blob(Encoding.UTF8.GetBytes(elmAppStateToSet));
+                            var setAppStateResult=
+                            Result<string, PublicHostConfiguration?>.ok(publicAppHost)
+                            .AndThen(maybeNull => Maybe.NothingFromNull(maybeNull).ToResult("Not possible because there is no app (state)."))
+                            .AndThen(publicAppHost =>
+                            publicAppHost.processLiveRepresentation.SetStateOnMainBranch(
+                                storeWriter: processStoreWriter,
+                                elmAppStateToSet))
+                            .Map(compositionLogEventAndResponse =>
+                            new AttemptContinueWithCompositionEventReport
+                            (
+                                beginTime: beginTime,
+                                compositionEvent: compositionLogEventAndResponse.compositionLogEvent,
+                                storeReductionReport: null,
+                                storeReductionTimeSpentMilli: null,
+                                totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                                result: Result<string, string>.ok("Successfully applied this composition event to the process.")
+                            ));
 
-                            var appConfigValueInFile =
-                                new ValueInFileStructure
-                                {
-                                    HashBase16 = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent))
-                                };
-
-                            processStoreWriter.StoreComponent(elmAppStateComponent);
-
-                            await attemptContinueWithCompositionEventAndSendHttpResponse(
-                                new CompositionLogRecordInFile.CompositionEvent
-                                {
-                                    SetElmAppState = appConfigValueInFile
-                                });
+                            await writeAsHttpResponse(setAppStateResult);
                         })
                     ),
                     new ApiRoute
@@ -815,6 +815,25 @@ public class StartupAdminInterface
 
                         return (statusCode, report);
                     }
+                }
+
+                async System.Threading.Tasks.Task writeAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
+                {
+                    static string reportAsString(object report)
+                    {
+                        if (report is null)
+                            return "";
+
+                        if (report is string alreadyString)
+                            return alreadyString;
+
+                        return System.Text.Json.JsonSerializer.Serialize(report);
+                    }
+
+                    var (statusCode, responseBodyString) = result.Unpack(err => (400, reportAsString(err)), ok => (200, reportAsString(ok)));
+
+                    context.Response.StatusCode = statusCode;
+                    await context.Response.WriteAsync(responseBodyString);
                 }
 
                 async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(

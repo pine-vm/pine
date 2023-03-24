@@ -21,7 +21,8 @@ public interface IPersistentProcess
 
 public record struct StoreProvisionalReductionReport(
     int lockTimeSpentMilli,
-    int? serializeElmAppStateTimeSpentMilli,
+    int? getElmAppStateFromEngineTimeSpentMilli,
+    int? serializeElmAppStateToStringTimeSpentMilli,
     int? serializeElmAppStateLength,
     int? storeDependenciesTimeSpentMilli);
 
@@ -245,10 +246,10 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                     var newElmAppProcess = prepareProcessResult.startProcess();
 
-                    var elmAppStateAsString = Encoding.UTF8.GetString(compositionLogRecord.reduction.Value.elmAppState.Span);
+                    var elmAppState = JsonSerializer.Deserialize<JsonElement>(compositionLogRecord.reduction.Value.elmAppState.Span);
 
                     var setStateResponse =
-                        StateShim.StateShim.SetAppStateOnMainBranch(process: newElmAppProcess, stateJson: elmAppStateAsString)
+                        StateShim.StateShim.SetAppStateOnMainBranch(process: newElmAppProcess, stateJson: elmAppState)
                         .Extract(error => throw new Exception("Failed to set state: " + error));
 
                     processRepresentationDuringRestore.lastElmAppVolatileProcess?.Dispose();
@@ -374,7 +375,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     "Failed to load the serialized state with the elm app: Looks like no app was deployed so far.");
             }
 
-            var projectedElmAppState = Encoding.UTF8.GetString(setElmAppState);
+            var projectedElmAppState = JsonSerializer.Deserialize<JsonElement>(setElmAppState);
 
             return
                 StateShim.StateShim.SetAppStateOnMainBranch(
@@ -388,12 +389,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             var elmAppStateBefore =
                 processBefore.lastElmAppVolatileProcess is null ?
-                null
+                (JsonElement?)null
                 :
                 StateShim.StateShim.GetAppStateFromMainBranch(processBefore.lastElmAppVolatileProcess)
                 .Extract(err => throw new Exception("Failed to get serialized state: " + err));
 
-            if (elmAppStateBefore is null)
+            if (!elmAppStateBefore.HasValue)
                 return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err("No state from previous app");
 
             var prepareProcessResult =
@@ -411,7 +412,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         functionName: "migrate",
                         arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
                             stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                            serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Deserialize<JsonElement>(elmAppStateBefore))),
+                            serializedArgumentsJson: ImmutableList.Create(elmAppStateBefore.Value)),
                         stateDestinationBranches: ImmutableList.Create("main"))));
 
             return
@@ -509,8 +510,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 functionName: "processEvent",
                 arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<bool>(
                     stateArgument: true,
-                    serializedArgumentsJson: ImmutableList.Create(
-                        JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(webServerEvent))))));
+                    serializedArgumentsJson: ImmutableList.Create(JsonSerializer.SerializeToElement(webServerEvent)))));
         try
         {
             var webServerEvent = JsonSerializer.Deserialize<InterfaceToHost.BackendEventStruct>(asString);
@@ -743,6 +743,46 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
+    public Result<string, (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string)> SetStateOnMainBranch(
+        IProcessStoreWriter storeWriter,
+        JsonElement appState)
+    {
+        lock (processLock)
+        {
+            return
+                StateShim.StateShim.SetAppStateOnMainBranch(lastElmAppVolatileProcess, appState)
+                .Map(setStateSuccess =>
+                {
+                    using var stream = new System.IO.MemoryStream();
+
+                    using var jsonWriter = new Utf8JsonWriter(stream);
+
+                    appState.WriteTo(jsonWriter);
+
+                    jsonWriter.Flush();
+
+                    var elmAppStateComponent = PineValue.Blob(stream.ToArray());
+
+                    storeWriter.StoreComponent(elmAppStateComponent);
+
+                    var compositionEvent =
+                        new CompositionLogRecordInFile.CompositionEvent
+                        {
+                            SetElmAppState = new ValueInFileStructure
+                            {
+                                HashBase16 = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent))
+                            }
+                        };
+
+                    var recordHash = storeWriter.AppendCompositionLogRecord(compositionEvent);
+
+                    lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
+
+                    return (compositionEvent, setStateSuccess);
+                });
+        }
+    }
+
     public Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
         IProcessStoreWriter storeWriter,
         AdminInterface.ApplyFunctionOnDatabaseRequest request)
@@ -820,7 +860,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     {
         var report = new StoreProvisionalReductionReport();
 
-        string? elmAppState = null;
+        JsonElement? elmAppState = null;
+
+        string? elmAppStateSerial = null;
 
         var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -842,19 +884,26 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 StateShim.StateShim.GetAppStateFromMainBranch(lastElmAppVolatileProcess)
                 .Extract(err => throw new Exception("Failed to get serialized state: " + err));
 
-            report.serializeElmAppStateTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds;
-            report.serializeElmAppStateLength = elmAppState?.Length;
+            report.getElmAppStateFromEngineTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds;
+
+            elmAppStateSerial = elmAppState?.ToString();
+
+            if (elmAppStateSerial == "")
+                elmAppStateSerial = "\"\"";
+
+            report.serializeElmAppStateToStringTimeSpentMilli = (int)serializeStopwatch.ElapsedMilliseconds;
+            report.serializeElmAppStateLength = elmAppStateSerial?.Length;
         }
 
         var elmAppStateBlob =
-            elmAppState == null
+            elmAppStateSerial is null
             ?
             null
             :
-            Encoding.UTF8.GetBytes(elmAppState);
+            Encoding.UTF8.GetBytes(elmAppStateSerial);
 
         var elmAppStateComponent =
-            elmAppStateBlob == null
+            elmAppStateBlob is null
             ?
             null
             :

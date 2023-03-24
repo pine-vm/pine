@@ -287,13 +287,13 @@ public class PublicAppState
             {
                 var processEventResponse = serverAndElmAppConfig.ProcessEventInElmApp(serializedAppEvent);
 
-                var backendEventResponseSerial =
+                var backendEventResponseJson =
                     processEventResponse
                     .AndThen(applyFunctionOk => applyFunctionOk.resultLessStateJson.ToResult("Apply function response is missing resultLessStateJson"))
                     .Extract(err => throw new Exception("Failed to process event in Elm app: " + err));
 
                 var backendEventResponse =
-                System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.BackendEventResponseStruct>(backendEventResponseSerial);
+                System.Text.Json.JsonSerializer.Deserialize<InterfaceToHost.BackendEventResponseStruct>(backendEventResponseJson);
 
                 var notifyWhenPosixTimeHasArrived = backendEventResponse.notifyWhenPosixTimeHasArrived.WithDefault(null);
 

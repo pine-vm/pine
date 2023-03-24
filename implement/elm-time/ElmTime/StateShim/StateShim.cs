@@ -16,16 +16,14 @@ public class StateShim
 
     static public Result<string, string> SetAppStateOnMainBranch(
         IProcess<string, string> process,
-        string stateJson) =>
-        SetAppState(process: process, stateJsonString: stateJson, branchName: "main");
+        JsonElement stateJson) =>
+        SetAppState(process: process, stateJson: stateJson, branchName: "main");
 
     static public Result<string, string> SetAppState(
         IProcess<string, string> process,
-        string stateJsonString,
+        JsonElement stateJson,
         string branchName)
     {
-        var stateJson = JsonSerializer.Deserialize<JsonElement>(stateJsonString);
-
         return
             ProcessStateShimRequest(
                 process,
@@ -42,10 +40,10 @@ public class StateShim
             });
     }
 
-    static public Result<string, string> GetAppStateFromMainBranch(IProcess<string, string> process) =>
+    static public Result<string, JsonElement> GetAppStateFromMainBranch(IProcess<string, string> process) =>
         GetSerializedState(process, branchName: MainBranchName);
 
-    static public Result<string, string> GetSerializedState(
+    static public Result<string, JsonElement> GetSerializedState(
         IProcess<string, string> process,
         string branchName)
     {
@@ -59,7 +57,7 @@ public class StateShim
                 serializeStateResponse.Result,
 
                 _ =>
-                Result<string, string>.err(
+                Result<string, JsonElement>.err(
                     "Unexpected type of response: " + JsonSerializer.Serialize(decodeOk))
             });
     }

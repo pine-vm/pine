@@ -46,7 +46,7 @@ public abstract record StateShimResponseStruct
     public record ApplyFunctionShimResponse(Result<string, FunctionApplicationResult> Result)
         : StateShimResponseStruct;
 
-    public record SerializeStateShimResponse(Result<string, string> Result)
+    public record SerializeStateShimResponse(Result<string, JsonElement> Result)
         : StateShimResponseStruct;
 
     public record SetBranchesStateShimResponse(Result<string, string> Result)
@@ -72,7 +72,7 @@ public record ApplyFunctionArguments<StateT>(
     IReadOnlyList<JsonElement> serializedArgumentsJson)
 {
     public ApplyFunctionArguments<NewStateT> MapStateArgument<NewStateT>(Func<StateT, NewStateT> map) =>
-        new ApplyFunctionArguments<NewStateT>(
+        new(
             stateArgument: map(stateArgument),
             serializedArgumentsJson: serializedArgumentsJson);
 }
@@ -88,7 +88,7 @@ public abstract record StateSource
     public record BranchStateSource(string Branch) : StateSource;
 }
 
-public record FunctionApplicationResult(Maybe<string> resultLessStateJson);
+public record FunctionApplicationResult(Maybe<JsonElement> resultLessStateJson);
 
 public record NamedExposedFunction(string functionName, ExposedFunctionDescription functionDescription);
 
