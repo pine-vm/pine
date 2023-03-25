@@ -626,6 +626,10 @@ processEvent config hostEvent stateBefore =
 
                                 Ok ( maybeFunctionResultState, maybeFunctionResultOther ) ->
                                     let
+                                        producedStateDifferentFromStateArgument =
+                                            (maybeFunctionResultState /= Nothing)
+                                                && (maybeFunctionResultState /= stateArgument)
+
                                         updateStateResult =
                                             case applyFunction.stateDestinationBranches of
                                                 [] ->
@@ -647,7 +651,12 @@ processEvent config hostEvent stateBefore =
 
                                         Ok state ->
                                             ( state
-                                            , ApplyFunctionShimResponse (Ok { resultLessStateJson = maybeFunctionResultOther })
+                                            , ApplyFunctionShimResponse
+                                                (Ok
+                                                    { resultLessStateJson = maybeFunctionResultOther
+                                                    , producedStateDifferentFromStateArgument = producedStateDifferentFromStateArgument
+                                                    }
+                                                )
                                             )
 
         SerializeStateShimRequest stateSource ->
@@ -861,6 +870,7 @@ type alias ExposedFunctionDescription =
 
 type alias FunctionApplicationResult =
     { resultLessStateJson : Maybe Json.Encode.Value
+    , producedStateDifferentFromStateArgument : Bool
     }
 
 """

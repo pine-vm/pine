@@ -88,7 +88,9 @@ public abstract record StateSource
     public record BranchStateSource(string Branch) : StateSource;
 }
 
-public record FunctionApplicationResult(Maybe<JsonElement> resultLessStateJson);
+public record FunctionApplicationResult(
+    Maybe<JsonElement> resultLessStateJson,
+    bool producedStateDifferentFromStateArgument);
 
 public record NamedExposedFunction(string functionName, ExposedFunctionDescription functionDescription);
 
