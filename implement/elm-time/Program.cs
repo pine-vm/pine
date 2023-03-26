@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-03-25";
+    static public string AppVersionId => "2023-03-26";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -1303,7 +1303,7 @@ public class Program
             {
                 var inputDirectory = inputDirectoryOption.Value() ?? Environment.CurrentDirectory;
 
-                var outputPath = outputOption.Value() ?? "make-default-output.html";
+                var outputPathArgument = outputOption.Value() ?? "make-default-output.html";
 
                 var loadInputDirectoryResult =
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(inputDirectory)
@@ -1338,7 +1338,7 @@ public class Program
                         return
                         Make(sourceFiles: Composition.TreeToFlatDictionaryWithPathComparer(loadInputOk.tree),
                         pathToFileWithElmEntryPoint: pathToElmFileArgument.Value!.Replace("\\", "/").Split('/'),
-                        outputFileName: outputPath,
+                        outputFileName: Path.GetFileName(outputPathArgument),
                         elmMakeCommandAppendix: elmMakeCommandAppendix)
                         .Unpack(
                             fromErr: error =>
@@ -1348,9 +1348,12 @@ public class Program
                             },
                             fromOk: makeOk =>
                             {
+                                var outputPath = Path.GetFullPath(outputPathArgument);
+
                                 var outputDirectory = Path.GetDirectoryName(outputPath);
 
-                                Directory.CreateDirectory(outputDirectory);
+                                if (outputDirectory is not null)
+                                    Directory.CreateDirectory(outputDirectory);
 
                                 File.WriteAllBytes(outputPath, makeOk.producedFile.ToArray());
                                 Console.WriteLine("Saved the output to " + outputPath);
