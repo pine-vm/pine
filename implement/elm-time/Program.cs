@@ -260,7 +260,10 @@ public class Program
             var publicAppUrlsOption = runServerCommand.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
             var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
             var deployOption = runServerCommand.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
-            var elmEngineOption = AddElmEngineOptionOnCommand(runServerCommand, defaultEngine: ElmInteractive.ElmEngineType.JavaScript_Jint);
+            var elmEngineOption = AddElmEngineOptionOnCommand(
+                runServerCommand,
+                defaultFromEnvironmentVariablePrefix: "web_server",
+                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.ElmEngineType.JavaScript_Jint);
 
             runServerCommand.OnExecute(() =>
             {
@@ -387,8 +390,10 @@ public class Program
                         processStoreFileStore.SetFileContent(filePath, fileContent);
                 }
 
+                var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
+
                 var jsEngineFactory =
-                    elmEngineOption.parseElmEngineTypeFromOption() switch
+                    elmEngineType switch
                     {
                         ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJintOptimizedForElmApps.Create),
                         ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
@@ -410,7 +415,7 @@ public class Program
 
                 var webHost = webHostBuilder.Build();
 
-                Console.WriteLine("Starting the web server with the admin interface...");
+                Console.WriteLine("Starting web server with admin interface (using engine " + elmEngineType + ")...");
 
                 webHost.Start();
 
@@ -877,7 +882,10 @@ public class Program
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
 
-            var elmEngineOption = AddElmEngineOptionOnCommand(interactiveCommand, defaultEngine: ElmInteractive.IInteractiveSession.DefaultImplementation);
+            var elmEngineOption = AddElmEngineOptionOnCommand(
+                interactiveCommand,
+                defaultFromEnvironmentVariablePrefix: "interactive",
+                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.IInteractiveSession.DefaultImplementation);
 
             var submitOption =
                 interactiveCommand.Option(
@@ -1553,8 +1561,18 @@ public class Program
 
     static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption) AddElmEngineOptionOnCommand(
         CommandLineApplication cmd,
-        ElmInteractive.ElmEngineType defaultEngine)
+        string? defaultFromEnvironmentVariablePrefix,
+        Func<ElmInteractive.ElmEngineType?, ElmInteractive.ElmEngineType> defaultEngineConsideringEnvironmentVariable)
     {
+        var defaultEngineFromEnvironmentVarible =
+            defaultFromEnvironmentVariablePrefix switch
+            {
+                string variablePrefix => ElmEngineFromEnvironmentVariableWithPrefix(variablePrefix),
+                null => null
+            };
+
+        var defaultEngine = defaultEngineConsideringEnvironmentVariable(defaultEngineFromEnvironmentVarible);
+
         var elmEngineOption =
             cmd.Option(
                 template: "--elm-engine",
@@ -1571,6 +1589,22 @@ public class Program
         }
 
         return (elmEngineOption, parseElmEngineTypeFromOption);
+    }
+
+    static public ElmInteractive.ElmEngineType? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
+    {
+        var environmentVariable =
+            environmentVariablePrefix?.TrimEnd('_') +
+            (environmentVariablePrefix is null ? "" : "_") +
+            "elm_engine";
+
+        if (Environment.GetEnvironmentVariable(environmentVariable) is not string asString)
+            return null;
+
+        if (Enum.TryParse<ElmInteractive.ElmEngineType>(asString, ignoreCase: true, out var result))
+            return result;
+
+        return null;
     }
 
     static public string ElmMakeHomeDirectoryPath =>
