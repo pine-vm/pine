@@ -393,6 +393,8 @@ namespace ElmTime
                 (
                     serializeTimeSpentMilli: (int)serializeStopwatch.ElapsedMilliseconds,
                     prepareJsEngineTimeSpentMilli: (int?)prepareJsEngineStopwatch?.ElapsedMilliseconds,
+                    argumentsJsonHash: argumentsJsonHash,
+                    argumentsToJsEngineSerializedLength: argumentsJson.Length,
                     inJsEngineTimeSpentMilli: (int?)inJsEngineStopwatch?.ElapsedMilliseconds,
                     deserializeTimeSpentMilli: (int?)deserializeStopwatch?.ElapsedMilliseconds,
                     totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
@@ -575,6 +577,8 @@ namespace ElmTime
         public record CompilationIterationCompilationReport(
             int serializeTimeSpentMilli,
             int? prepareJsEngineTimeSpentMilli,
+            string? argumentsJsonHash,
+            int? argumentsToJsEngineSerializedLength,
             int? inJsEngineTimeSpentMilli,
             int? deserializeTimeSpentMilli,
             int totalTimeSpentMilli);
