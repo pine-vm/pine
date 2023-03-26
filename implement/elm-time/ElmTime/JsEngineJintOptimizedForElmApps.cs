@@ -1,12 +1,11 @@
 using Jint;
 using Jint.Native;
 using Jint.Native.Object;
-using Jint.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using static ElmTime.JsEngineJint;
 
@@ -63,7 +62,7 @@ public class JsEngineJintOptimizedForElmApps
             {
                 var argument = arguments.Single();
 
-                return Convert.ToBase64String(Get_array_buffer_bytes(argument));
+                return Convert.ToBase64String(JintInterop.GetBytesOfArrayBuffer(argument));
             });
 
         yield return new FunctionDelegateIntoHost(
@@ -79,12 +78,12 @@ public class JsEngineJintOptimizedForElmApps
 
                 if (!Convert.TryFromBase64String(argumentString, bytes, out var bytesWritten))
                 {
-                    return ElmMaybeNothing(engine);
+                    return ElmInteropJint.ElmMaybeNothing(engine);
                 }
 
-                var arrayBuffer = ArrayBufferFromBytes(engine, bytes.AsSpan()[..bytesWritten].ToArray());
+                var arrayBuffer = JintInterop.NewArrayBufferFromBytes(engine, bytes.AsSpan()[..bytesWritten].ToArray());
 
-                return ElmMaybeJust(engine, DataViewFromArrayBuffer(engine, arrayBuffer));
+                return ElmInteropJint.ElmMaybeJust(engine, JintInterop.NewDataViewFromArrayBuffer(engine, arrayBuffer));
             });
 
         yield return new FunctionDelegateIntoHost(
@@ -101,30 +100,38 @@ public class JsEngineJintOptimizedForElmApps
             });
 
         yield return new FunctionDelegateIntoHost(
+            // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L58-L69
+            delegatedJavaScriptFunctionName: "_Bytes_write_bytes",
+            buildWrapperJavaScript: (hostFuncName, originalExpression) =>
+            ElmInteropJint.AstDelegateInElmF3(originalExpression, hostFuncName)
+            .WithDefaultBuilder(() => (Esprima.Ast.Expression)originalExpression),
+            hostFunc: (_, _, arguments) =>
+            {
+                var destDataView = (ObjectInstance)arguments.ElementAt(0);
+
+                var offset = (int)arguments.ElementAt(1).AsNumber();
+
+                var sourceDataView = arguments.ElementAt(2);
+
+                var sourceArrayBuffer = JintInterop.GetArrayBufferOfDataView(sourceDataView);
+
+                var sourceBytes = JintInterop.GetBytesOfArrayBuffer(sourceArrayBuffer);
+
+                var destArrayBuffer = JintInterop.GetArrayBufferOfDataView(destDataView);
+
+                var destBufferBytes = JintInterop.GetBytesOfArrayBuffer(destArrayBuffer);
+
+                Buffer.BlockCopy(sourceBytes, 0, destBufferBytes, offset, sourceBytes.Length);
+
+                return new JsNumber(offset + sourceBytes.Length);
+            });
+
+        yield return new FunctionDelegateIntoHost(
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L87-L124
             delegatedJavaScriptFunctionName: "_Bytes_write_string",
             buildWrapperJavaScript: (hostFuncName, originalExpression) =>
-            {
-                if (originalExpression is not Esprima.Ast.CallExpression originalCallExpression)
-                {
-                    return (Esprima.Ast.Expression)originalExpression;
-                }
-
-                if (originalCallExpression.Callee is not Esprima.Ast.Identifier originalCallExpressionCallee)
-                {
-                    return originalCallExpression;
-                }
-
-                if (originalCallExpressionCallee.Name != "F3")
-                    return originalCallExpression;
-
-                return
-                originalCallExpression
-                .UpdateWith(
-                    callee: originalCallExpression.Callee,
-                    arguments: Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(
-                        new[] { new Esprima.Ast.Identifier(hostFuncName) }));
-            },
+            ElmInteropJint.AstDelegateInElmF3(originalExpression, hostFuncName)
+            .WithDefaultBuilder(() => (Esprima.Ast.Expression)originalExpression),
             hostFunc: (_, _, arguments) =>
             {
                 var destDataView = (ObjectInstance)arguments.ElementAt(0);
@@ -135,9 +142,9 @@ public class JsEngineJintOptimizedForElmApps
 
                 var utf8String = Encoding.UTF8.GetBytes(argumentString);
 
-                var destArrayBuffer = Get_DataView_array_buffer(destDataView);
+                var destArrayBuffer = JintInterop.GetArrayBufferOfDataView(destDataView);
 
-                var destBufferBytes = Get_array_buffer_bytes(destArrayBuffer);
+                var destBufferBytes = JintInterop.GetBytesOfArrayBuffer(destArrayBuffer);
 
                 Buffer.BlockCopy(utf8String, 0, destBufferBytes, offset, utf8String.Length);
 
@@ -148,27 +155,8 @@ public class JsEngineJintOptimizedForElmApps
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L152-L182
             delegatedJavaScriptFunctionName: "_Bytes_read_string",
             buildWrapperJavaScript: (hostFuncName, originalExpression) =>
-            {
-                if (originalExpression is not Esprima.Ast.CallExpression originalCallExpression)
-                {
-                    return (Esprima.Ast.Expression)originalExpression;
-                }
-
-                if (originalCallExpression.Callee is not Esprima.Ast.Identifier originalCallExpressionCallee)
-                {
-                    return originalCallExpression;
-                }
-
-                if (originalCallExpressionCallee.Name != "F3")
-                    return originalCallExpression;
-
-                return
-                originalCallExpression
-                .UpdateWith(
-                    callee: originalCallExpression.Callee,
-                    arguments: Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(
-                        new[] { new Esprima.Ast.Identifier(hostFuncName) }));
-            },
+            ElmInteropJint.AstDelegateInElmF3(originalExpression, hostFuncName)
+            .WithDefaultBuilder(() => (Esprima.Ast.Expression)originalExpression),
             hostFunc: (_, _, arguments) =>
             {
                 var len = (int)arguments.ElementAt(0).AsNumber();
@@ -177,115 +165,69 @@ public class JsEngineJintOptimizedForElmApps
 
                 var offset = (int)arguments.ElementAt(2).AsNumber();
 
-                var sourceArrayBuffer = Get_DataView_array_buffer(sourceDataView);
+                var sourceArrayBuffer = JintInterop.GetArrayBufferOfDataView(sourceDataView);
 
-                var sourceBufferBytes = Get_array_buffer_bytes(sourceArrayBuffer);
+                var sourceBufferBytes = JintInterop.GetBytesOfArrayBuffer(sourceArrayBuffer);
 
                 var readString = Encoding.UTF8.GetString(sourceBufferBytes, offset, len);
 
                 var newOffset = offset + len;
 
-                var elmTuple = new JsObject(sourceDataView.Engine);
-
-                elmTuple.FastSetDataProperty("$", new JsString("#2"));
-                elmTuple.FastSetDataProperty("a", newOffset);
-                elmTuple.FastSetDataProperty("b", readString);
-
-                return elmTuple;
+                return ElmInteropJint.NewElmTuple2(sourceDataView.Engine, newOffset, readString);
             });
-    }
 
-    static JsObject ElmMaybeNothing(Engine engine)
-    {
-        // var $elm$core$Maybe$Nothing = {$: 'Nothing'};
+        yield return new FunctionDelegateIntoHost(
+            // https://github.com/folkertdev/elm-sha2/blob/2a106ca6850c3f8197e02c7e6a3e3797f599e87a/src/SHA256.elm#L103-L105
+            delegatedJavaScriptFunctionName: "$folkertdev$elm_sha2$SHA256$fromBytes",
+            buildWrapperJavaScript: (hostFuncName, originalExpression) => new Esprima.Ast.Identifier(hostFuncName),
+            hostFunc: (engine, _, arguments) =>
+            {
+                var argumentDataView = arguments[0];
 
-        var jsObject = new JsObject(engine);
+                var buffer = JintInterop.GetArrayBufferOfDataView(argumentDataView);
 
-        jsObject.FastSetDataProperty("$", "Nothing");
+                var bytes = JintInterop.GetBytesOfArrayBuffer(buffer);
 
-        return jsObject;
-    }
+                var sha256 = SHA256.HashData(bytes);
 
-    static JsObject ElmMaybeJust(Engine engine, JsValue just)
-    {
-        /*
-        var $elm$core$Maybe$Just = function (a) {
-            return {$: 'Just', a: a};
-        };
-         * */
+                var integersForElmTuple8 = new uint[8];
 
-        var jsObject = new JsObject(engine);
+                Buffer.BlockCopy(sha256, 0, integersForElmTuple8, 0, sha256.Length);
 
-        jsObject.FastSetDataProperty("$", "Just");
-        jsObject.FastSetDataProperty("a", just);
+                return
+                ElmInteropJint.ElmChoiceTypeTag(
+                    engine,
+                    "Digest",
+                    ElmInteropJint.ElmChoiceTypeTag(
+                        engine,
+                        "Tuple8",
+                        integersForElmTuple8.Select(i => new JsNumber(i)).ToArray()));
+            });
 
-        return jsObject;
-    }
+        yield return new FunctionDelegateIntoHost(
+            // https://github.com/folkertdev/elm-sha2/blob/2a106ca6850c3f8197e02c7e6a3e3797f599e87a/src/SHA256.elm#L67-L69
+            delegatedJavaScriptFunctionName: "$folkertdev$elm_sha2$SHA256$fromString",
+            buildWrapperJavaScript: (hostFuncName, originalExpression) => new Esprima.Ast.Identifier(hostFuncName),
+            hostFunc: (engine, _, arguments) =>
+            {
+                var argumentString = arguments[0].AsString();
 
-    static ObjectInstance DataViewFromArrayBuffer(Engine engine, ObjectInstance arrayBuffer)
-    {
-        return engine.Construct("DataView", arrayBuffer);
-    }
+                var utf8 = Encoding.UTF8.GetBytes(argumentString);
 
-    static ObjectInstance ArrayBufferFromBytes(Engine engine, ReadOnlyMemory<byte> bytes)
-    {
-        var arrayBuffer = ArrayBufferFromLength(engine, bytes.Length);
+                var sha256 = SHA256.HashData(utf8);
 
-        var bufferBytes = Get_array_buffer_bytes(arrayBuffer);
+                var integersForElmTuple8 = new uint[8];
 
-        bytes.CopyTo(bufferBytes);
+                Buffer.BlockCopy(sha256, 0, integersForElmTuple8, 0, sha256.Length);
 
-        return arrayBuffer;
-    }
-
-    static ObjectInstance ArrayBufferFromLength(Engine engine, int length)
-    {
-        return engine.Construct("ArrayBuffer", length);
-    }
-
-    static ObjectInstance Get_DataView_array_buffer(JsValue objectInstance)
-    {
-        var argumentType = objectInstance.GetType();
-
-        var propertyArrayBuffer =
-            argumentType.GetField(
-                "_viewedArrayBuffer",
-                bindingAttr: BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
-        return (ObjectInstance)propertyArrayBuffer.GetValue(objectInstance);
-    }
-
-    static byte[] Get_array_buffer_bytes(JsValue objectInstance)
-    {
-        var argumentType = objectInstance.GetType();
-
-        var propertyArrayBufferData =
-            argumentType.GetProperty(
-                "ArrayBufferData",
-                bindingAttr: BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
-        var bufferBytes = (byte[])propertyArrayBufferData.GetMethod.Invoke(objectInstance, null);
-
-        return bufferBytes;
-    }
-
-    class DelegatingFunctionInstance : Jint.Native.Function.FunctionInstance
-    {
-        readonly Func<JsValue, JsValue[], JsValue> func;
-
-        public DelegatingFunctionInstance(
-            Engine engine,
-            Realm realm,
-            JsString? name,
-            Func<JsValue, JsValue[], JsValue> func)
-            : base(engine, realm, name)
-        {
-            this.func = func;
-        }
-
-        protected override JsValue Call(JsValue thisObject, JsValue[] arguments)
-        {
-            return func(thisObject, arguments);
-        }
+                return
+                ElmInteropJint.ElmChoiceTypeTag(
+                    engine,
+                    "Digest",
+                    ElmInteropJint.ElmChoiceTypeTag(
+                        engine,
+                        "Tuple8",
+                        integersForElmTuple8.Select(i => new JsNumber(i)).ToArray()));
+            });
     }
 }
