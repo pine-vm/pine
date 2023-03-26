@@ -670,6 +670,89 @@ fromIntFromDigitsChars digitsCharacters int =
 
 """
     , """
+module Array exposing (..)
+
+
+import Basics exposing (..)
+import Bitwise
+import List
+import Maybe exposing (Maybe(..))
+import Tuple
+
+
+empty =
+    []
+
+
+isEmpty : Array a -> Bool
+isEmpty array =
+    Pine_kernel.equal [ array, [] ]
+
+
+length : Array a -> Int
+length array =
+    Pine_kernel.length array
+
+
+repeat : Int -> a -> Array a
+repeat n value =
+    List.repeat n value
+
+
+get : Int -> Array a -> Maybe a
+get index array =
+    if index < 0
+    then
+        Nothing
+    else
+        List.head (List.drop index array)
+
+
+set : Int -> a -> Array a -> Array a
+set index value array =
+    if (index < 0) || (index >= (Pine_kernel.length array))
+    then
+        array
+    else
+        Pine_kernel.concat [ Pine_kernel.take [ index, array ], [ value ], Pine_kernel.skip [ index + 1, array ] ]
+
+
+push : a -> Array a -> Array a
+push element array =
+    Pine_kernel.concat [ array, [ element ] ]
+
+
+append : Array a -> Array a -> Array a
+append first second =
+    Pine_kernel.concat [ first, second ]
+
+
+fromList : List a -> Array a
+fromList list =
+    list
+
+
+toList : Array a -> List a
+toList array =
+    array
+
+
+map : (a -> b) -> Array a -> Array b
+map =
+    List.map
+
+
+foldr : (a -> b -> b) -> b -> Array a -> b
+foldr =
+    List.foldr
+
+
+foldl : (a -> b -> b) -> b -> Array a -> b
+foldl =
+    List.foldl
+
+"""
+    , """
 module Bytes exposing (..)
 
 

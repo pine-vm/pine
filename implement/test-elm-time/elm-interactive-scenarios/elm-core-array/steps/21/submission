@@ -1,0 +1,1 @@
+Array.push 7 (Array.push 5 Array.empty)
