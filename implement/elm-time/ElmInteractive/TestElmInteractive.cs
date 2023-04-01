@@ -10,7 +10,16 @@ namespace ElmTime.ElmInteractive;
 
 public class TestElmInteractive
 {
+    public record Scenario(
+        TreeNodeWithStringPath? appCodeTree,
+        IReadOnlyList<(string stepName, ScenarioStep step)> steps);
+
+    public record ScenarioStep(
+        string submission,
+        string? expectedResponse);
+
     public record InteractiveScenarioTestReport(
+        Scenario scenario,
         ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, object> result)> stepsReports,
         TimeSpan elapsedTime)
     {
@@ -40,6 +49,66 @@ public class TestElmInteractive
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        var parsedScenario =
+            ParseScenario(scenarioTree)
+            .Extract(err => throw new Exception("Failed parsing scenario: " + err));
+
+        using var interactiveSession = IInteractiveSession.Create(appCodeTree: parsedScenario.appCodeTree, implementationType);
+
+        var stepsReports =
+            parsedScenario.steps
+            .Select(sessionStep =>
+            {
+                Result<InteractiveScenarioTestStepFailure, object> getResult()
+                {
+                    try
+                    {
+                        var evalResult = interactiveSession.Submit(sessionStep.step.submission);
+
+                        var evalOk =
+                        evalResult
+                        .Extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
+
+                        if (sessionStep.step.expectedResponse is string expectedResponse)
+                        {
+                            if (expectedResponse != evalOk.interactiveResponse?.displayText)
+                            {
+                                var errorText =
+                                "Response from interactive does not match expected value. Expected:\n" +
+                                expectedResponse +
+                                "\nBut got this response:\n" +
+                                evalOk.interactiveResponse?.displayText;
+
+                                return Result<InteractiveScenarioTestStepFailure, object>.err(
+                                    new InteractiveScenarioTestStepFailure(
+                                        submission: sessionStep.step.submission,
+                                        errorAsText: errorText));
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        return Result<InteractiveScenarioTestStepFailure, object>.err(
+                            new InteractiveScenarioTestStepFailure(
+                                submission: sessionStep.step.submission,
+                                errorAsText: "Runtime exception:\n" + e.ToString()));
+                    }
+
+                    return Result<InteractiveScenarioTestStepFailure, object>.ok(new object());
+                }
+
+                return (sessionStep.stepName, getResult());
+            })
+            .ToImmutableList();
+
+        return new InteractiveScenarioTestReport(
+            scenario: parsedScenario,
+            stepsReports: stepsReports,
+            elapsedTime: totalStopwatch.Elapsed);
+    }
+
+    static public Result<string, Scenario> ParseScenario(TreeNodeWithStringPath scenarioTree)
+    {
         var appCodeTree =
             scenarioTree.GetNodeAtPath(new[] { "context-app" });
 
@@ -60,81 +129,30 @@ public class TestElmInteractive
                     throw new Exception("Found no stepsDirectories"))
             };
 
-        using var interactiveSession = IInteractiveSession.Create(appCodeTree: appCodeTree, implementationType);
-
         var stepsNames = testScenarioSteps.Select(s => s.itemName).ToImmutableList();
 
         if (!stepsNames.Order().SequenceEqual(stepsNames.OrderByNatural()))
-            throw new Exception("Ambiguous sort order of steps (" + string.Join(", ", stepsNames) + "). Rename these steps to make the ordering obvious");
+        {
+            return Result<string, Scenario>.err(
+                "Ambiguous sort order of steps (" + string.Join(", ", stepsNames) + "). Rename these steps to make the ordering obvious");
+        }
 
-        var stepsReports =
+        return
             testScenarioSteps
             .Select(sessionStep =>
             {
                 var stepName = sessionStep.itemName;
 
-                var (submission, expectedResponse) =
-                ParseStep(sessionStep.itemValue)
-                .Extract(fromErr: error => throw new Exception(error));
-
-                return new
-                {
-                    stepName,
-                    submission,
-                    expectedResponse
-                };
+                return
+                ParseScenarioStep(sessionStep.itemValue)
+                .MapError(err => "Failed to parse step " + stepName + ": " + err)
+                .Map(parsedStep => (stepName, parsedStep));
             })
-            .Select(sessionStep =>
-            {
-
-                Result<InteractiveScenarioTestStepFailure, object> getResult()
-                {
-                    try
-                    {
-                        var evalResult = interactiveSession.Submit(sessionStep.submission);
-
-                        var evalOk =
-                        evalResult
-                        .Extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
-
-                        if (sessionStep.expectedResponse != null)
-                        {
-                            if (sessionStep.expectedResponse != evalOk.interactiveResponse?.displayText)
-                            {
-                                var errorText =
-                                "Response from interactive does not match expected value. Expected:\n" +
-                                sessionStep.expectedResponse +
-                                "\nBut got this response:\n" +
-                                evalOk.interactiveResponse?.displayText;
-
-                                return Result<InteractiveScenarioTestStepFailure, object>.err(
-                                    new InteractiveScenarioTestStepFailure(
-                                        submission: sessionStep.submission,
-                                        errorAsText: errorText));
-                            }
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        return Result<InteractiveScenarioTestStepFailure, object>.err(
-                            new InteractiveScenarioTestStepFailure(
-                                submission: sessionStep.submission,
-                                errorAsText: "Runtime exception:\n" + e.ToString()));
-                    }
-
-                    return Result<InteractiveScenarioTestStepFailure, object>.ok(new object());
-                }
-
-                return (sessionStep.stepName, getResult());
-            })
-            .ToImmutableList();
-
-        return new InteractiveScenarioTestReport(
-            stepsReports: stepsReports,
-            elapsedTime: totalStopwatch.Elapsed);
+            .ListCombine()
+            .Map(steps => new Scenario(appCodeTree: appCodeTree, steps: steps));
     }
 
-    static public Result<string, (string submission, string? expectedResponse)> ParseStep(TreeNodeWithStringPath sessionStep)
+    static public Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
     {
         var expectedResponse =
             sessionStep.GetNodeAtPath(new[] { "expected-value" }) is TreeNodeWithStringPath.BlobNode expectedValueBlob
@@ -149,6 +167,6 @@ public class TestElmInteractive
                 TreeNodeWithStringPath.BlobNode submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
                 _ => Result<string, string>.err("Missing submission"),
             })
-            .Map(submission => (submission, expectedResponse));
+            .Map(submission => new ScenarioStep(submission, expectedResponse));
     }
 }

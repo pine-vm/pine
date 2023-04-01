@@ -102,7 +102,6 @@ public class DotNetAssembly
             item.itemResult
             .MapError(err => "Failed for directory " + item.Name + ": " + err)
             .Map(success => (item.Name, success)))
-            .ToImmutableList()
             .ListCombine()
             .Map(treeElements => TreeNodeWithStringPath.SortedTree(treeElements.ToImmutableList()));
     }

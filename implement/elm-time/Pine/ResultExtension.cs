@@ -7,7 +7,7 @@ namespace Pine;
 
 public static class ResultExtension
 {
-    public static Result<ErrT, IReadOnlyList<OkT>> ListCombine<ErrT, OkT>(this IReadOnlyList<Result<ErrT, OkT>> list)
+    public static Result<ErrT, IReadOnlyList<OkT>> ListCombine<ErrT, OkT>(this IEnumerable<Result<ErrT, OkT>> list)
     {
         var okList = new List<OkT>();
 

@@ -55,7 +55,6 @@ public static class Composition
             :
             Result<string, string>.err("Out of range: " + charInteger)))
             .Select((result, index) => result.MapError(err => "at " + index + ": " + err))
-            .ToImmutableList()
             .ListCombine()
             .Map(chars => string.Join(null, chars));
     }

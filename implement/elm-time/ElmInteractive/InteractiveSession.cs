@@ -19,7 +19,9 @@ public interface IInteractiveSession : IDisposable
             ElmEngineType.JavaScript_V8 =>
             new InteractiveSessionJavaScript(appCodeTree, InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8),
 
-            ElmEngineType.Pine => new InteractiveSessionPine(appCodeTree),
+            ElmEngineType.Pine =>
+            new InteractiveSessionPine(appCodeTree),
+
             _ => throw new ArgumentOutOfRangeException(nameof(engineType), $"Unexpected engine type value: {engineType}"),
         };
 

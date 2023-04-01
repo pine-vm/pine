@@ -93,5 +93,25 @@ public abstract record PineValue : IEquatable<PineValue>
 
         public override int GetHashCode() => slimHashCode;
     }
+
+    /// <summary>
+    /// Determines whether the given value is present within a nested ListValue, considering transitive containment.
+    /// </summary>
+    /// <param name="pineValue">The value to search for within the nested lists.</param>
+    /// <returns>
+    /// Returns true if the provided PineValue is found within the nested ListValue, including in any sublists;
+    /// returns false if the current instance is a BlobValue, as it does not contain any elements.
+    /// </returns>
+    public bool ContainsInListTransitive(PineValue pineValue) =>
+        this switch
+        {
+            BlobValue => false,
+
+            ListValue list =>
+            list.Elements.Any(e => e.Equals(pineValue) || e.ContainsInListTransitive(pineValue)),
+
+            _ =>
+            throw new NotImplementedException()
+        };
 }
 

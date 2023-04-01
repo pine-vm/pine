@@ -42,8 +42,8 @@ public class TestPineVM
             var pineVM = new PineVM();
 
             var evaluated = pineVM.EvaluateExpression(
-                PineValue.List(ImmutableList<PineValue>.Empty),
-                testCase.expression);
+                testCase.expression,
+                PineValue.List(ImmutableList<PineValue>.Empty));
 
             Assert.AreEqual(testCase.expected, evaluated);
         }

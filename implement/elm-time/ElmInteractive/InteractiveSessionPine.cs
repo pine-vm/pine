@@ -1,7 +1,12 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using static ElmTime.ElmInteractive.IInteractiveSession;
 
 namespace ElmTime.ElmInteractive;
@@ -17,12 +22,14 @@ public class InteractiveSessionPine : IInteractiveSession
 
     ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
-    readonly PineVM pineVM = new();
+    readonly PineVM pineVM;
 
     readonly static ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
 
-    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree)
+    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, PineVM? pineVM = null)
     {
+        this.pineVM = pineVM ?? new PineVM();
+
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
             CompileInteractiveEnvironment(appCodeTree: appCodeTree));
     }
@@ -120,13 +127,13 @@ public class InteractiveSessionPine : IInteractiveSession
                         lastCompilationCache = compileSubmissionOk.cache;
 
                         return
-                        PineVM.DecodeExpressionFromValue(compileSubmissionOk.compiledValue)
+                        PineVM.DecodeExpressionFromValueDefault(compileSubmissionOk.compiledValue)
                         .MapError(error => "Failed to decode expression: " + error)
                         .AndThen(decodeExpressionOk =>
                         {
                             clock.Restart();
 
-                            var evalResult = pineVM.EvaluateExpression(buildPineEvalContextOk, decodeExpressionOk);
+                            var evalResult = pineVM.EvaluateExpression(decodeExpressionOk, buildPineEvalContextOk);
 
                             logDuration("eval");
 
@@ -175,5 +182,65 @@ public class InteractiveSessionPine : IInteractiveSession
     {
         if (compileElmPreparedJsEngine.IsValueCreated)
             compileElmPreparedJsEngine.Value?.Dispose();
+    }
+
+    static public Result<string, PineCompileToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
+        IReadOnlyList<TestElmInteractive.Scenario> scenarios,
+        PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
+        int limitNumber)
+    {
+        var expressionsToCompile =
+            scenarios
+            .SelectMany(CollectExpressionsToOptimizeFromScenario)
+            .Distinct()
+            .ToImmutableList();
+
+        return
+            PineCompileToDotNet.CompileExpressionsToCSharpFile(
+                expressionsToCompile,
+                syntaxContainerConfig,
+                limitNumber: limitNumber);
+    }
+
+    static public IReadOnlyList<PineVM.Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
+    {
+        var expressionEvaluations = new ConcurrentQueue<PineVM.Expression>();
+
+        var profilingPineVM = new PineVM(
+            decodeExpressionOverrides: ImmutableDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>.Empty,
+            overrideEvaluateExpression: originalHandler => new PineVM.EvalExprDelegate(
+                (expression, environment) =>
+                {
+                    if
+                    (expression is not PineVM.Expression.EnvironmentExpression &&
+                    (expression is not PineVM.Expression.LiteralExpression))
+                    {
+                        expressionEvaluations.Enqueue(expression);
+                    }
+
+                    return originalHandler(expression, environment);
+                }));
+
+        var profilingSession = new InteractiveSessionPine(appCodeTree: null, profilingPineVM);
+
+        foreach (var step in scenario.steps)
+            profilingSession.Submit(step.step.submission);
+
+        var pineExpressionsToOptimize =
+            expressionEvaluations
+            .Distinct()
+            .Select(expression =>
+            {
+                var usageCount = expressionEvaluations.Count(c => c == expression);
+
+                return (expression, stats: new { usageCount });
+            })
+            .OrderByDescending(expressionAndStats => expressionAndStats.stats.usageCount)
+            .ToImmutableList();
+
+        return
+            pineExpressionsToOptimize
+            .Select(expressionAndStats => expressionAndStats.expression)
+            .ToImmutableList();
     }
 }

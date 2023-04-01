@@ -16,7 +16,7 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-03-26";
+    static public string AppVersionId => "2023-03-31";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -894,25 +894,31 @@ public class Program
                     optionType: CommandOptionType.MultipleValue);
 
             var testCommand =
-                interactiveCommand.Command("test", testCmd =>
+                interactiveCommand.Command("test", testCommand =>
                 {
-                    testCmd.Description = "Test the interactive automatically with given scenarios and reports timings.";
+                    testCommand.Description = "Test the interactive automatically with given scenarios and reports timings.";
 
                     var scenarioOption =
-                        testCmd
+                        testCommand
                         .Option(
                             template: "--scenario",
                             description: "Test an interactive scenario from the given path. The scenario specifies the submissions and can also specify expectations.",
                             optionType: CommandOptionType.MultipleValue);
 
                     var scenariosOption =
-                        testCmd
+                        testCommand
                         .Option(
                             template: "--scenarios",
                             description: "Test a list of interactive scenarios from the given directory. Each scenario specifies the submissions and can also specify expectations.",
                             optionType: CommandOptionType.MultipleValue);
 
-                    testCmd.OnExecute(() =>
+                    var compileToOption =
+                        testCommand.Option(
+                            template: "--compile-to",
+                            description: "Option to compile frequently used expressions to a C# file",
+                            optionType: CommandOptionType.SingleValue);
+
+                    testCommand.OnExecute(() =>
                     {
                         var console = (Pine.IConsole)StaticConsole.Instance;
 
@@ -1076,6 +1082,58 @@ public class Program
                                     color: Pine.IConsole.TextColor.Red);
                             }
                         }
+
+                        if (compileToOption.Value() is string compileTo)
+                        {
+                            var profilingScenarios =
+                            scenariosResults
+                            .Select(sr => sr.Value.scenario)
+                            .ToImmutableList();
+
+                            console.WriteLine("Starting to compile for " + profilingScenarios.Count + " scenarios...");
+
+                            var syntaxContainerConfig =
+                            new PineCompileToDotNet.SyntaxContainerConfig(
+                                containerTypeName: "container_type",
+                                dictionaryMemberName: "compiled_expressions_dictionary");
+
+                            var compileResult =
+                            ElmInteractive.InteractiveSessionPine.CompileForProfiledScenarios(
+                                profilingScenarios,
+                                syntaxContainerConfig: syntaxContainerConfig,
+                                limitNumber: 10);
+
+                            var compileToFileResult =
+                            compileResult
+                            .AndThen(compiledClass =>
+                            PineVMConfiguration.GenerateCSharpFile(
+                                syntaxContainerConfig: syntaxContainerConfig,
+                                compileCSharpClassResult: compiledClass));
+
+                            var returnValue =
+                            compileToFileResult
+                            .Unpack(
+                                fromErr: err =>
+                                {
+                                    console.WriteLine("Failed compilation:\n" + err, color: Pine.IConsole.TextColor.Red);
+
+                                    return 1;
+                                },
+                                fromOk: compileSuccess =>
+                                {
+                                    var outputPath = Path.GetFullPath(compileTo);
+
+                                    var outputDirectory = Path.GetDirectoryName(outputPath);
+
+                                    if (outputDirectory is not null)
+                                        Directory.CreateDirectory(outputDirectory);
+
+                                    File.WriteAllText(outputPath, compileSuccess);
+                                    console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
+
+                                    return 0;
+                                });
+                        }
                     });
                 });
 
@@ -1130,7 +1188,7 @@ public class Program
                                 fromBlob: _ => throw new Exception("Unexpected blob"),
                                 fromTree: tree =>
                                 tree.Select(stepDirectory =>
-                                ElmInteractive.TestElmInteractive.ParseStep(stepDirectory.itemValue)
+                                ElmInteractive.TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
                                 .Extract(fromErr: error => throw new Exception(error)).submission))
                                 .ToImmutableList();
                         })
