@@ -1,7 +1,7 @@
+using Pine;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
-using Pine;
 
 namespace ElmTime.Platform.WebServer;
 
@@ -30,9 +30,9 @@ static public class BuildConfigurationFromArguments
             :
             sourceTree;
 
-        var filteredSourceComposition = Composition.FromTreeWithStringPath(filteredSourceTree);
+        var filteredSourceComposition = PineValueComposition.FromTreeWithStringPath(filteredSourceTree);
 
-        var filteredSourceCompositionId = CommonConversion.StringBase16(Composition.GetHash(filteredSourceComposition));
+        var filteredSourceCompositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(filteredSourceComposition));
 
         Console.WriteLine("Loaded source composition " + filteredSourceCompositionId + " from '" + sourcePath + "'.");
 
@@ -48,10 +48,10 @@ static public class BuildConfigurationFromArguments
         if (originalTree is not TreeNodeWithStringPath.TreeNode tree)
             return originalTree;
 
-        TreeNodeWithStringPath getComponentFromStringName(string name) =>
+        TreeNodeWithStringPath? getValueFromStringName(string name) =>
             tree.Elements.FirstOrDefault(c => c.name == name).component;
 
-        var elmJson = getComponentFromStringName("elm.json");
+        var elmJson = getValueFromStringName("elm.json");
 
         bool keepNode((string name, TreeNodeWithStringPath component) node)
         {
@@ -71,10 +71,10 @@ static public class BuildConfigurationFromArguments
     static public byte[] BuildConfigurationZipArchive(PineValue sourceComposition)
     {
         var parseSourceAsTree =
-            Composition.ParseAsTreeWithStringPath(sourceComposition)
+            PineValueComposition.ParseAsTreeWithStringPath(sourceComposition)
             .Extract(error => throw new Exception("Failed to map source to tree."));
 
-        var sourceFiles = Composition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
+        var sourceFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
 
         return ZipArchive.ZipArchiveFromEntries(sourceFiles);
     }

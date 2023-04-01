@@ -1,10 +1,10 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace TestElmTime;
 
@@ -192,8 +192,8 @@ public class TestLoadFromGithub
                 var responseContentBytes = response.Content.ReadAsByteArrayAsync().Result;
 
                 return
-                    Pine.Composition.ToFlatDictionaryWithPathComparer(
-                        Pine.Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    Pine.PineValueComposition.ToFlatDictionaryWithPathComparer(
+                        Pine.PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             Pine.ZipArchive.EntriesFromZipArchive(responseContentBytes))
                         .EnumerateBlobsTransitive());
             }

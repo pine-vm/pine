@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -18,7 +18,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             {
                 reader.Read();
 
-                return Composition.ComponentFromSignedInteger(integer);
+                return PineValueAsInteger.ValueFromSignedInteger(integer);
             }
         }
 
@@ -66,7 +66,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
             if (propertyName is "ListAsString")
             {
-                var pineValue = Composition.ComponentFromString(reader.GetString());
+                var pineValue = PineValueAsString.ValueFromString(reader.GetString());
 
                 reader.Read();
 
@@ -84,7 +84,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
     public override void Write(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
-        if (Composition.SignedIntegerFromComponent(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
+        if (PineValueAsInteger.SignedIntegerFromValue(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
         {
             if (asInt.Value < long.MaxValue && long.MinValue < asInt.Value)
             {
@@ -94,9 +94,9 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             }
         }
 
-        if (Composition.StringFromComponent(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
+        if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
         {
-            if (!asString.Value.All(asChar => ((asChar & 0xff00) == 0x400) || ((asChar & 0xff00) == 0x200)))
+            if (!asString.Value.All(asChar => (asChar & 0xff00) == 0x400 || (asChar & 0xff00) == 0x200))
             {
                 writer.WriteStartObject();
 

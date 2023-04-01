@@ -1,6 +1,6 @@
-﻿using Jint.Native.Object;
+﻿using Jint;
 using Jint.Native;
-using Jint;
+using Jint.Native.Object;
 using System;
 using System.Reflection;
 

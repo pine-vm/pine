@@ -145,7 +145,7 @@ public class StateShim
                 catch (Exception e)
                 {
                     return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err(
-                        "Failed to parse response string: " + e.ToString());
+                        "Failed to parse response string: " + e);
                 }
             });
     }
@@ -242,7 +242,7 @@ public class StateShim
         catch (Exception e)
         {
             return Result<string, StateShimResponseStruct>.err(
-                "Failed to parse response string: " + e.ToString());
+                "Failed to parse response string: " + e);
         }
     }
 }

@@ -1,3 +1,5 @@
+using Pine;
+using Pine.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -5,8 +7,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Pine;
-using Pine.Json;
 
 namespace ElmTime
 {
@@ -45,7 +45,7 @@ namespace ElmTime
             ElmAppInterfaceConfig interfaceConfig)
         {
             var sourceFilesHash =
-                CommonConversion.StringBase16(Composition.GetHashSorted(Composition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
+                CommonConversion.StringBase16(PineValueComposition.GetHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
 
             var compilationHash =
                 CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
@@ -225,7 +225,7 @@ namespace ElmTime
                                         }
                                         catch (Exception e)
                                         {
-                                            return Result<string, ReadOnlyMemory<byte>>.err("Failed with runtime exception: " + e.ToString());
+                                            return Result<string, ReadOnlyMemory<byte>>.err("Failed with runtime exception: " + e);
                                         }
                                     }
 
@@ -419,9 +419,9 @@ namespace ElmTime
         {
             var compilerId =
                 CommonConversion.StringBase16(
-                    Composition.GetHash(
-                        Composition.FromTreeWithStringPath(
-                            Composition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles))));
+                    PineValueComposition.GetHash(
+                        PineValueComposition.FromTreeWithStringPath(
+                            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles))));
 
             return FileTreeCompilerJsEngineCache.GetOrAdd(
                 compilerId,
@@ -555,7 +555,7 @@ namespace ElmTime
             EstimateCacheItemSizeInMemory(compilationSuccess.result);
 
         static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> item) =>
-            (item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Length)) ?? 0;
+            item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Length) ?? 0;
 
         static long EstimateCacheItemSizeInMemory(LocatedCompilationError compilationError) =>
             100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) + EstimateCacheItemSizeInMemory(compilationError.error);

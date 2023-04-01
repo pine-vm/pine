@@ -1,3 +1,6 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Scripting;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -6,9 +9,6 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
-using Microsoft.CodeAnalysis.Scripting;
 
 namespace Pine;
 
@@ -33,7 +33,7 @@ public class VolatileProcess
         var runSetupScriptResult = RunScript(csharpScriptCode);
 
         if (runSetupScriptResult.Exception != null)
-            throw new Exception("Failed to setup the volatile process: " + runSetupScriptResult.Exception.ToString());
+            throw new Exception("Failed to setup the volatile process: " + runSetupScriptResult.Exception);
     }
 
     /// <summary>
@@ -328,7 +328,7 @@ public class VolatileProcess
                     if (assembly == null)
                         return new ImmutableArray<PortableExecutableReference>();
 
-                    if (!Composition.GetHash(PineValue.Blob(assembly)).Span.SequenceEqual(hash) &&
+                    if (!PineValueComposition.GetHash(PineValue.Blob(assembly)).Span.SequenceEqual(hash) &&
                         !CommonConversion.HashSHA256(assembly).Span.SequenceEqual(hash))
                         return new ImmutableArray<PortableExecutableReference>();
 

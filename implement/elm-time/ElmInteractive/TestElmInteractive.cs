@@ -91,7 +91,7 @@ public class TestElmInteractive
                         return Result<InteractiveScenarioTestStepFailure, object>.err(
                             new InteractiveScenarioTestStepFailure(
                                 submission: sessionStep.step.submission,
-                                errorAsText: "Runtime exception:\n" + e.ToString()));
+                                errorAsText: "Runtime exception:\n" + e));
                     }
 
                     return Result<InteractiveScenarioTestStepFailure, object>.ok(new object());

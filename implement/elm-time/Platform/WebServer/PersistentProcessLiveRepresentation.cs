@@ -1,3 +1,5 @@
+using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
+using Pine;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -5,8 +7,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
-using Pine;
 
 namespace ElmTime.Platform.WebServer;
 
@@ -63,7 +63,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         Func<IJsEngine>? overrideJsEngineFactory = null)
     {
-        var deploymentFiles = Composition.TreeToFlatDictionaryWithPathComparer(deployment);
+        var deploymentFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(deployment);
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: deploymentFiles,
@@ -146,7 +146,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     if (appConfigComponent != null && elmAppStateComponent != null)
                     {
                         var appConfigAsTree =
-                        Composition.ParseAsTreeWithStringPath(appConfigComponent)
+                        PineValueComposition.ParseAsTreeWithStringPath(appConfigComponent)
                         .Extract(error => throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree."));
 
                         if (elmAppStateComponent is not PineValue.BlobValue elmAppStateComponentBlob)
@@ -435,7 +435,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                     return new PersistentProcessLiveRepresentationDuringRestore(
                         lastAppConfig: new ProcessAppConfig(
-                            Composition.FromTreeWithStringPath(deployAppConfigAndMigrateElmAppState),
+                            PineValueComposition.FromTreeWithStringPath(deployAppConfigAndMigrateElmAppState),
                             prepareProcessResult.buildArtifacts),
                         lastElmAppVolatileProcess: newElmAppProcess,
                         initOrMigrateCmds: migrationBackendResponse);
@@ -486,7 +486,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     return
                     new PersistentProcessLiveRepresentationDuringRestore(
                         lastAppConfig: new ProcessAppConfig(
-                            Composition.FromTreeWithStringPath(appConfig),
+                            PineValueComposition.FromTreeWithStringPath(appConfig),
                             prepareProcessResult.buildArtifacts),
                         lastElmAppVolatileProcess: newElmAppProcess, backendResponse);
                 });
@@ -594,7 +594,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         {
             return Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>.err(
                 "Failed to parse event response from the app. Looks like the loaded elm app is not compatible with the interface.\nI got following response from the app:\n" +
-                eventResponseSerial + "\nException: " + parseException.ToString());
+                eventResponseSerial + "\nException: " + parseException);
         }
     }
 
@@ -631,7 +631,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 throw new Exception("Failed to load component " + componentHash + ": Not found in store.");
 
             return
-                Composition.ParseAsTreeWithStringPath(component)
+                PineValueComposition.ParseAsTreeWithStringPath(component)
                 .Extract(error => throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree."));
         }
 
@@ -707,7 +707,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
         catch (Exception e)
         {
-            return Result<string, FileStoreReaderProjectionResult>.err("Failed with exception: " + e.ToString());
+            return Result<string, FileStoreReaderProjectionResult>.err("Failed with exception: " + e);
         }
     }
 
@@ -770,7 +770,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         {
                             SetElmAppState = new ValueInFileStructure
                             {
-                                HashBase16 = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent))
+                                HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent))
                             }
                         };
 
@@ -918,13 +918,13 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     ? null
                     : new ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent))
+                        HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent))
                     },
                 appConfig:
                     new ValueInFileStructure
                     {
                         HashBase16 = CommonConversion.StringBase16(
-                            Composition.GetHash(lastAppConfig.appConfigComponent)),
+                            PineValueComposition.GetHash(lastAppConfig.appConfigComponent)),
                     }
             );
 

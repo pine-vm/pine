@@ -1,3 +1,4 @@
+using LibGit2Sharp;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -6,7 +7,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using LibGit2Sharp;
 
 namespace Pine;
 
@@ -290,7 +290,7 @@ static public class LoadFromGitHubOrGitLab
                                 }
                                 catch (Exception e)
                                 {
-                                    return Result<string, LoadFromUrlSuccess>.err("Failed to convert from git object:\n" + e.ToString());
+                                    return Result<string, LoadFromUrlSuccess>.err("Failed to convert from git object:\n" + e);
                                 }
                             });
                         });
@@ -349,8 +349,8 @@ static public class LoadFromGitHubOrGitLab
         return fromExternalCache switch
         {
             not null => Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
-                Composition.ToFlatDictionaryWithPathComparer(
-                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                PineValueComposition.ToFlatDictionaryWithPathComparer(
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(fromExternalCache.Value))
                     .EnumerateBlobsTransitive())),
 
@@ -391,7 +391,7 @@ static public class LoadFromGitHubOrGitLab
 
             return
                 Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
-                    Composition.ToFlatDictionaryWithPathComparer(
+                    PineValueComposition.ToFlatDictionaryWithPathComparer(
                         Filesystem.GetAllFilesFromDirectory(tempWorkingDirectory)
                         .Where(predicate: c => c.path?[0] == ".git")));
         }
@@ -511,7 +511,7 @@ static public class LoadFromGitHubOrGitLab
             }
 
             return
-                Composition.ToFlatDictionaryWithPathComparer(
+                PineValueComposition.ToFlatDictionaryWithPathComparer(
                     Filesystem.GetAllFilesFromDirectory(tempWorkingDirectory)
                     .Where(predicate: c => c.path?[0] == ".git"));
         }
@@ -576,7 +576,7 @@ static public class LoadFromGitHubOrGitLab
 
     static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)
     {
-        var prefixAsText = "blob " + blobContent.Length.ToString() + "\0";
+        var prefixAsText = "blob " + blobContent.Length + "\0";
 
         var hashedValue = Encoding.ASCII.GetBytes(prefixAsText).Concat(blobContent).ToArray();
 

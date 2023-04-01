@@ -1,10 +1,10 @@
-﻿using System;
+﻿using Pine;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Pine;
 
 namespace ElmTime;
 
@@ -59,7 +59,7 @@ public static class Elm019Binaries
     {
         var elmCodeFilesHash =
             CommonConversion.StringBase16(
-                Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles))));
+                PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles))));
 
         var requestIdentifer = new ElmMakeRequestIdentifier(
             elmCodeFilesHash: elmCodeFilesHash,
@@ -214,7 +214,7 @@ public static class Elm019Binaries
         var lastAttemptResults = attemptsResults.Last();
 
         return Result<string, ElmMakeOk>.err(
-            "Failed for " + attemptsResults.Count.ToString() + " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
+            "Failed for " + attemptsResults.Count + " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
             "\nExit Code: " + lastAttemptResults.processOutput.ExitCode +
             "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
             "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");

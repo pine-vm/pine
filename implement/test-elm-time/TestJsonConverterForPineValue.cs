@@ -18,16 +18,16 @@ public class TestJsonConverterForPineValue
 
         var testCases = new[]
         {
-            Composition.ComponentFromSignedInteger(0),
-            Composition.ComponentFromSignedInteger(1234),
-            Composition.ComponentFromSignedInteger(-45678),
+            PineValueAsInteger.ValueFromSignedInteger(0),
+            PineValueAsInteger.ValueFromSignedInteger(1234),
+            PineValueAsInteger.ValueFromSignedInteger(-45678),
 
             PineValue.EmptyList,
 
             PineValue.List(
                 ImmutableArray.Create(
-                    Composition.ComponentFromSignedInteger(56),
-                    Composition.ComponentFromSignedInteger(57))),
+                    PineValueAsInteger.ValueFromSignedInteger(56),
+                    PineValueAsInteger.ValueFromSignedInteger(57))),
 
             PineValue.Blob(new byte[]{ }),
             PineValue.Blob(new byte[]{10,11,13}),
@@ -62,12 +62,12 @@ public class TestJsonConverterForPineValue
         Assert.AreEqual(
             "1234",
             serializePineValue(
-                Composition.ComponentFromSignedInteger(1234)));
+                PineValueAsInteger.ValueFromSignedInteger(1234)));
 
         Assert.AreEqual(
             "-34567",
             serializePineValue(
-                Composition.ComponentFromSignedInteger(-34567)));
+                PineValueAsInteger.ValueFromSignedInteger(-34567)));
     }
 
     [TestMethod]
@@ -85,7 +85,7 @@ public class TestJsonConverterForPineValue
         Assert.AreEqual(
             $$"""{"ListAsString":"stringValue 789"}""",
             serializePineValue(
-                Composition.ComponentFromString("stringValue 789")));
+                PineValueAsString.ValueFromString("stringValue 789")));
 
         Assert.AreEqual(
             "[]",

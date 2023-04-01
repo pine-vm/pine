@@ -1,11 +1,11 @@
-﻿using System;
+﻿using Pine;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Pine;
 
 namespace ElmTime;
 
@@ -78,7 +78,7 @@ public class ProcessFromElm019Code
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         Func<IJsEngine>? overrideJsEngineFactory = null) =>
         ProcessFromElmCodeFiles(
-            Composition.ToFlatDictionaryWithPathComparer(elmCodeFiles),
+            PineValueComposition.ToFlatDictionaryWithPathComparer(elmCodeFiles),
             overrideElmAppInterfaceConfig,
             overrideJsEngineFactory);
 

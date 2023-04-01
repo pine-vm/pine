@@ -14,6 +14,6 @@ static public class LoadFromLocalFilesystem
 
         var blobs = Filesystem.GetAllFilesFromDirectory(path);
 
-        return Composition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
+        return PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
     }
 }

@@ -1,5 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.PineVM;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -8,9 +9,9 @@ namespace TestElmTime;
 [TestClass]
 public class TestPineCompileToDotNet
 {
-    static public readonly PineValue value_299b7decef = Composition.ComponentFromString("List");
+    static public readonly PineValue value_299b7decef = PineValueAsString.ValueFromString("List");
 
-    static public readonly PineValue value_d597fb92e5 = PineValue.List(new PineValue[] { value_299b7decef, PineValue.EmptyList });
+    static public readonly PineValue value_d597fb92e5 = PineValue.List(new[] { value_299b7decef, PineValue.EmptyList });
 
     [TestMethod]
     public void Test_sort_pine_value_by_containment()
@@ -26,7 +27,7 @@ public class TestPineCompileToDotNet
 
         var listWithHashes =
             listBeforeOrdering
-            .Select(value => (value, hash: CommonConversion.StringBase16(Composition.GetHash(value))))
+            .Select(value => (value, hash: CommonConversion.StringBase16(PineValueComposition.GetHash(value))))
             .ToImmutableList();
 
         var orderedValues = PineCompileToDotNet.OrderValuesByContainment(listBeforeOrdering).ToImmutableList();

@@ -1,12 +1,12 @@
+using ElmTime;
+using JavaScriptEngineSwitcher.V8;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
-using ElmTime;
-using JavaScriptEngineSwitcher.V8;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace TestElmTime;
 
@@ -79,7 +79,7 @@ public class TestModeledInElm
                 Assert.IsNotNull(testsValue, "testsValue on interface is not null.");
 
                 var testsResultEntries =
-                    System.Text.Json.JsonSerializer.Deserialize<FromElmTestResultEntry[]>(testsValue.ToString())!;
+                    System.Text.Json.JsonSerializer.Deserialize<FromElmTestResultEntry[]>(testsValue)!;
 
                 Assert.IsTrue(0 < testsResultEntries.Length, "Number of test result entries is greater than zero.");
 

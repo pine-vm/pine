@@ -1,12 +1,12 @@
+using ElmTime;
+using ElmTime.Platform.WebServer;
+using ElmTime.ProcessStore;
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using ElmTime;
-using ElmTime.Platform.WebServer;
-using ElmTime.ProcessStore;
-using Pine;
 
 namespace TestElmTime;
 
@@ -16,7 +16,7 @@ public class TestSetup
 
     static public PineValue AppConfigComponentFromFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appFiles) =>
-        Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
+        PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
 
     static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
@@ -87,7 +87,7 @@ public class TestSetup
 
     static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
         string directoryPath) =>
-            Composition.ToFlatDictionaryWithPathComparer(
+            PineValueComposition.ToFlatDictionaryWithPathComparer(
                 Filesystem.GetAllFilesFromDirectory(directoryPath)
                 .OrderBy(file => string.Join('/', file.path)));
 

@@ -31,7 +31,7 @@ public abstract record Maybe<JustT>
     /// <summary>
     /// A <see cref="Maybe{JustT}"/> that is Nothing.
     /// </summary>
-    public record Nothing() : Maybe<JustT>;
+    public record Nothing : Maybe<JustT>;
 
     /// <summary>
     /// A <see cref="Maybe{JustT}"/> that is a Just.

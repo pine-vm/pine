@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.PineVM;
 using System;
 using System.Collections.Immutable;
 
@@ -15,22 +16,22 @@ public class TestPineVM
         {
             new
             {
-                expression = (PineVM.Expression)new PineVM.Expression.LiteralExpression(PineValue.Blob(new byte[]{1,4,7})),
+                expression = (Expression)new Expression.LiteralExpression(PineValue.Blob(new byte[] { 1, 4, 7 })),
                 expected = Result<string, PineValue>.ok(
-                    PineValue.Blob(new byte[]{1,4,7}))
+                    PineValue.Blob(new byte[] { 1, 4, 7 }))
             },
             new
             {
-                expression = (PineVM.Expression)new PineVM.Expression.ListExpression(ImmutableArray<PineVM.Expression>.Empty),
+                expression = (Expression)new Expression.ListExpression(ImmutableArray<Expression>.Empty),
                 expected = Result<string, PineValue>.ok(
                     PineValue.List(ImmutableList<PineValue>.Empty))
             },
             new
             {
-                expression = (PineVM.Expression) PineVM.DecodeKernelApplicationExpression
+                expression = (Expression)PineVM.DecodeKernelApplicationExpression
                 (
-                    functionName : "concat",
-                    argument : new PineVM.Expression.ListExpression(ImmutableArray<PineVM.Expression>.Empty)
+                    functionName: "concat",
+                    argument: new Expression.ListExpression(ImmutableArray<Expression>.Empty)
                 ).Extract(fromErr: err => throw new Exception(err)),
                 expected = Result<string, PineValue>.ok(
                     PineValue.List(ImmutableList<PineValue>.Empty))

@@ -24,7 +24,7 @@ public abstract record StateShimRequestStruct
     public record EstimateSerializedStateLengthShimRequest(StateSource StateSource)
         : StateShimRequestStruct;
 
-    public record ListBranchesShimRequest()
+    public record ListBranchesShimRequest
         : StateShimRequestStruct;
 
     public record RemoveBranchesShimRequest(IReadOnlyList<string> BranchesNames)

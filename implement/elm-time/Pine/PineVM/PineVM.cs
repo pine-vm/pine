@@ -1,13 +1,10 @@
-using Pine.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Numerics;
-using System.Text.Json.Serialization;
 
-namespace Pine;
+namespace Pine.PineVM;
 
 public class PineVM
 {
@@ -183,9 +180,9 @@ public class PineVM
         ?
         Result<string, bool>.ok(true)
         :
-        (value == FalseValue ? Result<string, bool>.ok(false)
+        value == FalseValue ? Result<string, bool>.ok(false)
         :
-        Result<string, bool>.err("Value is neither True nor False"));
+        Result<string, bool>.err("Value is neither True nor False");
 
     static public Result<string, PineValue> EncodeExpressionAsValue(Expression expression) =>
         expression switch
@@ -214,7 +211,7 @@ public class PineVM
             EncodeExpressionAsValue(stringTag.tagged)
             .Map(encodedTagged => EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
-                PineValue.List(new[] { Composition.ComponentFromString(stringTag.tag), encodedTagged }))),
+                PineValue.List(new[] { PineValueAsString.ValueFromString(stringTag.tag), encodedTagged }))),
 
             _ =>
             Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
@@ -293,7 +290,7 @@ public class PineVM
         .Map(encodedArgument =>
         EncodeChoiceTypeVariantAsPineValue("KernelApplication",
             EncodeRecordToPineValue(
-                (nameof(Expression.KernelApplicationExpression.functionName), Composition.ComponentFromString(kernelApplicationExpression.functionName)),
+                (nameof(Expression.KernelApplicationExpression.functionName), PineValueAsString.ValueFromString(kernelApplicationExpression.functionName)),
                 (nameof(Expression.KernelApplicationExpression.argument), encodedArgument))));
 
     static public Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
@@ -301,7 +298,7 @@ public class PineVM
         PineValue value) =>
         DecodeRecord2FromPineValue(
             value,
-            (nameof(Expression.KernelApplicationExpression.functionName), Composition.StringFromComponent),
+            (nameof(Expression.KernelApplicationExpression.functionName), StringFromComponent: PineValueAsString.StringFromValue),
             (nameof(Expression.KernelApplicationExpression.argument), generalDecoder),
             (functionName, argument) => (functionName, argument))
         .AndThen(functionNameAndArgument =>
@@ -359,7 +356,7 @@ public class PineVM
         DecodePineListValue(value)
         .AndThen(DecodeListWithExactlyTwoElements)
         .AndThen(tagValueAndTaggedValue =>
-        Composition.StringFromComponent(tagValueAndTaggedValue.Item1).MapError(err => "Failed to decode tag: " + err)
+            PineValueAsString.StringFromValue(tagValueAndTaggedValue.Item1).MapError(err => "Failed to decode tag: " + err)
         .AndThen(tag => generalDecoder(tagValueAndTaggedValue.Item2).MapError(err => "Failed to decoded tagged expression: " + err)
         .Map(tagged => new Expression.StringTagExpression(tag: tag, tagged: tagged))));
 
@@ -421,7 +418,7 @@ public class PineVM
             fields.Select(field => PineValue.List(
                 new[]
                 {
-                    Composition.ComponentFromString(field.fieldName),
+                    PineValueAsString.ValueFromString(field.fieldName),
                     field.fieldValue
                 })).ToArray());
 
@@ -435,15 +432,14 @@ public class PineVM
             func: (aggregate, listElement) => aggregate.AndThen(recordFields =>
             DecodePineListValue(listElement)
             .AndThen(DecodeListWithExactlyTwoElements)
-            .AndThen(fieldNameValueAndValue =>
-            Composition.StringFromComponent(fieldNameValueAndValue.Item1)
+            .AndThen(fieldNameValueAndValue => PineValueAsString.StringFromValue(fieldNameValueAndValue.Item1)
             .Map(fieldName => recordFields.SetItem(fieldName, fieldNameValueAndValue.Item2))))));
 
     static public PineValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             new[]
             {
-                Composition.ComponentFromString(tagName),
+                PineValueAsString.ValueFromString(tagName),
                 tagArguments,
             });
 
@@ -453,8 +449,7 @@ public class PineVM
         PineValue value) =>
         DecodePineListValue(value)
         .AndThen(DecodeListWithExactlyTwoElements)
-        .AndThen(tagNameValueAndValue =>
-        Composition.StringFromComponent(tagNameValueAndValue.Item1)
+        .AndThen(tagNameValueAndValue => PineValueAsString.StringFromValue(tagNameValueAndValue.Item1)
         .MapError(error => "Failed to decode union tag name: " + error)
         .AndThen(tagName =>
         {
@@ -479,320 +474,5 @@ public class PineVM
             return Result<string, (T, T)>.err("Unexpected number of elements in list: Not 2 but " + list.Count);
 
         return Result<string, (T, T)>.ok((list[0], list[1]));
-    }
-
-
-    static public class KernelFunction
-    {
-        static public Result<string, PineValue> equal(PineValue value) =>
-            Result<string, PineValue>.ok(
-                ValueFromBool(
-                    value switch
-                    {
-                        PineValue.ListValue list =>
-                        list.Elements.Count < 1 ?
-                        true
-                        :
-                        list.Elements.All(e => e.Equals(list.Elements[0])),
-
-                        PineValue.BlobValue blob =>
-                        blob.Bytes.Length < 1 ? true :
-                        blob.Bytes.ToArray().All(b => b == blob.Bytes.Span[0]),
-
-                        _ => throw new NotImplementedException()
-                    }
-                ));
-
-        static public Result<string, PineValue> logical_not(PineValue value) =>
-            DecodeBoolFromValue(value)
-            .Map(b => ValueFromBool(!b));
-
-        static public Result<string, PineValue> logical_and(PineValue value) =>
-            KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: true, func: (a, b) => a && b), value);
-
-        static public Result<string, PineValue> logical_or(PineValue value) =>
-            KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: false, func: (a, b) => a || b), value);
-
-        static public Result<string, PineValue> length(PineValue value) =>
-            Result<string, PineValue>.ok(
-                Composition.ComponentFromSignedInteger(
-                    value switch
-                    {
-                        PineValue.BlobValue blobComponent => blobComponent.Bytes.Length,
-                        PineValue.ListValue listComponent => listComponent.Elements.Count,
-                        _ => throw new NotImplementedException()
-                    }));
-
-        static public Result<string, PineValue> skip(PineValue value) =>
-            KernelFunctionExpectingExactlyTwoArguments(
-                Composition.SignedIntegerFromComponent,
-                Result<string, PineValue>.ok,
-                compose: (count, list) =>
-                Result<string, PineValue>.ok(
-                    list switch
-                    {
-                        PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[(int)count..]),
-                        PineValue.ListValue listComponent => PineValue.List(listComponent.Elements.Skip((int)count).ToImmutableList()),
-                        _ => throw new NotImplementedException()
-                    }))
-            (value);
-
-        static public Result<string, PineValue> take(PineValue value) =>
-            KernelFunctionExpectingExactlyTwoArguments(
-                Composition.SignedIntegerFromComponent,
-                Result<string, PineValue>.ok,
-                compose: (count, list) =>
-                Result<string, PineValue>.ok(
-                    list switch
-                    {
-                        PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[..(int)count]),
-                        PineValue.ListValue listComponent => PineValue.List(listComponent.Elements.Take((int)count).ToImmutableList()),
-                        _ => throw new NotImplementedException()
-                    }))
-            (value);
-
-        static public Result<string, PineValue> reverse(PineValue value) =>
-            Result<string, PineValue>.ok(
-                value switch
-                {
-                    PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes.ToArray().Reverse().ToArray()),
-                    PineValue.ListValue listComponent => PineValue.List(listComponent.Elements.Reverse().ToImmutableList()),
-                    _ => throw new NotImplementedException()
-                });
-
-        static public Result<string, PineValue> concat(PineValue value) =>
-            DecodePineListValue(value)
-            .Map(list =>
-            list.Aggregate(
-                seed: PineValue.EmptyList,
-                func: (aggregate, elem) =>
-                elem switch
-                {
-                    PineValue.BlobValue elemBlobValue =>
-                    aggregate switch
-                    {
-                        PineValue.BlobValue aggregateBlobValue =>
-                        PineValue.Blob(CommonConversion.Concat(
-                            aggregateBlobValue.Bytes.Span, elemBlobValue.Bytes.Span)),
-                        _ => elemBlobValue
-                    },
-                    PineValue.ListValue elemListValue =>
-                    aggregate switch
-                    {
-                        PineValue.ListValue aggregateListValue =>
-                        PineValue.List(aggregateListValue.Elements.Concat(elemListValue.Elements).ToImmutableList()),
-                        _ => elemListValue
-                    },
-                    _ => throw new NotImplementedException()
-                }));
-
-        static public Result<string, PineValue> list_head(PineValue value) =>
-            DecodePineListValue(value)
-            .Map(list => list.Count < 1 ? PineValue.EmptyList : list[0]);
-
-        static public Result<string, PineValue> neg_int(PineValue value) =>
-            Composition.SignedIntegerFromComponent(value)
-            .Map(i => Composition.ComponentFromSignedInteger(-i));
-
-        static public Result<string, PineValue> add_int(PineValue value) =>
-            KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => Result<string, BigInteger>.ok(
-                    otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate + next)),
-                value);
-
-        static public Result<string, PineValue> sub_int(PineValue value) =>
-            KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => Result<string, BigInteger>.ok(
-                    otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate - next)),
-                value);
-
-        static public Result<string, PineValue> mul_int(PineValue value) =>
-            KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) => Result<string, BigInteger>.ok(
-                    otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate * next)),
-                value);
-
-        static public Result<string, PineValue> div_int(PineValue value) =>
-            KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-                (firstInt, otherInts) =>
-                otherInts.Contains(0) ?
-                Result<string, BigInteger>.err("Division by zero")
-                :
-                Result<string, BigInteger>.ok(otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next)),
-                value);
-
-        static public PineValue is_sorted_ascending_int(PineValue value) =>
-            ValueFromBool(sort_int(value) == value);
-
-        static public PineValue sort_int(PineValue value) =>
-            value switch
-            {
-                PineValue.ListValue list =>
-                new PineValue.ListValue(
-                    list.Elements
-                    .Select(sort_int)
-                    .Order(valueComparerInt)
-                    .ToImmutableList()),
-
-                _ => value,
-            };
-
-        static readonly BlobValueIntComparer valueComparerInt = new();
-
-        class BlobValueIntComparer : IComparer<PineValue>
-        {
-            public int Compare(PineValue? x, PineValue? y) =>
-                (x, y) switch
-                {
-                    (PineValue.BlobValue blobX, PineValue.BlobValue blobY) =>
-                    (Composition.SignedIntegerFromBlobValue(blobX.Bytes.Span),
-                    Composition.SignedIntegerFromBlobValue(blobY.Bytes.Span)) switch
-                    {
-                        (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
-                        BigInteger.Compare(intX.Value, intY.Value),
-
-                        (Result<string, BigInteger>.Ok _, _) => -1,
-                        (_, Result<string, BigInteger>.Ok _) => 1,
-                        _ => 0
-                    },
-
-                    (PineValue.ListValue listX, PineValue.ListValue listY) =>
-                    listX.Elements.Count - listY.Elements.Count,
-
-                    (PineValue.ListValue _, _) => -1,
-
-                    (_, PineValue.ListValue _) => 1,
-
-                    _ => 0
-                };
-        }
-
-        static Result<string, PineValue> KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-            Func<BigInteger, IReadOnlyList<BigInteger>, Result<string, BigInteger>> aggregate,
-            PineValue value) =>
-            KernelFunctionExpectingListOfBigInt(
-                aggregate:
-                listOfIntegers =>
-                (listOfIntegers.Count < 1
-                ?
-                Result<string, BigInteger>.err("List is empty. Expected at least one element")
-                :
-                aggregate(listOfIntegers[0], listOfIntegers.Skip(1).ToImmutableArray()))
-                .Map(Composition.ComponentFromSignedInteger),
-                value);
-
-        static Result<string, PineValue> KernelFunctionExpectingListOfBigInt(
-            Func<IReadOnlyList<BigInteger>, Result<string, PineValue>> aggregate,
-            PineValue value) =>
-            DecodePineListValue(value)
-            .AndThen(list => ResultListMapCombine(list, Composition.SignedIntegerFromComponent))
-            .AndThen(ints => aggregate(ints));
-
-        static Func<PineValue, Result<string, PineValue>> KernelFunctionExpectingExactlyTwoArguments<ArgA, ArgB>(
-            Func<PineValue, Result<string, ArgA>> decodeArgA,
-            Func<PineValue, Result<string, ArgB>> decodeArgB,
-            Func<ArgA, ArgB, Result<string, PineValue>> compose) =>
-            value => DecodePineListValue(value)
-            .AndThen(DecodeListWithExactlyTwoElements)
-            .AndThen(argsValues =>
-            decodeArgA(argsValues.Item1)
-            .AndThen(argA =>
-            decodeArgB(argsValues.Item2)
-            .AndThen(argB => compose(argA, argB))));
-
-        static Result<string, PineValue> KernelFunctionExpectingListOfTypeBool(
-            Func<IReadOnlyList<bool>, bool> compose,
-            PineValue value) =>
-            DecodePineListValue(value)
-            .AndThen(list => ResultListMapCombine(list, DecodeBoolFromValue))
-            .Map(compose)
-            .Map(ValueFromBool);
-    }
-
-    [JsonConverter(typeof(JsonConverterForChoiceType))]
-    public abstract record Expression
-    {
-        public record LiteralExpression(
-            PineValue Value)
-            : Expression;
-
-        public record ListExpression(
-            ImmutableArray<Expression> List)
-            : Expression
-        {
-            public virtual bool Equals(ListExpression? other)
-            {
-                if (other is not ListExpression notNull)
-                    return false;
-
-                return
-                    ReferenceEquals(this, notNull) ||
-                    (List.Length == notNull.List.Length &&
-                    List.SequenceEqual(notNull.List));
-            }
-
-            public override int GetHashCode()
-            {
-                var hashCode = new HashCode();
-
-                foreach (var item in List)
-                {
-                    hashCode.Add(item.GetHashCode());
-                }
-
-                return hashCode.ToHashCode();
-            }
-        }
-
-        public record DecodeAndEvaluateExpression(
-            Expression expression,
-            Expression environment)
-            : Expression;
-
-        public record KernelApplicationExpression(
-            string functionName,
-            Expression argument,
-
-            [property: JsonIgnore]
-            Func<PineValue, Result<string, PineValue>> function)
-            : Expression
-        {
-            public virtual bool Equals(KernelApplicationExpression? other)
-            {
-                if (other is not KernelApplicationExpression notNull)
-                    return false;
-
-                return
-                    notNull.functionName == functionName &&
-                    (ReferenceEquals(notNull.argument, argument) || notNull.argument.Equals(argument));
-            }
-
-            public override int GetHashCode()
-            {
-                var hash = new HashCode();
-
-                hash.Add(functionName);
-                hash.Add(argument);
-
-                return hash.ToHashCode();
-            }
-        }
-
-        public record ConditionalExpression(
-            Expression condition,
-            Expression ifTrue,
-            Expression ifFalse)
-            : Expression;
-
-        public record EnvironmentExpression() : Expression;
-
-        public record StringTagExpression(
-            string tag,
-            Expression tagged)
-            : Expression;
-
-
-        public record DelegatingExpression(Func<PineValue, Result<string, PineValue>> Delegate)
-            : Expression;
     }
 }

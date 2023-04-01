@@ -1,3 +1,4 @@
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -5,7 +6,6 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Pine;
 
 namespace ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
 
@@ -144,7 +144,7 @@ public record CompositionLogRecordInFile(
         CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
 
     static public ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
-        Composition.GetHash(PineValue.Blob(compositionRecord));
+        PineValueComposition.GetHash(PineValue.Blob(compositionRecord));
 
     public record CompositionEvent(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -283,12 +283,12 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             return null;
 
         return
-            Composition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
+            PineValueComposition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
             .Unpack(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
                 {
-                    if (CommonConversion.StringBase16(Composition.GetHash(loadComponentResult)) != componentHashBase16)
+                    if (CommonConversion.StringBase16(PineValueComposition.GetHash(loadComponentResult)) != componentHashBase16)
                         throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
                     return loadComponentResult;
@@ -564,7 +564,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(PineValue component)
     {
-        var (serialRepresentation, dependencies) = Composition.GetSerialRepresentationAndDependencies(component);
+        var (serialRepresentation, dependencies) = PineValueComposition.GetSerialRepresentationAndDependencies(component);
 
         var hash = CommonConversion.HashSHA256(serialRepresentation);
 

@@ -11,7 +11,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
     {
         readonly int slimHashCode;
 
-        public ReadOnlyMemory<byte> Bytes { private init; get; }
+        public ReadOnlyMemory<byte> Bytes { get; }
 
         public BlobNode(ReadOnlyMemory<byte> bytes)
         {
@@ -41,7 +41,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
     {
         readonly int slimHashCode;
 
-        public IReadOnlyList<(string name, TreeNodeWithStringPath component)> Elements { private init; get; }
+        public IReadOnlyList<(string name, TreeNodeWithStringPath component)> Elements { get; }
 
         public TreeNode(IReadOnlyList<(string name, TreeNodeWithStringPath component)> elements)
         {

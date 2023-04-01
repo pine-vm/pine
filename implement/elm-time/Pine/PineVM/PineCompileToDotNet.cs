@@ -11,7 +11,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Pine;
+namespace Pine.PineVM;
 
 public class PineCompileToDotNet
 {
@@ -24,7 +24,7 @@ public class PineCompileToDotNet
         IReadOnlyList<UsingDirectiveSyntax> Usings);
 
     static public Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpFile(
-        IReadOnlyList<PineVM.Expression> expressions,
+        IReadOnlyList<Expression> expressions,
         SyntaxContainerConfig containerConfig,
         int? limitNumber)
     {
@@ -39,7 +39,7 @@ public class PineCompileToDotNet
                     expression,
                     new EnvironmentConfig(argumentEnvironmentName: argumentEnvironmentName)));
 
-        var parametersSyntaxes = new ParameterSyntax[]
+        var parametersSyntaxes = new[]
         {
             SyntaxFactory.Parameter(SyntaxFactory.Identifier(argumentEnvironmentName))
             .WithType(SyntaxFactory.IdentifierName("PineValue")),
@@ -74,13 +74,13 @@ public class PineCompileToDotNet
                 .WithBody(blockSyntax);
         }
 
-        static (PineValue expressionValue, string functionName) functionNameForExpression(PineVM.Expression expression)
+        static (PineValue expressionValue, string functionName) functionNameForExpression(Expression expression)
         {
             var asValue = PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
 
             return
                 (asValue,
-                "expr_function_" + CommonConversion.StringBase16(Composition.GetHash(asValue))[..10]);
+                "expr_function_" + CommonConversion.StringBase16(PineValueComposition.GetHash(asValue))[..10]);
         }
 
         var expressionsMethodDeclarations =
@@ -164,7 +164,7 @@ public class PineCompileToDotNet
         }
 
         (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration) memberDeclarationForExpression(
-            PineVM.Expression expression)
+            Expression expression)
         {
             var expressionExpression =
                 EncodePineExpressionAsCSharpExpression(expression, specialSyntaxForPineValue)
@@ -302,14 +302,26 @@ public class PineCompileToDotNet
             typeSyntax:(TypeSyntax)SyntaxFactory.IdentifierName("PineValue"),
             (ExpressionSyntax)SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                SyntaxFactory.IdentifierName("PineVM"),
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.IdentifierName("Pine"),
+                        SyntaxFactory.IdentifierName("PineVM")),
+                    SyntaxFactory.IdentifierName("PineVM")),
                 SyntaxFactory.IdentifierName("TrueValue"))),
 
             ("value_false",
             SyntaxFactory.IdentifierName("PineValue"),
             SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                SyntaxFactory.IdentifierName("PineVM"),
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.IdentifierName("Pine"),
+                        SyntaxFactory.IdentifierName("PineVM")),
+                    SyntaxFactory.IdentifierName("PineVM")),
                 SyntaxFactory.IdentifierName("FalseValue"))),
         }
         .Concat(valuesStaticMembers)
@@ -448,11 +460,11 @@ public class PineCompileToDotNet
 
     public record DependenciesFromCompilation(
         ImmutableHashSet<PineValue> Values,
-        IImmutableSet<PineVM.Expression> Expressions)
+        IImmutableSet<Expression> Expressions)
     {
         static readonly public DependenciesFromCompilation Empty = new(
             Values: ImmutableHashSet<PineValue>.Empty,
-            Expressions: ImmutableHashSet<PineVM.Expression>.Empty);
+            Expressions: ImmutableHashSet<Expression>.Empty);
 
         static public (T, DependenciesFromCompilation) WithNoDependencies<T>(T other) => (other, Empty);
 
@@ -462,7 +474,7 @@ public class PineCompileToDotNet
     }
 
     static public Result<string, (BlockSyntax blockSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpFunctionBlockSyntax(
-        PineVM.Expression expression,
+        Expression expression,
         EnvironmentConfig environment) =>
             CompileToCSharpExpression(expression, environment)
             .Map(exprAndDeps => (SyntaxFactory.Block(SyntaxFactory.ReturnStatement(
@@ -473,48 +485,50 @@ public class PineCompileToDotNet
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
                     SyntaxFactory.GenericName(
-                        SyntaxFactory.Identifier("Result"))
-                    .WithTypeArgumentList(
-                        SyntaxFactory.TypeArgumentList(
-                            SyntaxFactory.SeparatedList<TypeSyntax>(
-                                new SyntaxNodeOrToken[]{
-                                    SyntaxFactory.PredefinedType(
-                                        SyntaxFactory.Token(SyntaxKind.StringKeyword)),
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                    SyntaxFactory.IdentifierName("PineValue")}))),
+                            SyntaxFactory.Identifier("Result"))
+                        .WithTypeArgumentList(
+                            SyntaxFactory.TypeArgumentList(
+                                SyntaxFactory.SeparatedList<TypeSyntax>(
+                                    new SyntaxNodeOrToken[]
+                                    {
+                                        SyntaxFactory.PredefinedType(
+                                            SyntaxFactory.Token(SyntaxKind.StringKeyword)),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.IdentifierName("PineValue")
+                                    }))),
                     SyntaxFactory.IdentifierName("ok")))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(expression))));
 
     static public Result<string, (ExpressionSyntax expression, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
-        PineVM.Expression expression,
+        Expression expression,
         EnvironmentConfig environment)
     {
         return
             expression switch
             {
-                PineVM.Expression.EnvironmentExpression =>
+                Expression.EnvironmentExpression =>
                 Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
                     DependenciesFromCompilation.WithNoDependencies(
                         SyntaxFactory.IdentifierName(environment.argumentEnvironmentName))),
 
-                PineVM.Expression.ListExpression listExpr =>
+                Expression.ListExpression listExpr =>
                 CompileToCSharpExpression(listExpr, environment),
 
-                PineVM.Expression.LiteralExpression literalExpr =>
+                Expression.LiteralExpression literalExpr =>
                 CompileToCSharpExpression(literalExpr),
 
-                PineVM.Expression.ConditionalExpression conditional =>
+                Expression.ConditionalExpression conditional =>
                 CompileToCSharpExpression(conditional, environment),
 
-                PineVM.Expression.KernelApplicationExpression kernelApp =>
+                Expression.KernelApplicationExpression kernelApp =>
                 CompileToCSharpExpression(kernelApp, environment),
 
-                PineVM.Expression.DecodeAndEvaluateExpression decodeAndEval =>
+                Expression.DecodeAndEvaluateExpression decodeAndEval =>
                 CompileToCSharpExpression(decodeAndEval, environment),
 
-                PineVM.Expression.StringTagExpression stringTagExpr =>
+                Expression.StringTagExpression stringTagExpr =>
                 CompileToCSharpExpression(stringTagExpr, environment),
 
                 _ =>
@@ -524,7 +538,7 @@ public class PineCompileToDotNet
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
-        PineVM.Expression.ListExpression listExpression,
+        Expression.ListExpression listExpression,
         EnvironmentConfig environment)
     {
         return
@@ -554,7 +568,7 @@ public class PineCompileToDotNet
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
-        PineVM.Expression.KernelApplicationExpression kernelApplicationExpression,
+        Expression.KernelApplicationExpression kernelApplicationExpression,
         EnvironmentConfig environment)
     {
         if (!KernelFunctionInfo.Value.TryGetValue(kernelApplicationExpression.functionName, out var syntaxBuilder))
@@ -588,7 +602,7 @@ public class PineCompileToDotNet
 
     static IReadOnlyDictionary<string, Func<ExpressionSyntax, InvocationExpressionSyntax>> ReadKernelMethodInfoViaReflection()
     {
-        var kernelFunctionContainerType = typeof(PineVM.KernelFunction);
+        var kernelFunctionContainerType = typeof(KernelFunction);
         var methodsInfos = kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
 
         return
@@ -602,7 +616,7 @@ public class PineCompileToDotNet
                     SyntaxKind.SimpleMemberAccessExpression,
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName("PineVM"),
+                        SyntaxFactory.QualifiedName(SyntaxFactory.IdentifierName("Pine"), SyntaxFactory.IdentifierName("PineVM")),
                         SyntaxFactory.IdentifierName(kernelFunctionContainerType.Name)),
                     SyntaxFactory.IdentifierName(m.Name)),
                 SyntaxFactory.ArgumentList(
@@ -617,7 +631,7 @@ public class PineCompileToDotNet
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
-        PineVM.Expression.ConditionalExpression conditionalExpression,
+        Expression.ConditionalExpression conditionalExpression,
         EnvironmentConfig environment)
     {
         return
@@ -647,7 +661,7 @@ public class PineCompileToDotNet
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
-        PineVM.Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
+        Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
         EnvironmentConfig environment)
     {
         return
@@ -662,32 +676,32 @@ public class PineCompileToDotNet
             });
     }
 
-    static public Result<string, PineVM.Expression> TransformPineExpressionWithOptionalReplacement(
-        Func<PineVM.Expression, Result<string, Maybe<PineVM.Expression>>> findReplacement,
-        PineVM.Expression expression)
+    static public Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
+        Func<Expression, Result<string, Maybe<Expression>>> findReplacement,
+        Expression expression)
     {
         return
             findReplacement(expression)
             .MapError(err => "Failed to find replacement: " + err)
             .AndThen(maybeReplacement =>
             maybeReplacement
-            .Map(r => Result<string, PineVM.Expression>.ok(r))
+            .Map(r => Result<string, Expression>.ok(r))
             .WithDefaultBuilder(() =>
             {
                 return expression switch
                 {
-                    PineVM.Expression.LiteralExpression literal =>
-                    Result<string, PineVM.Expression>.ok(literal),
+                    Expression.LiteralExpression literal =>
+                    Result<string, Expression>.ok(literal),
 
-                    PineVM.Expression.EnvironmentExpression =>
-                    Result<string, PineVM.Expression>.ok(expression),
+                    Expression.EnvironmentExpression =>
+                    Result<string, Expression>.ok(expression),
 
-                    PineVM.Expression.ListExpression list =>
+                    Expression.ListExpression list =>
                     list.List.Select(e => TransformPineExpressionWithOptionalReplacement(findReplacement, e))
                     .ListCombine()
-                    .Map(elements => (PineVM.Expression)new PineVM.Expression.ListExpression(elements.ToImmutableArray())),
+                    .Map(elements => (Expression)new Expression.ListExpression(elements.ToImmutableArray())),
 
-                    PineVM.Expression.ConditionalExpression conditional =>
+                    Expression.ConditionalExpression conditional =>
                     TransformPineExpressionWithOptionalReplacement(
                         findReplacement,
                         conditional.condition)
@@ -700,46 +714,46 @@ public class PineCompileToDotNet
                         findReplacement,
                         conditional.ifFalse)
                     .Map(transformedIfFalse =>
-                    (PineVM.Expression)new PineVM.Expression.ConditionalExpression(
+                    (Expression)new Expression.ConditionalExpression(
                         transformedCondition,
                         transformedIfTrue,
                         transformedIfFalse)))),
 
-                    PineVM.Expression.KernelApplicationExpression kernelAppl =>
+                    Expression.KernelApplicationExpression kernelAppl =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, kernelAppl.argument)
                     .MapError(err => "Failed to transform kernel application argument: " + err)
-                    .Map(transformedArgument => (PineVM.Expression)new PineVM.Expression.KernelApplicationExpression(
+                    .Map(transformedArgument => (Expression)new Expression.KernelApplicationExpression(
                         functionName: kernelAppl.functionName,
                         argument: transformedArgument,
                         function: null)),
 
-                    PineVM.Expression.StringTagExpression stringTag =>
+                    Expression.StringTagExpression stringTag =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, stringTag.tagged)
-                    .Map(transformedTagged => (PineVM.Expression)new PineVM.Expression.StringTagExpression(tag: stringTag.tag, tagged: transformedTagged)),
+                    .Map(transformedTagged => (Expression)new Expression.StringTagExpression(tag: stringTag.tag, tagged: transformedTagged)),
 
                     _ =>
-                    Result<string, PineVM.Expression>.err("Unsupported expression type: " + expression.GetType().FullName)
+                    Result<string, Expression>.err("Unsupported expression type: " + expression.GetType().FullName)
                 };
             }));
     }
 
-    static public Result<string, PineValue> TryEvaluateExpressionIndependent(PineVM.Expression expression) =>
+    static public Result<string, PineValue> TryEvaluateExpressionIndependent(Expression expression) =>
         expression switch
         {
-            PineVM.Expression.LiteralExpression literal =>
+            Expression.LiteralExpression literal =>
             Result<string, PineValue>.ok(literal.Value),
 
-            PineVM.Expression.ListExpression list =>
+            Expression.ListExpression list =>
             list.List.Select(TryEvaluateExpressionIndependent)
             .ListCombine()
             .Map(PineValue.List),
 
-            PineVM.Expression.KernelApplicationExpression kernelApplication =>
+            Expression.KernelApplicationExpression kernelApplication =>
             TryEvaluateExpressionIndependent(kernelApplication.argument)
             .MapError(err => "Failed to evaluate kernel application argument independent: " + err)
             .AndThen(argument => kernelApplication.function(argument)),
 
-            PineVM.Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
+            Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
             TryEvaluateExpressionIndependent(decodeAndEvaluateExpression)
             .Map(ok =>
             {
@@ -748,7 +762,7 @@ public class PineCompileToDotNet
                 return ok;
             }),
 
-            PineVM.Expression.StringTagExpression stringTag =>
+            Expression.StringTagExpression stringTag =>
             TryEvaluateExpressionIndependent(stringTag.tagged),
 
             _ =>
@@ -756,7 +770,7 @@ public class PineCompileToDotNet
         };
 
     static public Result<string, PineValue> TryEvaluateExpressionIndependent(
-        PineVM.Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
+        Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
     {
         if (TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.environment) is Result<string, PineValue>.Ok envOk)
         {
@@ -774,7 +788,7 @@ public class PineCompileToDotNet
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
-        PineVM.Expression.LiteralExpression literalExpression)
+        Expression.LiteralExpression literalExpression)
     {
         return
             Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
@@ -783,10 +797,10 @@ public class PineCompileToDotNet
     }
 
     static public string DeclarationNameForValue(PineValue pineValue) =>
-        "value_" + CommonConversion.StringBase16(Composition.GetHash(pineValue))[..10];
+        "value_" + CommonConversion.StringBase16(PineValueComposition.GetHash(pineValue))[..10];
 
     static public Result<string, (ExpressionSyntax expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
-        PineVM.Expression.StringTagExpression stringTagExpression,
+        Expression.StringTagExpression stringTagExpression,
         EnvironmentConfig environment)
     {
         Console.WriteLine("Compiling string tag: " + stringTagExpression.tag);
@@ -819,8 +833,8 @@ public class PineCompileToDotNet
                     SyntaxFactory.IdentifierName("EmptyList"));
         }
 
-        if (Composition.SignedIntegerFromComponent(pineValue) is Result<string, BigInteger>.Ok okInteger &&
-            Composition.ComponentFromSignedInteger(okInteger.Value) == pineValue)
+        if (PineValueAsInteger.SignedIntegerFromValue(pineValue) is Result<string, BigInteger>.Ok okInteger &&
+            PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == pineValue)
         {
             if (okInteger.Value < long.MaxValue)
             {
@@ -828,8 +842,8 @@ public class PineCompileToDotNet
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName("Composition"),
-                        SyntaxFactory.IdentifierName("ComponentFromSignedInteger")))
+                        SyntaxFactory.IdentifierName(nameof(PineValueAsInteger)),
+                        SyntaxFactory.IdentifierName(nameof(PineValueAsInteger.ValueFromSignedInteger))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
@@ -840,14 +854,14 @@ public class PineCompileToDotNet
             }
         }
 
-        if (Composition.StringFromComponent(pineValue) is Result<string, string>.Ok okString)
+        if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok okString)
         {
             return
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName("Composition"),
-                        SyntaxFactory.IdentifierName("ComponentFromString")))
+                        SyntaxFactory.IdentifierName(nameof(PineValueAsString)),
+                        SyntaxFactory.IdentifierName(nameof(PineValueAsString.ValueFromString))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
@@ -944,10 +958,10 @@ public class PineCompileToDotNet
     }
 
     static Result<string, ExpressionSyntax> EncodePineExpressionAsCSharpExpression(
-        PineVM.Expression expression,
+        Expression expression,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpressionForValue)
     {
-        var continueEncode = new Func<PineVM.Expression, Result<string, ExpressionSyntax>>(
+        var continueEncode = new Func<Expression, Result<string, ExpressionSyntax>>(
             descendant => EncodePineExpressionAsCSharpExpression(descendant, overrideDefaultExpressionForValue));
 
         static ExpressionSyntax continueWithNewConstructorOfExpressionVariant(
@@ -967,24 +981,24 @@ public class PineCompileToDotNet
 
         return expression switch
         {
-            PineVM.Expression.LiteralExpression literal =>
+            Expression.LiteralExpression literal =>
             Result<string, ExpressionSyntax>.ok(
                 continueWithNewConstructorOfExpressionVariant(
-                    nameof(PineVM.Expression.LiteralExpression),
+                    nameof(Expression.LiteralExpression),
                     CompileToCSharpLiteralExpression(literal.Value, overrideDefaultExpressionForValue))),
 
-            PineVM.Expression.EnvironmentExpression =>
+            Expression.EnvironmentExpression =>
             Result<string, ExpressionSyntax>.ok(
                 continueWithNewConstructorOfExpressionVariant(
-                    nameof(PineVM.Expression.EnvironmentExpression))),
+                    nameof(Expression.EnvironmentExpression))),
 
-            PineVM.Expression.ListExpression list =>
+            Expression.ListExpression list =>
             list.List.Select(continueEncode)
             .ListCombine()
             .MapError(err => "Failed to encode list expression element: " + err)
             .Map(elementsSyntaxes =>
             continueWithNewConstructorOfExpressionVariant(
-                nameof(PineVM.Expression.ListExpression),
+                nameof(Expression.ListExpression),
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
@@ -995,7 +1009,7 @@ public class PineCompileToDotNet
                         SyntaxFactory.SeparatedList(
                             elementsSyntaxes.Select(SyntaxFactory.Argument)))))),
 
-            PineVM.Expression.KernelApplicationExpression kernelApplicationExpr =>
+            Expression.KernelApplicationExpression kernelApplicationExpr =>
             continueEncode(kernelApplicationExpr.argument)
             .MapError(err => "Failed to encode argument of kernel application: " + err)
             .Map(encodedArgument =>
@@ -1015,7 +1029,7 @@ public class PineCompileToDotNet
                         SyntaxFactory.Argument(encodedArgument)
                     })))),
 
-            PineVM.Expression.DecodeAndEvaluateExpression decodeAndEvaluate =>
+            Expression.DecodeAndEvaluateExpression decodeAndEvaluate =>
             continueEncode(decodeAndEvaluate.expression)
             .MapError(err => "Failed to encode expression of decode and evaluate: " + err)
             .AndThen(encodedExpression =>
@@ -1023,7 +1037,7 @@ public class PineCompileToDotNet
             .MapError(err => "Failed to encode environment of decode and evaluate: " + err)
             .Map(encodedEnvironment =>
             continueWithNewConstructorOfExpressionVariant(
-                nameof(PineVM.Expression.DecodeAndEvaluateExpression),
+                nameof(Expression.DecodeAndEvaluateExpression),
                 encodedExpression,
                 encodedEnvironment))),
 

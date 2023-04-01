@@ -1,11 +1,11 @@
-﻿using System;
+﻿using ElmTime.ProcessStore;
+using Pine;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using ElmTime.ProcessStore;
-using Pine;
 
 namespace ElmTime.PersistentProcess;
 
@@ -117,7 +117,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                         lastStateHash = followingComposition.hash;
                     }
 
-                    logger?.Invoke("Restored the process state in " + ((int)restoreStopwatch.Elapsed.TotalSeconds) + " seconds.");
+                    logger?.Invoke("Restored the process state in " + (int)restoreStopwatch.Elapsed.TotalSeconds + " seconds.");
                     return;
                 }
 

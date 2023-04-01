@@ -1,11 +1,11 @@
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
-using Pine;
-using static Pine.Composition;
+using static Pine.PineValueComposition;
 
 namespace ElmTime.ElmInteractive;
 
@@ -390,7 +390,7 @@ public class ElmInteractive
                 PineValue pineValue,
                 IDictionary<PineValue, PineValueMappedForTransport>? cache)
             {
-                if (StringFromComponent(pineValue) is Result<string, string>.Ok asString)
+                if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
                     return new PineValueMappedForTransport(ListAsString: asString.Value, List: null, origin: pineValue);
 
                 if (pineValue is PineValue.ListValue listComponent)
@@ -551,7 +551,7 @@ public class ElmInteractive
             return PineValue.Blob(blob.Select(b => (byte)b).ToArray());
 
         if (fromJson.ListAsString is string listAsString)
-            return ComponentFromString(listAsString);
+            return PineValueAsString.ValueFromString(listAsString);
 
         if (fromJson.Reference is string reference)
         {

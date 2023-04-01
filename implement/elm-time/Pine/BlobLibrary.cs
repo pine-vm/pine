@@ -44,7 +44,7 @@ public class BlobLibrary
             if (blobCandidate == null)
                 return null;
 
-            if (!(Composition.GetHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
+            if (!(PineValueComposition.GetHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
                 System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
                 return null;
 
@@ -122,7 +122,7 @@ public class BlobLibrary
             if (!httpResponse.IsSuccessStatusCode)
             {
                 throw new Exception(
-                    "unexpected HTTP response status code in response from " + httpResponse.RequestMessage.RequestUri.ToString() +
+                    "unexpected HTTP response status code in response from " + httpResponse.RequestMessage.RequestUri +
                     ": " + (int)httpResponse.StatusCode + " (" +
                     httpResponse.StatusCode + ") ('" + httpResponse.Content.ReadAsStringAsync().Result + "')");
             }
@@ -169,7 +169,7 @@ public class BlobLibrary
         }
         catch (Exception e)
         {
-            return Result<string, ReadOnlyMemory<byte>>.err("Runtime exception: " + e.ToString());
+            return Result<string, ReadOnlyMemory<byte>>.err("Runtime exception: " + e);
         }
     }
 
@@ -204,7 +204,7 @@ public class BlobLibrary
 
     static public Func<ReadOnlyMemory<byte>, bool> BlobHasSHA256(ReadOnlyMemory<byte> sha256) =>
         blobCandidate =>
-        Composition.GetHash(PineValue.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
+        PineValueComposition.GetHash(PineValue.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
         System.Security.Cryptography.SHA256.HashData(blobCandidate.Span).AsSpan().SequenceEqual(sha256.Span);
 
     static public IEnumerable<ReadOnlyMemory<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
@@ -241,7 +241,7 @@ public class BlobLibrary
             try
             {
                 fromZipArchive =
-                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(blobContent));
             }
             catch { }

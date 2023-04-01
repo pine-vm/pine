@@ -1,8 +1,8 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
 
 namespace TestElmTime;
 
@@ -69,8 +69,8 @@ public class TestLoadComposition
                     })
                     .ToImmutableList();
 
-                var composition = Composition.FromTreeWithStringPath(loaded.tree);
-                var compositionId = CommonConversion.StringBase16(Composition.GetHash(composition));
+                var composition = PineValueComposition.FromTreeWithStringPath(loaded.tree);
+                var compositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(composition));
 
                 Assert.AreEqual(testCase.expectedCompositionId, compositionId);
             }

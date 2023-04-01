@@ -1,7 +1,5 @@
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine;
+using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -42,7 +40,7 @@ public class InteractiveSessionPine : IInteractiveSession
             appCodeTree switch
             {
                 null => "",
-                not null => CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(appCodeTree)))
+                not null => CommonConversion.StringBase16(PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(appCodeTree)))
             };
 
         try
@@ -202,9 +200,9 @@ public class InteractiveSessionPine : IInteractiveSession
                 limitNumber: limitNumber);
     }
 
-    static public IReadOnlyList<PineVM.Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
+    static public IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
     {
-        var expressionEvaluations = new ConcurrentQueue<PineVM.Expression>();
+        var expressionEvaluations = new ConcurrentQueue<Expression>();
 
         var profilingPineVM = new PineVM(
             decodeExpressionOverrides: ImmutableDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>.Empty,
@@ -212,8 +210,8 @@ public class InteractiveSessionPine : IInteractiveSession
                 (expression, environment) =>
                 {
                     if
-                    (expression is not PineVM.Expression.EnvironmentExpression &&
-                    (expression is not PineVM.Expression.LiteralExpression))
+                    (expression is not Expression.EnvironmentExpression &&
+                    expression is not Expression.LiteralExpression)
                     {
                         expressionEvaluations.Enqueue(expression);
                     }

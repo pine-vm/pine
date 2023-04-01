@@ -56,7 +56,7 @@ public abstract record TaskResult
         Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete> Result)
         : TaskResult;
 
-    public record CompleteWithoutResult()
+    public record CompleteWithoutResult
         : TaskResult;
 
     public static Result<string, TaskResult> From_2023_02_27(_2023_02_27.TaskResult taskResult)

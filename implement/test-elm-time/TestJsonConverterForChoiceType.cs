@@ -12,9 +12,9 @@ public class TestJsonConverterForChoiceType
     [JsonConverter(typeof(JsonConverterForChoiceType))]
     abstract record SimpleClass
     {
-        public record Alfa() : SimpleClass;
+        public record Alfa : SimpleClass;
 
-        public record Beta() : SimpleClass;
+        public record Beta : SimpleClass;
     }
 
     [TestMethod]
@@ -40,7 +40,7 @@ public class TestJsonConverterForChoiceType
     [JsonConverter(typeof(JsonConverterForChoiceType))]
     abstract record MixedClass<T0>
     {
-        public record VariantWithoutArgs() : MixedClass<T0>;
+        public record VariantWithoutArgs : MixedClass<T0>;
 
         public record VariantWithTwoArgs(int First, string Second) : MixedClass<T0>;
 

@@ -1,7 +1,7 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.PineVM;
 using System.Collections.Immutable;
-using System.Text.Json;
 
 namespace TestElmTime;
 
@@ -11,36 +11,36 @@ public class TestPineVMEncodeExpression
     [TestMethod]
     public void TestExpressionEncodeDecodeSymmetry()
     {
-        var testCases = new PineVM.Expression[]
+        var testCases = new Expression[]
         {
-            new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("literal content")),
+            new Expression.LiteralExpression(PineValueAsString.ValueFromString("literal content")),
 
-            new PineVM.Expression.EnvironmentExpression(),
+            new Expression.EnvironmentExpression(),
 
-            new PineVM.Expression.ListExpression(
-                ImmutableArray.Create<PineVM.Expression>(
-                    new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("list element alfa")),
-                    new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("list element beta")),
-                    new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("list element gamma"))
+            new Expression.ListExpression(
+                ImmutableArray.Create<Expression>(
+                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element alfa")),
+                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element beta")),
+                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element gamma"))
             )),
 
-            new PineVM.Expression.ConditionalExpression(
-                condition: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("condition")),
-                ifTrue: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("if true")),
-                ifFalse: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("if false"))),
+            new Expression.ConditionalExpression(
+                condition: new Expression.LiteralExpression(PineValueAsString.ValueFromString("condition")),
+                ifTrue: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if true")),
+                ifFalse: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if false"))),
 
-            new PineVM.Expression.DecodeAndEvaluateExpression(
-                expression: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("expression")),
-                environment: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("environment"))),
+            new Expression.DecodeAndEvaluateExpression(
+                expression: new Expression.LiteralExpression(PineValueAsString.ValueFromString("expression")),
+                environment: new Expression.LiteralExpression(PineValueAsString.ValueFromString("environment"))),
 
-            new PineVM.Expression.KernelApplicationExpression(
-                functionName: nameof(PineVM.KernelFunction.length),
-                argument: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("kernel app arg")),
+            new Expression.KernelApplicationExpression(
+                functionName: nameof(KernelFunction.length),
+                argument: new Expression.LiteralExpression(PineValueAsString.ValueFromString("kernel app arg")),
                 function: _ => Result<string, PineValue>.err("Not implemented")),
 
-            new PineVM.Expression.StringTagExpression(
+            new Expression.StringTagExpression(
                 tag: "tag text",
-                tagged: new PineVM.Expression.LiteralExpression(Composition.ComponentFromString("tagged expr")))
+                tagged: new Expression.LiteralExpression(PineValueAsString.ValueFromString("tagged expr")))
         };
 
         foreach (var testCase in testCases)
@@ -52,9 +52,6 @@ public class TestPineVMEncodeExpression
             var decoded =
                 PineVM.DecodeExpressionFromValueDefault(encoded)
                 .Extract(err => throw new System.Exception("Failed to decode expression: " + err));
-
-            var testCaseJson = JsonSerializer.Serialize(testCase);
-            var decodedJson = JsonSerializer.Serialize(decoded);
 
             Assert.AreEqual(testCase, decoded);
         }

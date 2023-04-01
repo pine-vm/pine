@@ -1,3 +1,8 @@
+using McMaster.Extensions.CommandLineUtils;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Pine;
+using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -6,17 +11,13 @@ using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using McMaster.Extensions.CommandLineUtils;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
-using Pine;
 using static ElmTime.Platform.WebServer.Configuration;
 
 namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-03-31";
+    static public string AppVersionId => "2023-04-01";
 
     static int AdminInterfaceDefaultPort => 4000;
 
@@ -255,7 +256,7 @@ public class Program
 
             var processStoreOption = runServerCommand.Option("--process-store", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
             var deletePreviousProcessOption = runServerCommand.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
-            var adminUrlsOption = runServerCommand.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault.ToString() + ".", CommandOptionType.SingleValue);
+            var adminUrlsOption = runServerCommand.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault + ".", CommandOptionType.SingleValue);
             var adminPasswordOption = runServerCommand.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
             var publicAppUrlsOption = runServerCommand.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
             var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
@@ -354,10 +355,10 @@ public class Program
                             sourcePath: deployOptionValue).configZipArchive;
 
                     var appConfigTree =
-                        Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
-                    var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
+                    var appConfigComponent = PineValueComposition.FromTreeWithStringPath(appConfigTree);
 
                     var processStoreWriter =
                         new Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
@@ -370,7 +371,7 @@ public class Program
                     var appConfigValueInFile =
                         new Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
+                            HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(appConfigComponent))
                         };
 
                     var initElmAppState =
@@ -398,7 +399,7 @@ public class Program
                         ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJintOptimizedForElmApps.Create),
                         ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
 
-                        object other => throw new NotImplementedException("Engine type not implemented here: " + other.ToString())
+                        object other => throw new NotImplementedException("Engine type not implemented here: " + other)
                     };
 
                 var webHostBuilder =
@@ -741,8 +742,8 @@ public class Program
 
         if (compileResult.compiledAppFiles != null)
         {
-            var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
-            var compiledFiles = Composition.TreeToFlatDictionaryWithPathComparer(compiledTree);
+            var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
+            var compiledFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(compiledTree);
 
             var compiledCompositionArchive = ZipArchive.ZipArchiveFromEntries(compiledFiles);
 
@@ -795,7 +796,7 @@ public class Program
         try
         {
             var sourceFiles =
-                Composition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.tree);
+                PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.tree);
 
             var interfaceConfig =
                 ElmAppInterfaceConfig.Default with
@@ -826,9 +827,9 @@ public class Program
                     {
                         var compiledAppFiles = compilationOk.result.compiledFiles;
 
-                        var compiledTree = Composition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
-                        var compiledComposition = Composition.FromTreeWithStringPath(compiledTree);
-                        var compiledCompositionId = CommonConversion.StringBase16(Composition.GetHash(compiledComposition));
+                        var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
+                        var compiledComposition = PineValueComposition.FromTreeWithStringPath(compiledTree);
+                        var compiledCompositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(compiledComposition));
 
                         compilationStopwatch.Stop();
 
@@ -848,7 +849,7 @@ public class Program
         {
             report = report with { compilationTimeSpentMilli = (int)compilationStopwatch.Elapsed.TotalMilliseconds };
 
-            Console.WriteLine("Compilation failed with runtime exception: " + e.ToString());
+            Console.WriteLine("Compilation failed with runtime exception: " + e);
 
             return
                 (report with { compilationException = e.ToString(), totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds },
@@ -983,9 +984,9 @@ public class Program
                             }))
                             .Select(loadedScenario =>
                             {
-                                var asComposition = Composition.FromTreeWithStringPath(loadedScenario.component);
+                                var asComposition = PineValueComposition.FromTreeWithStringPath(loadedScenario.component);
 
-                                var hashBase16 = CommonConversion.StringBase16(Composition.GetHash(asComposition));
+                                var hashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(asComposition));
 
                                 return new
                                 {
@@ -1008,10 +1009,10 @@ public class Program
                                 namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component)).ToImmutableList());
 
                         var aggregateComposition =
-                            Composition.FromTreeWithStringPath(aggregateCompositionTree);
+                            PineValueComposition.FromTreeWithStringPath(aggregateCompositionTree);
 
                         var aggregateCompositionHash =
-                            CommonConversion.StringBase16(Composition.GetHash(aggregateComposition));
+                            CommonConversion.StringBase16(PineValueComposition.GetHash(aggregateComposition));
 
                         console.WriteLine(
                             "Succesfully loaded " + namedDistinctScenarios.Count +
@@ -1294,9 +1295,9 @@ public class Program
                     .LogToActions(Console.WriteLine)
                     .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
-                var composition = Composition.FromTreeWithStringPath(loadCompositionResult.tree);
+                var composition = PineValueComposition.FromTreeWithStringPath(loadCompositionResult.tree);
 
-                var compositionId = CommonConversion.StringBase16(Composition.GetHash(composition));
+                var compositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(composition));
 
                 Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
@@ -1395,14 +1396,14 @@ public class Program
                     },
                     fromOk: loadInputOk =>
                     {
-                        var inputHash = CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(loadInputOk.tree)));
+                        var inputHash = CommonConversion.StringBase16(PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(loadInputOk.tree)));
 
                         Console.WriteLine(
                             "Loaded " + inputHash[..10] + " as input: " +
                             string.Join("\n", DescribeCompositionForHumans(loadInputOk.tree, listBlobs: false, extractBlobName: null)));
 
                         return
-                        Make(sourceFiles: Composition.TreeToFlatDictionaryWithPathComparer(loadInputOk.tree),
+                        Make(sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadInputOk.tree),
                         pathToFileWithElmEntryPoint: pathToElmFileArgument.Value!.Replace("\\", "/").Split('/'),
                         outputFileName: Path.GetFileName(outputPathArgument),
                         elmMakeCommandAppendix: elmMakeCommandAppendix)
@@ -1534,7 +1535,7 @@ public class Program
                         blobs.Select(blobAtPath =>
                         string.Join("/", blobAtPath.path) + " : " +
                         blobAtPath.blobContent.Length + " bytes, " +
-                        CommonConversion.StringBase16(Composition.GetHash(PineValue.Blob(blobAtPath.blobContent)))[..10]));
+                        CommonConversion.StringBase16(PineValueComposition.GetHash(PineValue.Blob(blobAtPath.blobContent)))[..10]));
 
             yield break;
         }
@@ -1548,7 +1549,7 @@ public class Program
                 foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, blob.Bytes))
                 {
                     var extractedTreeCompositionId =
-                        CommonConversion.StringBase16(Composition.GetHash(Composition.FromTreeWithStringPath(extractedTree)));
+                        CommonConversion.StringBase16(PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(extractedTree)));
 
                     var compositionDescription =
                         string.Join(
@@ -1692,7 +1693,7 @@ public class Program
 
     static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
     {
-        var compositionId = CommonConversion.StringBase16(Composition.GetHashSorted(sourceTree));
+        var compositionId = CommonConversion.StringBase16(PineValueComposition.GetHashSorted(sourceTree));
 
         var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
@@ -1771,7 +1772,7 @@ public class Program
 
         var filteredSourceCompositionId =
             CommonConversion.StringBase16(
-                Composition.GetHash(Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
 
         Console.WriteLine(
@@ -1844,17 +1845,17 @@ public class Program
                         processStoreFileStore);
 
                 var appConfigTree =
-                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
-                var appConfigComponent = Composition.FromTreeWithStringPath(appConfigTree);
+                var appConfigComponent = PineValueComposition.FromTreeWithStringPath(appConfigTree);
 
                 processStoreWriter.StoreComponent(appConfigComponent);
 
                 var appConfigValueInFile =
                     new Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfigComponent))
+                        HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(appConfigComponent))
                     };
 
                 var compositionLogEvent =
@@ -2012,7 +2013,7 @@ public class Program
             httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
              httpResponse.Headers.WwwAuthenticate.Any())
         {
-            Console.WriteLine("The server at '" + httpResponse.RequestMessage?.RequestUri?.ToString() + "' is asking for authentication. Please enter the password we should use to authenticate there:");
+            Console.WriteLine("The server at '" + httpResponse.RequestMessage?.RequestUri + "' is asking for authentication. Please enter the password we should use to authenticate there:");
 
             enteredPassword = ReadLine.ReadPassword("> ").Trim();
 
@@ -2151,7 +2152,7 @@ public class Program
         }
 
         var appStateComponent = PineValue.Blob(appStateSerial);
-        var appStateId = CommonConversion.StringBase16(Composition.GetHash(appStateComponent));
+        var appStateId = CommonConversion.StringBase16(PineValueComposition.GetHash(appStateComponent));
 
         report = report with { appStateSummary = new AppStateSummary(hash: appStateId, length: appStateSerial.Length) };
 
@@ -2212,7 +2213,7 @@ public class Program
 
         var elmAppStateComponent = PineValue.Blob(elmAppStateSerialized);
 
-        var elmAppStateId = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent));
+        var elmAppStateId = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent));
 
         var httpResponse = AttemptHttpRequest(() =>
             {
@@ -2275,7 +2276,7 @@ public class Program
         var elmAppStateSerialized = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
         var elmAppStateComponent = PineValue.Blob(elmAppStateSerialized);
-        var elmAppStateId = CommonConversion.StringBase16(Composition.GetHash(elmAppStateComponent));
+        var elmAppStateId = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent));
 
         return elmAppStateSerialized;
     }
@@ -2359,7 +2360,7 @@ public class Program
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
                 if (!response.IsSuccessStatusCode)
-                    throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
+                    throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
 
                 return
                     response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -2377,7 +2378,7 @@ public class Program
                     return null;
 
                 if (!response.IsSuccessStatusCode)
-                    throw new Exception("Unexpected response status code: " + ((int)response.StatusCode) + " (" + response.StatusCode + ").");
+                    throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
 
                 return response.Content.ReadAsByteArrayAsync().Result;
             }
@@ -2407,8 +2408,8 @@ public class Program
         var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
 
         return
-            Composition.ToFlatDictionaryWithPathComparer(
-                Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
+            PineValueComposition.ToFlatDictionaryWithPathComparer(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
                 .EnumerateBlobsTransitive());
     }
 
@@ -2422,9 +2423,9 @@ public class Program
             LoadFilesForRestoreFromPathAndLogToConsole(sourcePath: sourcePath, sourcePassword: sourcePassword);
 
         var processHistoryTree =
-            Composition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
 
-        var processHistoryComponentHash = Composition.GetHash(Composition.FromTreeWithStringPath(processHistoryTree));
+        var processHistoryComponentHash = PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(processHistoryTree));
         var processHistoryComponentHashBase16 = CommonConversion.StringBase16(processHistoryComponentHash);
 
         var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);

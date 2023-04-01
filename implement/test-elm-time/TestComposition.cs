@@ -1,9 +1,9 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
 
 namespace TestElmTime;
 
@@ -55,7 +55,7 @@ public class TestComposition
 
         foreach (var testCase in testCases)
         {
-            var asComposition = Composition.FromTreeWithStringPath(testCase.input);
+            var asComposition = PineValueComposition.FromTreeWithStringPath(testCase.input);
 
             Assert.AreEqual(testCase.expectedOutput, asComposition);
         }
@@ -109,7 +109,7 @@ public class TestComposition
 
         foreach (var testCase in testCases)
         {
-            var parseResult = Composition.ParseAsTreeWithStringPath(testCase.input);
+            var parseResult = PineValueComposition.ParseAsTreeWithStringPath(testCase.input);
 
             Assert.AreEqual(testCase.expectedOutput, parseResult);
         }
@@ -197,8 +197,8 @@ public class TestComposition
 
         foreach (var testCase in testCases)
         {
-            var asComposition = Composition.FromTreeWithStringPath(
-                Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
+            var asComposition = PineValueComposition.FromTreeWithStringPath(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
 
             Assert.AreEqual(testCase.expectedOutput, asComposition);
         }
@@ -219,7 +219,7 @@ public class TestComposition
 
         foreach (var testCase in testCases)
         {
-            var hash = Composition.GetHash(testCase.input);
+            var hash = PineValueComposition.GetHash(testCase.input);
 
             Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16(hash), ignoreCase: true);
         }
@@ -238,10 +238,10 @@ public class TestComposition
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                Composition.ComponentFromString(testCase);
+                PineValueAsString.ValueFromString(testCase);
 
             var toStringResult =
-                Composition.StringFromComponent(asPineValue)
+                PineValueAsString.StringFromValue(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toStringResult);
@@ -259,10 +259,10 @@ public class TestComposition
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                Composition.ComponentFromSignedInteger(testCase);
+                PineValueAsInteger.ValueFromSignedInteger(testCase);
 
             var toIntegerResult =
-                Composition.SignedIntegerFromComponent(asPineValue)
+                PineValueAsInteger.SignedIntegerFromValue(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);
@@ -280,17 +280,17 @@ public class TestComposition
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                Composition.ComponentFromUnsignedInteger(testCase)
+                PineValueAsInteger.ValueFromUnsignedInteger(testCase)
                 .Extract(error => throw new Exception(error));
 
             var toIntegerResult =
-                Composition.UnsignedIntegerFromComponent(asPineValue)
+                PineValueAsInteger.UnsignedIntegerFromValue(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);
         }
 
-        Assert.IsTrue(Composition.ComponentFromUnsignedInteger(-1) is Result<string, PineValue>.Err);
+        Assert.IsTrue(PineValueAsInteger.ValueFromUnsignedInteger(-1) is Result<string, PineValue>.Err);
     }
 
     [TestMethod]
@@ -351,7 +351,7 @@ public class TestComposition
 
         foreach (var testCase in testCases)
         {
-            var sortedTree = Composition.SortedTreeFromTree(testCase.input);
+            var sortedTree = PineValueComposition.SortedTreeFromTree(testCase.input);
 
             Assert.AreEqual(expected: testCase.expected, sortedTree);
         }

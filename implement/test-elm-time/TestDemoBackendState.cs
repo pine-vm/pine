@@ -1,6 +1,6 @@
-using System.Collections.Immutable;
 using ElmTime;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace TestElmTime

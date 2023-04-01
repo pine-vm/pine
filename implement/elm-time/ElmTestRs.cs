@@ -1,4 +1,4 @@
-﻿using Pine;
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -131,7 +131,7 @@ public class ElmTestRs
 
         var stdoutLines =
             stdout
-            .Split(new char[] { (char)10, (char)13 })
+            .Split(new[] { (char)10, (char)13 })
             .Where(l => 0 < l?.Length)
             .ToImmutableList();
 

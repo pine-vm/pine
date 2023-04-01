@@ -43,7 +43,7 @@ public class DotNetAssembly
         IReadOnlyList<string> directoryPath,
         Assembly assembly) =>
         LoadTreeFromManifestEmbeddedFileProvider(directoryPath, assembly)
-        .Map(Composition.TreeToFlatDictionaryWithPathComparer);
+        .Map(PineValueComposition.TreeToFlatDictionaryWithPathComparer);
 
     static public Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProvider(
         IReadOnlyList<string> directoryPath,

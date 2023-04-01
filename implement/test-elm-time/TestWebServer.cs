@@ -1,3 +1,10 @@
+using ElmTime.Platform.WebServer;
+using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -6,14 +13,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static MoreLinq.Extensions.BatchExtension;
-using Pine;
-using ElmTime.Platform.WebServer;
 
 namespace TestElmTime;
 
@@ -129,7 +129,7 @@ public class TestWebServer
                 });
 
         var webAppSource =
-            Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
+            PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
         using var server = testSetup.StartWebHost();
@@ -193,7 +193,7 @@ public class TestWebServer
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             deployAppAndInitElmState:
-            Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)),
+            PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)),
             persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
@@ -293,7 +293,7 @@ public class TestWebServer
                 });
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: Composition.FromTreeWithStringPath(Composition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)));
+            deployAppAndInitElmState: PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)));
 
         IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
@@ -652,7 +652,7 @@ public class TestWebServer
         var deploymentZipArchive = ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
 
         var deploymentTree =
-            Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+            PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                 ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList());
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup();
@@ -675,12 +675,12 @@ public class TestWebServer
                 var getAppResponseContent = getAppConfigResponse.Content.ReadAsByteArrayAsync().Result;
 
                 var responseAppConfigTree =
-                    Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 CollectionAssert.AreEqual(
-                    Composition.GetHashSorted(deploymentTree).ToArray(),
-                    Composition.GetHashSorted(responseAppConfigTree).ToArray(),
+                    PineValueComposition.GetHashSorted(deploymentTree).ToArray(),
+                    PineValueComposition.GetHashSorted(responseAppConfigTree).ToArray(),
                     "Get the same configuration back.");
             }
 
@@ -1356,7 +1356,7 @@ public class TestWebServer
 
             Assert.AreEqual(
                 deployReport.filteredSourceCompositionId,
-                CommonConversion.StringBase16(Composition.GetHash(restoredProcessLastDeployedAppComponent)),
+                CommonConversion.StringBase16(PineValueComposition.GetHash(restoredProcessLastDeployedAppComponent)),
                 "App ID in restored process equals app ID from deployment report.");
         }
 

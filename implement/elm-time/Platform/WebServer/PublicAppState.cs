@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using FluffySpoon.AspNet.LetsEncrypt;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -10,6 +6,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pine;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ElmTime.Platform.WebServer;
 
@@ -171,7 +171,7 @@ public class PublicAppState
         var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
         var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
 
-        var httpRequestId = timeMilli.ToString() + "-" + httpRequestIndex.ToString();
+        var httpRequestId = timeMilli + "-" + httpRequestIndex;
 
         var httpRequestEvent =
             await AsPersistentProcessInterfaceHttpRequestEvent(context, httpRequestId, currentDateTime);
@@ -373,7 +373,7 @@ public class PublicAppState
     {
         var matchFromSourceComposition =
             serverAndElmAppConfig?.SourceComposition == null ? null :
-            Composition.FindComponentByHash(serverAndElmAppConfig.SourceComposition, sha256);
+            PineValueComposition.FindComponentByHash(serverAndElmAppConfig.SourceComposition, sha256);
 
         if (matchFromSourceComposition != null)
         {

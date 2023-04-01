@@ -1,3 +1,6 @@
+using ElmTime.Platform.WebServer;
+using Microsoft.AspNetCore.Hosting;
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -5,9 +8,6 @@ using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using ElmTime.Platform.WebServer;
-using Microsoft.AspNetCore.Hosting;
-using Pine;
 
 namespace TestElmTime;
 
@@ -164,7 +164,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                     DeployAppConfigAndInitElmAppState =
                         new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16(Composition.GetHash(deployAppAndInitElmState))
+                            HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(deployAppAndInitElmState))
                         }
                 };
 

@@ -60,7 +60,7 @@ static public class LoadComposition
                 }
                 catch (Exception e)
                 {
-                    return Result<string, TreeNodeWithStringPath>.err("Failed to load from local file system: " + e?.ToString());
+                    return Result<string, TreeNodeWithStringPath>.err("Failed to load from local file system: " + e);
                 }
             })
             .ResultMap(tree => (tree, new LoadCompositionOrigin(FromLocalFileSystem: new object())));

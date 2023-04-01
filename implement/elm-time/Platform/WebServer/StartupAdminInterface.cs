@@ -1,10 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.IO;
-using System.Linq;
-using System.Net.Http.Headers;
-using System.Text;
 using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -14,6 +7,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pine;
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.IO;
+using System.Linq;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace ElmTime.Platform.WebServer;
 
@@ -192,7 +192,7 @@ public class StartupAdminInterface
                     IReadOnlyList<string> publicWebHostUrls)
                 {
                     var appConfigTree =
-                        Composition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
+                        PineValueComposition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
                         .Extract(error => throw new Exception(error.ToString()));
 
                     var appConfigFilesNamesAndContents =
@@ -338,12 +338,12 @@ public class StartupAdminInterface
                     }
 
                     var deploymentTree =
-                        Composition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
 
-                    var deploymentPineValue = Composition.FromTreeWithStringPath(deploymentTree);
+                    var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
 
-                    var deploymentHashBase16 = CommonConversion.StringBase16(Composition.GetHash(deploymentPineValue));
+                    var deploymentHashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(deploymentPineValue));
 
                     logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
 
@@ -392,9 +392,9 @@ public class StartupAdminInterface
                                 return;
                             }
 
-                            var appConfigHashBase16 = CommonConversion.StringBase16(Composition.GetHash(appConfig));
+                            var appConfigHashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(appConfig));
 
-                            var appConfigTreeResult = Composition.ParseAsTreeWithStringPath(appConfig);
+                            var appConfigTreeResult = PineValueComposition.ParseAsTreeWithStringPath(appConfig);
 
                             var appConfigZipArchive =
                             appConfigTreeResult
@@ -402,7 +402,7 @@ public class StartupAdminInterface
                                 fromErr: error => throw   new Exception("Failed to parse as tree with string path"),
                                 fromOk: appConfigTree =>
                                 ZipArchive.ZipArchiveFromEntries(
-                                    Composition.TreeToFlatDictionaryWithPathComparer(appConfigTree)));
+                                    PineValueComposition.TreeToFlatDictionaryWithPathComparer(appConfigTree)));
 
                             context.Response.StatusCode = 200;
                             context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
@@ -449,7 +449,7 @@ public class StartupAdminInterface
                             var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
 
                             var elmAppStateReductionComponent =
-                                components.First(c => CommonConversion.StringBase16(Composition.GetHash(c)) == elmAppStateReductionHashBase16);
+                                components.First(c => CommonConversion.StringBase16(PineValueComposition.GetHash(c)) == elmAppStateReductionHashBase16);
 
                             if(elmAppStateReductionComponent is not PineValue.BlobValue elmAppStateReductionComponentBlob)
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");
@@ -555,7 +555,7 @@ public class StartupAdminInterface
                             catch (Exception ex)
                             {
                                 context.Response.StatusCode = 422;
-                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex.ToString());
+                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
                             }
                         })
                     ),
