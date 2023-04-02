@@ -51,31 +51,34 @@ static public class KernelFunction
         KernelFunctionExpectingExactlyTwoArguments(
                 PineValueAsInteger.SignedIntegerFromValue,
                 Result<string, PineValue>.ok,
-                compose: (count, list) =>
-                    Result<string, PineValue>.ok(
-                        list switch
-                        {
-                            PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[(int)count..]),
-                            PineValue.ListValue listComponent => PineValue.List(listComponent.Elements
-                                .Skip((int)count).ToImmutableList()),
-                            _ => throw new NotImplementedException()
-                        }))
+                compose: skip)
             (value);
+
+    static public Result<string, PineValue> skip(BigInteger count, PineValue value) =>
+        Result<string, PineValue>.ok(
+            value switch
+            {
+                PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[(int)count..]),
+                PineValue.ListValue listComponent => PineValue.List(listComponent.Elements.Skip((int)count).ToImmutableList()),
+                _ => throw new NotImplementedException()
+            });
 
     static public Result<string, PineValue> take(PineValue value) =>
         KernelFunctionExpectingExactlyTwoArguments(
                 PineValueAsInteger.SignedIntegerFromValue,
                 Result<string, PineValue>.ok,
-                compose: (count, list) =>
-                    Result<string, PineValue>.ok(
-                        list switch
-                        {
-                            PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[..(int)count]),
-                            PineValue.ListValue listComponent => PineValue.List(listComponent.Elements
-                                .Take((int)count).ToImmutableList()),
-                            _ => throw new NotImplementedException()
-                        }))
+                compose: take)
             (value);
+
+    static public Result<string, PineValue> take(BigInteger count, PineValue value) =>
+        Result<string, PineValue>.ok(
+            value switch
+            {
+                PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[..(int)count]),
+                PineValue.ListValue listComponent => PineValue.List(listComponent.Elements
+                    .Take((int)count).ToImmutableList()),
+                _ => throw new NotImplementedException()
+            });
 
     static public Result<string, PineValue> reverse(PineValue value) =>
         Result<string, PineValue>.ok(
@@ -173,14 +176,14 @@ static public class KernelFunction
                 (PineValue.BlobValue blobX, PineValue.BlobValue blobY) =>
                     (PineValueAsInteger.SignedIntegerFromBlobValue(blobX.Bytes.Span),
                             PineValueAsInteger.SignedIntegerFromBlobValue(blobY.Bytes.Span)) switch
-                        {
-                            (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
-                                BigInteger.Compare(intX.Value, intY.Value),
+                    {
+                        (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
+                            BigInteger.Compare(intX.Value, intY.Value),
 
-                            (Result<string, BigInteger>.Ok _, _) => -1,
-                            (_, Result<string, BigInteger>.Ok _) => 1,
-                            _ => 0
-                        },
+                        (Result<string, BigInteger>.Ok _, _) => -1,
+                        (_, Result<string, BigInteger>.Ok _) => 1,
+                        _ => 0
+                    },
 
                 (PineValue.ListValue listX, PineValue.ListValue listY) =>
                     listX.Elements.Count - listY.Elements.Count,

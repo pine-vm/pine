@@ -102,11 +102,9 @@ public class PineCompileToDotNet
             .ToImmutableList();
 
         var aggregateDependencies =
+            DependenciesFromCompilation.Union(
             expressionsResults
-            .Select(er => er.Value.Map(ok => ok.dependencies).WithDefault(DependenciesFromCompilation.Empty))
-            .Aggregate(
-                seed: DependenciesFromCompilation.Empty,
-                (acc, next) => acc.Union(next));
+            .Select(er => er.Value.Map(ok => ok.dependencies).WithDefault(DependenciesFromCompilation.Empty)));
 
         var valueUsages = new Dictionary<PineValue, int>();
 
@@ -471,6 +469,11 @@ public class PineCompileToDotNet
         public DependenciesFromCompilation Union(DependenciesFromCompilation other) =>
             new(Values: Values.Union(other.Values),
                 Expressions: Expressions.Union(other.Expressions));
+
+        static public DependenciesFromCompilation Union(IEnumerable<DependenciesFromCompilation> dependencies) =>
+            dependencies.Aggregate(
+                seed: Empty,
+                func: (aggregate, next) => aggregate.Union(next));
     }
 
     static public Result<string, (BlockSyntax blockSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpFunctionBlockSyntax(
@@ -562,72 +565,252 @@ public class PineCompileToDotNet
                                     SyntaxKind.ArrayInitializerExpression,
                                     SyntaxFactory.SeparatedList(
                                         compiledElements.Select(ce => ce.expression)))))))),
-                                        compiledElements.Aggregate(
-                                            seed: DependenciesFromCompilation.Empty,
-                                            func: (aggregate, next) => aggregate.Union(next.dependencies))));
+            DependenciesFromCompilation.Union(compiledElements.Select(e => e.dependencies))));
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
         EnvironmentConfig environment)
     {
-        if (!KernelFunctionInfo.Value.TryGetValue(kernelApplicationExpression.functionName, out var syntaxBuilder))
+        if (!KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.functionName, out var kernelFunctionInfo))
             Result<string, ExpressionSyntax>.err("Kernel function name " + kernelApplicationExpression.functionName + " does not match any of the "
-                + KernelFunctionInfo.Value.Count + " known names: " + string.Join(", ", KernelFunctionInfo.Value.Keys));
+                + KernelFunctionsInfo.Value.Count + " known names: " + string.Join(", ", KernelFunctionsInfo.Value.Keys));
+
+        return
+            CompileKernelFunctionApplicationToCSharpExpression(
+                kernelFunctionInfo,
+                kernelApplicationExpression.argument,
+                environment);
+    }
+
+    static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileKernelFunctionApplicationToCSharpExpression(
+        KernelFunctionInfo kernelFunctionInfo,
+        Expression kernelApplicationArgumentExpression,
+        EnvironmentConfig environment)
+    {
+        var staticallyKnownArgumentsList =
+            ParseKernelApplicationArgumentAsList(kernelApplicationArgumentExpression, environment)
+                ?.Unpack(fromErr: err =>
+                {
+                    Console.WriteLine("Failed to parse argument list: " + err);
+                    return null;
+                },
+                    fromOk: ok => ok);
+
+        InvocationExpressionSyntax wrapInvocationInWithDefault(InvocationExpressionSyntax invocationExpressionSyntax)
+        {
+            return
+                SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            invocationExpressionSyntax,
+                            SyntaxFactory.IdentifierName("WithDefault")))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.MemberAccessExpression(
+                                        SyntaxKind.SimpleMemberAccessExpression,
+                                        SyntaxFactory.IdentifierName("PineValue"),
+                                        SyntaxFactory.IdentifierName("EmptyList"))))));
+        }
+
+        if (staticallyKnownArgumentsList is not null)
+        {
+            foreach (var specializedImpl in kernelFunctionInfo.SpecializedImplementations)
+            {
+                if (specializedImpl.parameterTypes.Count == staticallyKnownArgumentsList.Count)
+                {
+                    var argumentsResults =
+                        specializedImpl.parameterTypes
+                            .Select((parameterType, parameterIndex) =>
+                            {
+                                if (!staticallyKnownArgumentsList[parameterIndex].argumentSyntaxFromParameterType
+                                        .TryGetValue(parameterType, out var param))
+                                    return Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.err(
+                                        "No transformation found for parameter type " + parameterType);
+
+                                return Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(param);
+                            });
+
+                    if (argumentsResults.ListCombine() is
+                        Result<string, IReadOnlyList<(ExpressionSyntax, DependenciesFromCompilation)>>.Ok specializedOk)
+                    {
+                        return
+                            Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
+                                (wrapInvocationInWithDefault(
+                                    specializedImpl.CompileInvocation(specializedOk.Value.Select(p => p.Item1).ToImmutableList())),
+                                DependenciesFromCompilation.Union(specializedOk.Value.Select(p => p.Item2))));
+                    }
+                }
+            }
+        }
 
         return
             CompileToCSharpExpression(
-                kernelApplicationExpression.argument,
-                environment)
-            .Map(compiledArgument =>
-            ((ExpressionSyntax)
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    syntaxBuilder(compiledArgument.expression),
-                    SyntaxFactory.IdentifierName("WithDefault")))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(
-                            SyntaxFactory.MemberAccessExpression(
-                                SyntaxKind.SimpleMemberAccessExpression,
-                                SyntaxFactory.IdentifierName("PineValue"),
-                                SyntaxFactory.IdentifierName("EmptyList")))))),
-             compiledArgument.dependencies));
+                    kernelApplicationArgumentExpression,
+                    environment)
+                .Map(compiledArgument =>
+                    ((ExpressionSyntax)wrapInvocationInWithDefault(kernelFunctionInfo.CompileGenericInvocation(compiledArgument.expression)),
+                compiledArgument.dependencies));
     }
 
-    static readonly Lazy<IReadOnlyDictionary<string, Func<ExpressionSyntax, InvocationExpressionSyntax>>> KernelFunctionInfo =
-        new(ReadKernelMethodInfoViaReflection);
+    static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
+        Expression kernelApplicationArgumentExpression,
+        EnvironmentConfig environment)
+    {
+        Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> continueWithList(IEnumerable<Expression> list)
+        {
+            return
+                list
+                    .Select(e => ParseKernelApplicationArgument(e, environment))
+                    .ListCombine();
+        }
 
-    static IReadOnlyDictionary<string, Func<ExpressionSyntax, InvocationExpressionSyntax>> ReadKernelMethodInfoViaReflection()
+        return
+            kernelApplicationArgumentExpression switch
+            {
+                Expression.ListExpression listExpressionArgument =>
+                    continueWithList(listExpressionArgument.List),
+
+                Expression.LiteralExpression literalExpressionArgument =>
+                    literalExpressionArgument.Value switch
+                    {
+                        PineValue.ListValue literalList =>
+                            continueWithList(
+                                literalList.Elements.Select(elementValue => new Expression.LiteralExpression(elementValue))),
+
+                        _ => null
+                    },
+
+                _ => null
+            };
+    }
+
+    static Result<string, ParsedKernelApplicationArgumentExpression> ParseKernelApplicationArgument(
+        Expression argumentExpression,
+        EnvironmentConfig environment)
+    {
+        var dictionary = new Dictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)>();
+
+        if (argumentExpression is Expression.LiteralExpression literal)
+        {
+            if (PineValueAsInteger.SignedIntegerFromValue(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
+                PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)
+            {
+                dictionary[KernelFunctionParameterType.Integer] =
+                    (SyntaxFactory.LiteralExpression(
+                        SyntaxKind.NumericLiteralExpression,
+                        SyntaxFactory.Literal((long)okInteger.Value)), DependenciesFromCompilation.Empty);
+            }
+        }
+
+        return
+            CompileToCSharpExpression(argumentExpression, environment)
+                .Map(csharpExpression =>
+                    new ParsedKernelApplicationArgumentExpression(
+                        argumentSyntaxFromParameterType:
+                        ImmutableDictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)>.Empty
+                            .SetItem(KernelFunctionParameterType.Generic, (csharpExpression.expression, csharpExpression.dependencies))
+                            .SetItems(dictionary)));
+    }
+
+    record ParsedKernelApplicationArgumentExpression(
+        IReadOnlyDictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)> argumentSyntaxFromParameterType);
+
+    record KernelFunctionInfo(
+        Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
+        IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations);
+
+    record KernelFunctionSpecializedInfo(
+        IReadOnlyList<KernelFunctionParameterType> parameterTypes,
+        Func<IReadOnlyList<ExpressionSyntax>, InvocationExpressionSyntax> CompileInvocation);
+
+    enum KernelFunctionParameterType
+    {
+        Generic = 1,
+        Integer = 10,
+    }
+
+    static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> KernelFunctionsInfo =
+        new(ReadKernelFunctionsInfoViaReflection);
+
+    static IReadOnlyDictionary<string, KernelFunctionInfo> ReadKernelFunctionsInfoViaReflection()
     {
         var kernelFunctionContainerType = typeof(KernelFunction);
         var methodsInfos = kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
 
+        KernelFunctionParameterType parseKernelFunctionParameterType(Type parameterType)
+        {
+            if (parameterType == typeof(BigInteger))
+                return KernelFunctionParameterType.Integer;
+
+            if (parameterType == typeof(PineValue))
+                return KernelFunctionParameterType.Generic;
+
+            throw new Exception("Unknown parameter type: " + parameterType.FullName);
+        }
+
+        KernelFunctionInfo ReadKernelFunctionInfo(MethodInfo genericMethodInfo)
+        {
+            InvocationExpressionSyntax compileInvocationForArgumentList(ArgumentListSyntax argumentListSyntax)
+            {
+                return
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.QualifiedName(SyntaxFactory.IdentifierName("Pine"),
+                                    SyntaxFactory.IdentifierName("PineVM")),
+                                SyntaxFactory.IdentifierName(kernelFunctionContainerType.Name)),
+                            SyntaxFactory.IdentifierName(genericMethodInfo.Name)),
+                        argumentListSyntax
+                            .WithOpenParenToken(
+                                SyntaxFactory.Token(
+                                    SyntaxFactory.TriviaList(),
+                                    SyntaxKind.OpenParenToken,
+                                    SyntaxFactory.TriviaList(
+                                        SyntaxFactory.LineFeed))));
+            }
+
+            InvocationExpressionSyntax compileGenericInvocation(ExpressionSyntax argumentExpression) =>
+                compileInvocationForArgumentList(SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(argumentExpression))));
+
+            var specializedImplementations =
+                methodsInfos
+                    .Where(candidateMethod => !candidateMethod.Equals(genericMethodInfo))
+                    .Select(specializedMethodInfo =>
+                    {
+                        var parameterTypes =
+                            specializedMethodInfo
+                                .GetParameters().Select(pi => parseKernelFunctionParameterType(pi.ParameterType))
+                                .ToImmutableList();
+
+                        return
+                            new KernelFunctionSpecializedInfo(
+                                parameterTypes: parameterTypes,
+                                CompileInvocation: argumentsExpressions =>
+                                    compileInvocationForArgumentList(SyntaxFactory.ArgumentList(
+                                        SyntaxFactory.SeparatedList(
+                                            argumentsExpressions.Select(SyntaxFactory.Argument)))));
+                    })
+                    .ToImmutableList();
+
+            return
+                new KernelFunctionInfo(
+                    CompileGenericInvocation: compileGenericInvocation,
+                    SpecializedImplementations: specializedImplementations);
+        }
+
         return
             methodsInfos
-            .Where(m =>
-            m.ReturnType == typeof(Result<string, PineValue>) &&
-            m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(PineValue))
-            .ToImmutableDictionary(m => m.Name, m => new Func<ExpressionSyntax, InvocationExpressionSyntax>(argumentExpression =>
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.QualifiedName(SyntaxFactory.IdentifierName("Pine"), SyntaxFactory.IdentifierName("PineVM")),
-                        SyntaxFactory.IdentifierName(kernelFunctionContainerType.Name)),
-                    SyntaxFactory.IdentifierName(m.Name)),
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(argumentExpression)))
-                .WithOpenParenToken(
-                    SyntaxFactory.Token(
-                        SyntaxFactory.TriviaList(),
-                        SyntaxKind.OpenParenToken,
-                        SyntaxFactory.TriviaList(
-                            SyntaxFactory.LineFeed))))));
+            .Where(methodInfo =>
+            methodInfo.ReturnType == typeof(Result<string, PineValue>) &&
+            methodInfo.GetParameters().Length == 1 && methodInfo.GetParameters()[0].ParameterType == typeof(PineValue))
+            .ToImmutableDictionary(m => m.Name, ReadKernelFunctionInfo);
     }
 
     static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
@@ -672,7 +855,7 @@ public class PineCompileToDotNet
             {
                 return
                 Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.err(
-                    "Transforming inner expression not implemented.");
+                    "Transforming decode and eval expression not implemented.");
             });
     }
 
