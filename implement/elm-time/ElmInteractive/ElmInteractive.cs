@@ -11,9 +11,9 @@ namespace ElmTime.ElmInteractive;
 
 public class ElmInteractive
 {
-    static public readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavascriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+    public static readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavascriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
 
-    static public Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
+    public static Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
         IJsEngine evalElmPreparedJsEngine,
         TreeNodeWithStringPath? appCodeTree,
         string submission,
@@ -46,7 +46,7 @@ public class ElmInteractive
             responseStructure.DecodedArguments.Evaluated);
     }
 
-    static public IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
+    public static IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
         IJsEngine evalElmPreparedJsEngine)
     {
         var responseJson =
@@ -56,7 +56,7 @@ public class ElmInteractive
             System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<string>>(responseJson)!;
     }
 
-    static internal Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
+    internal static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
         IJsEngine evalElmPreparedJsEngine,
         TreeNodeWithStringPath? appCodeTree,
         CompilationCache compilationCacheBefore)
@@ -76,7 +76,7 @@ public class ElmInteractive
             compileResultAndCache.compilationCache));
     }
 
-    static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModulesCachingIncrements(
+    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModulesCachingIncrements(
         IReadOnlyList<string> elmModulesTexts,
         IJsEngine evalElmPreparedJsEngine,
         CompilationCache compilationCacheBefore)
@@ -150,7 +150,7 @@ public class ElmInteractive
             });
     }
 
-    static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModules(
+    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModules(
         IReadOnlyList<string> elmModulesTexts,
         CompileInteractiveEnvironmentResult? parentEnvironment,
         IJsEngine evalElmPreparedJsEngine,
@@ -207,9 +207,9 @@ public class ElmInteractive
 
         public ReadOnlyMemory<byte> Hash => HashCache.Value;
 
-        Lazy<ReadOnlyMemory<byte>> HashCache => new(ComputeHash);
+        private Lazy<ReadOnlyMemory<byte>> HashCache => new(ComputeHash);
 
-        ReadOnlyMemory<byte> ComputeHash()
+        private ReadOnlyMemory<byte> ComputeHash()
         {
             var lastIncrementModulesBlobs =
                 lastIncrementModulesTexts.Select(Encoding.UTF8.GetBytes).ToArray();
@@ -238,7 +238,7 @@ public class ElmInteractive
         }
     }
 
-    static internal Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
+    internal static Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
         IJsEngine evalElmPreparedJsEngine,
         PineValue environment,
         string submission,
@@ -297,22 +297,22 @@ public class ElmInteractive
         IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> valueJsonCache,
         IImmutableSet<CompileInteractiveEnvironmentResult> compileInteractiveEnvironmentResults)
     {
-        static internal CompilationCache Empty =>
+        internal static CompilationCache Empty =>
             new(
                 ImmutableDictionary<PineValue, PineValueJson.PineValueMappedForTransport>.Empty,
                 ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty,
                 ImmutableHashSet<CompileInteractiveEnvironmentResult>.Empty);
     }
 
-    record CompileElmInteractiveEnvironmentRequest(
+    private record CompileElmInteractiveEnvironmentRequest(
         PineValueJson environmentBefore,
         IReadOnlyList<string> modulesTexts);
 
-    record CompileInteractiveSubmissionRequest(
+    private record CompileInteractiveSubmissionRequest(
         PineValueJson environment,
         string submission);
 
-    static public Result<string, EvaluatedSctructure> SubmissionResponseFromResponsePineValue(
+    public static Result<string, EvaluatedSctructure> SubmissionResponseFromResponsePineValue(
         IJsEngine evalElmPreparedJsEngine,
         PineValue response)
     {
@@ -358,7 +358,7 @@ public class ElmInteractive
                 return origin.GetHashCode();
             }
 
-            static public bool Equals(PineValueMappedForTransport? left, PineValueMappedForTransport? right)
+            public static bool Equals(PineValueMappedForTransport? left, PineValueMappedForTransport? right)
             {
                 if (left is null && right is null)
                     return true;
@@ -372,7 +372,7 @@ public class ElmInteractive
                 return left.origin.Equals(right.origin);
             }
 
-            static public PineValueMappedForTransport FromPineValue(
+            public static PineValueMappedForTransport FromPineValue(
                 PineValue pineValue,
                 IDictionary<PineValue, PineValueMappedForTransport>? cache)
             {
@@ -386,7 +386,7 @@ public class ElmInteractive
                 return mapped;
             }
 
-            static private PineValueMappedForTransport FromPineValueIgnoringCacheForCurrent(
+            private static PineValueMappedForTransport FromPineValueIgnoringCacheForCurrent(
                 PineValue pineValue,
                 IDictionary<PineValue, PineValueMappedForTransport>? cache)
             {
@@ -403,7 +403,7 @@ public class ElmInteractive
             }
         }
 
-        static public ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
+        public static ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
             FromPineValueBuildingDictionary(
             PineValue pineValue,
             CompilationCache compilationCache)
@@ -513,10 +513,10 @@ public class ElmInteractive
             return (cacheEntry, compilationCacheTask);
         }
 
-        static public PineValueJson FromPineValueWithoutBuildingDictionary(PineValue pineValue) =>
+        public static PineValueJson FromPineValueWithoutBuildingDictionary(PineValue pineValue) =>
             FromPineValueWithoutBuildingDictionary(PineValueMappedForTransport.FromPineValue(pineValue, cache: null));
 
-        static PineValueJson FromPineValueWithoutBuildingDictionary(
+        private static PineValueJson FromPineValueWithoutBuildingDictionary(
             PineValueMappedForTransport pineValue,
             IReadOnlyDictionary<PineValueMappedForTransport, string>? dictionary = null,
             bool doNotDictionaryOnFirstLevel = false)
@@ -542,7 +542,7 @@ public class ElmInteractive
         }
     }
 
-    static PineValue ParsePineValueFromJson(PineValueJson fromJson, IReadOnlyDictionary<string, PineValue>? dictionary)
+    private static PineValue ParsePineValueFromJson(PineValueJson fromJson, IReadOnlyDictionary<string, PineValue>? dictionary)
     {
         if (fromJson.List is IReadOnlyList<PineValueJson> list)
             return PineValue.List(list.Select(item => ParsePineValueFromJson(item, dictionary)).ToImmutableList());
@@ -566,7 +566,7 @@ public class ElmInteractive
         throw new NotImplementedException("Unexpected shape of Pine value from JSON");
     }
 
-    static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
+    private static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
         appCodeTree == null ? null
         :
         TreeToFlatDictionaryWithPathComparer(CompileTree(appCodeTree)!)
@@ -574,7 +574,7 @@ public class ElmInteractive
         .WhereNotNull()
         .ToImmutableList();
 
-    static TreeNodeWithStringPath? CompileTree(TreeNodeWithStringPath? sourceTree)
+    private static TreeNodeWithStringPath? CompileTree(TreeNodeWithStringPath? sourceTree)
     {
         if (sourceTree == null)
             return null;
@@ -604,7 +604,7 @@ public class ElmInteractive
                 fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
     }
 
-    static public IJsEngine PrepareJsEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
+    public static IJsEngine PrepareJsEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
         PrepareJsEngineToEvaluateElm(
             jsEngineFactory: javaScriptEngineFlavor switch
             {
@@ -614,7 +614,7 @@ public class ElmInteractive
                 _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
             });
 
-    static public IJsEngine PrepareJsEngineToEvaluateElm(Func<IJsEngine> jsEngineFactory)
+    public static IJsEngine PrepareJsEngineToEvaluateElm(Func<IJsEngine> jsEngineFactory)
     {
         var javascriptEngine = jsEngineFactory();
 
@@ -623,7 +623,7 @@ public class ElmInteractive
         return javascriptEngine;
     }
 
-    static public string PrepareJavascriptToEvaluateElm()
+    public static string PrepareJavascriptToEvaluateElm()
     {
         var compileElmProgramCodeFiles = LoadCompileElmProgramCodeFiles();
 
@@ -669,16 +669,16 @@ public class ElmInteractive
                 listFunctionToPublish);
     }
 
-    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompileElmProgramCodeFiles() =>
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompileElmProgramCodeFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
             directoryPath: ImmutableList.Create("ElmTime", "compile-elm-program"),
             assembly: typeof(ElmInteractive).Assembly);
 
-    record EvaluateSubmissionResponseStructure
+    private record EvaluateSubmissionResponseStructure
         (string? FailedToDecodeArguments = null,
         DecodedArgumentsSctructure? DecodedArguments = null);
 
-    record DecodedArgumentsSctructure(
+    private record DecodedArgumentsSctructure(
         string? FailedToEvaluate = null,
         EvaluatedSctructure? Evaluated = null);
 

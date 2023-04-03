@@ -25,9 +25,9 @@ public interface IConsole
 
 public class StaticConsole : IConsole
 {
-    static readonly public System.ConsoleColor InitialForegroundColor = System.Console.ForegroundColor;
+    public static readonly System.ConsoleColor InitialForegroundColor = System.Console.ForegroundColor;
 
-    static readonly public StaticConsole Instance = new();
+    public static readonly StaticConsole Instance = new();
 
     public void Write(IReadOnlyList<(string text, IConsole.TextColor color)> coloredTexts)
     {

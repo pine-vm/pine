@@ -22,11 +22,11 @@ public interface IPersistentProcess
 //  A provisional special case for a process from an elm app. Migrations give an example of why the elm code should be modeled on the history as well.
 public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProcess, IDisposable
 {
-    static readonly JsonSerializerOptions recordSerializationSettings = ProcessStoreInFileStore.RecordSerializationSettings;
+    private static readonly JsonSerializerOptions recordSerializationSettings = ProcessStoreInFileStore.RecordSerializationSettings;
 
-    byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
+    private byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
 
-    readonly IDisposableProcessWithStringInterface process;
+    private readonly IDisposableProcessWithStringInterface process;
 
     public PersistentProcessWithHistoryOnFileFromElm019Code(
         IProcessStoreReader storeReader,
@@ -140,7 +140,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
         logger?.Invoke("Found no composition record, default to initial state.");
     }
 
-    static string Serialize(CompositionRecordInFile composition) =>
+    private static string Serialize(CompositionRecordInFile composition) =>
         JsonSerializer.Serialize(composition, recordSerializationSettings);
 
     public (IReadOnlyList<string> responses, (byte[] serializedCompositionRecord, byte[] serializedCompositionRecordHash))

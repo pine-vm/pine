@@ -9,7 +9,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
 {
     public record BlobNode : TreeNodeWithStringPath
     {
-        readonly int slimHashCode;
+        private readonly int slimHashCode;
 
         public ReadOnlyMemory<byte> Bytes { get; }
 
@@ -39,7 +39,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
 
     public record TreeNode : TreeNodeWithStringPath
     {
-        readonly int slimHashCode;
+        private readonly int slimHashCode;
 
         public IReadOnlyList<(string name, TreeNodeWithStringPath component)> Elements { get; }
 
@@ -71,18 +71,18 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         public override int GetHashCode() => slimHashCode;
     }
 
-    static public readonly IComparer<(string name, TreeNodeWithStringPath component)> TreeEntryDefaultComparer = new TreeEntryDefaultComparerClass();
+    public static readonly IComparer<(string name, TreeNodeWithStringPath component)> TreeEntryDefaultComparer = new TreeEntryDefaultComparerClass();
 
-    static public TreeNodeWithStringPath Blob(ReadOnlyMemory<byte> blobContent) =>
+    public static TreeNodeWithStringPath Blob(ReadOnlyMemory<byte> blobContent) =>
         new BlobNode(blobContent);
 
-    static public TreeNodeWithStringPath SortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
+    public static TreeNodeWithStringPath SortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
         Sort(NonSortedTree(treeContent));
 
-    static public TreeNodeWithStringPath NonSortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
+    public static TreeNodeWithStringPath NonSortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
         new TreeNode(treeContent);
 
-    static public readonly TreeNodeWithStringPath EmptyTree = new TreeNode(ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty);
+    public static readonly TreeNodeWithStringPath EmptyTree = new TreeNode(ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty);
 
 
     public IImmutableList<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive() =>
@@ -175,7 +175,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         return SortedTree(treeEntries);
     }
 
-    static public TreeNodeWithStringPath Sort(TreeNodeWithStringPath node) =>
+    public static TreeNodeWithStringPath Sort(TreeNodeWithStringPath node) =>
         node switch
         {
             BlobNode _ => node,
@@ -197,7 +197,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
             _ => throw new NotImplementedException()
         };
 
-    class TreeEntryDefaultComparerClass : IComparer<(string name, TreeNodeWithStringPath component)>
+    private class TreeEntryDefaultComparerClass : IComparer<(string name, TreeNodeWithStringPath component)>
     {
         public int Compare((string name, TreeNodeWithStringPath component) x, (string name, TreeNodeWithStringPath component) y)
         {

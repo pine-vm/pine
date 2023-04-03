@@ -8,30 +8,30 @@ using System.Collections.Generic;
 
 namespace ElmTime.Platform.WebServer;
 
-static public class Configuration
+public static class Configuration
 {
-    static public string ApiPersistentProcessStatePath => "/api/process/state";
+    public static string ApiPersistentProcessStatePath => "/api/process/state";
 
-    static public string AdminPasswordSettingKey => "adminPassword";
+    public static string AdminPasswordSettingKey => "adminPassword";
 
-    static public string PublicWebHostUrlsSettingKey = "publicWebHostUrls";
+    public static string PublicWebHostUrlsSettingKey = "publicWebHostUrls";
 
-    static public string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
+    public static string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
 
     //  https://en.wikipedia.org/wiki/Basic_access_authentication
-    static public string BasicAuthenticationForAdmin(string? password) => ":" + password;
+    public static string BasicAuthenticationForAdmin(string? password) => ":" + password;
 
-    static public IWebHostBuilder WithProcessStoreFileStore(
+    public static IWebHostBuilder WithProcessStoreFileStore(
         this IWebHostBuilder orig,
         IFileStore fileStore) =>
         orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new FileStoreForProcessStore(fileStore)));
 
-    static public IWebHostBuilder WithSettingProcessStoreDirectoryPath(
+    public static IWebHostBuilder WithSettingProcessStoreDirectoryPath(
         this IWebHostBuilder orig,
         string processStoreDirectoryPath) =>
         orig.WithProcessStoreFileStore(new FileStoreFromSystemIOFile(processStoreDirectoryPath));
 
-    static public IWebHostBuilder WithSettingProcessStoreSeparateReaderDirectoryPath(
+    public static IWebHostBuilder WithSettingProcessStoreSeparateReaderDirectoryPath(
         this IWebHostBuilder orig,
         string? processStoreSeparateReaderDirectoryPath) =>
         orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(
@@ -40,42 +40,42 @@ static public class Configuration
                 ? null
                 : new FileStoreFromSystemIOFile(processStoreSeparateReaderDirectoryPath))));
 
-    static public IWebHostBuilder WithDeployZipArchive(
+    public static IWebHostBuilder WithDeployZipArchive(
         this IWebHostBuilder orig,
         byte[] zipArchive) =>
         orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new DeployZipArchive(zipArchive)));
 
-    static public IWebHostBuilder WithDeployZipArchiveFromFilePath(
+    public static IWebHostBuilder WithDeployZipArchiveFromFilePath(
         this IWebHostBuilder orig,
         string deployFilePath) =>
         orig.WithDeployZipArchive(System.IO.File.ReadAllBytes(deployFilePath));
 
-    static public IWebHostBuilder WithSettingAdminPassword(
+    public static IWebHostBuilder WithSettingAdminPassword(
         this IWebHostBuilder orig,
         string? adminPassword) =>
         orig.UseSetting(AdminPasswordSettingKey, adminPassword);
 
-    static public IWebHostBuilder WithSettingDateTimeOffsetDelegate(
+    public static IWebHostBuilder WithSettingDateTimeOffsetDelegate(
         this IWebHostBuilder orig,
         Func<DateTimeOffset> getDateTimeOffset) =>
         orig.ConfigureServices(services => services.AddSingleton(getDateTimeOffset));
 
-    static public IWebHostBuilder WithSettingPublicWebHostUrls(
+    public static IWebHostBuilder WithSettingPublicWebHostUrls(
         this IWebHostBuilder orig,
         string[] urls) =>
         orig.UseSetting(PublicWebHostUrlsSettingKey, string.Join(",", urls));
 
-    static public IReadOnlyList<string> GetSettingPublicWebHostUrls(
+    public static IReadOnlyList<string> GetSettingPublicWebHostUrls(
         this IConfiguration? configuration) =>
         configuration?.GetValue<string>(PublicWebHostUrlsSettingKey)?.Split(new[] { ',', ';' }) ??
         PublicWebHostUrlsDefault;
 
-    static public IWebHostBuilder WithJsEngineFactory(
+    public static IWebHostBuilder WithJsEngineFactory(
         this IWebHostBuilder orig,
         Func<IJsEngine> jsEngineFactory) =>
         orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(jsEngineFactory));
 
-    static internal DateTimeOffset GetDateTimeOffset(HttpContext context) =>
+    internal static DateTimeOffset GetDateTimeOffset(HttpContext context) =>
         context.RequestServices.GetService<Func<DateTimeOffset>>()!();
 }
 

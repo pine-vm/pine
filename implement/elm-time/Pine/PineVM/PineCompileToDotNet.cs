@@ -23,7 +23,7 @@ public class PineCompileToDotNet
         ClassDeclarationSyntax ClassDeclarationSyntax,
         IReadOnlyList<UsingDirectiveSyntax> UsingDirectives);
 
-    static public Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpFile(
+    public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpFile(
         IReadOnlyList<Expression> expressions,
         SyntaxContainerConfig containerConfig)
     {
@@ -383,12 +383,12 @@ public class PineCompileToDotNet
                 });
     }
 
-    static QualifiedNameSyntax evalExprDelegateTypeSyntax =>
+    private static QualifiedNameSyntax evalExprDelegateTypeSyntax =>
         SyntaxFactory.QualifiedName(
             pineVmClassQualifiedNameSyntax,
             SyntaxFactory.IdentifierName(nameof(PineVM.EvalExprDelegate)));
 
-    static QualifiedNameSyntax pineVmClassQualifiedNameSyntax =>
+    private static QualifiedNameSyntax pineVmClassQualifiedNameSyntax =>
         SyntaxFactory.QualifiedName(
             SyntaxFactory.QualifiedName(
                 SyntaxFactory.IdentifierName("Pine"),
@@ -399,7 +399,7 @@ public class PineCompileToDotNet
         byte[] Assembly,
         Func<IReadOnlyDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>> BuildCompiledExpressionsDictionary);
 
-    static public Result<string, CompileToAssemblyResult> CompileToAssembly(
+    public static Result<string, CompileToAssemblyResult> CompileToAssembly(
         SyntaxContainerConfig syntaxContainerConfig,
         CompilationUnitSyntax compilationUnitSyntax)
     {
@@ -421,17 +421,6 @@ public class PineCompileToDotNet
             compilationResult.Diagnostics
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .ToImmutableList();
-
-        static bool CanIgnoreErrorMessage(Diagnostic diagnostic)
-        {
-            if (diagnostic.ToString().Contains("error CS0246: The type or namespace name 'System.Collections.Immutable' could not be found"))
-            {
-                // It is unclear why the compiler creates this error message, despite the references containing the assembly.
-                return true;
-            }
-
-            return false;
-        }
 
         var compilationErrorsAccountingForCompilerProblem =
             compilationErrors.Where(d => !CanIgnoreErrorMessage(d))
@@ -463,10 +452,21 @@ public class PineCompileToDotNet
                 BuildCompiledExpressionsDictionary: buildDictionary));
     }
 
-    static readonly Lazy<IImmutableList<MetadataReference>> MetadataReferences =
+    private static bool CanIgnoreErrorMessage(Diagnostic diagnostic)
+    {
+        if (diagnostic.ToString().Contains("error CS0246: The type or namespace name 'System.Collections.Immutable' could not be found"))
+        {
+            // It is unclear why the compiler creates this error message, despite the references containing the assembly.
+            return true;
+        }
+
+        return false;
+    }
+
+    private static readonly Lazy<IImmutableList<MetadataReference>> MetadataReferences =
         new(() => ListMetadataReferences().ToImmutableList());
 
-    static IEnumerable<MetadataReference> ListMetadataReferences()
+    private static IEnumerable<MetadataReference> ListMetadataReferences()
     {
         var types = new[]
         {
@@ -500,25 +500,25 @@ public class PineCompileToDotNet
         IImmutableSet<(string hash, Expression expression)> Expressions,
         IImmutableSet<(string hash, Expression.DecodeAndEvaluateExpression expression)> LocalDependencies)
     {
-        static readonly public DependenciesFromCompilation Empty = new(
+        public static readonly DependenciesFromCompilation Empty = new(
             Values: ImmutableHashSet<PineValue>.Empty,
             Expressions: ImmutableHashSet<(string, Expression)>.Empty,
             LocalDependencies: ImmutableHashSet<(string, Expression.DecodeAndEvaluateExpression)>.Empty);
 
-        static public (T, DependenciesFromCompilation) WithNoDependencies<T>(T other) => (other, Empty);
+        public static (T, DependenciesFromCompilation) WithNoDependencies<T>(T other) => (other, Empty);
 
         public DependenciesFromCompilation Union(DependenciesFromCompilation other) =>
             new(Values: Values.Union(other.Values),
                 Expressions: Expressions.Union(other.Expressions),
                 LocalDependencies: LocalDependencies.Union(other.LocalDependencies));
 
-        static public DependenciesFromCompilation Union(IEnumerable<DependenciesFromCompilation> dependencies) =>
+        public static DependenciesFromCompilation Union(IEnumerable<DependenciesFromCompilation> dependencies) =>
             dependencies.Aggregate(
                 seed: Empty,
                 func: (aggregate, next) => aggregate.Union(next));
     }
 
-    static public Result<string, (BlockSyntax blockSyntax, DependenciesFromCompilation dependencies)>
+    public static Result<string, (BlockSyntax blockSyntax, DependenciesFromCompilation dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
             EnvironmentConfig environment) =>
@@ -591,7 +591,7 @@ public class PineCompileToDotNet
                             }));
             });
 
-    static ExpressionSyntax WrapAndThenResult(
+    private static ExpressionSyntax WrapAndThenResult(
         IEnumerable<(string hash, Expression.DecodeAndEvaluateExpression expression)> dependencies,
         ExpressionSyntax innerResultExpressionSyntax) =>
         dependencies
@@ -642,7 +642,7 @@ public class PineCompileToDotNet
                                                 .WithExpressionBody(aggregate)))));
                 });
 
-    static public ExpressionSyntax WrapExpressionInPineValueResultOk(ExpressionSyntax expression) =>
+    public static ExpressionSyntax WrapExpressionInPineValueResultOk(ExpressionSyntax expression) =>
         SyntaxFactory.InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
@@ -663,7 +663,7 @@ public class PineCompileToDotNet
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(expression))));
 
-    static public Result<string, (ExpressionSyntax expression, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax expression, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
         Expression expression,
         EnvironmentConfig environment)
     {
@@ -699,7 +699,7 @@ public class PineCompileToDotNet
             };
     }
 
-    static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.ListExpression listExpression,
         EnvironmentConfig environment)
     {
@@ -732,7 +732,7 @@ public class PineCompileToDotNet
                         DependenciesFromCompilation.Union(compiledElements.Select(e => e.dependencies))));
     }
 
-    static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
         EnvironmentConfig environment)
     {
@@ -753,7 +753,7 @@ public class PineCompileToDotNet
                 environment);
     }
 
-    static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileKernelFunctionApplicationToCSharpExpression(
+    private static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileKernelFunctionApplicationToCSharpExpression(
         KernelFunctionInfo kernelFunctionInfo,
         Expression kernelApplicationArgumentExpression,
         EnvironmentConfig environment)
@@ -825,7 +825,7 @@ public class PineCompileToDotNet
                 compiledArgument.dependencies));
     }
 
-    static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
+    private static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
         Expression kernelApplicationArgumentExpression,
         EnvironmentConfig environment)
     {
@@ -857,7 +857,7 @@ public class PineCompileToDotNet
             };
     }
 
-    static Result<string, ParsedKernelApplicationArgumentExpression> ParseKernelApplicationArgument(
+    private static Result<string, ParsedKernelApplicationArgumentExpression> ParseKernelApplicationArgument(
         Expression argumentExpression,
         EnvironmentConfig environment)
     {
@@ -885,27 +885,27 @@ public class PineCompileToDotNet
                             .SetItems(dictionary)));
     }
 
-    record ParsedKernelApplicationArgumentExpression(
+    private record ParsedKernelApplicationArgumentExpression(
         IReadOnlyDictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)> argumentSyntaxFromParameterType);
 
-    record KernelFunctionInfo(
+    private record KernelFunctionInfo(
         Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
         IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations);
 
-    record KernelFunctionSpecializedInfo(
+    private record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> parameterTypes,
         Func<IReadOnlyList<ExpressionSyntax>, InvocationExpressionSyntax> CompileInvocation);
 
-    enum KernelFunctionParameterType
+    private enum KernelFunctionParameterType
     {
         Generic = 1,
         Integer = 10,
     }
 
-    static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> KernelFunctionsInfo =
+    private static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> KernelFunctionsInfo =
         new(ReadKernelFunctionsInfoViaReflection);
 
-    static IReadOnlyDictionary<string, KernelFunctionInfo> ReadKernelFunctionsInfoViaReflection()
+    private static IReadOnlyDictionary<string, KernelFunctionInfo> ReadKernelFunctionsInfoViaReflection()
     {
         var kernelFunctionContainerType = typeof(KernelFunction);
         var methodsInfos = kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
@@ -986,7 +986,7 @@ public class PineCompileToDotNet
             .ToImmutableDictionary(m => m.Name, ReadKernelFunctionInfo);
     }
 
-    static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.ConditionalExpression conditionalExpression,
         EnvironmentConfig environment)
     {
@@ -1016,7 +1016,7 @@ public class PineCompileToDotNet
                 compiledCondition.dependencies.Union(compiledIfTrue.dependencies).Union(compiledIfFalse.dependencies)))));
     }
 
-    static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
         EnvironmentConfig environment)
     {
@@ -1035,7 +1035,7 @@ public class PineCompileToDotNet
                     { LocalDependencies = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, decodeAndEvaluateExpression)) }));
     }
 
-    static public Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
+    public static Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
         Func<Expression, Result<string, Maybe<Expression>>> findReplacement,
         Expression expression)
     {
@@ -1096,7 +1096,7 @@ public class PineCompileToDotNet
             }));
     }
 
-    static public Result<string, PineValue> TryEvaluateExpressionIndependent(Expression expression) =>
+    public static Result<string, PineValue> TryEvaluateExpressionIndependent(Expression expression) =>
         expression switch
         {
             Expression.LiteralExpression literal =>
@@ -1128,7 +1128,7 @@ public class PineCompileToDotNet
             Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
         };
 
-    static public Result<string, PineValue> TryEvaluateExpressionIndependent(
+    public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
     {
         if (TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.environment) is Result<string, PineValue>.Ok envOk)
@@ -1146,7 +1146,7 @@ public class PineCompileToDotNet
             .MapError(err => "Inner expression is not independent: " + err));
     }
 
-    static public Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.LiteralExpression literalExpression)
     {
         return
@@ -1155,10 +1155,10 @@ public class PineCompileToDotNet
                 DependenciesFromCompilation.Empty with { Values = ImmutableHashSet.Create(literalExpression.Value) }));
     }
 
-    static public string DeclarationNameForValue(PineValue pineValue) =>
+    public static string DeclarationNameForValue(PineValue pineValue) =>
         "value_" + CommonConversion.StringBase16(PineValueHashTree.ComputeHash(pineValue))[..10];
 
-    static public Result<string, (ExpressionSyntax expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
+    public static Result<string, (ExpressionSyntax expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
         EnvironmentConfig environment)
     {
@@ -1175,7 +1175,7 @@ public class PineCompileToDotNet
                 compiledExpr.dependencies));
     }
 
-    static public ExpressionSyntax CompileToCSharpLiteralExpression(
+    public static ExpressionSyntax CompileToCSharpLiteralExpression(
         PineValue pineValue,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpression)
     {
@@ -1299,13 +1299,13 @@ public class PineCompileToDotNet
         };
     }
 
-    static ExpressionSyntax pineValueEmptyListSyntax =
+    private static ExpressionSyntax pineValueEmptyListSyntax =
         SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
             SyntaxFactory.IdentifierName("PineValue"),
             SyntaxFactory.IdentifierName("EmptyList"));
 
-    static IEnumerable<PineValue> EnumerateAllLiterals(Expression expression) =>
+    private static IEnumerable<PineValue> EnumerateAllLiterals(Expression expression) =>
         expression switch
         {
             Expression.LiteralExpression literal =>
@@ -1335,7 +1335,7 @@ public class PineCompileToDotNet
             _ => throw new NotImplementedException("Expression type not implemented: " + expression.GetType().FullName)
         };
 
-    static public string GetNameForExpression(ExpressionSyntax syntax)
+    public static string GetNameForExpression(ExpressionSyntax syntax)
     {
         var serialized = syntax.ToString();
 
@@ -1346,7 +1346,7 @@ public class PineCompileToDotNet
         return CommonConversion.StringBase16(hash)[..10];
     }
 
-    static Result<string, ExpressionSyntax> EncodePineExpressionAsCSharpExpression(
+    private static Result<string, ExpressionSyntax> EncodePineExpressionAsCSharpExpression(
         Expression expression,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpressionForValue)
     {
@@ -1462,7 +1462,7 @@ public class PineCompileToDotNet
         };
     }
 
-    static public IEnumerable<PineValue> OrderValuesByContainment(IEnumerable<PineValue> pineValues)
+    public static IEnumerable<PineValue> OrderValuesByContainment(IEnumerable<PineValue> pineValues)
     {
         var blobs = pineValues.OfType<PineValue.BlobValue>();
 
@@ -1483,7 +1483,7 @@ public class PineCompileToDotNet
         return blobs.Cast<PineValue>().Concat(orderedLists);
     }
 
-    static IEnumerable<PineValue.ListValue> EnumerateDescendantListsBreadthFirst(IEnumerable<PineValue.ListValue> roots)
+    private static IEnumerable<PineValue.ListValue> EnumerateDescendantListsBreadthFirst(IEnumerable<PineValue.ListValue> roots)
     {
         var queue = new Queue<PineValue.ListValue>(roots);
 

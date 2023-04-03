@@ -8,12 +8,12 @@ namespace ElmTime;
 
 internal class JintInterop
 {
-    static public ObjectInstance NewDataViewFromArrayBuffer(Engine engine, ObjectInstance arrayBuffer)
+    public static ObjectInstance NewDataViewFromArrayBuffer(Engine engine, ObjectInstance arrayBuffer)
     {
         return engine.Construct("DataView", arrayBuffer);
     }
 
-    static public ObjectInstance NewArrayBufferFromBytes(Engine engine, ReadOnlyMemory<byte> bytes)
+    public static ObjectInstance NewArrayBufferFromBytes(Engine engine, ReadOnlyMemory<byte> bytes)
     {
         var arrayBuffer = NewArrayBufferFromLength(engine, bytes.Length);
 
@@ -24,12 +24,12 @@ internal class JintInterop
         return arrayBuffer;
     }
 
-    static public ObjectInstance NewArrayBufferFromLength(Engine engine, int length)
+    public static ObjectInstance NewArrayBufferFromLength(Engine engine, int length)
     {
         return engine.Construct("ArrayBuffer", length);
     }
 
-    static public ObjectInstance GetArrayBufferOfDataView(JsValue objectInstance)
+    public static ObjectInstance GetArrayBufferOfDataView(JsValue objectInstance)
     {
         var argumentType = objectInstance.GetType();
 
@@ -41,7 +41,7 @@ internal class JintInterop
         return (ObjectInstance)propertyArrayBuffer.GetValue(objectInstance);
     }
 
-    static public byte[] GetBytesOfArrayBuffer(JsValue objectInstance)
+    public static byte[] GetBytesOfArrayBuffer(JsValue objectInstance)
     {
         var argumentType = objectInstance.GetType();
 

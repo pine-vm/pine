@@ -13,29 +13,29 @@ namespace TestElmTime;
 
 public class WebHostAdminInterfaceTestSetup : IDisposable
 {
-    static string PublicWebHostUrlDefault => "http://localhost:35491";
+    private static string PublicWebHostUrlDefault => "http://localhost:35491";
 
-    static string AdminWebHostUrlDefault => "http://localhost:19372";
+    private static string AdminWebHostUrlDefault => "http://localhost:19372";
 
-    readonly string? publicWebHostUrlOverride;
+    private readonly string? publicWebHostUrlOverride;
 
-    readonly string? adminWebHostUrlOverride;
+    private readonly string? adminWebHostUrlOverride;
 
     public string PublicWebHostUrl => publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
 
     public string AdminWebHostUrl => adminWebHostUrlOverride ?? AdminWebHostUrlDefault;
 
-    readonly string testDirectory;
+    private readonly string testDirectory;
 
-    readonly string? adminPassword;
+    private readonly string? adminPassword;
 
-    readonly Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap;
+    private readonly Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap;
 
     public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
-    IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+    private IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
 
-    readonly IFileStore fileStore;
+    private readonly IFileStore fileStore;
 
     public IWebHost StartWebHost(
          Func<IFileStore, IFileStore>? processStoreFileStoreMap = null)
@@ -61,7 +61,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             logger: null)
         .process;
 
-    static public WebHostAdminInterfaceTestSetup Setup(
+    public static WebHostAdminInterfaceTestSetup Setup(
         Func<DateTimeOffset>? persistentProcessHostDateTime = null,
         string? adminPassword = null,
         IFileStore? fileStore = null,
@@ -73,7 +73,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
             persistentProcessHostDateTime: persistentProcessHostDateTime);
 
-    static public WebHostAdminInterfaceTestSetup Setup(
+    public static WebHostAdminInterfaceTestSetup Setup(
         Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
         string? adminPassword = null,
         IFileStore? fileStore = null,
@@ -136,7 +136,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         Directory.Delete(testDirectory, true);
     }
 
-    WebHostAdminInterfaceTestSetup(
+    private WebHostAdminInterfaceTestSetup(
         string testDirectory,
         string? adminPassword,
         IFileStore? fileStore,

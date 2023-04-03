@@ -93,5 +93,5 @@ namespace TestElmTime
         }
     }
 
-    record GetEntryOverviewResponseEntry(int length);
+    internal record GetEntryOverviewResponseEntry(int length);
 }

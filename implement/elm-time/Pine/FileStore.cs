@@ -57,14 +57,14 @@ public interface IFileStore : IFileStoreReader, IFileStoreWriter
 
 public class FileStoreFromSystemIOFile : IFileStore
 {
-    readonly string directoryPath;
+    private readonly string directoryPath;
 
     public FileStoreFromSystemIOFile(string directoryPath)
     {
         this.directoryPath = directoryPath ?? throw new ArgumentNullException(nameof(directoryPath));
     }
 
-    string CombinePath(IImmutableList<string> path)
+    private string CombinePath(IImmutableList<string> path)
     {
         foreach (var pathComponent in path)
         {
@@ -75,7 +75,7 @@ public class FileStoreFromSystemIOFile : IFileStore
         return Path.Combine(path.Insert(0, directoryPath).ToArray());
     }
 
-    static void EnsureDirectoryExists(string directoryPath)
+    private static void EnsureDirectoryExists(string directoryPath)
     {
         if (!(0 < directoryPath?.Length))
             return;
@@ -151,9 +151,9 @@ public class FileStoreFromSystemIOFile : IFileStore
 
 public class FileStoreFromWriterAndReader : IFileStore
 {
-    readonly IFileStoreWriter writer;
+    private readonly IFileStoreWriter writer;
 
-    readonly IFileStoreReader reader;
+    private readonly IFileStoreReader reader;
 
     public FileStoreFromWriterAndReader(IFileStoreWriter writer, IFileStoreReader reader)
     {
@@ -179,7 +179,7 @@ public class FileStoreFromWriterAndReader : IFileStore
 
 public class RecordingFileStoreWriter : IFileStoreWriter
 {
-    readonly ConcurrentQueue<WriteOperation> history = new();
+    private readonly ConcurrentQueue<WriteOperation> history = new();
 
     public IEnumerable<WriteOperation> History => history;
 
@@ -191,7 +191,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         (IImmutableList<string> path, IReadOnlyList<byte> fileContent)? AppendFileContent = null,
         IImmutableList<string>? DeleteFile = null)
     {
-        static public IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
+        public static IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
             writeOperations.Aggregate(fileStoreReader, (previousState, writeOperation) => writeOperation.Apply(previousState));
 
         public IFileStoreReader Apply(IFileStoreReader previousState)
@@ -294,12 +294,12 @@ public class EmptyFileStoreReader : IFileStoreReader
         ImmutableList<IImmutableList<string>>.Empty;
 }
 
-static public class FileStoreExtension
+public static class FileStoreExtension
 {
-    static public IEnumerable<IImmutableList<string>> ListFiles(this IFileStoreReader fileStore) =>
+    public static IEnumerable<IImmutableList<string>> ListFiles(this IFileStoreReader fileStore) =>
         fileStore.ListFilesInDirectory(ImmutableList<string>.Empty);
 
-    static public IFileStoreReader WithMappedPath(
+    public static IFileStoreReader WithMappedPath(
         this IFileStoreReader originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
         new DelegatingFileStoreReader
         (
@@ -307,14 +307,14 @@ static public class FileStoreExtension
             ListFilesInDirectoryDelegate: originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath))
         );
 
-    static public IFileStoreReader ForSubdirectory(this IFileStoreReader originalFileStore, string directoryName) =>
+    public static IFileStoreReader ForSubdirectory(this IFileStoreReader originalFileStore, string directoryName) =>
         ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
 
-    static public IFileStoreReader ForSubdirectory(
+    public static IFileStoreReader ForSubdirectory(
         this IFileStoreReader originalFileStore, IEnumerable<string> directoryPath) =>
         WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
 
-    static public IFileStoreWriter WithMappedPath(
+    public static IFileStoreWriter WithMappedPath(
         this IFileStoreWriter originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
         new DelegatingFileStoreWriter
         (
@@ -323,10 +323,10 @@ static public class FileStoreExtension
             DeleteFileDelegate: originalPath => originalFileStore.DeleteFile(pathMap(originalPath))
         );
 
-    static public IFileStoreWriter ForSubdirectory(this IFileStoreWriter originalFileStore, string directoryName) =>
+    public static IFileStoreWriter ForSubdirectory(this IFileStoreWriter originalFileStore, string directoryName) =>
         ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
 
-    static public IFileStoreWriter ForSubdirectory(
+    public static IFileStoreWriter ForSubdirectory(
         this IFileStoreWriter originalFileStore, IEnumerable<string> directoryPath) =>
         WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
 }

@@ -13,12 +13,12 @@ namespace ElmTime;
 
 public class JsEngineJintOptimizedForElmApps
 {
-    static public JsEngineJint Create() =>
+    public static JsEngineJint Create() =>
         new(DelegatesIntoHost);
 
-    static readonly IReadOnlyList<FunctionDelegateIntoHost> DelegatesIntoHost = BuildDelegatesIntoHost().ToImmutableList();
+    private static readonly IReadOnlyList<FunctionDelegateIntoHost> DelegatesIntoHost = BuildDelegatesIntoHost().ToImmutableList();
 
-    static IEnumerable<FunctionDelegateIntoHost> BuildDelegatesIntoHost()
+    private static IEnumerable<FunctionDelegateIntoHost> BuildDelegatesIntoHost()
     {
         yield return new FunctionDelegateIntoHost(
             // https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Decode.elm#L8-L10

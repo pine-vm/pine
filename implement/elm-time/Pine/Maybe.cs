@@ -3,16 +3,16 @@ using System.Text.Json.Serialization;
 
 namespace Pine;
 
-[JsonConverter(typeof(Json.JsonConverterForChoiceType))]
 /// <summary>
 /// A choice type that represents values that may or may not exist.
 /// The only two possible variants are <see cref="Nothing"/> and <see cref="Just"/>.
 /// </summary>
+[JsonConverter(typeof(Json.JsonConverterForChoiceType))]
 public abstract record Maybe<JustT>
 {
-    static public Maybe<JustT> nothing() => new Nothing();
+    public static Maybe<JustT> nothing() => new Nothing();
 
-    static public Maybe<JustT> just(JustT just) => new Just(just);
+    public static Maybe<JustT> just(JustT just) => new Just(just);
 
     public bool IsNothing() =>
         this switch
@@ -81,11 +81,11 @@ public abstract record Maybe<JustT>
 
 public static class Maybe
 {
-    static public Maybe<ClassJustT> NothingFromNull<ClassJustT>(ClassJustT? maybeNull)
+    public static Maybe<ClassJustT> NothingFromNull<ClassJustT>(ClassJustT? maybeNull)
         where ClassJustT : class =>
         maybeNull is ClassJustT notNull ? Maybe<ClassJustT>.just(notNull) : Maybe<ClassJustT>.nothing();
 
-    static public Maybe<StructJustT> NothingFromNull<StructJustT>(StructJustT? maybeNull)
+    public static Maybe<StructJustT> NothingFromNull<StructJustT>(StructJustT? maybeNull)
         where StructJustT : struct =>
         maybeNull is StructJustT notNull ? Maybe<StructJustT>.just(notNull) : Maybe<StructJustT>.nothing();
 }

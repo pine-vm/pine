@@ -17,20 +17,20 @@ namespace Pine;
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
-    static public PineValue Blob(ReadOnlyMemory<byte> bytes) =>
+    public static PineValue Blob(ReadOnlyMemory<byte> bytes) =>
         new BlobValue(bytes);
 
-    static public PineValue List(IReadOnlyList<PineValue> elements) =>
+    public static PineValue List(IReadOnlyList<PineValue> elements) =>
         new ListValue(elements);
 
-    static public readonly PineValue EmptyList = List(ImmutableList<PineValue>.Empty);
+    public static readonly PineValue EmptyList = List(ImmutableList<PineValue>.Empty);
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.
     /// </summary>
     public record ListValue : PineValue, IEquatable<ListValue>
     {
-        readonly int slimHashCode;
+        private readonly int slimHashCode;
 
         public IReadOnlyList<PineValue> Elements { get; }
 
@@ -68,7 +68,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public record BlobValue : PineValue, IEquatable<BlobValue>
     {
-        readonly int slimHashCode;
+        private readonly int slimHashCode;
 
         public ReadOnlyMemory<byte> Bytes { get; }
 

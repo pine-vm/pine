@@ -15,11 +15,11 @@ public class InteractiveSessionJavaScript : IInteractiveSession
         V8 = 2,
     }
 
-    readonly TreeNodeWithStringPath? appCodeTree;
+    private readonly TreeNodeWithStringPath? appCodeTree;
 
-    readonly Lazy<IJsEngine> evalElmPreparedJsEngine;
+    private readonly Lazy<IJsEngine> evalElmPreparedJsEngine;
 
-    readonly IList<string> previousSubmissions = new List<string>();
+    private readonly IList<string> previousSubmissions = new List<string>();
 
     public InteractiveSessionJavaScript(
         TreeNodeWithStringPath? appCodeTree,

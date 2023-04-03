@@ -9,9 +9,9 @@ namespace TestElmTime;
 [TestClass]
 public class TestPineCompileToDotNet
 {
-    static public readonly PineValue value_299b7decef = PineValueAsString.ValueFromString("List");
+    public static readonly PineValue value_299b7decef = PineValueAsString.ValueFromString("List");
 
-    static public readonly PineValue value_d597fb92e5 = PineValue.List(new[] { value_299b7decef, PineValue.EmptyList });
+    public static readonly PineValue value_d597fb92e5 = PineValue.List(new[] { value_299b7decef, PineValue.EmptyList });
 
     [TestMethod]
     public void Test_sort_pine_value_by_containment()

@@ -30,7 +30,7 @@ public class TestElmInteractive
         string submission,
         string errorAsText);
 
-    static public ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
+    public static ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
         Func<TContainer, TreeNodeWithStringPath> getScenario,
         ElmEngineType implementationType) where TContainer : notnull =>
@@ -43,7 +43,7 @@ public class TestElmInteractive
             s => s.scenarioContainer,
             elementSelector: s => s.testReport);
 
-    static public InteractiveScenarioTestReport TestElmInteractiveScenario(
+    public static InteractiveScenarioTestReport TestElmInteractiveScenario(
         TreeNodeWithStringPath scenarioTree,
         ElmEngineType implementationType)
     {
@@ -107,7 +107,7 @@ public class TestElmInteractive
             elapsedTime: totalStopwatch.Elapsed);
     }
 
-    static public Result<string, Scenario> ParseScenario(TreeNodeWithStringPath scenarioTree)
+    public static Result<string, Scenario> ParseScenario(TreeNodeWithStringPath scenarioTree)
     {
         var appCodeTree =
             scenarioTree.GetNodeAtPath(new[] { "context-app" });
@@ -152,7 +152,7 @@ public class TestElmInteractive
             .Map(steps => new Scenario(appCodeTree: appCodeTree, steps: steps));
     }
 
-    static public Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
+    public static Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
     {
         var expectedResponse =
             sessionStep.GetNodeAtPath(new[] { "expected-value" }) is TreeNodeWithStringPath.BlobNode expectedValueBlob

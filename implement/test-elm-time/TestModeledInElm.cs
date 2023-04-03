@@ -13,13 +13,13 @@ namespace TestElmTime;
 [TestClass]
 public class TestModeledInElm
 {
-    static IImmutableList<string> PathToDirectoryWithTestsModeledInElm =>
+    private static IImmutableList<string> PathToDirectoryWithTestsModeledInElm =>
         ImmutableList.Create(".", "..", "..", "..", "modeled-in-elm");
 
-    static string FilePathStringFromPath(IImmutableList<string> path) =>
+    private static string FilePathStringFromPath(IImmutableList<string> path) =>
         Path.Combine(path.ToArray());
 
-    static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
+    private static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>
         TestSetup.AsLoweredElmApp(
             TestSetup.GetElmAppFromDirectoryPath(directoryPath),
@@ -28,7 +28,7 @@ public class TestModeledInElm
     /*
     Get the value from `tests` in the Elm module `Main`.
     */
-    static string? GetTestsValueFromModuleMain(
+    private static string? GetTestsValueFromModuleMain(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmAppFiles)
     {
         var elmMakeResult = Elm019Binaries.ElmMakeToJavascript(
@@ -108,7 +108,7 @@ public class TestModeledInElm
         }
     }
 
-    record FromElmTestResultEntry(
+    private record FromElmTestResultEntry(
         string testName,
         string expected,
         string derived);

@@ -6,12 +6,12 @@ using System.Security.Cryptography;
 
 namespace Pine;
 
-static public class PineValueHashTree
+public static class PineValueHashTree
 {
-    static public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
+    public static ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
         ComputeHashAndDependencies(pineValue).hash;
 
-    static public (ReadOnlyMemory<byte> hash, IReadOnlyCollection<PineValue> dependencies)
+    public static (ReadOnlyMemory<byte> hash, IReadOnlyCollection<PineValue> dependencies)
         ComputeHashAndDependencies(PineValue pineValue)
     {
         var (serialRepresentation, dependencies) = ComputeHashTreeNodeSerialRepresentation(pineValue);
@@ -19,7 +19,7 @@ static public class PineValueHashTree
         return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies);
     }
 
-    static public (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<PineValue> dependencies)
+    public static (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<PineValue> dependencies)
         ComputeHashTreeNodeSerialRepresentation(PineValue pineValue)
     {
         switch (pineValue)
@@ -55,12 +55,12 @@ static public class PineValueHashTree
         }
     }
 
-    static public Result<string, PineValue> DeserializeFromHashTree(
+    public static Result<string, PineValue> DeserializeFromHashTree(
         ReadOnlyMemory<byte> serializedValue,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> loadSerializedValueByHash) =>
         DeserializeFromHashTree(serializedValue, loadSerializedValueByHash);
 
-    static public Result<string, PineValue> DeserializeFromHashTree(
+    public static Result<string, PineValue> DeserializeFromHashTree(
         ReadOnlyMemory<byte> serializedValue,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?> loadSerializedValueByHash)
     {
@@ -146,13 +146,13 @@ static public class PineValueHashTree
         return Result<string, PineValue>.err("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
     }
 
-    static public ReadOnlyMemory<byte> ComputeHashSorted(TreeNodeWithStringPath treeNode) =>
+    public static ReadOnlyMemory<byte> ComputeHashSorted(TreeNodeWithStringPath treeNode) =>
         ComputeHashNotSorted(TreeNodeWithStringPath.Sort(treeNode));
 
-    static public ReadOnlyMemory<byte> ComputeHashNotSorted(TreeNodeWithStringPath treeNode) =>
+    public static ReadOnlyMemory<byte> ComputeHashNotSorted(TreeNodeWithStringPath treeNode) =>
         ComputeHash(PineValueComposition.FromTreeWithStringPath(treeNode));
 
-    static public PineValue? FindNodeByHash(PineValue pineValue, ReadOnlyMemory<byte> hash)
+    public static PineValue? FindNodeByHash(PineValue pineValue, ReadOnlyMemory<byte> hash)
     {
         if (ComputeHash(pineValue).Span.SequenceEqual(hash.Span))
             return pineValue;

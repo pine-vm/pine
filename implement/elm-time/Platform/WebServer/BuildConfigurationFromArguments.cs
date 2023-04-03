@@ -5,9 +5,9 @@ using System.Linq;
 
 namespace ElmTime.Platform.WebServer;
 
-static public class BuildConfigurationFromArguments
+public static class BuildConfigurationFromArguments
 {
-    static public
+    public static
         (TreeNodeWithStringPath sourceTree,
         string filteredSourceCompositionId,
         byte[] configZipArchive)
@@ -42,7 +42,7 @@ static public class BuildConfigurationFromArguments
         return (sourceTree, filteredSourceCompositionId, configZipArchive);
     }
 
-    static public TreeNodeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
+    public static TreeNodeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
         TreeNodeWithStringPath originalTree)
     {
         if (originalTree is not TreeNodeWithStringPath.TreeNode tree)
@@ -68,7 +68,7 @@ static public class BuildConfigurationFromArguments
                 .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList());
     }
 
-    static public byte[] BuildConfigurationZipArchive(PineValue sourceComposition)
+    public static byte[] BuildConfigurationZipArchive(PineValue sourceComposition)
     {
         var parseSourceAsTree =
             PineValueComposition.ParseAsTreeWithStringPath(sourceComposition)

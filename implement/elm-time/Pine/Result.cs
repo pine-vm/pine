@@ -12,12 +12,12 @@ public abstract record Result<ErrT, OkT>
     /// <summary>
     /// Constructor for the 'Err' case.
     /// </summary>
-    static public Result<ErrT, OkT> err(ErrT err) => new Err(err);
+    public static Result<ErrT, OkT> err(ErrT err) => new Err(err);
 
     /// <summary>
     /// Constructor for the 'Ok' case.
     /// </summary>
-    static public Result<ErrT, OkT> ok(OkT ok) => new Ok(ok);
+    public static Result<ErrT, OkT> ok(OkT ok) => new Ok(ok);
 
     /// <summary>
     /// Returns whether this value represents an error case.

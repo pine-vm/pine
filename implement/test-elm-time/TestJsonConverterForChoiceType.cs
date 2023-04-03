@@ -10,7 +10,7 @@ namespace TestElmTime;
 public class TestJsonConverterForChoiceType
 {
     [JsonConverter(typeof(JsonConverterForChoiceType))]
-    abstract record SimpleClass
+    private abstract record SimpleClass
     {
         public record Alfa : SimpleClass;
 
@@ -38,7 +38,7 @@ public class TestJsonConverterForChoiceType
     }
 
     [JsonConverter(typeof(JsonConverterForChoiceType))]
-    abstract record MixedClass<T0>
+    private abstract record MixedClass<T0>
     {
         public record VariantWithoutArgs : MixedClass<T0>;
 
@@ -102,7 +102,7 @@ public class TestJsonConverterForChoiceType
 
 
     [JsonConverter(typeof(JsonConverterForChoiceType))]
-    abstract record WithResults<T0>
+    private abstract record WithResults<T0>
     {
         public record DiverseResults(
             Result<string, int> Independent,

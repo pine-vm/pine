@@ -6,16 +6,16 @@ using System.Linq;
 
 namespace Pine;
 
-static public class TarArchive
+public static class TarArchive
 {
-    static public TreeNodeWithStringPath TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
+    public static TreeNodeWithStringPath TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
     {
         using var archiveReader = SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(tarArchive.ToArray()));
 
         return TreeWithStringPathFromTarArchiveEntries(archiveReader.Entries);
     }
 
-    static public TreeNodeWithStringPath TreeWithStringPathFromTarArchiveEntries(
+    public static TreeNodeWithStringPath TreeWithStringPathFromTarArchiveEntries(
         IEnumerable<SharpCompress.Archives.Tar.TarArchiveEntry> entries)
     {
         var treeEntries =

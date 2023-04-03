@@ -1420,17 +1420,17 @@ public class TestWebServer
         Assert.AreEqual("value from local assembly", responseContent);
     }
 
-    class FileStoreFromDelegates : IFileStore
+    private class FileStoreFromDelegates : IFileStore
     {
-        readonly Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent;
+        private readonly Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent;
 
-        readonly Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent;
+        private readonly Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent;
 
-        readonly Action<IImmutableList<string>> deleteFile;
+        private readonly Action<IImmutableList<string>> deleteFile;
 
-        readonly Func<IImmutableList<string>, IReadOnlyList<byte>?> getFileContent;
+        private readonly Func<IImmutableList<string>, IReadOnlyList<byte>?> getFileContent;
 
-        readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
+        private readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
 
         public FileStoreFromDelegates(
             Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent,
@@ -1462,11 +1462,11 @@ public class TestWebServer
             setFileContent(path, fileContent);
     }
 
-    record Web_host_propagates_HTTP_headers_Response_Entry(
+    private record Web_host_propagates_HTTP_headers_Response_Entry(
         string name,
         IReadOnlyList<string> values);
 
-    static HttpResponseMessage HttpPostStringContentAtRoot(
+    private static HttpResponseMessage HttpPostStringContentAtRoot(
         HttpClient client, string requestContent) =>
             client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
 }

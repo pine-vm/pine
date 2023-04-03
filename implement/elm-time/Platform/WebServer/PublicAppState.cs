@@ -15,27 +15,27 @@ namespace ElmTime.Platform.WebServer;
 
 public class PublicAppState
 {
-    static TimeSpan NotifyTimeHasArrivedMaximumDistance => TimeSpan.FromSeconds(10);
+    private static TimeSpan NotifyTimeHasArrivedMaximumDistance => TimeSpan.FromSeconds(10);
 
-    long nextHttpRequestIndex = 0;
+    private long nextHttpRequestIndex = 0;
 
-    int createVolatileProcessAttempts = 0;
+    private int createVolatileProcessAttempts = 0;
 
-    readonly ConcurrentDictionary<string, InterfaceToHost.HttpResponse> appTaskCompleteHttpResponse = new();
+    private readonly ConcurrentDictionary<string, InterfaceToHost.HttpResponse> appTaskCompleteHttpResponse = new();
 
-    readonly ConcurrentDictionary<string, VolatileProcess> volatileProcesses = new();
+    private readonly ConcurrentDictionary<string, VolatileProcess> volatileProcesses = new();
 
-    readonly public System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
+    public readonly System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
 
-    readonly ServerAndElmAppConfig serverAndElmAppConfig;
-    readonly Func<DateTimeOffset> getDateTimeOffset;
+    private readonly ServerAndElmAppConfig serverAndElmAppConfig;
+    private readonly Func<DateTimeOffset> getDateTimeOffset;
 
-    readonly System.Threading.Timer notifyTimeHasArrivedTimer;
+    private readonly System.Threading.Timer notifyTimeHasArrivedTimer;
 
-    readonly object nextTimeToNotifyLock = new();
+    private readonly object nextTimeToNotifyLock = new();
 
-    DateTimeOffset? lastAppEventTimeHasArrived = null;
-    InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStruct? nextTimeToNotify = null;
+    private DateTimeOffset? lastAppEventTimeHasArrived = null;
+    private InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStruct? nextTimeToNotify = null;
 
     public PublicAppState(
         ServerAndElmAppConfig serverAndElmAppConfig,
@@ -144,7 +144,7 @@ public class PublicAppState
         return app;
     }
 
-    void ConfigureServices(
+    private void ConfigureServices(
         IServiceCollection services,
         ILogger logger)
     {
@@ -165,7 +165,7 @@ public class PublicAppState
         Asp.ConfigureServices(services);
     }
 
-    async System.Threading.Tasks.Task HandleRequestAsync(HttpContext context)
+    private async System.Threading.Tasks.Task HandleRequestAsync(HttpContext context)
     {
         var currentDateTime = getDateTimeOffset();
         var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
@@ -273,7 +273,7 @@ public class PublicAppState
         ));
     }
 
-    (string serializedInterfaceEvent, Action processEventAndResultingRequests) PrepareProcessEventAndResultingRequests(
+    private (string serializedInterfaceEvent, Action processEventAndResultingRequests) PrepareProcessEventAndResultingRequests(
         InterfaceToHost.BackendEventStruct appEvent)
     {
         var serializedAppEvent = System.Text.Json.JsonSerializer.Serialize(appEvent);
@@ -319,7 +319,7 @@ public class PublicAppState
         return (serializedAppEvent, processEvent);
     }
 
-    void PerformProcessTaskAndFeedbackEvent(InterfaceToHost.StartTask taskWithId)
+    private void PerformProcessTaskAndFeedbackEvent(InterfaceToHost.StartTask taskWithId)
     {
         var taskResult = PerformProcessTask(taskWithId.task);
 
@@ -335,14 +335,14 @@ public class PublicAppState
         ProcessEventAndResultingRequests(interfaceEvent);
     }
 
-    void ProcessEventAndResultingRequests(InterfaceToHost.BackendEventStruct interfaceEvent)
+    private void ProcessEventAndResultingRequests(InterfaceToHost.BackendEventStruct interfaceEvent)
     {
         var prepareProcessEvent = PrepareProcessEventAndResultingRequests(interfaceEvent);
 
         prepareProcessEvent.processEventAndResultingRequests();
     }
 
-    System.Threading.Tasks.Task ForwardTasksFromResponseCmds(InterfaceToHost.BackendEventResponseStruct response)
+    private System.Threading.Tasks.Task ForwardTasksFromResponseCmds(InterfaceToHost.BackendEventResponseStruct response)
     {
         var startTasks =
             response.startTasks
@@ -356,7 +356,7 @@ public class PublicAppState
         return System.Threading.Tasks.Task.WhenAll(startTasks);
     }
 
-    InterfaceToHost.TaskResult PerformProcessTask(InterfaceToHost.Task task) =>
+    private InterfaceToHost.TaskResult PerformProcessTask(InterfaceToHost.Task task) =>
         task switch
         {
             InterfaceToHost.Task.CreateVolatileProcess create =>
@@ -370,7 +370,7 @@ public class PublicAppState
             _ => throw new NotImplementedException("Unexpected task structure.")
         };
 
-    byte[]? GetBlobWithSHA256(byte[] sha256)
+    private byte[]? GetBlobWithSHA256(byte[] sha256)
     {
         var matchFromSourceComposition =
             serverAndElmAppConfig?.SourceComposition == null ? null :
@@ -387,7 +387,7 @@ public class PublicAppState
         return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();
     }
 
-    InterfaceToHost.TaskResult PerformProcessTaskCreateVolatileProcess(InterfaceToHost.CreateVolatileProcessStruct createVolatileProcess)
+    private InterfaceToHost.TaskResult PerformProcessTaskCreateVolatileProcess(InterfaceToHost.CreateVolatileProcessStruct createVolatileProcess)
     {
         try
         {
@@ -422,7 +422,7 @@ public class PublicAppState
         }
     }
 
-    Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
+    private Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
         PerformProcessTaskRequestToVolatileProcess(
         InterfaceToHost.RequestToVolatileProcessStruct requestToVolatileProcess)
     {
@@ -454,14 +454,14 @@ public class PublicAppState
         );
     }
 
-    InterfaceToHost.TaskResult PerformProcessTaskTerminateVolatileProcess(InterfaceToHost.TerminateVolatileProcessStruct terminateVolatileProcess)
+    private InterfaceToHost.TaskResult PerformProcessTaskTerminateVolatileProcess(InterfaceToHost.TerminateVolatileProcessStruct terminateVolatileProcess)
     {
         volatileProcesses.TryRemove(terminateVolatileProcess.processId, out var volatileProcess);
 
         return new InterfaceToHost.TaskResult.CompleteWithoutResult();
     }
 
-    static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEventStruct> AsPersistentProcessInterfaceHttpRequestEvent(
+    private static async System.Threading.Tasks.Task<InterfaceToHost.HttpRequestEventStruct> AsPersistentProcessInterfaceHttpRequestEvent(
         HttpContext httpContext,
         string httpRequestId,
         DateTimeOffset time)

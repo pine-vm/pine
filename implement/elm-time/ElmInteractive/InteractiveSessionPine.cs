@@ -11,18 +11,18 @@ namespace ElmTime.ElmInteractive;
 
 public class InteractiveSessionPine : IInteractiveSession
 {
-    readonly object submissionLock = new();
+    private readonly object submissionLock = new();
 
     private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
 
-    readonly Lazy<IJsEngine> compileElmPreparedJsEngine =
+    private readonly Lazy<IJsEngine> compileElmPreparedJsEngine =
         new(ElmInteractive.PrepareJsEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
 
-    ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
+    private ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
-    readonly PineVM pineVM;
+    private readonly PineVM pineVM;
 
-    readonly static ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
+    private static readonly ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
 
     public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, PineVM? pineVM = null)
     {
@@ -32,7 +32,7 @@ public class InteractiveSessionPine : IInteractiveSession
             CompileInteractiveEnvironment(appCodeTree: appCodeTree));
     }
 
-    static private readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
+    private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
 
     private Result<string, PineValue> CompileInteractiveEnvironment(TreeNodeWithStringPath? appCodeTree)
     {
@@ -182,7 +182,7 @@ public class InteractiveSessionPine : IInteractiveSession
             compileElmPreparedJsEngine.Value?.Dispose();
     }
 
-    static public Result<string, PineCompileToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
+    public static Result<string, PineCompileToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
         IReadOnlyList<TestElmInteractive.Scenario> scenarios,
         PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         int limitNumber)
@@ -200,7 +200,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 syntaxContainerConfig);
     }
 
-    static public IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
+    public static IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
     {
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 

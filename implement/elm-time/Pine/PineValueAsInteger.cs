@@ -8,11 +8,11 @@ public static class PineValueAsInteger
     /// Converts an integer into a blob value with an unsigned representation of that integer.
     /// Returns an error if the input integer is less than zero.
     /// </summary>
-    static public Result<string, PineValue> ValueFromUnsignedInteger(System.Numerics.BigInteger integer) =>
+    public static Result<string, PineValue> ValueFromUnsignedInteger(System.Numerics.BigInteger integer) =>
         BlobValueFromUnsignedInteger(integer)
         .Map(PineValue.Blob);
 
-    static public Result<string, ReadOnlyMemory<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
+    public static Result<string, ReadOnlyMemory<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
     {
         var signedBlobValue = BlobValueFromSignedInteger(integer);
 
@@ -22,10 +22,10 @@ public static class PineValueAsInteger
         return Result<string, ReadOnlyMemory<byte>>.ok(signedBlobValue[1..]);
     }
 
-    static public PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer) =>
+    public static PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer) =>
         PineValue.Blob(BlobValueFromSignedInteger(integer));
 
-    static public ReadOnlyMemory<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
+    public static ReadOnlyMemory<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
     {
         var absoluteValue = System.Numerics.BigInteger.Abs(integer);
 
@@ -42,7 +42,7 @@ public static class PineValueAsInteger
         return memory;
     }
 
-    static public Result<string, System.Numerics.BigInteger> SignedIntegerFromValue(PineValue value)
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValue(PineValue value)
     {
         if (value is not PineValue.BlobValue blob)
             return Result<string, System.Numerics.BigInteger>.err(
@@ -51,7 +51,7 @@ public static class PineValueAsInteger
         return SignedIntegerFromBlobValue(blob.Bytes.Span);
     }
 
-    static public Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
     {
         if (blobValue.Length < 1)
             return Result<string, System.Numerics.BigInteger>.err(
@@ -72,13 +72,13 @@ public static class PineValueAsInteger
                 integerValue * new System.Numerics.BigInteger(isNegative ? -1 : 1));
     }
 
-    static public Result<string, System.Numerics.BigInteger> UnsignedIntegerFromValue(PineValue value) =>
+    public static Result<string, System.Numerics.BigInteger> UnsignedIntegerFromValue(PineValue value) =>
         value switch
         {
             PineValue.BlobValue blob => Result<string, System.Numerics.BigInteger>.ok(UnsignedIntegerFromBlobValue(blob.Bytes.Span)),
             _ => Result<string, System.Numerics.BigInteger>.err("Only a BlobValue can represent an integer.")
         };
 
-    static public System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>
+    public static System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>
         new(blobValue, isUnsigned: true, isBigEndian: true);
 }

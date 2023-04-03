@@ -35,7 +35,7 @@ namespace Pine
             /// 
             /// applyBlobChanges : List BlobChangeSequenceElement -> Bytes.Bytes -> Bytes.Bytes
             /// </summary>
-            static public ReadOnlyMemory<byte> ApplyBlobChanges(
+            public static ReadOnlyMemory<byte> ApplyBlobChanges(
                 IReadOnlyList<BlobChangeSequenceElement> changes,
                 ReadOnlyMemory<byte>? blobBefore)
             {
@@ -96,7 +96,7 @@ namespace Pine
         public record Bytes(string AsBase64);
     }
 
-    static public class LoadFromElmEditor
+    public static class LoadFromElmEditor
     {
         public record ParseUrlResult(
             string projectStateString,
@@ -116,7 +116,7 @@ namespace Pine
         /// https://elm-editor.com/?project-state-deflate-base64=XZDLasMwEEX%2FZdZO5Ecip97FLYVQWmi3RgQ9xg9qW0aSQ4vRv9cyZNHsZg5zzwyzwA2N7fR4TeM0ucYJFAsIbhEKaJ2bbEFI07l2FnupB4L9sKvnvreOy%2B%2BHzhlEkh9SeowF5bROMFMyTzOV01qIk0xOT5InlMcCkZJumHoccHQEf3iod3ya7KZE1TltiMKaz70LHCJQXV2jwVHiq9FDuV24gMFB3%2FBDK7RQVCwC2fKxwbLXIoCqAmvkmn7n3bhf3cCiaoEvnC2Wv24LHbOc%2BSjAoLpTurGzUnewNjZspYf1M5fnc3N5%2BXwDv4399x0z5hlj3vs%2F&project-state-hash=c34a6a5e4ee0ea6308c9965dfbfbe68d28ecc07dca1cba8f9a2dac50700324e9&file-path-to-open=src%2FMain.elm
         /// 
         /// </summary>
-        static public ParseUrlResult? ParseUrl(string url)
+        public static ParseUrlResult? ParseUrl(string url)
         {
             try
             {
@@ -152,7 +152,7 @@ namespace Pine
             }
         }
 
-        static public Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl)
+        public static Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl)
         {
             var parsedUrl = ParseUrl(sourceUrl);
 
@@ -194,7 +194,7 @@ namespace Pine
             return Result<string, LoadFromUrlSuccess>.err("Project state has an unexpected shape: " + parsedUrl.projectStateString);
         }
 
-        static public Result<string, TreeNodeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
+        public static Result<string, TreeNodeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
         {
             TreeNodeWithStringPath? baseComposition = null;
 
@@ -221,7 +221,7 @@ namespace Pine
         /// 
         /// applyProjectStateDifference_2021_01 : ProjectState_2021_01.ProjectStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
         /// </summary>
-        static public Result<string, TreeNodeWithStringPath> ApplyProjectStateDifference_2021_01(
+        public static Result<string, TreeNodeWithStringPath> ApplyProjectStateDifference_2021_01(
             ProjectState_2021_01.ProjectStateDifference differenceFromBase,
             TreeNodeWithStringPath? baseComposition)
         {

@@ -8,7 +8,7 @@ namespace Pine;
 
 public class DotNetAssembly
 {
-    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadFromAssemblyManifestResourceStreamContents(
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadFromAssemblyManifestResourceStreamContents(
         IReadOnlyList<IReadOnlyList<string>> filePaths,
         string resourceNameCommonPrefix,
         Assembly assembly)
@@ -39,13 +39,13 @@ public class DotNetAssembly
                     }));
     }
 
-    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
         IReadOnlyList<string> directoryPath,
         Assembly assembly) =>
         LoadTreeFromManifestEmbeddedFileProvider(directoryPath, assembly)
         .Map(PineValueComposition.TreeToFlatDictionaryWithPathComparer);
 
-    static public Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProvider(
+    public static Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProvider(
         IReadOnlyList<string> directoryPath,
         Assembly assembly)
     {
@@ -67,7 +67,7 @@ public class DotNetAssembly
                 LoadTreeFromManifestEmbeddedFileProvider(ImmutableList.CreateRange(directoryPath).Add(subdirectory), assembly));
     }
 
-    static public Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProviderFileInfo(
+    public static Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProviderFileInfo(
         Microsoft.Extensions.FileProviders.IDirectoryContents directoryContents,
         Func<string, Result<string, TreeNodeWithStringPath>> loadSubdirectory)
     {
@@ -106,7 +106,7 @@ public class DotNetAssembly
             .Map(treeElements => TreeNodeWithStringPath.SortedTree(treeElements.ToImmutableList()));
     }
 
-    static public ReadOnlyMemory<byte>? GetManifestResourceStreamContentAsBytes(Assembly assembly, string name)
+    public static ReadOnlyMemory<byte>? GetManifestResourceStreamContentAsBytes(Assembly assembly, string name)
     {
         using var stream = assembly.GetManifestResourceStream(name);
 

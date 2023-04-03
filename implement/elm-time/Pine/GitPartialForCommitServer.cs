@@ -15,11 +15,11 @@ namespace Pine;
 /// </summary>
 public class GitPartialForCommitServer
 {
-    static public string ZipArchivePathPrefix => "/git/partial-for-commit/zip/";
+    public static string ZipArchivePathPrefix => "/git/partial-for-commit/zip/";
 
-    static public string ZipArchivePathFromCommit(string commit) => ZipArchivePathPrefix + commit;
+    public static string ZipArchivePathFromCommit(string commit) => ZipArchivePathPrefix + commit;
 
-    static public Task Run(
+    public static Task Run(
         IReadOnlyList<string> urls,
         IReadOnlyList<string> gitCloneUrlPrefixes,
         string fileCacheDirectory)

@@ -16,7 +16,7 @@ public class ExecutableFile
         string StandardOutput,
         int ExitCode);
 
-    static public (ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
+    public static (ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
         ReadOnlyMemory<byte> executableFile,
         string arguments,
@@ -148,7 +148,7 @@ public class ExecutableFile
     /// Offer method with old interface for backwards-compatibility with assembly consumers.
     /// </summary>
     [Obsolete("Use the new " + nameof(ExecuteFileWithArguments) + " instead")]
-    static public (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
+    public static (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
     IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
     ReadOnlyMemory<byte> executableFile,
     string arguments,
@@ -183,7 +183,7 @@ public class ExecutableFile
 
     //  Helper for Linux platform. Thank you Kyle Spearrin!
     //  https://stackoverflow.com/questions/45132081/file-permissions-on-linux-unix-with-net-core/47918132#47918132
-    static public void LinuxExecWithBash(string cmd)
+    public static void LinuxExecWithBash(string cmd)
     {
         var escapedArgs = cmd.Replace("\"", "\\\"");
 

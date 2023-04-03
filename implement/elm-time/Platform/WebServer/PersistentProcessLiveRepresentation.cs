@@ -32,13 +32,13 @@ public record struct ProcessAppConfig(
 
 public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposable
 {
-    readonly object processLock = new();
+    private readonly object processLock = new();
 
-    string lastCompositionLogRecordHashBase16;
+    private string lastCompositionLogRecordHashBase16;
 
     public readonly ProcessAppConfig lastAppConfig;
 
-    readonly IDisposableProcessWithStringInterface lastElmAppVolatileProcess;
+    private readonly IDisposableProcessWithStringInterface lastElmAppVolatileProcess;
 
     public record struct CompositionLogRecordWithResolvedDependencies(
         CompositionLogRecordInFile compositionRecord,
@@ -58,7 +58,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         TreeNodeWithStringPath? DeployAppConfigAndInitElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null);
 
-    static public ProcessFromElm019Code.PreparedProcess ProcessFromDeployment(
+    public static ProcessFromElm019Code.PreparedProcess ProcessFromDeployment(
         TreeNodeWithStringPath deployment,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         Func<IJsEngine>? overrideJsEngineFactory = null)
@@ -79,7 +79,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 overrideJsEngineFactory: overrideJsEngineFactory);
     }
 
-    PersistentProcessLiveRepresentation(
+    private PersistentProcessLiveRepresentation(
         string lastCompositionLogRecordHashBase16,
         ProcessAppConfig lastAppConfig,
         IDisposableProcessWithStringInterface lastElmAppVolatileProcess)
@@ -89,7 +89,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         this.lastElmAppVolatileProcess = lastElmAppVolatileProcess;
     }
 
-    static public (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16)
+    public static (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16)
         GetFilesForRestoreProcess(
         IFileStoreReader fileStoreReader)
     {
@@ -120,7 +120,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             lastCompositionLogRecordHashBase16: compositionLogRecords.LastOrDefault().compositionRecordHashBase16);
     }
 
-    static IEnumerable<CompositionLogRecordWithResolvedDependencies>
+    private static IEnumerable<CompositionLogRecordWithResolvedDependencies>
         EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(IProcessStoreReader storeReader) =>
             storeReader
             .EnumerateSerializedCompositionLogRecordsReverse()
@@ -174,7 +174,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null)
             .Reverse();
 
-    static public (PersistentProcessLiveRepresentation? process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
+    public static (PersistentProcessLiveRepresentation? process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
         LoadFromStoreAndRestoreProcess(
         IProcessStoreReader storeReader,
         Action<string>? logger,
@@ -208,7 +208,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         return processLiveRepresentation;
     }
 
-    static public (PersistentProcessLiveRepresentation process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
+    public static (PersistentProcessLiveRepresentation process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
         RestoreFromCompositionEventSequence(
         IEnumerable<CompositionLogRecordWithResolvedDependencies> compositionLogRecords,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
@@ -305,12 +305,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             processRepresentationDuringRestore.initOrMigrateCmds);
     }
 
-    record PersistentProcessLiveRepresentationDuringRestore(
+    private record PersistentProcessLiveRepresentationDuringRestore(
         ProcessAppConfig? lastAppConfig,
         IDisposableProcessWithStringInterface? lastElmAppVolatileProcess,
         InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds);
 
-    static Result<string, PersistentProcessLiveRepresentationDuringRestore> ApplyCompositionEvent(
+    private static Result<string, PersistentProcessLiveRepresentationDuringRestore> ApplyCompositionEvent(
         CompositionEventWithResolvedDependencies compositionEvent,
         PersistentProcessLiveRepresentationDuringRestore processBefore,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig,
@@ -496,11 +496,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
 
-    record UpdateElmAppStateForEvent(
+    private record UpdateElmAppStateForEvent(
         string functionName,
         StateShim.InterfaceToHost.ApplyFunctionArguments<bool> arguments);
 
-    static Result<string, UpdateElmAppStateForEvent> TranslateUpdateElmAppEventFromStore(
+    private static Result<string, UpdateElmAppStateForEvent> TranslateUpdateElmAppEventFromStore(
         Span<byte> updateElmAppEventFromStore)
     {
         var asString = Encoding.UTF8.GetString(updateElmAppEventFromStore);
@@ -573,7 +573,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         return Result<string, UpdateElmAppStateForEvent>.err("Did not match any expected shape");
     }
 
-    static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> AttemptProcessRequest(
+    private static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> AttemptProcessRequest(
         IProcessWithStringInterface process,
         StateShim.InterfaceToHost.StateShimRequestStruct stateShimRequest)
     {
@@ -598,7 +598,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
-    static CompositionEventWithResolvedDependencies? LoadCompositionEventDependencies(
+    private static CompositionEventWithResolvedDependencies? LoadCompositionEventDependencies(
         CompositionLogRecordInFile.CompositionEvent compositionEvent,
         IProcessStoreReader storeReader)
     {
@@ -686,7 +686,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         throw new Exception("Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
 
-    static public Result<string, FileStoreReaderProjectionResult>
+    public static Result<string, FileStoreReaderProjectionResult>
         TestContinueWithCompositionEvent(
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
             IFileStoreReader fileStoreReader,

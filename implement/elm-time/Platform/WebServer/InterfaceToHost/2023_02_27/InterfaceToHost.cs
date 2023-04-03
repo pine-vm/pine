@@ -10,7 +10,7 @@ public record AppEventStructure(
     string? SetStateEvent = null,
     string? MigrateStateEvent = null)
 {
-    static public readonly System.Text.Json.JsonSerializerOptions JsonSerializerSettings = new()
+    public static readonly System.Text.Json.JsonSerializerOptions JsonSerializerSettings = new()
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
     };

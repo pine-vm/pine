@@ -9,28 +9,28 @@ namespace Pine;
 /*
 2020-07-16 Discovered: The roundtrip over `ZipArchiveFromEntries` and `EntriesFromZipArchive` changed the order of entries!
 */
-static public class ZipArchive
+public static class ZipArchive
 {
     /// <summary>
     /// https://github.com/dotnet/corefx/blob/a10890f4ffe0fadf090c922578ba0e606ebdd16c/src/System.IO.Compression/src/System/IO/Compression/ZipArchiveEntry.cs#L206-L234
     /// </summary>
-    static public DateTimeOffset EntryLastWriteTimeDefault => new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    public static DateTimeOffset EntryLastWriteTimeDefault => new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    static public byte[] ZipArchiveFromEntries(
+    public static byte[] ZipArchiveFromEntries(
         IEnumerable<(string name, ReadOnlyMemory<byte> content)> entries,
         System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
         ZipArchiveFromEntries(
             entries.Select(entry => (entry.name, entry.content, EntryLastWriteTimeDefault)).ToImmutableList(),
             compressionLevel);
 
-    static public byte[] ZipArchiveFromEntries(
+    public static byte[] ZipArchiveFromEntries(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> entries,
         System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal) =>
         ZipArchiveFromEntries(
             entries.Select(entry => (name: string.Join("/", entry.Key), content: entry.Value)),
             compressionLevel);
 
-    static public byte[] ZipArchiveFromEntries(
+    public static byte[] ZipArchiveFromEntries(
         IEnumerable<(string name, ReadOnlyMemory<byte> content, DateTimeOffset lastWriteTime)> entries,
         System.IO.Compression.CompressionLevel compressionLevel = System.IO.Compression.CompressionLevel.Optimal)
     {
@@ -57,15 +57,15 @@ static public class ZipArchive
         return zipArchive;
     }
 
-    static public IEnumerable<(string name, ReadOnlyMemory<byte> content)> FileEntriesFromZipArchive(ReadOnlyMemory<byte> zipArchive) =>
+    public static IEnumerable<(string name, ReadOnlyMemory<byte> content)> FileEntriesFromZipArchive(ReadOnlyMemory<byte> zipArchive) =>
         EntriesFromZipArchive(
             zipArchive: zipArchive,
             includeEntry: entry => !entry.FullName.Replace('\\', '/').EndsWith('/'));
 
-    static public IEnumerable<(string name, ReadOnlyMemory<byte> content)> EntriesFromZipArchive(ReadOnlyMemory<byte> zipArchive) =>
+    public static IEnumerable<(string name, ReadOnlyMemory<byte> content)> EntriesFromZipArchive(ReadOnlyMemory<byte> zipArchive) =>
         EntriesFromZipArchive(zipArchive: zipArchive, includeEntry: _ => true);
 
-    static public IEnumerable<(string name, ReadOnlyMemory<byte> content)> EntriesFromZipArchive(
+    public static IEnumerable<(string name, ReadOnlyMemory<byte> content)> EntriesFromZipArchive(
         ReadOnlyMemory<byte> zipArchive,
         Func<System.IO.Compression.ZipArchiveEntry, bool> includeEntry)
     {

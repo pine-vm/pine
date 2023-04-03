@@ -11,17 +11,17 @@ public static class PineValueAsString
     /// Converts a .NET string to a Pine list value containing one element for each character in the input string.
     /// </summary>
     /// <returns>Pine list value containing one element for each character in the input string.</returns>
-    static public PineValue ValueFromString(string str) =>
+    public static PineValue ValueFromString(string str) =>
         PineValue.List(ListValueFromString(str));
 
-    static public IImmutableList<PineValue> ListValueFromString(string str) =>
+    public static IImmutableList<PineValue> ListValueFromString(string str) =>
         ToCodePoints(str!)
         .Select(charAsInteger => new System.Numerics.BigInteger(charAsInteger))
         .Select(PineValueAsInteger.ValueFromUnsignedInteger)
         .Select(charResult => charResult.Extract(error => throw new Exception(error)))
         .ToImmutableList();
 
-    static public Result<string, string> StringFromValue(PineValue pineValue)
+    public static Result<string, string> StringFromValue(PineValue pineValue)
     {
         if (pineValue is not PineValue.ListValue list)
             return Result<string, string>.err("Only a ListValue can represent a string.");
@@ -45,7 +45,7 @@ public static class PineValueAsString
     }
 
     // https://stackoverflow.com/questions/687359/how-would-you-get-an-array-of-unicode-code-points-from-a-net-string/28155130#28155130
-    static public int[] ToCodePoints(string str)
+    public static int[] ToCodePoints(string str)
     {
         var codePoints = new List<int>(str.Length);
         for (var i = 0; i < str.Length; i++)

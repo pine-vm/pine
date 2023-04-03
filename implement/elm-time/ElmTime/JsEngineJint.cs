@@ -15,11 +15,11 @@ public class JsEngineJint : IJsEngine
         Func<string, Esprima.Ast.Node, Esprima.Ast.Expression> buildWrapperJavaScript,
         Func<Engine, JsValue, JsValue[], JsValue> hostFunc);
 
-    readonly Engine engine = new();
+    private readonly Engine engine = new();
 
-    readonly IReadOnlyList<FunctionDelegateIntoHost> functionDelegatesIntoHost;
+    private readonly IReadOnlyList<FunctionDelegateIntoHost> functionDelegatesIntoHost;
 
-    readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> evalAstRewriterDeclarationReplacements;
+    private readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> evalAstRewriterDeclarationReplacements;
 
     public JsEngineJint(IReadOnlyList<FunctionDelegateIntoHost>? functionDelegatesIntoHost)
     {
@@ -70,7 +70,7 @@ public class JsEngineJint : IJsEngine
         return dotnetValue;
     }
 
-    static object CastToDotnetType(JsValue jintValue)
+    private static object CastToDotnetType(JsValue jintValue)
     {
         if (jintValue is JsString jsString)
             return jsString.AsString();
@@ -85,9 +85,9 @@ public class JsEngineJint : IJsEngine
     {
     }
 
-    class AstRewriter : Esprima.Utils.AstRewriter
+    private class AstRewriter : Esprima.Utils.AstRewriter
     {
-        readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements;
+        private readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements;
 
         public AstRewriter(IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements)
         {
@@ -132,9 +132,9 @@ public class JsEngineJint : IJsEngine
         }
     }
 
-    class DelegatingFunctionInstance : Jint.Native.Function.FunctionInstance
+    private class DelegatingFunctionInstance : Jint.Native.Function.FunctionInstance
     {
-        readonly Func<JsValue, JsValue[], JsValue> func;
+        private readonly Func<JsValue, JsValue[], JsValue> func;
 
         public DelegatingFunctionInstance(
             Engine engine,

@@ -44,10 +44,10 @@ public class JsonConverterForChoiceType : JsonConverterFactory
         return converter;
     }
 
-    static public Result<string, ParsedType> CachedParseTypeToConvert(Type typeToConvert) =>
+    public static Result<string, ParsedType> CachedParseTypeToConvert(Type typeToConvert) =>
         parseTypeToConvertCache.GetOrAdd(typeToConvert, valueFactory: ParseTypeToConvert);
 
-    static public Result<string, ParsedType> ParseTypeToConvert(Type typeToConvert)
+    public static Result<string, ParsedType> ParseTypeToConvert(Type typeToConvert)
     {
         var matchingNestedTypes =
             typeToConvert.GetNestedTypes()
@@ -86,7 +86,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
             : Result<string, ParsedType>.ok(new ParsedType(variants)));
     }
 
-    static Result<string, ParsedType.Variant> ParseUnionTypeVariant(Type variantType)
+    private static Result<string, ParsedType.Variant> ParseUnionTypeVariant(Type variantType)
     {
         static object DefaultValueFromType(Type type)
         {
@@ -151,7 +151,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 
 public class JsonConverterForChoiceType<T> : JsonConverter<T>
 {
-    readonly static JsonConverterForChoiceType.ParsedType ParsedType =
+    private static readonly JsonConverterForChoiceType.ParsedType ParsedType =
         JsonConverterForChoiceType.CachedParseTypeToConvert(typeof(T)).Extract(error => throw new Exception(error));
 
     public override T Read(

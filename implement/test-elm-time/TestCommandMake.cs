@@ -84,7 +84,7 @@ public class TestCommandMake
         CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 4 }, outputBlob.Span.ToArray());
     }
 
-    static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(
+    private static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(
         IReadOnlyList<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> projectFiles,
         IReadOnlyList<string> entryPointFilePath) =>
         GetOutputFileContentForCommandMake(
@@ -94,7 +94,7 @@ public class TestCommandMake
                 keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
             entryPointFilePath: entryPointFilePath);
 
-    static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(
+    private static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> projectFiles,
         IReadOnlyList<string> entryPointFilePath)
     {

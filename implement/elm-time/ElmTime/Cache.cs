@@ -5,9 +5,9 @@ using System.Linq;
 
 namespace ElmTime;
 
-static public class Cache
+public static class Cache
 {
-    static public void RemoveItemsToLimitRetainedSize<TKey, TValue, TOrderKey>(
+    public static void RemoveItemsToLimitRetainedSize<TKey, TValue, TOrderKey>(
         IDictionary<TKey, TValue> cache,
         Func<KeyValuePair<TKey, TValue>, long> computeItemSize,
         Func<KeyValuePair<TKey, TValue>, TOrderKey> computeItemRetentionPriority,

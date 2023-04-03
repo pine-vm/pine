@@ -12,7 +12,7 @@ public class PineVM
 
     public record FunctionApplicationCacheEntryKey(PineValue function, PineValue argument);
 
-    readonly ConcurrentDictionary<FunctionApplicationCacheEntryKey, PineValue> functionApplicationCache = new();
+    private readonly ConcurrentDictionary<FunctionApplicationCacheEntryKey, PineValue> functionApplicationCache = new();
 
     public IImmutableDictionary<FunctionApplicationCacheEntryKey, PineValue> CopyFunctionApplicationCache() =>
         functionApplicationCache.ToImmutableDictionary();
@@ -23,9 +23,9 @@ public class PineVM
 
     public long FunctionApplicationMaxEnvSize { private set; get; }
 
-    readonly IReadOnlyDictionary<PineValue, Expression.DelegatingExpression>? decodeExpressionOverrides;
+    private readonly IReadOnlyDictionary<PineValue, Expression.DelegatingExpression>? decodeExpressionOverrides;
 
-    readonly EvalExprDelegate evalExprDelegate;
+    private readonly EvalExprDelegate evalExprDelegate;
 
     public PineVM(
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
@@ -150,7 +150,7 @@ public class PineVM
         .AndThen(conditionValue =>
         EvaluateExpression(conditionValue == TrueValue ? conditional.ifTrue : conditional.ifFalse, environment));
 
-    static readonly IReadOnlyDictionary<string, Func<PineValue, Result<string, PineValue>>> NamedKernelFunctions =
+    private static readonly IReadOnlyDictionary<string, Func<PineValue, Result<string, PineValue>>> NamedKernelFunctions =
         ImmutableDictionary<string, Func<PineValue, Result<string, PineValue>>>.Empty
         .SetItem(nameof(KernelFunction.equal), KernelFunction.equal)
         .SetItem(nameof(KernelFunction.logical_not), KernelFunction.logical_not)
@@ -169,13 +169,13 @@ public class PineVM
         .SetItem(nameof(KernelFunction.div_int), KernelFunction.div_int)
         .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
 
-    static public PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
+    public static PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
 
-    static readonly public PineValue TrueValue = PineValue.Blob(new byte[] { 4 });
+    public static readonly PineValue TrueValue = PineValue.Blob(new byte[] { 4 });
 
-    static readonly public PineValue FalseValue = PineValue.Blob(new byte[] { 2 });
+    public static readonly PineValue FalseValue = PineValue.Blob(new byte[] { 2 });
 
-    static public Result<string, bool> DecodeBoolFromValue(PineValue value) =>
+    public static Result<string, bool> DecodeBoolFromValue(PineValue value) =>
         value == TrueValue
         ?
         Result<string, bool>.ok(true)
@@ -184,7 +184,7 @@ public class PineVM
         :
         Result<string, bool>.err("Value is neither True nor False");
 
-    static public Result<string, PineValue> EncodeExpressionAsValue(Expression expression) =>
+    public static Result<string, PineValue> EncodeExpressionAsValue(Expression expression) =>
         expression switch
         {
             Expression.LiteralExpression literal =>
@@ -229,13 +229,13 @@ public class PineVM
                 value);
     }
 
-    static public Result<string, Expression> DecodeExpressionFromValueDefault(PineValue value) =>
+    public static Result<string, Expression> DecodeExpressionFromValueDefault(PineValue value) =>
         DecodeChoiceFromPineValue(
             generalDecoder: DecodeExpressionFromValueDefault,
             ExpressionDecoders,
             value);
 
-    static readonly IImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>> ExpressionDecoders =
+    private static readonly IImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>> ExpressionDecoders =
         ImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>>.Empty
         .SetItem(
             "Literal",
@@ -266,7 +266,7 @@ public class PineVM
             (generalDecoder, value) => DecodeStringTagExpression(generalDecoder, value)
             .Map(stringTag => (Expression)stringTag));
 
-    static public Result<string, PineValue> EncodeDecodeAndEvaluateExpression(Expression.DecodeAndEvaluateExpression decodeAndEval) =>
+    public static Result<string, PineValue> EncodeDecodeAndEvaluateExpression(Expression.DecodeAndEvaluateExpression decodeAndEval) =>
         EncodeExpressionAsValue(decodeAndEval.expression)
         .AndThen(encodedExpression =>
         EncodeExpressionAsValue(decodeAndEval.environment)
@@ -276,7 +276,7 @@ public class PineVM
                 (nameof(Expression.DecodeAndEvaluateExpression.expression), encodedExpression),
                 (nameof(Expression.DecodeAndEvaluateExpression.environment), encodedEnvironment)))));
 
-    static public Result<string, Expression.DecodeAndEvaluateExpression> DecodeDecodeAndEvaluateExpression(
+    public static Result<string, Expression.DecodeAndEvaluateExpression> DecodeDecodeAndEvaluateExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
         PineValue value) =>
         DecodeRecord2FromPineValue(
@@ -285,7 +285,7 @@ public class PineVM
             ("environment", generalDecoder),
             (expression, environment) => new Expression.DecodeAndEvaluateExpression(expression: expression, environment: environment));
 
-    static public Result<string, PineValue> EncodeKernelApplicationExpression(Expression.KernelApplicationExpression kernelApplicationExpression) =>
+    public static Result<string, PineValue> EncodeKernelApplicationExpression(Expression.KernelApplicationExpression kernelApplicationExpression) =>
         EncodeExpressionAsValue(kernelApplicationExpression.argument)
         .Map(encodedArgument =>
         EncodeChoiceTypeVariantAsPineValue("KernelApplication",
@@ -293,7 +293,7 @@ public class PineVM
                 (nameof(Expression.KernelApplicationExpression.functionName), PineValueAsString.ValueFromString(kernelApplicationExpression.functionName)),
                 (nameof(Expression.KernelApplicationExpression.argument), encodedArgument))));
 
-    static public Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
+    public static Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
         PineValue value) =>
         DecodeRecord2FromPineValue(
@@ -304,13 +304,13 @@ public class PineVM
         .AndThen(functionNameAndArgument =>
         DecodeKernelApplicationExpression(functionNameAndArgument.functionName, functionNameAndArgument.argument));
 
-    static public Expression.KernelApplicationExpression DecodeKernelApplicationExpressionThrowOnUnknownName(
+    public static Expression.KernelApplicationExpression DecodeKernelApplicationExpressionThrowOnUnknownName(
         string functionName,
         Expression argument) =>
         DecodeKernelApplicationExpression(functionName, argument)
         .Extract(err => throw new Exception(err));
 
-    static public Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
+    public static Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
         string functionName,
         Expression argument)
     {
@@ -327,7 +327,7 @@ public class PineVM
                 argument: argument));
     }
 
-    static public Result<string, PineValue> EncodeConditionalExpressionAsValue(Expression.ConditionalExpression conditionalExpression) =>
+    public static Result<string, PineValue> EncodeConditionalExpressionAsValue(Expression.ConditionalExpression conditionalExpression) =>
         EncodeExpressionAsValue(conditionalExpression.condition)
         .AndThen(encodedCondition =>
         EncodeExpressionAsValue(conditionalExpression.ifTrue)
@@ -340,7 +340,7 @@ public class PineVM
                 (nameof(Expression.ConditionalExpression.ifTrue), encodedIfTrue),
                 (nameof(Expression.ConditionalExpression.ifFalse), encodedIfFalse))))));
 
-    static public Result<string, Expression.ConditionalExpression> DecodeConditionalExpression(
+    public static Result<string, Expression.ConditionalExpression> DecodeConditionalExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
         PineValue value) =>
         DecodeRecord3FromPineValue(
@@ -350,7 +350,7 @@ public class PineVM
             (nameof(Expression.ConditionalExpression.ifFalse), generalDecoder),
             (condition, ifTrue, ifFalse) => new Expression.ConditionalExpression(condition: condition, ifTrue: ifTrue, ifFalse: ifFalse));
 
-    static public Result<string, Expression.StringTagExpression> DecodeStringTagExpression(
+    public static Result<string, Expression.StringTagExpression> DecodeStringTagExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
         PineValue value) =>
         DecodePineListValue(value)
@@ -360,12 +360,12 @@ public class PineVM
         .AndThen(tag => generalDecoder(tagValueAndTaggedValue.Item2).MapError(err => "Failed to decoded tagged expression: " + err)
         .Map(tagged => new Expression.StringTagExpression(tag: tag, tagged: tagged))));
 
-    static public Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
+    public static Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
         IReadOnlyList<OkT> list,
         Func<OkT, Result<ErrT, MappedOkT>> mapElement) =>
         list.Select(mapElement).ListCombine();
 
-    static public Result<string, Record> DecodeRecord3FromPineValue<FieldA, FieldB, FieldC, Record>(
+    public static Result<string, Record> DecodeRecord3FromPineValue<FieldA, FieldB, FieldC, Record>(
         PineValue value,
         (string name, Func<PineValue, Result<string, FieldA>> decode) fieldA,
         (string name, Func<PineValue, Result<string, FieldB>> decode) fieldB,
@@ -392,7 +392,7 @@ public class PineVM
             .Map(fieldCDecoded => compose(fieldADecoded, fieldBDecoded, fieldCDecoded))));
         });
 
-    static public Result<string, Record> DecodeRecord2FromPineValue<FieldA, FieldB, Record>(
+    public static Result<string, Record> DecodeRecord2FromPineValue<FieldA, FieldB, Record>(
         PineValue value,
         (string name, Func<PineValue, Result<string, FieldA>> decode) fieldA,
         (string name, Func<PineValue, Result<string, FieldB>> decode) fieldB,
@@ -413,7 +413,7 @@ public class PineVM
             .Map(fieldBDecoded => compose(fieldADecoded, fieldBDecoded)));
         });
 
-    static public PineValue EncodeRecordToPineValue(params (string fieldName, PineValue fieldValue)[] fields) =>
+    public static PineValue EncodeRecordToPineValue(params (string fieldName, PineValue fieldValue)[] fields) =>
         PineValue.List(
             fields.Select(field => PineValue.List(
                 new[]
@@ -423,7 +423,7 @@ public class PineVM
                 })).ToArray());
 
 
-    static public Result<string, ImmutableDictionary<string, PineValue>> DecodeRecordFromPineValue(PineValue value) =>
+    public static Result<string, ImmutableDictionary<string, PineValue>> DecodeRecordFromPineValue(PineValue value) =>
         DecodePineListValue(value)
         .AndThen(list =>
         list
@@ -435,7 +435,7 @@ public class PineVM
             .AndThen(fieldNameValueAndValue => PineValueAsString.StringFromValue(fieldNameValueAndValue.Item1)
             .Map(fieldName => recordFields.SetItem(fieldName, fieldNameValueAndValue.Item2))))));
 
-    static public PineValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
+    public static PineValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             new[]
             {
@@ -443,7 +443,7 @@ public class PineVM
                 tagArguments,
             });
 
-    static public Result<string, T> DecodeChoiceFromPineValue<T>(
+    public static Result<string, T> DecodeChoiceFromPineValue<T>(
         Func<PineValue, Result<string, T>> generalDecoder,
         IImmutableDictionary<string, Func<Func<PineValue, Result<string, T>>, PineValue, Result<string, T>>> variants,
         PineValue value) =>
@@ -459,7 +459,7 @@ public class PineVM
             return variant(generalDecoder, tagNameValueAndValue.Item2)!;
         }));
 
-    static public Result<string, IImmutableList<PineValue>> DecodePineListValue(PineValue value)
+    public static Result<string, IImmutableList<PineValue>> DecodePineListValue(PineValue value)
     {
         if (value is not PineValue.ListValue listValue)
             return Result<string, IImmutableList<PineValue>>.err("Not a list");
@@ -468,7 +468,7 @@ public class PineVM
             listValue.Elements as IImmutableList<PineValue> ?? listValue.Elements.ToImmutableList());
     }
 
-    static public Result<string, (T, T)> DecodeListWithExactlyTwoElements<T>(IImmutableList<T> list)
+    public static Result<string, (T, T)> DecodeListWithExactlyTwoElements<T>(IImmutableList<T> list)
     {
         if (list.Count != 2)
             return Result<string, (T, T)>.err("Unexpected number of elements in list: Not 2 but " + list.Count);

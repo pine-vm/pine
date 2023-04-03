@@ -90,18 +90,18 @@ public class TestStateShim
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
-    abstract record CalculatorOperation
+    private abstract record CalculatorOperation
     {
         public record AddOperation(int Operand)
             : CalculatorOperation;
     }
 
-    record CalculatorBackendStateRecord(
+    private record CalculatorBackendStateRecord(
         int httpRequestCount,
         int operationsViaHttpRequestCount,
         int resultingNumber);
 
-    record CustomUsageReportStruct(
+    private record CustomUsageReportStruct(
         int httpRequestCount,
         int operationsViaHttpRequestCount,
         string anotherField);

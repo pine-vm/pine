@@ -7,7 +7,7 @@ namespace Pine;
 
 public static class PineValueComposition
 {
-    static public Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath> ParseAsTreeWithStringPath(
+    public static Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath> ParseAsTreeWithStringPath(
         PineValue composition)
     {
         static Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath> continueForListComposition(
@@ -73,7 +73,7 @@ public static class PineValueComposition
             };
     }
 
-    static public PineValue FromTreeWithStringPath(TreeNodeWithStringPath node) =>
+    public static PineValue FromTreeWithStringPath(TreeNodeWithStringPath node) =>
         node switch
         {
             TreeNodeWithStringPath.BlobNode blob => PineValue.Blob(blob.Bytes),
@@ -92,7 +92,7 @@ public static class PineValueComposition
             _ => throw new NotImplementedException("Incomplete match on sum type.")
         };
 
-    static public TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
         IEnumerable<(string path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         SortedTreeFromSetOfBlobs(
             blobsWithPath.Select(blobWithPath =>
@@ -105,7 +105,7 @@ public static class PineValueComposition
             })
         );
 
-    static public TreeNodeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
         IEnumerable<(IReadOnlyList<PathT> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath,
         Func<PathT, string> mapPathElement) =>
         SortedTreeFromSetOfBlobs(
@@ -113,20 +113,20 @@ public static class PineValueComposition
                 (path: (IImmutableList<string>)blobWithPath.path.Select(mapPathElement).ToImmutableList(),
                     blobWithPath.blobContent)));
 
-    static public TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
         IEnumerable<(IReadOnlyList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         SortedTreeFromSetOfBlobs(blobsWithPath, pathComponent => pathComponent);
 
-    static public TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> blobsWithPath) =>
         SortedTreeFromSetOfBlobsWithStringPath(
             blobsWithPath.Select(pathAndBlobContent =>
                 (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
-    static public TreeNodeWithStringPath SortedTreeFromTree(
+    public static TreeNodeWithStringPath SortedTreeFromTree(
         TreeNodeWithStringPath tree) => TreeNodeWithStringPath.Sort(tree);
 
-    static public TreeNodeWithStringPath SortedTreeFromSetOfBlobs(
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobs(
         IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         blobsWithPath.Aggregate(
             seed: TreeNodeWithStringPath.EmptyTree,
@@ -134,18 +134,18 @@ public static class PineValueComposition
                 tree.SetNodeAtPathSorted(blobPathAndContent.path,
                     TreeNodeWithStringPath.Blob(blobPathAndContent.blobContent)));
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
         TreeToFlatDictionaryWithPathComparer(
             TreeNodeWithStringPath tree) =>
         ToFlatDictionaryWithPathComparer(tree.EnumerateBlobsTransitive());
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ToFlatDictionaryWithPathComparer(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ToFlatDictionaryWithPathComparer(
         IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> filesBeforeSorting) =>
         ToFlatDictionaryWithPathComparer(
             filesBeforeSorting
                 .Select(file => ((IReadOnlyList<string>)file.filePath, file.fileContent)).ToImmutableList());
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ToFlatDictionaryWithPathComparer(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ToFlatDictionaryWithPathComparer(
         IEnumerable<(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent)> filesBeforeSorting) =>
         filesBeforeSorting.ToImmutableSortedDictionary(
             entry => entry.filePath,

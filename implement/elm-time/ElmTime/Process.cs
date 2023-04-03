@@ -24,7 +24,7 @@ public interface IDisposableProcessWithStringInterface : IProcessWithStringInter
 
 public class ProcessHostedWithJsEngine : IDisposableProcessWithStringInterface
 {
-    readonly IJsEngine javascriptEngine;
+    private readonly IJsEngine javascriptEngine;
 
     public ProcessHostedWithJsEngine(
         string javascriptPreparedToRun,
@@ -73,7 +73,7 @@ public class ProcessFromElm019Code
         string javaScriptFromElmMake,
         string javaScriptPreparedToRun);
 
-    static public PreparedProcess ProcessFromElmCodeFiles(
+    public static PreparedProcess ProcessFromElmCodeFiles(
         IReadOnlyCollection<(IReadOnlyList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         Func<IJsEngine>? overrideJsEngineFactory = null) =>
@@ -82,7 +82,7 @@ public class ProcessFromElm019Code
             overrideElmAppInterfaceConfig,
             overrideJsEngineFactory);
 
-    static public PreparedProcess ProcessFromElmCodeFiles(
+    public static PreparedProcess ProcessFromElmCodeFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         Func<IJsEngine>? overrideJsEngineFactory = null)
@@ -116,7 +116,7 @@ public class ProcessFromElm019Code
     }
 
     [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
-    static public string CompileElmToJavascript(
+    public static string CompileElmToJavascript(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
@@ -127,7 +127,7 @@ public class ProcessFromElm019Code
                 elmMakeCommandAppendix));
 
     [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
-    static public string CompileElmToHtml(
+    public static string CompileElmToHtml(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
@@ -137,13 +137,13 @@ public class ProcessFromElm019Code
                 pathToFileWithElmEntryPoint,
                 elmMakeCommandAppendix));
 
-    static string ExtractFileAsStringFromElmMakeResult(Result<string, Elm019Binaries.ElmMakeOk> result) =>
+    private static string ExtractFileAsStringFromElmMakeResult(Result<string, Elm019Binaries.ElmMakeOk> result) =>
         Encoding.UTF8.GetString(
             result.Extract(err => throw new Exception(err)).producedFile.Span);
 
     /// <inheritdoc cref="Elm019Binaries.ElmMake"/>
     [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
-    static public string CompileElm(
+    public static string CompileElm(
         IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
@@ -163,7 +163,7 @@ public class ProcessFromElm019Code
 
     public const string processEventSyncronousJsFunctionName = "processEventAndUpdateState";
 
-    static public string AsJavascriptExpression(string originalString) =>
+    public static string AsJavascriptExpression(string originalString) =>
         JsonSerializer.Serialize(originalString);
 
     /*
@@ -173,7 +173,7 @@ public class ProcessFromElm019Code
     + Publish interfacing functions of app to the global scope.
     + Add a function which implements processing an event and storing the resulting process state and returns the response of the process.
     */
-    static string BuildAppJavascript(
+    private static string BuildAppJavascript(
         string javascriptFromElmMake,
         string pathToSerializedEventFunction,
         string pathToInitialStateFunction)
@@ -212,7 +212,7 @@ public class ProcessFromElm019Code
             processEventAndUpdateStateFunctionJavascript;
     }
 
-    static public string PublishFunctionsFromJavascriptFromElmMake(
+    public static string PublishFunctionsFromJavascriptFromElmMake(
         string javascriptFromElmMake,
         IEnumerable<(string functionNameInElm, string publicName, int arity)> functions)
     {
@@ -258,13 +258,13 @@ public class ProcessFromElm019Code
     For some applications collecting the arguments to those functions might be interesting,
     to implement this, have a look at https://github.com/Microsoft/ChakraCore/wiki/JavaScript-Runtime-(JSRT)-Overview
     */
-    static public string JavascriptMinusCrashes(string javascriptFromElmMake) =>
+    public static string JavascriptMinusCrashes(string javascriptFromElmMake) =>
         Regex.Replace(
             javascriptFromElmMake,
             "^\\s*console\\.\\w+\\(.+$", "",
             RegexOptions.Multiline);
 
-    static string BuildElmFunctionPublicationExpression(string functionToCallName, int arity)
+    private static string BuildElmFunctionPublicationExpression(string functionToCallName, int arity)
     {
         if (arity < 2)
             return functionToCallName;
@@ -276,6 +276,6 @@ public class ProcessFromElm019Code
             string.Join("", paramNameList.Select(paramName => "(" + paramName + ")"));
     }
 
-    static string AppFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
+    private static string AppFunctionSymbolMap(string pathToFileWithElmEntryPoint) =>
         "$author$project$" + pathToFileWithElmEntryPoint.Replace(".", "$");
 }

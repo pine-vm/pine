@@ -6,23 +6,23 @@ using System.Text.RegularExpressions;
 
 namespace Pine;
 
-static public class EnumerableExtension
+public static class EnumerableExtension
 {
-    static public IEnumerable<T> WhereHasValue<T>(this IEnumerable<T?> orig) where T : struct =>
+    public static IEnumerable<T> WhereHasValue<T>(this IEnumerable<T?> orig) where T : struct =>
         orig.Where(i => i.HasValue).Select(i => i!.Value);
 
-    static public IEnumerable<T> WhereNotNull<T>(this IEnumerable<T?> orig) where T : class =>
+    public static IEnumerable<T> WhereNotNull<T>(this IEnumerable<T?> orig) where T : class =>
         orig.Where(i => i != null).Cast<T>();
 
-    static public IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T>? orig) =>
+    public static IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T>? orig) =>
         orig ?? Array.Empty<T>();
 
-    static public IEqualityComparer<T> EqualityComparer<T>() where T : IEnumerable<IComparable> => new IEnumerableEqualityComparer<T>();
+    public static IEqualityComparer<T> EqualityComparer<T>() where T : IEnumerable<IComparable> => new IEnumerableEqualityComparer<T>();
 
-    static public IComparer<T> Comparer<T>() where T : IEnumerable<IComparable> => new IEnumerableComparer<T>();
+    public static IComparer<T> Comparer<T>() where T : IEnumerable<IComparable> => new IEnumerableComparer<T>();
 
     // From https://github.com/morelinq/MoreLINQ/blob/07bd0861658b381ce97c8b44d3b9f2cd3c9bf769/MoreLinq/TakeUntil.cs
-    static public IEnumerable<TSource> TakeUntil<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
+    public static IEnumerable<TSource> TakeUntil<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (predicate == null) throw new ArgumentNullException(nameof(predicate));
@@ -38,7 +38,7 @@ static public class EnumerableExtension
         }
     }
 
-    class IEnumerableEqualityComparer<T> : IEqualityComparer<T> where T : IEnumerable<IComparable>
+    private class IEnumerableEqualityComparer<T> : IEqualityComparer<T> where T : IEnumerable<IComparable>
     {
         public bool Equals(T? x, T? y)
         {
@@ -48,7 +48,7 @@ static public class EnumerableExtension
         public int GetHashCode(T obj) => 0;
     }
 
-    class IEnumerableComparer<T> : IComparer<T> where T : IEnumerable<IComparable>
+    private class IEnumerableComparer<T> : IComparer<T> where T : IEnumerable<IComparable>
     {
         public static int Compare([AllowNull] IEnumerable<IComparable> x, [AllowNull] IEnumerable<IComparable> y)
         {
@@ -91,10 +91,10 @@ static public class EnumerableExtension
         }
     }
 
-    static public IEnumerable<string> OrderByNatural(this IEnumerable<string> items, StringComparer? stringComparer = null) =>
+    public static IEnumerable<string> OrderByNatural(this IEnumerable<string> items, StringComparer? stringComparer = null) =>
         OrderByNatural(items, s => s, stringComparer);
 
-    static public IEnumerable<T> OrderByNatural<T>(this IEnumerable<T> items, Func<T, string> selector, StringComparer? stringComparer = null)
+    public static IEnumerable<T> OrderByNatural<T>(this IEnumerable<T> items, Func<T, string> selector, StringComparer? stringComparer = null)
     {
         var regex = new Regex(@"\d+", RegexOptions.Compiled);
 

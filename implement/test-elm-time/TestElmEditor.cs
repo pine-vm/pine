@@ -13,7 +13,7 @@ namespace TestElmTime
     [TestClass]
     public class TestElmEditor
     {
-        static string NormalizeStringTestingElmFormat(string originalString) =>
+        private static string NormalizeStringTestingElmFormat(string originalString) =>
             originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
 
         [TestMethod]

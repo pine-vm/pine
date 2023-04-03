@@ -9,9 +9,9 @@ public record LoadCompositionOrigin(
     LoadFromElmEditor.ParseUrlResult? FromEditor = null,
     object? FromHttp = null);
 
-static public class LoadComposition
+public static class LoadComposition
 {
-    static public ProcessWithLog<string, Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>> LoadFromPathResolvingNetworkDependencies(string sourcePath)
+    public static ProcessWithLog<string, Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>> LoadFromPathResolvingNetworkDependencies(string sourcePath)
     {
         var asProcess = AsProcessWithStringLog(sourcePath);
 
@@ -66,7 +66,7 @@ static public class LoadComposition
             .ResultMap(tree => (tree, new LoadCompositionOrigin(FromLocalFileSystem: new object())));
     }
 
-    static public IEnumerable<string> LogEntriesForLoadFromGitSuccess(LoadFromGitHubOrGitLab.LoadFromUrlSuccess loadFromGitSuccess)
+    public static IEnumerable<string> LogEntriesForLoadFromGitSuccess(LoadFromGitHubOrGitLab.LoadFromUrlSuccess loadFromGitSuccess)
     {
         yield return "This path points to commit " + loadFromGitSuccess?.rootCommit.hash;
 
@@ -90,5 +90,5 @@ static public class LoadComposition
             "Committer: " + describeGitParticipant(commitToDisplayParticipants.content.committer);
     }
 
-    static public ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) => new ProcessWithLog<string, T>.Result(result);
+    public static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) => new ProcessWithLog<string, T>.Result(result);
 }

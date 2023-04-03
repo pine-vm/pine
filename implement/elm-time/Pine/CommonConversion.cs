@@ -7,20 +7,20 @@ namespace Pine;
 
 public class CommonConversion
 {
-    static public byte[] ByteArrayFromStringBase16(string base16) =>
+    public static byte[] ByteArrayFromStringBase16(string base16) =>
         Enumerable.Range(0, base16.Length / 2)
         .Select(octetIndex => Convert.ToByte(base16.Substring(octetIndex * 2, 2), 16))
         .ToArray();
 
-    static public string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
+    public static string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
         BitConverter.ToString(bytes as byte[] ?? bytes.ToArray()).Replace("-", "").ToLowerInvariant();
 
-    static public string StringBase16(ReadOnlyMemory<byte> bytes) =>
+    public static string StringBase16(ReadOnlyMemory<byte> bytes) =>
         BitConverter.ToString(bytes.ToArray()).Replace("-", "").ToLowerInvariant();
 
-    static public ReadOnlyMemory<byte> HashSHA256(ReadOnlyMemory<byte> input) => SHA256.HashData(input.Span);
+    public static ReadOnlyMemory<byte> HashSHA256(ReadOnlyMemory<byte> input) => SHA256.HashData(input.Span);
 
-    static public ReadOnlyMemory<byte> CompressGzip(ReadOnlyMemory<byte> original)
+    public static ReadOnlyMemory<byte> CompressGzip(ReadOnlyMemory<byte> original)
     {
         using var compressedStream = new System.IO.MemoryStream();
 
@@ -32,7 +32,7 @@ public class CommonConversion
         return compressedStream.ToArray();
     }
 
-    static public ReadOnlyMemory<byte> DecompressGzip(ReadOnlyMemory<byte> compressed)
+    public static ReadOnlyMemory<byte> DecompressGzip(ReadOnlyMemory<byte> compressed)
     {
         using var decompressStream = new System.IO.Compression.GZipStream(
             new System.IO.MemoryStream(compressed.ToArray()), System.IO.Compression.CompressionMode.Decompress);
@@ -42,7 +42,7 @@ public class CommonConversion
         return decompressedStream.ToArray();
     }
 
-    static public ReadOnlyMemory<byte> Deflate(ReadOnlyMemory<byte> input)
+    public static ReadOnlyMemory<byte> Deflate(ReadOnlyMemory<byte> input)
     {
         using var deflatedStream = new System.IO.MemoryStream();
 
@@ -54,7 +54,7 @@ public class CommonConversion
         return deflatedStream.ToArray();
     }
 
-    static public ReadOnlyMemory<byte> Inflate(IReadOnlyList<byte> input)
+    public static ReadOnlyMemory<byte> Inflate(IReadOnlyList<byte> input)
     {
         using var inflatedStream = new System.IO.MemoryStream();
 
@@ -66,7 +66,7 @@ public class CommonConversion
         return inflatedStream.ToArray();
     }
 
-    static public string TimeStringViewForReport(DateTimeOffset time) =>
+    public static string TimeStringViewForReport(DateTimeOffset time) =>
         time.ToString("yyyy-MM-ddTHH-mm-ss");
 
     public static ReadOnlyMemory<T> Concat<T>(ReadOnlySpan<T> s1, ReadOnlySpan<T> s2)

@@ -9,18 +9,18 @@ public interface IJsEngine : IDisposable
 
     object CallFunction(string functionName, params object[] args);
 
-    static public IJsEngine DefaultBuildJsEngine() =>
+    public static IJsEngine DefaultBuildJsEngine() =>
         JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine();
 
-    static public Func<IJsEngine>? OverrideDefaultBuildJsEngine { set; get; }
+    public static Func<IJsEngine>? OverrideDefaultBuildJsEngine { set; get; }
 
-    static public IJsEngine BuildJsEngine() =>
+    public static IJsEngine BuildJsEngine() =>
         OverrideDefaultBuildJsEngine?.Invoke() ?? DefaultBuildJsEngine();
 }
 
 public class JsEngineFromJavaScriptEngineSwitcher : IJsEngine
 {
-    readonly JavaScriptEngineSwitcher.Core.IJsEngine jsEngine;
+    private readonly JavaScriptEngineSwitcher.Core.IJsEngine jsEngine;
 
     public JsEngineFromJavaScriptEngineSwitcher(JavaScriptEngineSwitcher.Core.IJsEngine jsEngine)
     {
@@ -36,12 +36,12 @@ public class JsEngineFromJavaScriptEngineSwitcher : IJsEngine
     void IDisposable.Dispose() =>
         jsEngine.Dispose();
 
-    static public int? OverrideJsEngineSettingsMaxStackSize = null;
+    public static int? OverrideJsEngineSettingsMaxStackSize = null;
 
-    static public IJsEngine ConstructJsEngine() =>
+    public static IJsEngine ConstructJsEngine() =>
         new JsEngineFromJavaScriptEngineSwitcher(ConstructJavaScriptEngineSwitcherJsEngine());
 
-    static public JavaScriptEngineSwitcher.Core.IJsEngine ConstructJavaScriptEngineSwitcherJsEngine()
+    public static JavaScriptEngineSwitcher.Core.IJsEngine ConstructJavaScriptEngineSwitcherJsEngine()
     {
         return new V8JsEngine(
             new V8Settings

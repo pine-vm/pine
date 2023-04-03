@@ -71,7 +71,7 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter : System.Tex
 
 public class ElmTestRs
 {
-    static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmTestRsExecutableFileByOs =
+    public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmTestRsExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
@@ -82,7 +82,7 @@ public class ElmTestRs
             ("b9a2d5d68307426e0b35f8030efbac940a3fa621a33ad2d84334a313cac33090",
             @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_windows.zip"));
 
-    static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
+    public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
@@ -93,11 +93,11 @@ public class ElmTestRs
             ("166dfe795d6331ac9fb1c672374007129ea25e61650045d17e6c3f22083fc9f8",
             @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-pc-windows-msvc.zip"));
 
-    static public ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
+    public static ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
-    static public ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
+    public static ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
 
-    static public (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
+    public static (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmProjectFiles)
     {
         var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
@@ -142,7 +142,7 @@ public class ElmTestRs
         return (executeElmTestResult.processOutput, parsedLines);
     }
 
-    static public ElmTestRsReportJsonEntry DeserializeElmTestRsReportJsonEntry(string json)
+    public static ElmTestRsReportJsonEntry DeserializeElmTestRsReportJsonEntry(string json)
     {
         var serializeOptions = new System.Text.Json.JsonSerializerOptions
         {
@@ -154,7 +154,7 @@ public class ElmTestRs
         return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, serializeOptions)!;
     }
 
-    static public (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
+    public static (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
         ElmTestRsReportJsonEntry @event)
     {
         if (@event.@event == "runStart")
@@ -238,7 +238,7 @@ public class ElmTestRs
 
 public record ElmTestRsConsoleOutputColor(object? Default = null, object? Red = null, object? Green = null)
 {
-    static public ElmTestRsConsoleOutputColor DefaultColor => new(Default: new object());
-    static public ElmTestRsConsoleOutputColor RedColor => new(Red: new object());
-    static public ElmTestRsConsoleOutputColor GreenColor => new(Green: new object());
+    public static ElmTestRsConsoleOutputColor DefaultColor => new(Default: new object());
+    public static ElmTestRsConsoleOutputColor RedColor => new(Red: new object());
+    public static ElmTestRsConsoleOutputColor GreenColor => new(Green: new object());
 }

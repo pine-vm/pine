@@ -10,9 +10,9 @@ using System.Text.RegularExpressions;
 
 namespace Pine;
 
-static public class LoadFromGitHubOrGitLab
+public static class LoadFromGitHubOrGitLab
 {
-    static public CacheByFileName? RepositoryFilesPartialForCommitCacheDefault = null;
+    public static CacheByFileName? RepositoryFilesPartialForCommitCacheDefault = null;
 
     /// <summary>
     /// Sample address to a tree:
@@ -31,7 +31,7 @@ static public class LoadFromGitHubOrGitLab
     /// Tree on GitLab:
     /// https://gitlab.com/gilmi/strema/-/tree/de9f6a401f89215cb6cebbbbf2eed0252aeef1d1/src/Strema
     /// </summary>
-    static string GitHubOrGitLabRegexPattern(
+    private static string GitHubOrGitLabRegexPattern(
         string repositoryGroupName,
         string typeGroupName,
         string refGroupName,
@@ -60,7 +60,7 @@ static public class LoadFromGitHubOrGitLab
         string commit,
         IReadOnlyList<string> cloneUrlCandidates);
 
-    static public ParsedUrl? ParseUrl(string objectUrl)
+    public static ParsedUrl? ParseUrl(string objectUrl)
     {
         const string repositoryGroupName = "repo";
         const string typeGroupName = "type";
@@ -96,18 +96,18 @@ static public class LoadFromGitHubOrGitLab
         );
     }
 
-    static public string BackToUrl(ParsedUrl parsedUrl) =>
+    public static string BackToUrl(ParsedUrl parsedUrl) =>
         parsedUrl.repository +
         (parsedUrl.inRepository == null
         ? "" :
         "/" + parsedUrl.inRepository.objectType + "/" + parsedUrl.inRepository.@ref + "/" + parsedUrl.inRepository.path);
 
-    static public Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl) =>
+    public static Result<string, LoadFromUrlSuccess> LoadFromUrl(string sourceUrl) =>
         LoadFromUrl(
             sourceUrl: sourceUrl,
             getRepositoryFilesPartialForCommit: GetRepositoryFilesPartialForCommitDefault);
 
-    static public Result<string, LoadFromUrlSuccess> LoadFromUrl(
+    public static Result<string, LoadFromUrlSuccess> LoadFromUrl(
         string sourceUrl,
         Func<GetRepositoryFilesPartialForCommitRequest, Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> getRepositoryFilesPartialForCommit)
     {
@@ -313,7 +313,7 @@ static public class LoadFromGitHubOrGitLab
             });
     }
 
-    static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitDefault(
+    private static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitDefault(
         GetRepositoryFilesPartialForCommitRequest request)
     {
         var loadNew =
@@ -358,7 +358,7 @@ static public class LoadFromGitHubOrGitLab
         };
     }
 
-    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
         string cloneUrl,
         string? branchName)
     {
@@ -370,7 +370,7 @@ static public class LoadFromGitHubOrGitLab
             .AndThen(commitId => GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(cloneUrl, commitId));
     }
 
-    static public Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
         string cloneUrl,
         string commit)
     {
@@ -405,7 +405,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static public string RefCanonicalNameFromPathComponentInGitHubRepository(string? refPathComponent)
+    public static string RefCanonicalNameFromPathComponentInGitHubRepository(string? refPathComponent)
     {
         if (refPathComponent is null)
             return "HEAD";
@@ -416,7 +416,7 @@ static public class LoadFromGitHubOrGitLab
         return "refs/heads/" + refPathComponent;
     }
 
-    static public Result<string, string> GetCommitFromReference(
+    public static Result<string, string> GetCommitFromReference(
         string cloneUrl,
         string referenceCanonicalName)
     {
@@ -431,7 +431,7 @@ static public class LoadFromGitHubOrGitLab
             referenceCanonicalName);
     }
 
-    static public Result<string, string> GetCommitFromReference(
+    public static Result<string, string> GetCommitFromReference(
         IImmutableSet<string> stack,
         IReadOnlyList<Reference> remoteReferences,
         string referenceCanonicalName)
@@ -456,9 +456,9 @@ static public class LoadFromGitHubOrGitLab
             matchingReference.TargetIdentifier);
     }
 
-    static public bool RefLooksLikeCommit(string reference) => Regex.IsMatch(reference, "[A-Fa-f0-9]{40}");
+    public static bool RefLooksLikeCommit(string reference) => Regex.IsMatch(reference, "[A-Fa-f0-9]{40}");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
         string cloneUrl,
         string commit)
     {
@@ -525,7 +525,7 @@ static public class LoadFromGitHubOrGitLab
         }
     }
 
-    static public (string hash, CommitContent content) GetCommitHashAndContent(Commit commit)
+    public static (string hash, CommitContent content) GetCommitHashAndContent(Commit commit)
     {
         return (commit.Sha, new CommitContent
         (
@@ -535,7 +535,7 @@ static public class LoadFromGitHubOrGitLab
         ));
     }
 
-    static public GitParticipantSignature GetParticipantSignature(Signature signature)
+    public static GitParticipantSignature GetParticipantSignature(Signature signature)
     {
         return new GitParticipantSignature
         (
@@ -544,7 +544,7 @@ static public class LoadFromGitHubOrGitLab
         );
     }
 
-    static Result<object, GitObject> FindGitObjectAtPath(Tree root, IEnumerable<string> nodesNames)
+    private static Result<object, GitObject> FindGitObjectAtPath(Tree root, IEnumerable<string> nodesNames)
     {
         if (root == null)
             return Result<object, GitObject>.err(new object());
@@ -574,7 +574,7 @@ static public class LoadFromGitHubOrGitLab
         return Result<object, GitObject>.ok(currentObject);
     }
 
-    static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)
+    private static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)
     {
         var prefixAsText = "blob " + blobContent.Length + "\0";
 
@@ -607,6 +607,6 @@ static public class LoadFromGitHubOrGitLab
         string name,
         string email);
 
-    static void DeleteLocalDirectoryRecursive(string directoryPath) =>
+    private static void DeleteLocalDirectoryRecursive(string directoryPath) =>
         Filesystem.DeleteLocalDirectoryRecursive(directoryPath);
 }

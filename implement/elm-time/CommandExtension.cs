@@ -3,9 +3,9 @@ using System.Linq;
 
 namespace ElmTime;
 
-static public class CommandExtension
+public static class CommandExtension
 {
-    static public void ConfigureHelpCommandForCommand(CommandLineApplication helpCommand, CommandLineApplication commandToDescribe)
+    public static void ConfigureHelpCommandForCommand(CommandLineApplication helpCommand, CommandLineApplication commandToDescribe)
     {
         helpCommand.Description = "Show help for the '" + commandToDescribe.Names.FirstOrDefault() + "' command";
 

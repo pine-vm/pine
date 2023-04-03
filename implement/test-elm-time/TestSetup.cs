@@ -12,20 +12,20 @@ namespace TestElmTime;
 
 public class TestSetup
 {
-    static public string PathToExampleElmApps => "./../../../example-elm-apps";
+    public static string PathToExampleElmApps => "./../../../example-elm-apps";
 
-    static public PineValue AppConfigComponentFromFiles(
+    public static PineValue AppConfigComponentFromFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appFiles) =>
         PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
 
-    static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
+    public static IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
         additionsAndExpectedResponses
         .Select(additionAndExpectedResponse =>
             (System.Text.Json.JsonSerializer.Serialize(new { addition = additionAndExpectedResponse.addition }),
             additionAndExpectedResponse.expectedResponse.ToString()));
 
-    static public IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
+    public static IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<int> additions, int previousValue = 0)
     {
         IEnumerable<(int addition, int expectedResponse)> enumerateWithExplicitExpectedResult()
@@ -43,25 +43,25 @@ public class TestSetup
         return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
     }
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =
         GetElmAppFromExampleName("counter-webapp");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CalculatorWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CalculatorWebApp =
         GetElmAppFromExampleName("calculator-webapp");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =
         GetElmAppFromExampleName("read-source-file-webapp");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =
         GetElmAppFromExampleName("string-builder-webapp");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
        GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
        GetElmAppFromExampleName("http-proxy");
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServerConfigJson(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServerConfigJson(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalDeploymentFiles,
         WebServerConfigJson jsonStructure)
     {
@@ -75,23 +75,23 @@ public class TestSetup
                 System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
         string exampleName) => GetElmAppFromDirectoryPath(Path.Combine(PathToExampleElmApps, exampleName));
 
-    static string FilePathStringFromPath(IImmutableList<string> path) =>
+    private static string FilePathStringFromPath(IImmutableList<string> path) =>
         Path.Combine(path.ToArray());
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>
         GetElmAppFromDirectoryPath(FilePathStringFromPath(directoryPath));
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
         string directoryPath) =>
             PineValueComposition.ToFlatDictionaryWithPathComparer(
                 Filesystem.GetAllFilesFromDirectory(directoryPath)
                 .OrderBy(file => string.Join('/', file.path)));
 
-    static public IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalAppFiles,
         IReadOnlyList<string> compilationRootFilePath)
     {
@@ -104,7 +104,7 @@ public class TestSetup
         return compilationResult.result.compiledFiles;
     }
 
-    static public IProcessStoreReader EmptyProcessStoreReader() =>
+    public static IProcessStoreReader EmptyProcessStoreReader() =>
         new ProcessStoreReaderFromDelegates
         (
             EnumerateSerializedCompositionsRecordsReverseDelegate: () => Array.Empty<byte[]>(),
@@ -112,7 +112,7 @@ public class TestSetup
         );
 }
 
-record ProcessStoreReaderFromDelegates(
+internal record ProcessStoreReaderFromDelegates(
     Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate,
     Func<byte[], ReductionRecord?> GetReductionDelegate)
     : IProcessStoreReader

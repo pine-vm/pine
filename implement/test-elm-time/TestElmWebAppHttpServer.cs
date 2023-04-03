@@ -8,19 +8,19 @@ namespace TestElmTime;
 [TestClass]
 public class TestElmWebAppHttpServer
 {
-    static public PineValue CounterWebApp =>
+    public static PineValue CounterWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
 
-    static public PineValue CalculatorWebApp =>
+    public static PineValue CalculatorWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CalculatorWebApp);
 
-    static public PineValue StringBuilderWebApp =>
+    public static PineValue StringBuilderWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.StringBuilderElmWebApp);
 
-    static public PineValue CrossPropagateHttpHeadersToAndFromBody =>
+    public static PineValue CrossPropagateHttpHeadersToAndFromBody =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp);
 
-    static public PineValue HttpProxyWebApp =>
+    public static PineValue HttpProxyWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.HttpProxyWebApp);
 
     [TestMethod]

@@ -6,13 +6,13 @@ namespace ElmTime;
 
 public class ElmInteropJint
 {
-    static public JsObject ElmMaybeNothing(Engine engine) =>
+    public static JsObject ElmMaybeNothing(Engine engine) =>
         ElmChoiceTypeTag(engine, "Nothing");
 
-    static public JsObject ElmMaybeJust(Engine engine, JsValue just) =>
+    public static JsObject ElmMaybeJust(Engine engine, JsValue just) =>
         ElmChoiceTypeTag(engine, "Just", just);
 
-    static public JsObject NewElmTuple2(Engine engine, JsValue first, JsValue second)
+    public static JsObject NewElmTuple2(Engine engine, JsValue first, JsValue second)
     {
         // function _Utils_Tuple2(a, b) { return { $: '#2', a: a, b: b }; }
 
@@ -25,7 +25,7 @@ public class ElmInteropJint
         return elmTuple;
     }
 
-    static public JsObject ElmChoiceTypeTag(Engine engine, string tagName, params JsValue[] tagArguments)
+    public static JsObject ElmChoiceTypeTag(Engine engine, string tagName, params JsValue[] tagArguments)
     {
         /*
         * Example found in JavaScript emitted by Elm compiler:
@@ -47,7 +47,7 @@ public class ElmInteropJint
         return jsObject;
     }
 
-    static public Result<string, Esprima.Ast.Expression> AstDelegateInElmF3(
+    public static Result<string, Esprima.Ast.Expression> AstDelegateInElmF3(
         Esprima.Ast.Node originalExpression,
         string delegateIdentifier)
     {

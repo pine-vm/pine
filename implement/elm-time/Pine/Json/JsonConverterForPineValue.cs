@@ -111,7 +111,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         WriteDefaultRepresentation(writer, value, options);
     }
 
-    void WriteDefaultRepresentation(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
+    private void WriteDefaultRepresentation(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
         if (value is PineValue.ListValue list)
         {

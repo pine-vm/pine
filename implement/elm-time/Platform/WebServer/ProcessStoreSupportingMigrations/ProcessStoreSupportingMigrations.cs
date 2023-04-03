@@ -30,7 +30,7 @@ public interface IProcessStoreReader
 
     PineValue? LoadComponent(string componentHash);
 
-    static public FileStoreReaderProjectionResult
+    public static FileStoreReaderProjectionResult
         ProjectFileStoreReaderForAppendedCompositionLogEvent(
         IFileStoreReader originalFileStore,
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
@@ -89,7 +89,7 @@ public interface IProcessStoreReader
             projectedReader: projectedFileStoreReader);
     }
 
-    static public IProcessStoreReader EmptyProcessStoreReader()
+    public static IProcessStoreReader EmptyProcessStoreReader()
     {
         return new DelegatingProcessStoreReader
         (
@@ -100,7 +100,7 @@ public interface IProcessStoreReader
     }
 }
 
-record DelegatingProcessStoreReader(
+internal record DelegatingProcessStoreReader(
     Func<IEnumerable<byte[]>> EnumerateSerializedCompositionLogRecordsReverseDelegate,
     Func<string, PineValue?> LoadComponentDelegate,
     Func<string, ProvisionalReductionRecordInFile?> LoadProvisionalReductionDelegate) : IProcessStoreReader
@@ -138,12 +138,12 @@ public record CompositionLogRecordInFile(
     string? parentHashBase16,
     CompositionLogRecordInFile.CompositionEvent compositionEvent)
 {
-    static public string? CompositionLogFirstRecordParentHashBase16 => null;
+    public static string? CompositionLogFirstRecordParentHashBase16 => null;
 
-    static public string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
+    public static string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
         CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
 
-    static public ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
+    public static ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
         PineValueHashTree.ComputeHash(PineValue.Blob(compositionRecord));
 
     public record CompositionEvent(
@@ -165,7 +165,7 @@ public record CompositionLogRecordInFile(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ValueInFileStructure? RevertProcessTo = null)
     {
-        static public CompositionEvent EventForDeployAppConfig(
+        public static CompositionEvent EventForDeployAppConfig(
             ValueInFileStructure appConfigValueInFile,
             bool initElmAppState) =>
             initElmAppState
@@ -193,43 +193,43 @@ public record ProvisionalReductionRecordInFile(
 
 public class ProcessStoreInFileStore
 {
-    static readonly protected IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
+    protected static readonly IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
 
-    static public JsonSerializerOptions RecordSerializationSettings => new()
+    public static JsonSerializerOptions RecordSerializationSettings => new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    static protected IImmutableList<string> CompositionHeadHashFilePath =>
+    protected static IImmutableList<string> CompositionHeadHashFilePath =>
         ImmutableList.Create("composition-log-head-hash");
 
     /// <summary>
     /// Use the 'literal' name to distinguish from other possible (future) representations, such as 'deflated'.
     /// </summary>
-    static readonly protected IImmutableList<string> CompositionLogLiteralPath = ImmutableList.Create("composition-log", "literal");
+    protected static readonly IImmutableList<string> CompositionLogLiteralPath = ImmutableList.Create("composition-log", "literal");
 
     /*
     Distinguish literals from other kinds of representations. (derivations/recipes)
     We can also distinguish between representations in the 'literal' class: I see two extremes here: On one end is the same that we currently use for hashing. The opposite end is integrating the transitive hull of dependencies.
     */
-    static protected string LiteralElementSubdirectory => "literal-element";
+    protected static string LiteralElementSubdirectory => "literal-element";
 
-    static protected string DeflatedLiteralElementSubdirectory => "deflated-literal-element";
+    protected static string DeflatedLiteralElementSubdirectory => "deflated-literal-element";
 
-    static protected string ProvisionalReductionSubdirectory => "provisional-reduction";
+    protected static string ProvisionalReductionSubdirectory => "provisional-reduction";
 
 
-    static readonly protected JsonSerializerOptions recordSerializationSettings = RecordSerializationSettings;
+    protected static readonly JsonSerializerOptions recordSerializationSettings = RecordSerializationSettings;
 
-    static public IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
+    public static IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
         ImmutableList.Create(componentHash.Substring(0, 2), componentHash);
 
-    static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer = EnumerableExtension.Comparer<IImmutableList<string>>();
+    private static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer = EnumerableExtension.Comparer<IImmutableList<string>>();
 
-    static protected IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesPaths) =>
+    protected static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesPaths) =>
         logFilesPaths.OrderBy(filePath => filePath, CompositionLogFileOrderPathComparer);
 
-    static public byte[] Serialize(CompositionLogRecordInFile record) =>
+    public static byte[] Serialize(CompositionLogRecordInFile record) =>
         Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, recordSerializationSettings));
 
     public ProcessStoreInFileStore()
@@ -254,10 +254,10 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         this.fileStore = fileStore;
     }
 
-    ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash) =>
+    private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash) =>
         LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16(componentHash));
 
-    ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
+    private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
     {
         var filePath =
             GetFilePathForComponentInComponentFileStore(componentHashBase16);
@@ -395,7 +395,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
     /// <summary>
     /// Drop content after the last occurrence of delimiter sequence to account for the possible partial write of the last composition record.
     /// </summary>
-    static IEnumerable<IReadOnlyList<byte>> SplitFileContentIntoCompositionLogRecords(IReadOnlyList<byte> fileContent)
+    private static IEnumerable<IReadOnlyList<byte>> SplitFileContentIntoCompositionLogRecords(IReadOnlyList<byte> fileContent)
     {
         if (fileContent == null)
             yield break;
@@ -460,7 +460,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
 public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
 {
-    static int TryDeflateSizeThreshold => 10_000;
+    private static int TryDeflateSizeThreshold => 10_000;
 
     protected IFileStoreWriter fileStore;
 
@@ -472,11 +472,11 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     protected IFileStoreWriter CompositionLogLiteralFileStore => fileStore.ForSubdirectory(CompositionLogLiteralPath);
 
-    readonly Func<DateTimeOffset> getTimeForCompositionLogBatch;
+    private readonly Func<DateTimeOffset> getTimeForCompositionLogBatch;
 
-    readonly object appendLock = new();
+    private readonly object appendLock = new();
 
-    (string hashBase16, IImmutableList<string> filePath)? lastCompositionRecord;
+    private (string hashBase16, IImmutableList<string> filePath)? lastCompositionRecord;
 
     public ProcessStoreWriterInFileStore(
         IFileStoreReader fileStoreReader,
@@ -562,7 +562,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         StoreComponentAndGetHash(component);
     }
 
-    (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(PineValue component)
+    private (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(PineValue component)
     {
         var (serialRepresentation, dependencies) = PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component);
 

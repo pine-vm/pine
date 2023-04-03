@@ -25,7 +25,7 @@ public static class ResultExtension
         return new Result<ErrT, IReadOnlyList<OkT>>.Ok(okList);
     }
 
-    static public Result<IImmutableList<ErrT>, OkT> FirstOkOrErrors<ErrT, OkT>(
+    public static Result<IImmutableList<ErrT>, OkT> FirstOkOrErrors<ErrT, OkT>(
         this IEnumerable<Func<Result<ErrT, OkT>>> candidates) =>
         candidates.Aggregate(
             seed: Result<IImmutableList<ErrT>, OkT>.err(ImmutableList<ErrT>.Empty),
@@ -38,7 +38,7 @@ public static class ResultExtension
                             fromOk: success => Result<IImmutableList<ErrT>, OkT>.ok(success)),
                     fromOk: _ => accumulate));
 
-    static public Result<ErrT, OkT> AggregateExitingOnFirstError<ItemT, ErrT, OkT>(
+    public static Result<ErrT, OkT> AggregateExitingOnFirstError<ItemT, ErrT, OkT>(
         IEnumerable<ItemT> sequence,
         Func<OkT, ItemT, Result<ErrT, OkT>> aggregateFunc,
         OkT aggregateSeed) =>

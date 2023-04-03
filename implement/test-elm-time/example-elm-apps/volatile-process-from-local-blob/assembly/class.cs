@@ -2,7 +2,7 @@
 {
     public class Class
     {
-        static public string Function(string input) =>
+        public static string Function(string input) =>
             "value from local assembly";
     }
 }

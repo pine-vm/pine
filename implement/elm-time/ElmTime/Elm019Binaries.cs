@@ -14,30 +14,30 @@ namespace ElmTime;
 /// </summary>
 public static class Elm019Binaries
 {
-    static public string? overrideElmMakeHomeDirectory = null;
+    public static string? overrideElmMakeHomeDirectory = null;
 
-    static public IFileStore? elmMakeResultCacheFileStoreDefault = null;
+    public static IFileStore? elmMakeResultCacheFileStoreDefault = null;
 
-    static string? elmHomeDirectory;
+    private static string? elmHomeDirectory;
 
     public record ElmMakeOk(ReadOnlyMemory<byte> producedFile);
 
     /// <inheritdoc cref="ElmMake"/>
-    static public Result<string, ElmMakeOk> ElmMakeToJavascript(
+    public static Result<string, ElmMakeOk> ElmMakeToJavascript(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
         ElmMake(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
 
     /// <inheritdoc cref="ElmMake"/>
-    static public Result<string, ElmMakeOk> ElmMakeToHtml(
+    public static Result<string, ElmMakeOk> ElmMakeToHtml(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
         ElmMake(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
 
     /// <inheritdoc cref="ElmMakeIgnoringCachedResults"/>
-    static public Result<string, ElmMakeOk> ElmMake(
+    public static Result<string, ElmMakeOk> ElmMake(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
@@ -50,7 +50,7 @@ public static class Elm019Binaries
             resultCacheFileStore: elmMakeResultCacheFileStoreDefault);
 
     /// <inheritdoc cref="ElmMakeIgnoringCachedResults"/>
-    static public Result<string, ElmMakeOk> ElmMake(
+    public static Result<string, ElmMakeOk> ElmMake(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
@@ -134,7 +134,7 @@ public static class Elm019Binaries
     /// <summary>
     /// Use the 'elm make' command on the elm executable file.
     /// </summary>
-    static public Result<string, ElmMakeOk> ElmMakeIgnoringCachedResults(
+    public static Result<string, ElmMakeOk> ElmMakeIgnoringCachedResults(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
@@ -220,10 +220,10 @@ public static class Elm019Binaries
             "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
     }
 
-    static public ReadOnlyMemory<byte> GetElmExecutableFile =>
+    public static ReadOnlyMemory<byte> GetElmExecutableFile =>
         BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!.Value;
 
-    static public IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmExecutableFileByOs =
+    public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             /*
@@ -242,7 +242,7 @@ public static class Elm019Binaries
             ("821e61ee150b660ca173584b66d1784b7be08b7107e7aa4977135686dc9d2fb2",
             @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz"));
 
-    static public string GetElmHomeDirectory()
+    public static string GetElmHomeDirectory()
     {
         elmHomeDirectory =
             overrideElmMakeHomeDirectory ??
@@ -253,18 +253,18 @@ public static class Elm019Binaries
         return elmHomeDirectory;
     }
 
-    record ElmMakeRequestIdentifier(
+    private record ElmMakeRequestIdentifier(
         string elmCodeFilesHash,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
         string? elmMakeCommandAppendix);
 
-    record ElmMakeOkJsonStructure(
+    private record ElmMakeOkJsonStructure(
         string producedFileBase64);
 
-    static ElmMakeOk AsElmMakeOk(ElmMakeOkJsonStructure cacheEntry) =>
+    private static ElmMakeOk AsElmMakeOk(ElmMakeOkJsonStructure cacheEntry) =>
         new(producedFile: Convert.FromBase64String(cacheEntry.producedFileBase64));
 
-    static ElmMakeOkJsonStructure AsJsonStructure(ElmMakeOk cacheEntry) =>
+    private static ElmMakeOkJsonStructure AsJsonStructure(ElmMakeOk cacheEntry) =>
         new(producedFileBase64: Convert.ToBase64String(cacheEntry.producedFile!.ToArray())!);
 }

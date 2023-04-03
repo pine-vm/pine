@@ -2,9 +2,9 @@ using System.IO;
 
 namespace Pine;
 
-static public class LoadFromLocalFilesystem
+public static class LoadFromLocalFilesystem
 {
-    static public TreeNodeWithStringPath? LoadSortedTreeFromPath(string path)
+    public static TreeNodeWithStringPath? LoadSortedTreeFromPath(string path)
     {
         if (File.Exists(path))
             return TreeNodeWithStringPath.Blob(blobContent: File.ReadAllBytes(path));

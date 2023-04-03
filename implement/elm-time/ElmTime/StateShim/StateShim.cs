@@ -10,16 +10,16 @@ namespace ElmTime.StateShim;
 
 public class StateShim
 {
-    static public StateSource MainStateBranch => new StateSource.BranchStateSource(MainBranchName);
+    public static StateSource MainStateBranch => new StateSource.BranchStateSource(MainBranchName);
 
-    static public string MainBranchName => "main";
+    public static string MainBranchName => "main";
 
-    static public Result<string, string> SetAppStateOnMainBranch(
+    public static Result<string, string> SetAppStateOnMainBranch(
         IProcess<string, string> process,
         JsonElement stateJson) =>
         SetAppState(process: process, stateJson: stateJson, branchName: "main");
 
-    static public Result<string, string> SetAppState(
+    public static Result<string, string> SetAppState(
         IProcess<string, string> process,
         JsonElement stateJson,
         string branchName)
@@ -40,10 +40,10 @@ public class StateShim
             });
     }
 
-    static public Result<string, JsonElement> GetAppStateFromMainBranch(IProcess<string, string> process) =>
+    public static Result<string, JsonElement> GetAppStateFromMainBranch(IProcess<string, string> process) =>
         GetSerializedState(process, branchName: MainBranchName);
 
-    static public Result<string, JsonElement> GetSerializedState(
+    public static Result<string, JsonElement> GetSerializedState(
         IProcess<string, string> process,
         string branchName)
     {
@@ -62,7 +62,7 @@ public class StateShim
             });
     }
 
-    static public Result<string, IReadOnlyList<NamedExposedFunction>> ListExposedFunctions(IProcess<string, string> process)
+    public static Result<string, IReadOnlyList<NamedExposedFunction>> ListExposedFunctions(IProcess<string, string> process)
     {
         return
             ProcessStateShimRequest(
@@ -80,7 +80,7 @@ public class StateShim
     }
 
 
-    static public Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
+    public static Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
         IProcess<string, string> process,
         AdminInterface.ApplyFunctionOnDatabaseRequest request)
     {
@@ -150,7 +150,7 @@ public class StateShim
             });
     }
 
-    static public Result<string, long> EstimateSerializedStateLengthOnMainBranch(
+    public static Result<string, long> EstimateSerializedStateLengthOnMainBranch(
         IProcess<string, string> process)
     {
         return
@@ -169,7 +169,7 @@ public class StateShim
             });
     }
 
-    static public Result<string, IReadOnlyList<string>> ListBranches(
+    public static Result<string, IReadOnlyList<string>> ListBranches(
         IProcess<string, string> process)
     {
         return
@@ -187,7 +187,7 @@ public class StateShim
             });
     }
 
-    static public Result<string, string> SetBranchesState(
+    public static Result<string, string> SetBranchesState(
         IProcess<string, string> process,
         StateSource stateSource,
         IReadOnlyList<string> branches)
@@ -208,7 +208,7 @@ public class StateShim
     }
 
 
-    static public Result<string, RemoveBranchesShimResponseStruct> RemoveBranches(
+    public static Result<string, RemoveBranchesShimResponseStruct> RemoveBranches(
         IProcess<string, string> process,
         IReadOnlyList<string> branches)
     {
@@ -227,7 +227,7 @@ public class StateShim
             });
     }
 
-    static public Result<string, StateShimResponseStruct> ProcessStateShimRequest(
+    public static Result<string, StateShimResponseStruct> ProcessStateShimRequest(
        IProcess<string, string> process,
        StateShimRequestStruct stateShimRequest)
     {

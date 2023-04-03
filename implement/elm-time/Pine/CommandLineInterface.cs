@@ -4,10 +4,10 @@ namespace Pine;
 
 public class CommandLineInterface
 {
-    static public string FormatIntegerForDisplay(long integer) =>
+    public static string FormatIntegerForDisplay(long integer) =>
         FormatIntegerForDisplay(integer, '_');
 
-    static public string FormatIntegerForDisplay(long integer, char thousandsSeparator) =>
+    public static string FormatIntegerForDisplay(long integer, char thousandsSeparator) =>
         integer.ToString("N",
             new NumberFormatInfo
             {

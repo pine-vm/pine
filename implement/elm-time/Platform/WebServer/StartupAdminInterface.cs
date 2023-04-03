@@ -19,31 +19,31 @@ namespace ElmTime.Platform.WebServer;
 
 public class StartupAdminInterface
 {
-    static public string PathApiDeployAndInitAppState => "/api/deploy-and-init-app-state";
+    public static string PathApiDeployAndInitAppState => "/api/deploy-and-init-app-state";
 
-    static public string PathApiDeployAndMigrateAppState => "/api/deploy-and-migrate-app-state";
+    public static string PathApiDeployAndMigrateAppState => "/api/deploy-and-migrate-app-state";
 
-    static public string PathApiRevertProcessTo => "/api/revert-process-to";
+    public static string PathApiRevertProcessTo => "/api/revert-process-to";
 
-    static public string PathApiElmAppState => "/api/elm-app-state";
+    public static string PathApiElmAppState => "/api/elm-app-state";
 
-    static public string PathApiGetDeployedAppConfig => "/api/get-deployed-app-config";
+    public static string PathApiGetDeployedAppConfig => "/api/get-deployed-app-config";
 
-    static public string PathApiReplaceProcessHistory => "/api/replace-process-history";
+    public static string PathApiReplaceProcessHistory => "/api/replace-process-history";
 
-    static public string PathApiTruncateProcessHistory => "/api/truncate-process-history";
+    public static string PathApiTruncateProcessHistory => "/api/truncate-process-history";
 
-    static public string PathApiProcessHistoryFileStore => "/api/process-history-file-store";
+    public static string PathApiProcessHistoryFileStore => "/api/process-history-file-store";
 
-    static public string PathApiProcessHistoryFileStoreGetFileContent => PathApiProcessHistoryFileStore + "/get-file-content";
+    public static string PathApiProcessHistoryFileStoreGetFileContent => PathApiProcessHistoryFileStore + "/get-file-content";
 
-    static public string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
+    public static string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
-    static public string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db/";
+    public static string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db/";
 
-    static public IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
+    public static IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
 
-    static public IImmutableList<IImmutableList<string>> WebServerConfigFilePathAlternatives =>
+    public static IImmutableList<IImmutableList<string>> WebServerConfigFilePathAlternatives =>
         ImmutableList.Create(
             WebServerConfigFilePathDefault,
 
@@ -79,7 +79,7 @@ public class StartupAdminInterface
         }
     }
 
-    record PublicHostConfiguration(
+    private record PublicHostConfiguration(
         PersistentProcessLiveRepresentation processLiveRepresentation,
         IHost webHost);
 
@@ -877,29 +877,29 @@ public class StartupAdminInterface
             });
     }
 
-    static string ApiGuide =>
+    private static string ApiGuide =>
         HtmlFromLines(
             "The easiest way to use the APIs is via the command-line interface in the elm-time executable file.",
             "To learn about the admin interface and how to deploy an app, see  " + LinkHtmlElementFromUrl(LinkToGuideUrl)
         );
 
-    static string LinkToGuideUrl => "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md";
+    private static string LinkToGuideUrl => "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md";
 
-    static string LinkHtmlElementFromUrl(string url) =>
+    private static string LinkHtmlElementFromUrl(string url) =>
         "<a href='" + url + "'>" + url + "</a>";
 
-    static string HtmlFromLines(params string[] lines) =>
+    private static string HtmlFromLines(params string[] lines) =>
         string.Join("<br>\n", lines);
 
-    static string HtmlToDescribeApiRoute(ApiRoute apiRoute) =>
+    private static string HtmlToDescribeApiRoute(ApiRoute apiRoute) =>
         LinkHtmlElementFromUrl(apiRoute.path) +
         " [ " + string.Join(", ", apiRoute.methods.Select(m => m.Key.ToUpperInvariant())) + " ]";
 
-    record ApiRoute(
+    private record ApiRoute(
         string path,
         ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>> methods);
 
-    static public string HtmlDocument(string body) =>
+    public static string HtmlDocument(string body) =>
         string.Join("\n",
         new[]
         {
@@ -910,7 +910,7 @@ public class StartupAdminInterface
             "</html>"
         });
 
-    static public (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
+    public static (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
         IFileStore processStoreFileStore,
         Action<string>? testContinueLogger = null)

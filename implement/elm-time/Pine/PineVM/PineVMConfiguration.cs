@@ -13,7 +13,7 @@ namespace Pine.PineVM;
 /// </summary>
 public partial class PineVMConfiguration
 {
-    static public IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>?
+    public static IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>?
         DecodeExpressionOverrides = null;
 
     static PineVMConfiguration()
@@ -23,7 +23,7 @@ public partial class PineVMConfiguration
 
     static partial void LinkGeneratedOptimizations();
 
-    static public Result<string, string> GenerateCSharpFile(
+    public static Result<string, string> GenerateCSharpFile(
         PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         PineCompileToDotNet.CompileCSharpClassResult compileCSharpClassResult)
     {

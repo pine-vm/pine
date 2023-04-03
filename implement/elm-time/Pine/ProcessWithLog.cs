@@ -42,24 +42,24 @@ public abstract record ProcessWithLog<LogEntryT, ResultT>
             () => new Result(result)));
 }
 
-static public class ProcessWithLogExtension
+public static class ProcessWithLogExtension
 {
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenMap<LogEntryT, ErrT, OkT, NewOkT>(
+    public static ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenMap<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, Result<ErrT, NewOkT>> andThen) =>
         orig.MapResult(previousResult => previousResult.AndThen(andThen));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
+    public static ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMap<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, NewOkT> map) =>
         orig.ResultAndThenMap(previousResult => Result<ErrT, NewOkT>.ok(map(previousResult)));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMapContinue<LogEntryT, ErrT, OkT, NewOkT>(
+    public static ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultMapContinue<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, ProcessWithLog<LogEntryT, NewOkT>> map) =>
         orig.ResultAndThenContinue(previousOk => map(previousOk).MapResult(newOk => Result<ErrT, NewOkT>.ok(newOk)));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenContinue<LogEntryT, ErrT, OkT, NewOkT>(
+    public static ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenContinue<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>> andThen) =>
         orig.Continue(previousResult =>
@@ -68,7 +68,7 @@ static public class ProcessWithLogExtension
             fromErr: error => new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>.Result(Result<ErrT, NewOkT>.err(error)),
             fromOk: ok => andThen(ok)));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(
+    public static ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, LogEntryT> addLogEntry) =>
         ResultAndThenContinue(
@@ -77,7 +77,7 @@ static public class ProcessWithLogExtension
                 addLogEntry(ok),
                 () => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.Result(Result<ErrT, OkT>.ok(ok))));
 
-    static public ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntriesIfOk<LogEntryT, ErrT, OkT>(
+    public static ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntriesIfOk<LogEntryT, ErrT, OkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, IEnumerable<LogEntryT>> addLogEntries) =>
         ResultAndThenContinue(
@@ -88,7 +88,7 @@ static public class ProcessWithLogExtension
                 seed: (ProcessWithLog<LogEntryT, Result<ErrT, OkT>>)new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.Result(Result<ErrT, OkT>.ok(ok)),
                 func: (prev, logEntry) => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.LogEntry(logEntry, () => prev)));
 
-    static public ResultT LogToActions<LogEntryT, ResultT>(
+    public static ResultT LogToActions<LogEntryT, ResultT>(
         this ProcessWithLog<LogEntryT, ResultT> firstStep,
         Action<LogEntryT> logAction)
     {
@@ -109,7 +109,7 @@ static public class ProcessWithLogExtension
         };
     }
 
-    static public (IImmutableList<LogEntryT> log, ResultT result) LogToList<LogEntryT, ResultT>(
+    public static (IImmutableList<LogEntryT> log, ResultT result) LogToList<LogEntryT, ResultT>(
          this ProcessWithLog<LogEntryT, ResultT> firstStep)
     {
         (IImmutableList<LogEntryT> log, ResultT result) continueWithLogEntry(ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry)

@@ -14,13 +14,13 @@ namespace Pine;
 
 public class VolatileProcess
 {
-    readonly object @lock = new();
+    private readonly object @lock = new();
 
-    ScriptState<object>? scriptState;
+    private ScriptState<object>? scriptState;
 
-    readonly MetadataResolver metadataResolver;
+    private readonly MetadataResolver metadataResolver;
 
-    readonly Func<byte[], byte[]?> getFileFromHashSHA256;
+    private readonly Func<byte[], byte[]?> getFileFromHashSHA256;
 
     public VolatileProcess(
         Func<byte[], byte[]?> getFileFromHashSHA256,
@@ -125,7 +125,7 @@ public class VolatileProcess
         }
     }
 
-    static string DescribeAssemblyResolutionForErrorMessage(
+    private static string DescribeAssemblyResolutionForErrorMessage(
         IEnumerable<(string url, IEnumerable<TreeNodeWithStringPath>? loadedTrees)> resolution)
     {
         return string.Join("\n",
@@ -141,7 +141,7 @@ public class VolatileProcess
                 }));
     }
 
-    static string DescribeTreeContentsForErrorMessage(TreeNodeWithStringPath tree)
+    private static string DescribeTreeContentsForErrorMessage(TreeNodeWithStringPath tree)
     {
         return string.Join("\n",
             tree.EnumerateBlobsTransitive().Select(blobAtPath =>
@@ -155,30 +155,30 @@ public class VolatileProcess
         return RunScript(RequestExpression(request));
     }
 
-    static string RequestExpression(string request)
+    private static string RequestExpression(string request)
     {
         return "InterfaceToHost_Request(\"" + request.Replace(@"\", @"\\").Replace("\"", "\\\"") + "\")";
     }
 
-    class MetadataResolver : MetadataReferenceResolver
+    private class MetadataResolver : MetadataReferenceResolver
     {
-        readonly object @lock = new();
+        private readonly object @lock = new();
 
-        readonly SyntaxTree csharpScriptCodeSyntaxTree;
+        private readonly SyntaxTree csharpScriptCodeSyntaxTree;
 
-        readonly Func<byte[], byte[]?> getFileFromHashSHA256;
+        private readonly Func<byte[], byte[]?> getFileFromHashSHA256;
 
-        ImmutableList<AssemblyMetadata> resolvedAssemblies = ImmutableList<AssemblyMetadata>.Empty;
+        private ImmutableList<AssemblyMetadata> resolvedAssemblies = ImmutableList<AssemblyMetadata>.Empty;
 
-        static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = new();
+        private static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = new();
 
-        static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new();
+        private static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new();
 
-        readonly ConcurrentDictionary<string, IEnumerable<string>> hintUrlsFromAssemblyReference = new();
+        private readonly ConcurrentDictionary<string, IEnumerable<string>> hintUrlsFromAssemblyReference = new();
 
-        readonly ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl = new();
+        private readonly ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl = new();
 
-        static readonly ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>> resolveReferenceCache =
+        private static readonly ConcurrentDictionary<ResolveReferenceRequest, ImmutableArray<PortableExecutableReference>> resolveReferenceCache =
             new(new ResolveReferenceRequestEqualityComparer());
 
         public IEnumerable<(string url, IEnumerable<TreeNodeWithStringPath>? loadedTrees)>? ResolutionsFromAssemblyReference(string assemblyReference)
@@ -212,7 +212,7 @@ public class VolatileProcess
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
         }
 
-        static private Assembly? CurrentDomain_AssemblyResolve(object? sender, ResolveEventArgs args)
+        private static Assembly? CurrentDomain_AssemblyResolve(object? sender, ResolveEventArgs args)
         {
             /*
              * Value observed for args.Name:
@@ -254,14 +254,14 @@ public class VolatileProcess
         public override int GetHashCode() => 0;
 
 
-        record struct ResolveReferenceRequest
+        private record struct ResolveReferenceRequest
         {
             public string reference;
             public string? baseFilePath;
             public MetadataReferenceProperties properties;
         }
 
-        class ResolveReferenceRequestEqualityComparer : IEqualityComparer<ResolveReferenceRequest>
+        private class ResolveReferenceRequestEqualityComparer : IEqualityComparer<ResolveReferenceRequest>
         {
             public bool Equals(ResolveReferenceRequest x, ResolveReferenceRequest y) =>
                 x.reference == y.reference &&
@@ -295,7 +295,7 @@ public class VolatileProcess
             return resolvedReferences;
         }
 
-        ImmutableArray<PortableExecutableReference> ResolveReferenceWithoutAssemblyCache(ResolveReferenceRequest request)
+        private ImmutableArray<PortableExecutableReference> ResolveReferenceWithoutAssemblyCache(ResolveReferenceRequest request)
         {
             lock (@lock)
             {
@@ -349,7 +349,7 @@ public class VolatileProcess
                     request.properties);
         }
 
-        IEnumerable<string> ParseHintUrlsFromAssemblyReference(string assemblyReference)
+        private IEnumerable<string> ParseHintUrlsFromAssemblyReference(string assemblyReference)
         {
             var allNodesAndTokens =
                 csharpScriptCodeSyntaxTree.GetRoot()
@@ -384,7 +384,7 @@ public class VolatileProcess
             return linksFromComments.Select(url => url.ToString());
         }
 
-        IReadOnlyList<byte>? GetBlobFromHashAndHintUrls(byte[] hash, IEnumerable<string> hintUrls)
+        private IReadOnlyList<byte>? GetBlobFromHashAndHintUrls(byte[] hash, IEnumerable<string> hintUrls)
         {
             foreach (var hintUrl in hintUrls)
             {
@@ -423,11 +423,11 @@ public class VolatileProcess
         }
     }
 
-    static bool IsComment(SyntaxTrivia trivia) =>
+    private static bool IsComment(SyntaxTrivia trivia) =>
         trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineCommentTrivia) ||
         trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineCommentTrivia);
 
-    static public IEnumerable<Uri> EnumerateUrlsFromText(string text)
+    public static IEnumerable<Uri> EnumerateUrlsFromText(string text)
     {
         foreach (var nonSpace in Regex.Split(text, "\\s+"))
         {

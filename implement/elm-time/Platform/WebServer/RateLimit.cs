@@ -50,9 +50,9 @@ public record RateLimitStateSingleWindow(
 
 public class RateLimitMutableContainer : IMutableRateLimit
 {
-    readonly object @lock = new();
+    private readonly object @lock = new();
 
-    IRateLimit rateLimitState;
+    private IRateLimit rateLimitState;
 
     public RateLimitMutableContainer(IRateLimit init)
     {

@@ -11,23 +11,23 @@ using System.Threading.Tasks;
 
 namespace ElmTime.Platform.WebServer;
 
-static public class Asp
+public static class Asp
 {
-    class ClientsRateLimitStateContainer
+    private class ClientsRateLimitStateContainer
     {
-        readonly public ConcurrentDictionary<string, IMutableRateLimit> RateLimitFromClientId = new();
+        public readonly ConcurrentDictionary<string, IMutableRateLimit> RateLimitFromClientId = new();
     }
 
-    static public void ConfigureServices(IServiceCollection services)
+    public static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(new ClientsRateLimitStateContainer());
     }
 
-    static public async Task MiddlewareFromWebServerConfig(
+    public static async Task MiddlewareFromWebServerConfig(
         WebServerConfigJson? serverConfig, HttpContext context, Func<Task> next) =>
         await RateLimitMiddlewareFromWebServerConfig(serverConfig, context, next);
 
-    static async Task RateLimitMiddlewareFromWebServerConfig(
+    private static async Task RateLimitMiddlewareFromWebServerConfig(
         WebServerConfigJson? serverConfig,
         HttpContext context,
         Func<Task> next)
@@ -63,7 +63,7 @@ static public class Asp
         return;
     }
 
-    static IMutableRateLimit BuildRateLimitContainerForClient(WebServerConfigJson? jsonStructure)
+    private static IMutableRateLimit BuildRateLimitContainerForClient(WebServerConfigJson? jsonStructure)
     {
         if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
             return new MutableRateLimitAlwaysPassing();
@@ -76,7 +76,7 @@ static public class Asp
         ));
     }
 
-    static public async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(
+    public static async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(
         HttpRequest httpRequest)
     {
         var httpHeaders =

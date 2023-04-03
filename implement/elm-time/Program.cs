@@ -17,11 +17,11 @@ namespace ElmTime;
 
 public class Program
 {
-    static public string AppVersionId => "2023-04-03";
+    public static string AppVersionId => "2023-04-03";
 
-    static int AdminInterfaceDefaultPort => 4000;
+    private static int AdminInterfaceDefaultPort => 4000;
 
-    static int Main(string[] args)
+    private static int Main(string[] args)
     {
         Elm019Binaries.overrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
         Elm019Binaries.elmMakeResultCacheFileStoreDefault = ElmMakeResultCacheFileStoreDefault;
@@ -246,7 +246,7 @@ public class Program
         return executeAndGuideInCaseOfException();
     }
 
-    static CommandLineApplication AddRunServerCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddRunServerCommand(CommandLineApplication app) =>
         app.Command("run-server", runServerCommand =>
         {
             runServerCommand.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
@@ -426,7 +426,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddDeployCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddDeployCommand(CommandLineApplication app) =>
         app.Command("deploy", deployCommand =>
         {
             deployCommand.Description = "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.";
@@ -463,7 +463,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddCopyAppStateCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddCopyAppStateCommand(CommandLineApplication app) =>
         app.Command("copy-app-state", copyAppStateCommand =>
         {
             copyAppStateCommand.Description = "Copy the state of an Elm backend app.";
@@ -506,7 +506,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddCopyProcessCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddCopyProcessCommand(CommandLineApplication app) =>
         app.Command("copy-process", copyProcessCommand =>
         {
             copyProcessCommand.Description = "Copy all files needed to restore a process and store them in a zip archive.";
@@ -544,7 +544,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddApplyFunctionCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddApplyFunctionCommand(CommandLineApplication app) =>
         app.Command("apply-function", applyFunctionCommand =>
     {
         applyFunctionCommand.Description = "Apply an Elm function on the database containing the state of an Elm app.";
@@ -590,7 +590,7 @@ public class Program
         });
     });
 
-    static string LoadArgumentFromUserInterfaceAsJsonOrFileTextContext(string argumentFromCLI)
+    private static string LoadArgumentFromUserInterfaceAsJsonOrFileTextContext(string argumentFromCLI)
     {
         try
         {
@@ -603,7 +603,7 @@ public class Program
         return File.ReadAllText(argumentFromCLI);
     }
 
-    static CommandLineApplication AddTruncateProcessHistoryCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddTruncateProcessHistoryCommand(CommandLineApplication app) =>
         app.Command("truncate-process-history", truncateProcessHistoryCommand =>
         {
             truncateProcessHistoryCommand.Description = "Remove parts of the process history that are not needed to restore the process.";
@@ -634,7 +634,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddCompileCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddCompileCommand(CommandLineApplication app) =>
         app.Command("compile", compileCommand =>
         {
             compileCommand.Description = "Compile app source code the same way as would be done when deploying.";
@@ -657,7 +657,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddElmTestRsCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddElmTestRsCommand(CommandLineApplication app) =>
         app.Command("elm-test-rs", elmTestRsCommand =>
         {
             elmTestRsCommand.Description = "Compile and run tests using the interface of elm-test-rs. The compilation integrates interfaces such as SourceFiles.";
@@ -735,7 +735,7 @@ public class Program
             });
         });
 
-    static (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
+    private static (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileAppAndSaveCompositionToZipArchive(string sourcePath)
     {
         var compileResult = CompileApp(sourcePath);
@@ -760,7 +760,7 @@ public class Program
         return compileResult;
     }
 
-    static public (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
+    public static (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileApp(string sourcePath)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -857,7 +857,7 @@ public class Program
         }
     }
 
-    static CommandLineApplication AddInteractiveCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddInteractiveCommand(CommandLineApplication app) =>
         app.Command("interactive", interactiveCommand =>
         {
             interactiveCommand.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
@@ -1267,7 +1267,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddDescribeCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddDescribeCommand(CommandLineApplication app) =>
         app.Command("describe", describeCommand =>
         {
             describeCommand.Description = "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.";
@@ -1332,7 +1332,7 @@ public class Program
             });
         });
 
-    static CommandLineApplication AddMakeCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddMakeCommand(CommandLineApplication app) =>
         app.Command("make", makeCommand =>
         {
             makeCommand.Description = "The `make` command compiles Elm code into JS, HTML, or other files.";
@@ -1434,7 +1434,7 @@ public class Program
     /// <summary>
     /// Compiles Elm code as offered with the 'make' command on the CLI.
     /// </summary>
-    static public Result<string, Elm019Binaries.ElmMakeOk> Make(
+    public static Result<string, Elm019Binaries.ElmMakeOk> Make(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
@@ -1514,7 +1514,7 @@ public class Program
             });
     }
 
-    static public IEnumerable<string> DescribeCompositionForHumans(
+    public static IEnumerable<string> DescribeCompositionForHumans(
         TreeNodeWithStringPath composition,
         bool listBlobs,
         string? extractBlobName)
@@ -1565,7 +1565,7 @@ public class Program
         }
     }
 
-    static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
+    private static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
         app.Command("run-cache-server", runCacheServerCmd =>
         {
             runCacheServerCmd.Description = "Run an HTTP server to cache popular parts of git repositories.";
@@ -1603,7 +1603,7 @@ public class Program
             });
         });
 
-    static Func<string?, string?> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(
+    private static Func<string?, string?> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(
         CommandLineApplication cmd, string? siteName = null)
     {
         siteName ??= "site";
@@ -1613,12 +1613,12 @@ public class Program
         return site => site == null ? null : sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
     }
 
-    static CommandArgument ProcessSiteArgumentOnCommand(CommandLineApplication cmd) =>
+    private static CommandArgument ProcessSiteArgumentOnCommand(CommandLineApplication cmd) =>
         cmd
         .Argument("process-site", "Path to the admin interface of the server running the process.")
         .IsRequired(allowEmptyStrings: false);
 
-    static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption) AddElmEngineOptionOnCommand(
+    private static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption) AddElmEngineOptionOnCommand(
         CommandLineApplication cmd,
         string? defaultFromEnvironmentVariablePrefix,
         Func<ElmInteractive.ElmEngineType?, ElmInteractive.ElmEngineType> defaultEngineConsideringEnvironmentVariable)
@@ -1650,7 +1650,7 @@ public class Program
         return (elmEngineOption, parseElmEngineTypeFromOption);
     }
 
-    static public ElmInteractive.ElmEngineType? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
+    public static ElmInteractive.ElmEngineType? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
     {
         var environmentVariable =
             environmentVariablePrefix?.TrimEnd('_') +
@@ -1666,14 +1666,14 @@ public class Program
         return null;
     }
 
-    static public string ElmMakeHomeDirectoryPath =>
+    public static string ElmMakeHomeDirectoryPath =>
         Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
 
-    static public IFileStore ElmMakeResultCacheFileStoreDefault =>
+    public static IFileStore ElmMakeResultCacheFileStoreDefault =>
         new FileStoreFromSystemIOFile(
             Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", AppVersionId));
 
-    static public void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
+    public static void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
     {
         var colorBefore = Console.ForegroundColor;
 
@@ -1684,14 +1684,14 @@ public class Program
         Console.ForegroundColor = colorBefore;
     }
 
-    static public void DotNetConsoleWriteProblemCausingAbort(string line)
+    public static void DotNetConsoleWriteProblemCausingAbort(string line)
     {
         Console.WriteLine("");
 
         DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
     }
 
-    static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
+    private static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
     {
         var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(sourceTree));
 
@@ -1746,7 +1746,7 @@ public class Program
         int? statusCode,
         object body);
 
-    static public DeployAppReport DeployApp(
+    public static DeployAppReport DeployApp(
         string sourcePath,
         string site,
         string? siteDefaultPassword,
@@ -1893,7 +1893,7 @@ public class Program
         );
     }
 
-    static public ApplyFunctionReport ApplyFunction(
+    public static ApplyFunctionReport ApplyFunction(
         string site,
         string functionName,
         IReadOnlyList<string> serializedArgumentsJson,
@@ -1979,7 +1979,7 @@ public class Program
         );
     }
 
-    static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string? enteredPassword)>
+    private static async System.Threading.Tasks.Task<(System.Net.Http.HttpResponseMessage httpResponse, string? enteredPassword)>
         AttemptHttpRequest(
         Func<System.Net.Http.HttpRequestMessage> buildRequestBeforeAddingCommonHeaders,
         string? defaultPassword,
@@ -2023,7 +2023,7 @@ public class Program
         return (httpResponse, enteredPassword);
     }
 
-    static string MapSiteForCommandLineArgument(string siteArgument)
+    private static string MapSiteForCommandLineArgument(string siteArgument)
     {
         if (LooksLikeLocalSite(siteArgument))
             return siteArgument;
@@ -2031,7 +2031,7 @@ public class Program
         return MapUriForForAdminInterface(siteArgument).ToString();
     }
 
-    static Uri MapUriForForAdminInterface(string uriString)
+    private static Uri MapUriForForAdminInterface(string uriString)
     {
         if (!Uri.IsWellFormedUriString(uriString, UriKind.Absolute))
         {
@@ -2045,7 +2045,7 @@ public class Program
         return MapUriForDefaultPort(uriString, AdminInterfaceDefaultPort);
     }
 
-    static Uri MapUriForDefaultPort(string uriString, int defaultPort)
+    private static Uri MapUriForDefaultPort(string uriString, int defaultPort)
     {
         var uri = new Uri(uriString);
 
@@ -2055,7 +2055,7 @@ public class Program
         return uri;
     }
 
-    static bool LooksLikeLocalSite(string site)
+    private static bool LooksLikeLocalSite(string site)
     {
         if (site.StartsWith(".") || site.StartsWith("/"))
             return true;
@@ -2072,7 +2072,7 @@ public class Program
         return false;
     }
 
-    static public Uri WithPort(Uri uri, int newPort)
+    public static Uri WithPort(Uri uri, int newPort)
     {
         var builder = new UriBuilder(uri)
         {
@@ -2081,7 +2081,7 @@ public class Program
         return builder.Uri;
     }
 
-    record CopyElmAppStateReport(
+    private record CopyElmAppStateReport(
         string beginTime,
         string source,
 
@@ -2105,7 +2105,7 @@ public class Program
 
     public record AppStateSummary(string hash, int length);
 
-    static CopyElmAppStateReport CopyElmAppState(
+    private static CopyElmAppStateReport CopyElmAppState(
         string source,
         string? sourceDefaultPassword,
         string? destination,
@@ -2197,7 +2197,7 @@ public class Program
 
     }
 
-    static ResponseFromServerReport SetElmAppStateViaAdminInterface(
+    private static ResponseFromServerReport SetElmAppStateViaAdminInterface(
         string site,
         string? siteDefaultPassword,
         byte[] elmAppStateSerialized,
@@ -2249,7 +2249,7 @@ public class Program
         );
     }
 
-    static byte[] GetElmAppStateViaAdminInterface(
+    private static byte[] GetElmAppStateViaAdminInterface(
         string site,
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
@@ -2277,13 +2277,13 @@ public class Program
         return elmAppStateSerialized;
     }
 
-    record TruncateProcessHistoryReport(
+    private record TruncateProcessHistoryReport(
         string beginTime,
         string site,
         ResponseFromServerReport responseFromServer,
         int totalTimeSpentMilli);
 
-    static TruncateProcessHistoryReport TruncateProcessHistory(
+    private static TruncateProcessHistoryReport TruncateProcessHistory(
         string site,
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
@@ -2335,7 +2335,7 @@ public class Program
         );
     }
 
-    static (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
+    private static (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
         string sourceAdminInterface,
         string? sourceAdminPassword)
     {
@@ -2383,7 +2383,7 @@ public class Program
         return Platform.WebServer.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }
 
-    static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
+    private static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
         string sourcePath, string? sourcePassword)
     {
         if (!LooksLikeLocalSite(sourcePath))
@@ -2409,7 +2409,7 @@ public class Program
                 .EnumerateBlobsTransitive());
     }
 
-    static public void ReplicateProcessAndLogToConsole(
+    public static void ReplicateProcessAndLogToConsole(
         string site,
         string sitePassword,
         string sourcePath,
@@ -2451,7 +2451,7 @@ public class Program
              httpResponse.Content.ReadAsStringAsync().Result);
     }
 
-    static (string commandName, Func<(bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)> checkInstallation)
+    private static (string commandName, Func<(bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)> checkInstallation)
         CheckIfExecutableIsRegisteredOnPath()
     {
         var environmentVariableName = "PATH";
@@ -2534,9 +2534,9 @@ public class Program
         return (commandName, checkInstallation);
     }
 
-    static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-time-tool", "report");
+    private static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-time-tool", "report");
 
-    static void WriteReportToFileInReportDirectory(string reportContent, string reportKind)
+    private static void WriteReportToFileInReportDirectory(string reportContent, string reportKind)
     {
         var fileName = CommonConversion.TimeStringViewForReport(programStartTime) + "_" + reportKind;
 
@@ -2549,10 +2549,10 @@ public class Program
         Console.WriteLine("Saved report to file '" + filePath + "'.");
     }
 
-    static string? GetCurrentProcessExecutableFilePath() =>
+    private static string? GetCurrentProcessExecutableFilePath() =>
         System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
 
-    static System.Net.Http.HttpRequestMessage AddUserAgentHeader(
+    private static System.Net.Http.HttpRequestMessage AddUserAgentHeader(
         System.Net.Http.HttpRequestMessage httpRequest)
     {
         httpRequest.Headers.UserAgent.Add(
@@ -2562,9 +2562,9 @@ public class Program
         return httpRequest;
     }
 
-    static readonly DateTimeOffset programStartTime = DateTimeOffset.UtcNow;
+    private static readonly DateTimeOffset programStartTime = DateTimeOffset.UtcNow;
 
-    static public (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
+    public static (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
         CompileAndElmTestRs(string source)
     {
         var (_, compiledAppFiles) = CompileApp(source);

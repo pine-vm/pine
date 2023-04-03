@@ -6,9 +6,9 @@ using System.Numerics;
 
 namespace Pine.PineVM;
 
-static public class KernelFunction
+public static class KernelFunction
 {
-    static public Result<string, PineValue> equal(PineValue value) =>
+    public static Result<string, PineValue> equal(PineValue value) =>
         Result<string, PineValue>.ok(
             PineVM.ValueFromBool(
                 value switch
@@ -27,17 +27,17 @@ static public class KernelFunction
                 }
             ));
 
-    static public Result<string, PineValue> logical_not(PineValue value) =>
+    public static Result<string, PineValue> logical_not(PineValue value) =>
         PineVM.DecodeBoolFromValue(value)
             .Map(b => PineVM.ValueFromBool(!b));
 
-    static public Result<string, PineValue> logical_and(PineValue value) =>
+    public static Result<string, PineValue> logical_and(PineValue value) =>
         KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: true, func: (a, b) => a && b), value);
 
-    static public Result<string, PineValue> logical_or(PineValue value) =>
+    public static Result<string, PineValue> logical_or(PineValue value) =>
         KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: false, func: (a, b) => a || b), value);
 
-    static public Result<string, PineValue> length(PineValue value) =>
+    public static Result<string, PineValue> length(PineValue value) =>
         Result<string, PineValue>.ok(
             PineValueAsInteger.ValueFromSignedInteger(
                 value switch
@@ -47,14 +47,14 @@ static public class KernelFunction
                     _ => throw new NotImplementedException()
                 }));
 
-    static public Result<string, PineValue> skip(PineValue value) =>
+    public static Result<string, PineValue> skip(PineValue value) =>
         KernelFunctionExpectingExactlyTwoArguments(
                 PineValueAsInteger.SignedIntegerFromValue,
                 Result<string, PineValue>.ok,
                 compose: skip)
             (value);
 
-    static public Result<string, PineValue> skip(BigInteger count, PineValue value) =>
+    public static Result<string, PineValue> skip(BigInteger count, PineValue value) =>
         Result<string, PineValue>.ok(
             value switch
             {
@@ -63,14 +63,14 @@ static public class KernelFunction
                 _ => throw new NotImplementedException()
             });
 
-    static public Result<string, PineValue> take(PineValue value) =>
+    public static Result<string, PineValue> take(PineValue value) =>
         KernelFunctionExpectingExactlyTwoArguments(
                 PineValueAsInteger.SignedIntegerFromValue,
                 Result<string, PineValue>.ok,
                 compose: take)
             (value);
 
-    static public Result<string, PineValue> take(BigInteger count, PineValue value) =>
+    public static Result<string, PineValue> take(BigInteger count, PineValue value) =>
         Result<string, PineValue>.ok(
             value switch
             {
@@ -80,7 +80,7 @@ static public class KernelFunction
                 _ => throw new NotImplementedException()
             });
 
-    static public Result<string, PineValue> reverse(PineValue value) =>
+    public static Result<string, PineValue> reverse(PineValue value) =>
         Result<string, PineValue>.ok(
             value switch
             {
@@ -89,7 +89,7 @@ static public class KernelFunction
                 _ => throw new NotImplementedException()
             });
 
-    static public Result<string, PineValue> concat(PineValue value) =>
+    public static Result<string, PineValue> concat(PineValue value) =>
         PineVM.DecodePineListValue(value)
             .Map(list =>
                 list.Aggregate(
@@ -115,33 +115,33 @@ static public class KernelFunction
                             _ => throw new NotImplementedException()
                         }));
 
-    static public Result<string, PineValue> list_head(PineValue value) =>
+    public static Result<string, PineValue> list_head(PineValue value) =>
         PineVM.DecodePineListValue(value)
             .Map(list => list.Count < 1 ? PineValue.EmptyList : list[0]);
 
-    static public Result<string, PineValue> neg_int(PineValue value) =>
+    public static Result<string, PineValue> neg_int(PineValue value) =>
         PineValueAsInteger.SignedIntegerFromValue(value)
             .Map(i => PineValueAsInteger.ValueFromSignedInteger(-i));
 
-    static public Result<string, PineValue> add_int(PineValue value) =>
+    public static Result<string, PineValue> add_int(PineValue value) =>
         KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
             (firstInt, otherInts) => Result<string, BigInteger>.ok(
                 otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate + next)),
             value);
 
-    static public Result<string, PineValue> sub_int(PineValue value) =>
+    public static Result<string, PineValue> sub_int(PineValue value) =>
         KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
             (firstInt, otherInts) => Result<string, BigInteger>.ok(
                 otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate - next)),
             value);
 
-    static public Result<string, PineValue> mul_int(PineValue value) =>
+    public static Result<string, PineValue> mul_int(PineValue value) =>
         KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
             (firstInt, otherInts) => Result<string, BigInteger>.ok(
                 otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate * next)),
             value);
 
-    static public Result<string, PineValue> div_int(PineValue value) =>
+    public static Result<string, PineValue> div_int(PineValue value) =>
         KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
             (firstInt, otherInts) =>
                 otherInts.Contains(0) ?
@@ -150,10 +150,10 @@ static public class KernelFunction
                     Result<string, BigInteger>.ok(otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next)),
             value);
 
-    static public Result<string, PineValue> is_sorted_ascending_int(PineValue value) =>
+    public static Result<string, PineValue> is_sorted_ascending_int(PineValue value) =>
         Result<string, PineValue>.ok(PineVM.ValueFromBool(sort_int(value) == value));
 
-    static public PineValue sort_int(PineValue value) =>
+    public static PineValue sort_int(PineValue value) =>
         value switch
         {
             PineValue.ListValue list =>
@@ -166,9 +166,9 @@ static public class KernelFunction
             _ => value,
         };
 
-    static readonly BlobValueIntComparer valueComparerInt = new();
+    private static readonly BlobValueIntComparer valueComparerInt = new();
 
-    class BlobValueIntComparer : IComparer<PineValue>
+    private class BlobValueIntComparer : IComparer<PineValue>
     {
         public int Compare(PineValue? x, PineValue? y) =>
             (x, y) switch
@@ -196,7 +196,7 @@ static public class KernelFunction
             };
     }
 
-    static Result<string, PineValue> KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
+    private static Result<string, PineValue> KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
         Func<BigInteger, IReadOnlyList<BigInteger>, Result<string, BigInteger>> aggregate,
         PineValue value) =>
         KernelFunctionExpectingListOfBigInt(
@@ -210,14 +210,14 @@ static public class KernelFunction
                 .Map(PineValueAsInteger.ValueFromSignedInteger),
             value);
 
-    static Result<string, PineValue> KernelFunctionExpectingListOfBigInt(
+    private static Result<string, PineValue> KernelFunctionExpectingListOfBigInt(
         Func<IReadOnlyList<BigInteger>, Result<string, PineValue>> aggregate,
         PineValue value) =>
         PineVM.DecodePineListValue(value)
             .AndThen(list => PineVM.ResultListMapCombine(list, PineValueAsInteger.SignedIntegerFromValue))
             .AndThen(ints => aggregate(ints));
 
-    static Func<PineValue, Result<string, PineValue>> KernelFunctionExpectingExactlyTwoArguments<ArgA, ArgB>(
+    private static Func<PineValue, Result<string, PineValue>> KernelFunctionExpectingExactlyTwoArguments<ArgA, ArgB>(
         Func<PineValue, Result<string, ArgA>> decodeArgA,
         Func<PineValue, Result<string, ArgB>> decodeArgB,
         Func<ArgA, ArgB, Result<string, PineValue>> compose) =>
@@ -229,7 +229,7 @@ static public class KernelFunction
                         decodeArgB(argsValues.Item2)
                             .AndThen(argB => compose(argA, argB))));
 
-    static Result<string, PineValue> KernelFunctionExpectingListOfTypeBool(
+    private static Result<string, PineValue> KernelFunctionExpectingListOfTypeBool(
         Func<IReadOnlyList<bool>, bool> compose,
         PineValue value) =>
         PineVM.DecodePineListValue(value)
