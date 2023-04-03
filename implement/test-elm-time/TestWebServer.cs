@@ -679,8 +679,8 @@ public class TestWebServer
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 CollectionAssert.AreEqual(
-                    PineValueComposition.GetHashSorted(deploymentTree).ToArray(),
-                    PineValueComposition.GetHashSorted(responseAppConfigTree).ToArray(),
+                    PineValueHashTree.ComputeHashSorted(deploymentTree).ToArray(),
+                    PineValueHashTree.ComputeHashSorted(responseAppConfigTree).ToArray(),
                     "Get the same configuration back.");
             }
 
@@ -1356,7 +1356,7 @@ public class TestWebServer
 
             Assert.AreEqual(
                 deployReport.filteredSourceCompositionId,
-                CommonConversion.StringBase16(PineValueComposition.GetHash(restoredProcessLastDeployedAppComponent)),
+                CommonConversion.StringBase16(PineValueHashTree.ComputeHash(restoredProcessLastDeployedAppComponent)),
                 "App ID in restored process equals app ID from deployment report.");
         }
 

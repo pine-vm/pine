@@ -343,7 +343,7 @@ public class StartupAdminInterface
 
                     var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
 
-                    var deploymentHashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(deploymentPineValue));
+                    var deploymentHashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(deploymentPineValue));
 
                     logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
 
@@ -392,7 +392,7 @@ public class StartupAdminInterface
                                 return;
                             }
 
-                            var appConfigHashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(appConfig));
+                            var appConfigHashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfig));
 
                             var appConfigTreeResult = PineValueComposition.ParseAsTreeWithStringPath(appConfig);
 
@@ -449,7 +449,7 @@ public class StartupAdminInterface
                             var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
 
                             var elmAppStateReductionComponent =
-                                components.First(c => CommonConversion.StringBase16(PineValueComposition.GetHash(c)) == elmAppStateReductionHashBase16);
+                                components.First(c => CommonConversion.StringBase16(PineValueHashTree.ComputeHash(c)) == elmAppStateReductionHashBase16);
 
                             if(elmAppStateReductionComponent is not PineValue.BlobValue elmAppStateReductionComponentBlob)
                                 throw   new Exception("elmAppStateReductionComponent is not a blob");

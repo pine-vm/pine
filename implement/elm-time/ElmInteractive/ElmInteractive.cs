@@ -216,12 +216,12 @@ public class ElmInteractive
 
             var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(blob => PineValue.Blob(blob)).ToImmutableList());
 
-            var selfHash = GetHash(selfValue);
+            var selfHash = PineValueHashTree.ComputeHash(selfValue);
 
             if (parent is null)
                 return selfHash;
 
-            return GetHash(PineValue.List(new[] { PineValue.Blob(selfHash), PineValue.Blob(parent.Hash) }));
+            return PineValueHashTree.ComputeHash(PineValue.List(new[] { PineValue.Blob(selfHash), PineValue.Blob(parent.Hash) }));
         }
 
         public virtual bool Equals(CompileInteractiveEnvironmentResult? other)

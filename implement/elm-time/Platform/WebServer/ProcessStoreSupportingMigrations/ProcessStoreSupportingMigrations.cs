@@ -144,7 +144,7 @@ public record CompositionLogRecordInFile(
         CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
 
     static public ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
-        PineValueComposition.GetHash(PineValue.Blob(compositionRecord));
+        PineValueHashTree.ComputeHash(PineValue.Blob(compositionRecord));
 
     public record CompositionEvent(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -283,12 +283,12 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
             return null;
 
         return
-            PineValueComposition.Deserialize(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
+            PineValueHashTree.DeserializeFromHashTree(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
             .Unpack(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
                 {
-                    if (CommonConversion.StringBase16(PineValueComposition.GetHash(loadComponentResult)) != componentHashBase16)
+                    if (CommonConversion.StringBase16(PineValueHashTree.ComputeHash(loadComponentResult)) != componentHashBase16)
                         throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
                     return loadComponentResult;
@@ -564,7 +564,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(PineValue component)
     {
-        var (serialRepresentation, dependencies) = PineValueComposition.GetSerialRepresentationAndDependencies(component);
+        var (serialRepresentation, dependencies) = PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component);
 
         var hash = CommonConversion.HashSHA256(serialRepresentation);
 

@@ -156,28 +156,28 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         this.adminWebHostUrlOverride = adminWebHostUrlOverride;
         this.publicWebHostUrlOverride = publicWebHostUrlOverride;
 
-        if (deployAppAndInitElmState != null)
-        {
-            var compositionLogEvent =
-                new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
-                {
-                    DeployAppConfigAndInitElmAppState =
-                        new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
-                        {
-                            HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(deployAppAndInitElmState))
-                        }
-                };
+        if (deployAppAndInitElmState is null)
+            return;
 
-            var processStoreWriter =
-                new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+        var compositionLogEvent =
+            new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
+            {
+                DeployAppConfigAndInitElmAppState =
+                    new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
+                    {
+                        HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(deployAppAndInitElmState))
+                    }
+            };
+
+        var processStoreWriter =
+            new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                 fileStore,
                 getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
                 fileStore);
 
-            processStoreWriter.StoreComponent(deployAppAndInitElmState);
+        processStoreWriter.StoreComponent(deployAppAndInitElmState);
 
-            processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
-        }
+        processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
     }
 
     public IFileStoreReader BuildProcessStoreFileStoreReaderInFileDirectory() =>

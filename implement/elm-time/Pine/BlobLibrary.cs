@@ -44,8 +44,8 @@ public class BlobLibrary
             if (blobCandidate == null)
                 return null;
 
-            if (!(PineValueComposition.GetHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
-                System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
+            if (!(PineValueHashTree.ComputeHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
+                  System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
                 return null;
 
             return blobCandidate;
@@ -204,7 +204,7 @@ public class BlobLibrary
 
     static public Func<ReadOnlyMemory<byte>, bool> BlobHasSHA256(ReadOnlyMemory<byte> sha256) =>
         blobCandidate =>
-        PineValueComposition.GetHash(PineValue.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
+        PineValueHashTree.ComputeHash(PineValue.Blob(blobCandidate)).Span.SequenceEqual(sha256.Span) ||
         System.Security.Cryptography.SHA256.HashData(blobCandidate.Span).AsSpan().SequenceEqual(sha256.Span);
 
     static public IEnumerable<ReadOnlyMemory<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -33,14 +33,13 @@ public abstract record ProcessWithLog<LogEntryT, ResultT>
 
     public ProcessWithLog<LogEntryT, ResultT> WithLogEntryAdded(
         LogEntryT logEntry) =>
-        Continue(result => new ProcessWithLog<LogEntryT, ResultT>.LogEntry(
-            logEntry, () => new ProcessWithLog<LogEntryT, ResultT>.Result(result)));
+        Continue(result => new LogEntry(logEntry, () => new Result(result)));
 
     public ProcessWithLog<LogEntryT, ResultT> WithLogEntryFromResultAdded(
         Func<ResultT, LogEntryT> logEntry) =>
-        Continue(result => new ProcessWithLog<LogEntryT, ResultT>.LogEntry(
+        Continue(result => new LogEntry(
             logEntry(result),
-            () => new ProcessWithLog<LogEntryT, ResultT>.Result(result)));
+            () => new Result(result)));
 }
 
 static public class ProcessWithLogExtension

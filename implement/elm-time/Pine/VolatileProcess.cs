@@ -328,7 +328,7 @@ public class VolatileProcess
                     if (assembly == null)
                         return new ImmutableArray<PortableExecutableReference>();
 
-                    if (!PineValueComposition.GetHash(PineValue.Blob(assembly)).Span.SequenceEqual(hash) &&
+                    if (!PineValueHashTree.ComputeHash(PineValue.Blob(assembly)).Span.SequenceEqual(hash) &&
                         !CommonConversion.HashSHA256(assembly).Span.SequenceEqual(hash))
                         return new ImmutableArray<PortableExecutableReference>();
 

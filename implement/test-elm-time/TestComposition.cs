@@ -213,13 +213,13 @@ public class TestComposition
             {
                 input = PineValue.Blob(new byte[]{0,1,2}),
                 expectedHashBase16 = CommonConversion.StringBase16(
-                    CommonConversion.HashSHA256(Encoding.ASCII.GetBytes("blob 3\0").Concat(new byte[]{0,1,2}).ToArray()))
+                    CommonConversion.HashSHA256("blob 3\0"u8.ToArray().Concat(new byte[]{0,1,2}).ToArray()))
             },
         };
 
         foreach (var testCase in testCases)
         {
-            var hash = PineValueComposition.GetHash(testCase.input);
+            var hash = PineValueHashTree.ComputeHash(testCase.input);
 
             Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16(hash), ignoreCase: true);
         }

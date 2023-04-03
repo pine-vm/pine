@@ -770,7 +770,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         {
                             SetElmAppState = new ValueInFileStructure
                             {
-                                HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent))
+                                HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(elmAppStateComponent))
                             }
                         };
 
@@ -918,13 +918,13 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     ? null
                     : new ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent))
+                        HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(elmAppStateComponent))
                     },
                 appConfig:
                     new ValueInFileStructure
                     {
                         HashBase16 = CommonConversion.StringBase16(
-                            PineValueComposition.GetHash(lastAppConfig.appConfigComponent)),
+                            PineValueHashTree.ComputeHash(lastAppConfig.appConfigComponent)),
                     }
             );
 

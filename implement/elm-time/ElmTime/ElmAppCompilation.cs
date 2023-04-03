@@ -45,7 +45,7 @@ namespace ElmTime
             ElmAppInterfaceConfig interfaceConfig)
         {
             var sourceFilesHash =
-                CommonConversion.StringBase16(PineValueComposition.GetHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
+                CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
 
             var compilationHash =
                 CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
@@ -419,9 +419,8 @@ namespace ElmTime
         {
             var compilerId =
                 CommonConversion.StringBase16(
-                    PineValueComposition.GetHash(
-                        PineValueComposition.FromTreeWithStringPath(
-                            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles))));
+                    PineValueHashTree.ComputeHashSorted(
+                        PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles)));
 
             return FileTreeCompilerJsEngineCache.GetOrAdd(
                 compilerId,

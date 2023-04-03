@@ -369,11 +369,12 @@ public class PublicAppState
 
             _ => throw new NotImplementedException("Unexpected task structure.")
         };
+
     byte[]? GetBlobWithSHA256(byte[] sha256)
     {
         var matchFromSourceComposition =
             serverAndElmAppConfig?.SourceComposition == null ? null :
-            PineValueComposition.FindComponentByHash(serverAndElmAppConfig.SourceComposition, sha256);
+                PineValueHashTree.FindNodeByHash(serverAndElmAppConfig.SourceComposition, sha256);
 
         if (matchFromSourceComposition != null)
         {

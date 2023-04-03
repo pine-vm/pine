@@ -75,7 +75,7 @@ public class PineCompileToDotNet
                     {
                         var expressionValue = PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
 
-                        var expressionHash = CommonConversion.StringBase16(PineValueComposition.GetHash(expressionValue))[..10];
+                        var expressionHash = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(expressionValue))[..10];
 
                         var functionName = "expr_function_" + expressionHash[..10];
 
@@ -1025,7 +1025,7 @@ public class PineCompileToDotNet
                 .Extract(err => throw new Exception(err));
 
         var decodeAndEvaluateExpressionHash =
-            CommonConversion.StringBase16(PineValueComposition.GetHash(decodeAndEvaluateExpressionValue));
+            CommonConversion.StringBase16(PineValueHashTree.ComputeHash(decodeAndEvaluateExpressionValue));
 
         return
             Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
@@ -1156,7 +1156,7 @@ public class PineCompileToDotNet
     }
 
     static public string DeclarationNameForValue(PineValue pineValue) =>
-        "value_" + CommonConversion.StringBase16(PineValueComposition.GetHash(pineValue))[..10];
+        "value_" + CommonConversion.StringBase16(PineValueHashTree.ComputeHash(pineValue))[..10];
 
     static public Result<string, (ExpressionSyntax expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,

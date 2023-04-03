@@ -27,7 +27,7 @@ public class TestPineCompileToDotNet
 
         var listWithHashes =
             listBeforeOrdering
-            .Select(value => (value, hash: CommonConversion.StringBase16(PineValueComposition.GetHash(value))))
+            .Select(value => (value, hash: CommonConversion.StringBase16(PineValueHashTree.ComputeHash(value))))
             .ToImmutableList();
 
         var orderedValues = PineCompileToDotNet.OrderValuesByContainment(listBeforeOrdering).ToImmutableList();

@@ -1,4 +1,4 @@
-﻿using Pine;
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -59,7 +59,7 @@ public static class Elm019Binaries
     {
         var elmCodeFilesHash =
             CommonConversion.StringBase16(
-                PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles))));
+                PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles)));
 
         var requestIdentifer = new ElmMakeRequestIdentifier(
             elmCodeFilesHash: elmCodeFilesHash,

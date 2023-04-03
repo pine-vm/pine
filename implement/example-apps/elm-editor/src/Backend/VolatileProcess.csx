@@ -180,7 +180,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
 
                     var composition = Pine.PineValueComposition.FromTreeWithStringPath(loadFromGitOk.tree);
 
-                    var compositionId = Pine.CommonConversion.StringBase16(Pine.PineValueComposition.GetHash(composition));
+                    var compositionId = Pine.CommonConversion.StringBase16(Pine.PineValueHashTree.ComputeHash(composition));
 
                     var blobs =
                         loadFromGitOk.tree.EnumerateBlobsTransitive()

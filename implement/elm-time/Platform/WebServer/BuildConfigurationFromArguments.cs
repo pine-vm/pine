@@ -32,7 +32,7 @@ static public class BuildConfigurationFromArguments
 
         var filteredSourceComposition = PineValueComposition.FromTreeWithStringPath(filteredSourceTree);
 
-        var filteredSourceCompositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(filteredSourceComposition));
+        var filteredSourceCompositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(filteredSourceComposition));
 
         Console.WriteLine("Loaded source composition " + filteredSourceCompositionId + " from '" + sourcePath + "'.");
 

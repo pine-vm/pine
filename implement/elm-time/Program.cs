@@ -371,7 +371,7 @@ public class Program
                     var appConfigValueInFile =
                         new Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                         {
-                            HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(appConfigComponent))
+                            HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfigComponent))
                         };
 
                     var initElmAppState =
@@ -829,7 +829,7 @@ public class Program
 
                         var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
                         var compiledComposition = PineValueComposition.FromTreeWithStringPath(compiledTree);
-                        var compiledCompositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(compiledComposition));
+                        var compiledCompositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(compiledComposition));
 
                         compilationStopwatch.Stop();
 
@@ -986,7 +986,7 @@ public class Program
                             {
                                 var asComposition = PineValueComposition.FromTreeWithStringPath(loadedScenario.component);
 
-                                var hashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(asComposition));
+                                var hashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(asComposition));
 
                                 return new
                                 {
@@ -1012,7 +1012,7 @@ public class Program
                             PineValueComposition.FromTreeWithStringPath(aggregateCompositionTree);
 
                         var aggregateCompositionHash =
-                            CommonConversion.StringBase16(PineValueComposition.GetHash(aggregateComposition));
+                            CommonConversion.StringBase16(PineValueHashTree.ComputeHash(aggregateComposition));
 
                         console.WriteLine(
                             "Succesfully loaded " + namedDistinctScenarios.Count +
@@ -1297,7 +1297,7 @@ public class Program
 
                 var composition = PineValueComposition.FromTreeWithStringPath(loadCompositionResult.tree);
 
-                var compositionId = CommonConversion.StringBase16(PineValueComposition.GetHash(composition));
+                var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(composition));
 
                 Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
@@ -1396,7 +1396,7 @@ public class Program
                     },
                     fromOk: loadInputOk =>
                     {
-                        var inputHash = CommonConversion.StringBase16(PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(loadInputOk.tree)));
+                        var inputHash = CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(loadInputOk.tree));
 
                         Console.WriteLine(
                             "Loaded " + inputHash[..10] + " as input: " +
@@ -1535,7 +1535,7 @@ public class Program
                         blobs.Select(blobAtPath =>
                         string.Join("/", blobAtPath.path) + " : " +
                         blobAtPath.blobContent.Length + " bytes, " +
-                        CommonConversion.StringBase16(PineValueComposition.GetHash(PineValue.Blob(blobAtPath.blobContent)))[..10]));
+                        CommonConversion.StringBase16(PineValueHashTree.ComputeHash(PineValue.Blob(blobAtPath.blobContent)))[..10]));
 
             yield break;
         }
@@ -1549,7 +1549,7 @@ public class Program
                 foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, blob.Bytes))
                 {
                     var extractedTreeCompositionId =
-                        CommonConversion.StringBase16(PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(extractedTree)));
+                        CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(extractedTree));
 
                     var compositionDescription =
                         string.Join(
@@ -1693,7 +1693,7 @@ public class Program
 
     static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
     {
-        var compositionId = CommonConversion.StringBase16(PineValueComposition.GetHashSorted(sourceTree));
+        var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(sourceTree));
 
         var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
@@ -1767,16 +1767,12 @@ public class Program
 
         var appConfigZipArchive = buildResult.configZipArchive;
 
-        var appConfigZipArchiveFileId =
-            CommonConversion.StringBase16(CommonConversion.HashSHA256(appConfigZipArchive));
-
-        var filteredSourceCompositionId =
+        var compiledCompositionId =
             CommonConversion.StringBase16(
-                PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                    ZipArchive.EntriesFromZipArchive(appConfigZipArchive)))));
+                PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    ZipArchive.EntriesFromZipArchive(appConfigZipArchive))));
 
-        Console.WriteLine(
-            "Built app config " + filteredSourceCompositionId + " from " + sourceCompositionId + ".");
+        Console.WriteLine("Built app config " + compiledCompositionId + " from " + sourceCompositionId + ".");
 
         ResponseFromServerReport? responseFromServer = null;
 
@@ -1794,7 +1790,7 @@ public class Program
                     :
                     Platform.WebServer.StartupAdminInterface.PathApiDeployAndMigrateAppState);
 
-                Console.WriteLine("Attempting to deploy app '" + filteredSourceCompositionId + "' to '" + deployAddress + "'...");
+                Console.WriteLine("Attempting to deploy app '" + compiledCompositionId + "' to '" + deployAddress + "'...");
 
                 var httpResponse = AttemptHttpRequest(() =>
                     {
@@ -1802,7 +1798,7 @@ public class Program
 
                         httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
                         httpContent.Headers.ContentDisposition =
-                            new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = filteredSourceCompositionId + ".zip" };
+                            new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = compiledCompositionId + ".zip" };
 
                         return new System.Net.Http.HttpRequestMessage
                         {
@@ -1855,7 +1851,7 @@ public class Program
                 var appConfigValueInFile =
                     new Platform.WebServer.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16(PineValueComposition.GetHash(appConfigComponent))
+                        HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfigComponent))
                     };
 
                 var compositionLogEvent =
@@ -1890,7 +1886,7 @@ public class Program
             sourcePath: sourcePath,
             sourceCompositionId: sourceCompositionId,
             sourceSummary: sourceSummary,
-            filteredSourceCompositionId: filteredSourceCompositionId,
+            filteredSourceCompositionId: compiledCompositionId,
             responseFromServer: responseFromServer,
             deployException: deployException?.ToString(),
             totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
@@ -2152,7 +2148,7 @@ public class Program
         }
 
         var appStateComponent = PineValue.Blob(appStateSerial);
-        var appStateId = CommonConversion.StringBase16(PineValueComposition.GetHash(appStateComponent));
+        var appStateId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appStateComponent));
 
         report = report with { appStateSummary = new AppStateSummary(hash: appStateId, length: appStateSerial.Length) };
 
@@ -2213,7 +2209,7 @@ public class Program
 
         var elmAppStateComponent = PineValue.Blob(elmAppStateSerialized);
 
-        var elmAppStateId = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent));
+        var elmAppStateId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(elmAppStateComponent));
 
         var httpResponse = AttemptHttpRequest(() =>
             {
@@ -2276,7 +2272,7 @@ public class Program
         var elmAppStateSerialized = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
         var elmAppStateComponent = PineValue.Blob(elmAppStateSerialized);
-        var elmAppStateId = CommonConversion.StringBase16(PineValueComposition.GetHash(elmAppStateComponent));
+        var elmAppStateId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(elmAppStateComponent));
 
         return elmAppStateSerialized;
     }
@@ -2425,7 +2421,7 @@ public class Program
         var processHistoryTree =
             PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
 
-        var processHistoryComponentHash = PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(processHistoryTree));
+        var processHistoryComponentHash = PineValueHashTree.ComputeHashNotSorted(processHistoryTree);
         var processHistoryComponentHashBase16 = CommonConversion.StringBase16(processHistoryComponentHash);
 
         var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);

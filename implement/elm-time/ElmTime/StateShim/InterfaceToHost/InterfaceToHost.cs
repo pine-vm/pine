@@ -1,4 +1,4 @@
-﻿using Pine;
+using Pine;
 using Pine.Json;
 using System;
 using System.Collections.Generic;
@@ -31,7 +31,7 @@ public abstract record StateShimRequestStruct
         : StateShimRequestStruct;
 
     public string SerializeToJsonString() =>
-        System.Text.Json.JsonSerializer.Serialize(this);
+        JsonSerializer.Serialize(this);
 }
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]

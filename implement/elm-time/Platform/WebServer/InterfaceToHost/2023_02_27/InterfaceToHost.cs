@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace ElmTime.Platform.WebServer.InterfaceToHost._2023_02_27;
 

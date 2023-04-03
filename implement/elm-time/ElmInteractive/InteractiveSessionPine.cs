@@ -40,7 +40,7 @@ public class InteractiveSessionPine : IInteractiveSession
             appCodeTree switch
             {
                 null => "",
-                not null => CommonConversion.StringBase16(PineValueComposition.GetHash(PineValueComposition.FromTreeWithStringPath(appCodeTree)))
+                not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
             };
 
         try
