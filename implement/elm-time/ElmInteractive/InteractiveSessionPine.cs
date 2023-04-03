@@ -191,13 +191,13 @@ public class InteractiveSessionPine : IInteractiveSession
             scenarios
             .SelectMany(CollectExpressionsToOptimizeFromScenario)
             .Distinct()
+            .Take(limitNumber)
             .ToImmutableList();
 
         return
             PineCompileToDotNet.CompileExpressionsToCSharpFile(
                 expressionsToCompile,
-                syntaxContainerConfig,
-                limitNumber: limitNumber);
+                syntaxContainerConfig);
     }
 
     static public IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
@@ -205,19 +205,19 @@ public class InteractiveSessionPine : IInteractiveSession
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 
         var profilingPineVM = new PineVM(
-            decodeExpressionOverrides: ImmutableDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>.Empty,
-            overrideEvaluateExpression: originalHandler => new PineVM.EvalExprDelegate(
-                (expression, environment) =>
-                {
-                    if
+            decodeExpressionOverrides: ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
+            overrideEvaluateExpression: originalHandler => (expression, environment) =>
+            {
+                if
                     (expression is not Expression.EnvironmentExpression &&
-                    expression is not Expression.LiteralExpression)
-                    {
-                        expressionEvaluations.Enqueue(expression);
-                    }
+                     expression is not Expression.LiteralExpression &&
+                     expression is not Expression.DecodeAndEvaluateExpression)
+                {
+                    expressionEvaluations.Enqueue(expression);
+                }
 
-                    return originalHandler(expression, environment);
-                }));
+                return originalHandler(expression, environment);
+            });
 
         var profilingSession = new InteractiveSessionPine(appCodeTree: null, profilingPineVM);
 

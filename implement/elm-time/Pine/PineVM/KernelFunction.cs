@@ -150,8 +150,8 @@ static public class KernelFunction
                     Result<string, BigInteger>.ok(otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next)),
             value);
 
-    static public PineValue is_sorted_ascending_int(PineValue value) =>
-        PineVM.ValueFromBool(sort_int(value) == value);
+    static public Result<string, PineValue> is_sorted_ascending_int(PineValue value) =>
+        Result<string, PineValue>.ok(PineVM.ValueFromBool(sort_int(value) == value));
 
     static public PineValue sort_int(PineValue value) =>
         value switch

@@ -13,7 +13,7 @@ namespace Pine.PineVM;
 /// </summary>
 public partial class PineVMConfiguration
 {
-    static public IReadOnlyDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>?
+    static public IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>?
         DecodeExpressionOverrides = null;
 
     static PineVMConfiguration()
@@ -31,11 +31,8 @@ public partial class PineVMConfiguration
             SyntaxFactory.ClassDeclaration(nameof(PineVMConfiguration))
                 .WithModifiers(
                     SyntaxFactory.TokenList(
-                        new[]
-                        {
-                            SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                            SyntaxFactory.Token(SyntaxKind.PartialKeyword)
-                        }))
+                        SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                        SyntaxFactory.Token(SyntaxKind.PartialKeyword)))
                 .WithMembers(
                     SyntaxFactory.SingletonList<MemberDeclarationSyntax>(
                         SyntaxFactory.MethodDeclaration(
@@ -43,12 +40,9 @@ public partial class PineVMConfiguration
                                     SyntaxFactory.Token(SyntaxKind.VoidKeyword)),
                                 SyntaxFactory.Identifier(nameof(LinkGeneratedOptimizations)))
                             .WithModifiers(
-                                SyntaxFactory.TokenList(
-                                    new[]
-                                    {
-                                        SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                                        SyntaxFactory.Token(SyntaxKind.PartialKeyword)
-                                    }))
+                                SyntaxFactory.TokenList(SyntaxFactory.Token(
+                                    SyntaxKind.StaticKeyword),
+                                    SyntaxFactory.Token(SyntaxKind.PartialKeyword)))
                             .WithBody(
                                 SyntaxFactory.Block(
                                     SyntaxFactory.SingletonList<StatementSyntax>(
@@ -73,7 +67,7 @@ public partial class PineVMConfiguration
 
         var compilationUnitSyntax =
             SyntaxFactory.CompilationUnit()
-                .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.Usings))
+                .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
                 .WithMembers(
                     SyntaxFactory.List(
                         new MemberDeclarationSyntax[]

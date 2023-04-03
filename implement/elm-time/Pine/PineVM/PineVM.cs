@@ -28,7 +28,7 @@ public class PineVM
     readonly EvalExprDelegate evalExprDelegate;
 
     public PineVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
+        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
         Func<EvalExprDelegate, EvalExprDelegate>? overrideEvaluateExpression = null)
     {
         evalExprDelegate =
@@ -93,7 +93,7 @@ public class PineVM
 
         if (expression is Expression.DelegatingExpression delegatingExpr)
         {
-            return delegatingExpr.Delegate.Invoke(environment);
+            return delegatingExpr.Delegate.Invoke(evalExprDelegate, environment);
         }
 
         throw new NotImplementedException("Unexpected shape of expression: " + expression.GetType().FullName);
@@ -167,7 +167,7 @@ public class PineVM
         .SetItem(nameof(KernelFunction.sub_int), KernelFunction.sub_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.div_int), KernelFunction.div_int)
-        .SetItem(nameof(KernelFunction.is_sorted_ascending_int), value => Result<string, PineValue>.ok(KernelFunction.is_sorted_ascending_int(value)));
+        .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
 
     static public PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
 

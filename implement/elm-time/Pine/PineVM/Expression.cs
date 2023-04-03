@@ -89,6 +89,6 @@ public abstract record Expression
         Expression tagged)
         : Expression;
 
-    public record DelegatingExpression(Func<PineValue, Result<string, PineValue>> Delegate)
+    public record DelegatingExpression(Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>> Delegate)
         : Expression;
 }
