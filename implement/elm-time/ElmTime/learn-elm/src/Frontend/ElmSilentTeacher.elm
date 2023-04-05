@@ -569,8 +569,21 @@ view state =
                 SessionCompleted ->
                     ( 1000000
                     , { visualTree =
-                            Element.text "Congratulations! You have completed all exercises! 🎉"
-                                |> Element.el [ Element.padding (defaultFontSize * 3) ]
+                            [ [ Element.text "Congratulations! You have completed all exercises! 🎉"
+                                    |> Element.el [ Element.Font.size (defaultFontSize * 2) ]
+                              ]
+                            , [ Element.text "To continue learning about Elm, you might want to check out the guide at "
+                              , linkElementFromHref "https://guide.elm-lang.org"
+                              ]
+                            , [ Element.text "To work on real apps and games, you can use the development environment at "
+                              , linkElementFromHref "https://elm-editor.com"
+                              ]
+                            ]
+                                |> List.map (Element.paragraph [])
+                                |> Element.column
+                                    [ Element.width Element.fill
+                                    , Element.spacing defaultFontSize
+                                    ]
                       , onKeyDownEnter = Nothing
                       }
                     )
