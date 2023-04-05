@@ -10,17 +10,14 @@ import Element.Font
 import Element.Input
 import ElmInteractive
 import Frontend.ElmExplorer
+import Frontend.ElmSilentTeacher.Exercise as Exercise exposing (Exercise, ExerciseChallenge)
 import Html
 import Html.Attributes as HA
 import Html.Events
 import Json.Decode
 import Pine
 import Random
-import Random.Char
-import Random.List
-import Random.String
 import Result.Extra
-import String.Extra
 import Svg
 import Svg.Attributes
 import Task
@@ -45,29 +42,21 @@ type TrainingSessionState
 
 
 type alias SessionInProgressStructure =
-    { remainingLessons : List Lesson
-    , currentLesson : LessonWorkspace
-    , completedLessons : List Lesson
+    { remainingExercises : List Exercise
+    , currentExercise : ExerciseWorkspace
+    , completedExercises : List Exercise
     , progressBar : AnimatedProgressBar
     }
 
 
-type alias LessonWorkspace =
-    { lesson : Lesson
-    , challenge : LessonWorkspaceChallenge
+type alias ExerciseWorkspace =
+    { exercise : Exercise
+    , challenge : ExerciseWorkspaceChallenge
     }
 
 
-type alias Lesson =
-    { challengeGenerator : Random.Generator LessonChallenge }
-
-
-type alias LessonChallenge =
-    String
-
-
-type alias LessonWorkspaceChallenge =
-    { challenge : LessonChallenge
+type alias ExerciseWorkspaceChallenge =
+    { challenge : ExerciseChallenge
     , cachedCorrectAnswer : String
     , usersAnswer : WorkspaceAnswer
     , interactive : Maybe InteractiveState
@@ -99,117 +88,6 @@ type alias InteractiveState =
     }
 
 
-lessons : List Lesson
-lessons =
-    [ Random.map2
-        (\x y ->
-            String.fromInt x ++ " + " ++ String.fromInt y
-        )
-        (Random.int 0 9)
-        (Random.int 0 9)
-    , Random.map2
-        (\x y ->
-            String.fromInt x ++ " - " ++ String.fromInt y
-        )
-        (Random.int 0 9)
-        (Random.int 0 9)
-    , Random.map2
-        (\x y ->
-            String.fromInt x ++ " * " ++ String.fromInt y
-        )
-        (Random.int 0 9)
-        (Random.int 0 9)
-    , Random.map2
-        (\x y ->
-            """
-let
-    a = """ ++ String.fromInt x ++ """
-in
-    a + """ ++ String.fromInt y
-        )
-        (Random.int 0 9)
-        (Random.int 0 9)
-    , Random.map2
-        (\x y ->
-            """
-let
-    a = \"""" ++ x ++ """"
-    b = \"""" ++ y ++ """"
-in
-    a ++ b"""
-        )
-        (Random.String.string 2 Random.Char.lowerCaseLatin)
-        (Random.String.string 1 Random.Char.lowerCaseLatin)
-    , lessonSimplestNamedFunctionChallenge
-    , lessonListLength
-    , lessonListHead
-    , lessonListDrop
-    , lessonPipelineChallenge
-    ]
-        |> List.concatMap (List.repeat 3)
-        |> List.map Lesson
-
-
-lessonSimplestNamedFunctionChallenge : Random.Generator LessonChallenge
-lessonSimplestNamedFunctionChallenge =
-    Random.map2
-        (\x y ->
-            """
-let
-    hello a =
-        a + """ ++ String.fromInt x ++ """
-in
-hello """ ++ String.fromInt y
-        )
-        (Random.int 0 9)
-        (Random.int 0 9)
-
-
-lessonListLength : Random.Generator LessonChallenge
-lessonListLength =
-    Random.map2
-        (\randomList length ->
-            "List.length [ " ++ (String.join ", " (List.take length randomList) ++ " ]")
-        )
-        (List.range 0 9 |> Random.List.shuffle |> Random.map (List.map String.fromInt))
-        (Random.int 0 5)
-
-
-lessonListHead : Random.Generator LessonChallenge
-lessonListHead =
-    Random.map2
-        (\randomList length ->
-            "List.head [ " ++ (String.join ", " (List.take length randomList) ++ " ]")
-        )
-        (List.range 0 9 |> Random.List.shuffle |> Random.map (List.map String.fromInt))
-        (Random.int 0 3)
-
-
-lessonListDrop : Random.Generator LessonChallenge
-lessonListDrop =
-    Random.map2
-        (\randomList dropCount ->
-            "List.drop " ++ String.fromInt dropCount ++ " [ " ++ (String.join ", " randomList ++ " ]")
-        )
-        (List.range 0 9 |> Random.List.shuffle |> Random.map (List.take 3 >> List.map String.fromInt))
-        (Random.int 0 4)
-
-
-lessonPipelineChallenge : Random.Generator LessonChallenge
-lessonPipelineChallenge =
-    [ "pizza", "lasagna", "risotto", "focaccia", "arancino", "tiramisu" ]
-        |> Random.List.shuffle
-        |> Random.map (List.take 3 >> List.map (String.Extra.surround "\"") >> String.join ", ")
-        |> Random.andThen
-            (\list ->
-                Random.int 1 2
-                    |> Random.map (\dropCount -> "[ " ++ list ++ """ ]
-|> List.drop """ ++ String.fromInt dropCount ++ """
-|> List.head
-""")
-            )
-
-
 init : ( State, Cmd Event )
 init =
     let
@@ -220,15 +98,15 @@ init =
             ElmInteractive.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
 
         trainingSession =
-            case lessons of
-                currentLesson :: remainingLessons ->
+            case Exercise.exercises of
+                currentExercise :: remainingExercises ->
                     SessionInProgress
-                        { remainingLessons = remainingLessons
-                        , currentLesson =
-                            initLessonWorkspace
+                        { remainingExercises = remainingExercises
+                        , currentExercise =
+                            initExerciseWorkspace
                                 { evaluationContextResult = evaluationContextResult, time = time }
-                                currentLesson
-                        , completedLessons = []
+                                currentExercise
+                        , completedExercises = []
                         , progressBar = initProgressBar
                         }
 
@@ -243,15 +121,15 @@ init =
     )
 
 
-initLessonWorkspace :
+initExerciseWorkspace :
     { a | evaluationContextResult : Result String Pine.EvalContext, time : Time.Posix }
-    -> Lesson
-    -> LessonWorkspace
-initLessonWorkspace state lesson =
+    -> Exercise
+    -> ExerciseWorkspace
+initExerciseWorkspace state exercise =
     let
         challenge =
             Random.initialSeed (Time.posixToMillis state.time)
-                |> Random.step lesson.challengeGenerator
+                |> Random.step exercise.challengeGenerator
                 |> Tuple.first
                 |> String.trim
 
@@ -261,9 +139,9 @@ initLessonWorkspace state lesson =
                     "Failed to initialize the evaluation context: " ++ error
 
                 Ok evaluationContext ->
-                    computeSolutionFromLessonInContext evaluationContext challenge
+                    computeSolutionFromExerciseInContext evaluationContext challenge
     in
-    { lesson = lesson
+    { exercise = exercise
     , challenge =
         { challenge = challenge
         , cachedCorrectAnswer = correctAnswer
@@ -333,7 +211,7 @@ update event stateBefore =
         sessionShowsInputElement stateWithSession =
             case stateWithSession.trainingSession of
                 SessionInProgress sessionInProgress ->
-                    case sessionInProgress.currentLesson.challenge.usersAnswer of
+                    case sessionInProgress.currentExercise.challenge.usersAnswer of
                         WritingAnswer _ ->
                             True
 
@@ -358,13 +236,13 @@ updateLessFocusCmd : Event -> State -> ( State, Cmd Event )
 updateLessFocusCmd event stateBefore =
     case event of
         UserInputWriteAnswer answer ->
-            ( updateTrainingSessionCurrentLesson (workspaceUserInputWriteAnswer answer) stateBefore
+            ( updateTrainingSessionCurrentExercise (workspaceUserInputWriteAnswer answer) stateBefore
             , Cmd.none
             )
 
         UserInputCheckAnswer answer ->
             ( stateBefore
-                |> updateTrainingSessionCurrentLesson
+                |> updateTrainingSessionCurrentExercise
                     (\workspace ->
                         workspaceUserInputCheckAnswer workspace
                             |> Maybe.map ((|>) stateBefore >> (|>) answer)
@@ -379,27 +257,27 @@ updateLessFocusCmd event stateBefore =
                     ( stateBefore, Cmd.none )
 
                 SessionInProgress sessionInProgress ->
-                    case sessionInProgress.currentLesson.challenge.usersAnswer of
+                    case sessionInProgress.currentExercise.challenge.usersAnswer of
                         WritingAnswer _ ->
                             ( stateBefore, Cmd.none )
 
                         CheckedAnswer checkedAnswer ->
                             if checkedAnswer.cachedCorrect then
-                                case sessionInProgress.remainingLessons of
+                                case sessionInProgress.remainingExercises of
                                     [] ->
                                         ( { stateBefore | trainingSession = SessionCompleted }
                                         , Cmd.none
                                         )
 
-                                    currentLesson :: remainingLessons ->
+                                    currentExercise :: remainingExercises ->
                                         ( { stateBefore
                                             | trainingSession =
                                                 SessionInProgress
-                                                    { currentLesson = initLessonWorkspace stateBefore currentLesson
-                                                    , remainingLessons = remainingLessons
-                                                    , completedLessons =
-                                                        sessionInProgress.completedLessons
-                                                            ++ [ sessionInProgress.currentLesson.lesson ]
+                                                    { currentExercise = initExerciseWorkspace stateBefore currentExercise
+                                                    , remainingExercises = remainingExercises
+                                                    , completedExercises =
+                                                        sessionInProgress.completedExercises
+                                                            ++ [ sessionInProgress.currentExercise.exercise ]
                                                     , progressBar = sessionInProgress.progressBar
                                                     }
                                           }
@@ -408,14 +286,14 @@ updateLessFocusCmd event stateBefore =
 
                             else
                                 ( stateBefore
-                                    |> updateTrainingSessionCurrentLesson
-                                        (\currentLesson -> initLessonWorkspace stateBefore currentLesson.lesson)
+                                    |> updateTrainingSessionCurrentExercise
+                                        (\currentExercise -> initExerciseWorkspace stateBefore currentExercise.exercise)
                                 , Cmd.none
                                 )
 
         UserInputEnterInteractive expression ->
             ( stateBefore
-                |> updateTrainingSessionCurrentLesson
+                |> updateTrainingSessionCurrentExercise
                     (\workspace ->
                         workspaceUserInputEnterInteractive workspace
                             |> Maybe.map ((|>) stateBefore >> (|>) expression)
@@ -439,8 +317,8 @@ updateLessFocusCmd event stateBefore =
             ( stateBefore, Cmd.none )
 
 
-checkIfAnswerCorrect : State -> LessonWorkspaceChallenge -> String -> Bool
-checkIfAnswerCorrect state lessonWorkspace answer =
+checkIfAnswerCorrect : State -> ExerciseWorkspaceChallenge -> String -> Bool
+checkIfAnswerCorrect state exerciseWorkspace answer =
     let
         answerRepresentations =
             answer
@@ -448,7 +326,7 @@ checkIfAnswerCorrect state lessonWorkspace answer =
                         |> Result.toMaybe
                         |> Maybe.map
                             (\evaluationContext ->
-                                computeSolutionFromLessonInContext
+                                computeSolutionFromExerciseInContext
                                     evaluationContext
                                     answer
                             )
@@ -459,8 +337,8 @@ checkIfAnswerCorrect state lessonWorkspace answer =
         removeWhitespace =
             String.replace " " ""
     in
-    List.member lessonWorkspace.cachedCorrectAnswer answerRepresentations
-        && (removeWhitespace answer == removeWhitespace lessonWorkspace.cachedCorrectAnswer)
+    List.member exerciseWorkspace.cachedCorrectAnswer answerRepresentations
+        && (removeWhitespace answer == removeWhitespace exerciseWorkspace.cachedCorrectAnswer)
 
 
 updateSessionInProgressTimeArrived : { time : Time.Posix } -> State -> SessionInProgressStructure -> SessionInProgressStructure
@@ -488,11 +366,11 @@ updateSessionInProgressTimeArrivedPartInteractive :
     -> SessionInProgressStructure
 updateSessionInProgressTimeArrivedPartInteractive { time } stateBefore sessionInProgress =
     let
-        currentLessonBefore =
-            sessionInProgress.currentLesson
+        currentExerciseBefore =
+            sessionInProgress.currentExercise
 
         challengeBefore =
-            currentLessonBefore.challenge
+            currentExerciseBefore.challenge
 
         interactive =
             challengeBefore.interactive
@@ -504,8 +382,8 @@ updateSessionInProgressTimeArrivedPartInteractive { time } stateBefore sessionIn
                     )
     in
     { sessionInProgress
-        | currentLesson =
-            { currentLessonBefore
+        | currentExercise =
+            { currentExerciseBefore
                 | challenge =
                     { challengeBefore
                         | interactive = interactive
@@ -517,20 +395,20 @@ updateSessionInProgressTimeArrivedPartInteractive { time } stateBefore sessionIn
 progressBarAnimationTask : SessionInProgressStructure -> Maybe ({ durationMilli : Int } -> SessionInProgressStructure)
 progressBarAnimationTask sessionInProgress =
     let
-        totalLessonCount =
-            List.length (sessionInProgress.completedLessons ++ sessionInProgress.remainingLessons) + 1
+        totalExerciseCount =
+            List.length (sessionInProgress.completedExercises ++ sessionInProgress.remainingExercises) + 1
 
-        currentLessonCheckedCorrect =
-            case sessionInProgress.currentLesson.challenge.usersAnswer of
+        currentExerciseCheckedCorrect =
+            case sessionInProgress.currentExercise.challenge.usersAnswer of
                 WritingAnswer _ ->
                     False
 
                 CheckedAnswer checkedAnswer ->
                     checkedAnswer.cachedCorrect
 
-        completedLessonsCount =
-            List.length sessionInProgress.completedLessons
-                + (if currentLessonCheckedCorrect then
+        completedExercisesCount =
+            List.length sessionInProgress.completedExercises
+                + (if currentExerciseCheckedCorrect then
                     1
 
                    else
@@ -538,13 +416,13 @@ progressBarAnimationTask sessionInProgress =
                   )
 
         progressMicro =
-            (completedLessonsCount * 1000000) // totalLessonCount
+            (completedExercisesCount * 1000000) // totalExerciseCount
     in
     animateProgressBar { destMicro = progressMicro } sessionInProgress.progressBar
         |> Maybe.map (\anim -> \time -> { sessionInProgress | progressBar = anim time })
 
 
-workspaceUserInputWriteAnswer : String -> LessonWorkspace -> LessonWorkspace
+workspaceUserInputWriteAnswer : String -> ExerciseWorkspace -> ExerciseWorkspace
 workspaceUserInputWriteAnswer expression workspace =
     case workspace.challenge.usersAnswer of
         CheckedAnswer _ ->
@@ -558,7 +436,7 @@ workspaceUserInputWriteAnswer expression workspace =
             { workspace | challenge = { challengeBefore | usersAnswer = WritingAnswer expression } }
 
 
-workspaceUserInputCheckAnswer : LessonWorkspace -> Maybe (State -> String -> LessonWorkspace)
+workspaceUserInputCheckAnswer : ExerciseWorkspace -> Maybe (State -> String -> ExerciseWorkspace)
 workspaceUserInputCheckAnswer workspace =
     case workspace.challenge.usersAnswer of
         CheckedAnswer _ ->
@@ -588,7 +466,7 @@ workspaceUserInputCheckAnswer workspace =
                     )
 
 
-workspaceUserInputEnterInteractive : LessonWorkspace -> Maybe (State -> String -> LessonWorkspace)
+workspaceUserInputEnterInteractive : ExerciseWorkspace -> Maybe (State -> String -> ExerciseWorkspace)
 workspaceUserInputEnterInteractive workspace =
     case workspace.challenge.usersAnswer of
         WritingAnswer _ ->
@@ -663,11 +541,11 @@ updateLastEvaluatedExpression config stateBefore =
         { stateBefore | lastEvaluatedExpression = lastEvaluatedExpression }
 
 
-updateTrainingSessionCurrentLesson : (LessonWorkspace -> LessonWorkspace) -> State -> State
-updateTrainingSessionCurrentLesson updateCurrentLesson =
+updateTrainingSessionCurrentExercise : (ExerciseWorkspace -> ExerciseWorkspace) -> State -> State
+updateTrainingSessionCurrentExercise updateCurrentExercise =
     updateTrainingSessionInProgress
         (\sessionInProgress ->
-            { sessionInProgress | currentLesson = updateCurrentLesson sessionInProgress.currentLesson }
+            { sessionInProgress | currentExercise = updateCurrentExercise sessionInProgress.currentExercise }
         )
 
 
@@ -691,15 +569,15 @@ view state =
                 SessionCompleted ->
                     ( 1000000
                     , { visualTree =
-                            Element.text "All lessons complete 🎉"
-                                |> Element.el [ Element.padding (defaultFontSize * 2) ]
+                            Element.text "Congratulations! You have completed all exercises! 🎉"
+                                |> Element.el [ Element.padding (defaultFontSize * 3) ]
                       , onKeyDownEnter = Nothing
                       }
                     )
 
                 SessionInProgress sessionInProgress ->
                     ( sessionInProgress.progressBar.animationProgressMicro
-                    , viewLessonWorkspace sessionInProgress.currentLesson
+                    , viewExerciseWorkspace sessionInProgress.currentExercise
                     )
     in
     { document =
@@ -740,8 +618,8 @@ view state =
     }
 
 
-viewLessonWorkspace : LessonWorkspace -> { visualTree : Element.Element Event, onKeyDownEnter : Maybe Event }
-viewLessonWorkspace workspace =
+viewExerciseWorkspace : ExerciseWorkspace -> { visualTree : Element.Element Event, onKeyDownEnter : Maybe Event }
+viewExerciseWorkspace workspace =
     let
         ( answerText, answerIsReadOnly ) =
             case workspace.challenge.usersAnswer of
@@ -940,7 +818,7 @@ feedbackButton { labelText, onPress, enabledBackgroundColor } =
 
 
 viewChallengeElement :
-    { challenge : LessonChallenge, answerText : String, answerIsReadOnly : Bool }
+    { challenge : ExerciseChallenge, answerText : String, answerIsReadOnly : Bool }
     -> Element.Element Event
 viewChallengeElement { challenge, answerText, answerIsReadOnly } =
     let
@@ -1031,9 +909,9 @@ viewProgressBar { progressMicro } =
             ]
 
 
-computeSolutionFromLessonInContext : Pine.EvalContext -> LessonChallenge -> String
-computeSolutionFromLessonInContext evaluationContext lessonChallenge =
-    case ElmInteractive.submissionInInteractiveInPineContext evaluationContext lessonChallenge of
+computeSolutionFromExerciseInContext : Pine.EvalContext -> ExerciseChallenge -> String
+computeSolutionFromExerciseInContext evaluationContext exerciseChallenge =
+    case ElmInteractive.submissionInInteractiveInPineContext evaluationContext exerciseChallenge of
         Err error ->
             "Failed to evaluate: " ++ error
 
