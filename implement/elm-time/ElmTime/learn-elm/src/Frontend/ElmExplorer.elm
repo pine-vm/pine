@@ -1,9 +1,14 @@
-module Frontend.ElmExplorer exposing (State, main)
+module Frontend.ElmExplorer exposing
+    ( State
+    , main
+    , viewInteractive
+    )
 
 import Browser
 import Element
 import Element.Font
 import ElmInteractive
+import Frontend.BrowserApplicationInitWithTime
 import Html
 import Html.Attributes as HA
 import Html.Events
@@ -13,9 +18,17 @@ import Url
 
 
 type alias State =
-    { expression : String
+    { time : Time.Posix
+    , expression : String
     , evaluationContext : Result String Pine.EvalContext
-    , lastUserInputExpressionTime : Maybe Time.Posix
+    , lastUserInputExpressionTime : Time.Posix
+    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
+    }
+
+
+type alias InteractiveState =
+    { expression : String
+    , lastUserInputExpressionTime : Time.Posix
     , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
     }
 
@@ -32,21 +45,23 @@ evalDelayFromUserInputMilliseconds =
     500
 
 
-init : ( State, Cmd Event )
-init =
-    ( { expression = ""
+init : Time.Posix -> ( State, Cmd Event )
+init time =
+    ( { time = time
+      , expression = ""
       , evaluationContext = ElmInteractive.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
-      , lastUserInputExpressionTime = Nothing
+      , lastUserInputExpressionTime = Time.millisToPosix 0
       , lastEvaluatedExpression = Nothing
       }
     , Cmd.none
     )
 
 
-main : Program () State Event
+main : Frontend.BrowserApplicationInitWithTime.Program () State Event
 main =
-    Browser.application
-        { init = \_ _ _ -> init
+    Frontend.BrowserApplicationInitWithTime.application
+        { viewWhileWaitingForTime = viewWhileWaitingForTime
+        , init = \_ _ _ -> init
         , update = update
         , subscriptions = subscriptions
         , view = view
@@ -55,12 +70,16 @@ main =
         }
 
 
+viewWhileWaitingForTime : Browser.Document e
+viewWhileWaitingForTime =
+    { title = "Elm Explorer"
+    , body = [ Html.text "Initializing..." ]
+    }
+
+
 subscriptions : State -> Sub.Sub Event
 subscriptions state =
-    if
-        (state.lastUserInputExpressionTime == Nothing)
-            || not (lastEvaluatedExpressionIsLastEntered state)
-    then
+    if not (lastEvaluatedExpressionIsLastEntered state) then
         Time.every 100 TimeArrivedEvent
 
     else
@@ -73,7 +92,7 @@ update event stateBefore =
         UserInputExpression expression ->
             ( { stateBefore
                 | expression = expression
-                , lastUserInputExpressionTime = Nothing
+                , lastUserInputExpressionTime = stateBefore.time
               }
             , Cmd.none
             )
@@ -86,13 +105,10 @@ update event stateBefore =
 
         TimeArrivedEvent time ->
             let
-                lastUserInputExpressionTime =
-                    stateBefore.lastUserInputExpressionTime |> Maybe.withDefault time
-
                 lastUserInputExpressionAgeMilliseconds =
-                    Time.posixToMillis time - Time.posixToMillis lastUserInputExpressionTime
+                    Time.posixToMillis time - Time.posixToMillis stateBefore.lastUserInputExpressionTime
             in
-            ( { stateBefore | lastUserInputExpressionTime = Just lastUserInputExpressionTime }
+            ( { stateBefore | time = time }
                 |> (if evalDelayFromUserInputMilliseconds < lastUserInputExpressionAgeMilliseconds then
                         updateLastEvaluatedExpression
 
@@ -136,6 +152,26 @@ updateLastEvaluatedExpression stateBefore =
 view : State -> Browser.Document Event
 view state =
     let
+        interactiveElement =
+            viewInteractive
+                { userInputExpression = UserInputExpression
+                }
+                { expression = state.expression
+                , lastUserInputExpressionTime = state.lastUserInputExpressionTime
+                , lastEvaluatedExpression = state.lastEvaluatedExpression
+                }
+    in
+    { body =
+        [ interactiveElement
+            |> Element.layout [ Element.Font.size defaultFontSize ]
+        ]
+    , title = "Elm Explorer"
+    }
+
+
+viewInteractive : { userInputExpression : String -> e } -> InteractiveState -> Element.Element e
+viewInteractive config state =
+    let
         expressionTextareaHeight =
             (((state.expression
                 |> String.lines
@@ -154,7 +190,7 @@ view state =
         inputExpressionElement =
             [ Html.textarea
                 [ HA.value state.expression
-                , Html.Events.onInput UserInputExpression
+                , Html.Events.onInput config.userInputExpression
                 , HA.style "white-space" "pre"
                 , HA.style "font-family" "monospace, monospace"
                 , HA.style "font-size" "100%"
@@ -214,21 +250,16 @@ view state =
                 Just ( evaluatedExpression, evaluatedExpressionResult ) ->
                     evalResultElementFromEvalResult evaluatedExpressionResult (evaluatedExpression == state.expression)
     in
-    { body =
-        [ [ Element.text "Expression to evaluate"
-          , indentOneLevel inputExpressionElement
-          , Element.text "Evaluation result"
-          , indentOneLevel evalResultElement
-          ]
-            |> Element.column
-                [ Element.spacing defaultFontSize
-                , Element.padding 10
-                , Element.width Element.fill
-                ]
-            |> Element.layout [ Element.Font.size defaultFontSize ]
-        ]
-    , title = "Elm Explorer"
-    }
+    [ Element.text "Expression to evaluate"
+    , indentOneLevel inputExpressionElement
+    , Element.text "Evaluation result"
+    , indentOneLevel evalResultElement
+    ]
+        |> Element.column
+            [ Element.spacing defaultFontSize
+            , Element.padding 10
+            , Element.width Element.fill
+            ]
 
 
 lastEvaluatedExpressionIsLastEntered : State -> Bool

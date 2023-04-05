@@ -9,6 +9,7 @@ import Element.Border
 import Element.Font
 import Element.Input
 import ElmInteractive
+import Frontend.ElmExplorer
 import Html
 import Html.Attributes as HA
 import Html.Events
@@ -24,6 +25,11 @@ import Svg
 import Svg.Attributes
 import Task
 import Time
+
+
+evalDelayFromUserInputMilliseconds : Int
+evalDelayFromUserInputMilliseconds =
+    500
 
 
 type alias State =
@@ -64,6 +70,7 @@ type alias LessonWorkspaceChallenge =
     { challenge : LessonChallenge
     , cachedCorrectAnswer : String
     , usersAnswer : WorkspaceAnswer
+    , interactive : Maybe InteractiveState
     }
 
 
@@ -76,12 +83,20 @@ type Event
     = UserInputWriteAnswer String
     | UserInputCheckAnswer String
     | UserInputContinue
+    | UserInputEnterInteractive String
     | TimeArrivedEvent Time.Posix
     | DiscardEvent
 
 
 type alias AnimatedProgressBar =
     { animationProgressMicro : Int }
+
+
+type alias InteractiveState =
+    { expression : String
+    , lastUserInputExpressionTime : Time.Posix
+    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
+    }
 
 
 lessons : List Lesson
@@ -253,6 +268,7 @@ initLessonWorkspace state lesson =
         { challenge = challenge
         , cachedCorrectAnswer = correctAnswer
         , usersAnswer = WritingAnswer ""
+        , interactive = Nothing
         }
     }
 
@@ -397,6 +413,17 @@ updateLessFocusCmd event stateBefore =
                                 , Cmd.none
                                 )
 
+        UserInputEnterInteractive expression ->
+            ( stateBefore
+                |> updateTrainingSessionCurrentLesson
+                    (\workspace ->
+                        workspaceUserInputEnterInteractive workspace
+                            |> Maybe.map ((|>) stateBefore >> (|>) expression)
+                            |> Maybe.withDefault workspace
+                    )
+            , Cmd.none
+            )
+
         TimeArrivedEvent time ->
             let
                 state =
@@ -437,7 +464,13 @@ checkIfAnswerCorrect state lessonWorkspace answer =
 
 
 updateSessionInProgressTimeArrived : { time : Time.Posix } -> State -> SessionInProgressStructure -> SessionInProgressStructure
-updateSessionInProgressTimeArrived { time } stateBefore sessionInProgress =
+updateSessionInProgressTimeArrived config stateBefore =
+    updateSessionInProgressTimeArrivedPartInteractive config stateBefore
+        >> updateSessionInProgressTimeArrivedPartAnimation config stateBefore
+
+
+updateSessionInProgressTimeArrivedPartAnimation : { time : Time.Posix } -> State -> SessionInProgressStructure -> SessionInProgressStructure
+updateSessionInProgressTimeArrivedPartAnimation { time } stateBefore sessionInProgress =
     let
         timeDeltaMilli =
             Time.posixToMillis time - Time.posixToMillis stateBefore.time
@@ -446,6 +479,39 @@ updateSessionInProgressTimeArrived { time } stateBefore sessionInProgress =
         |> progressBarAnimationTask
         |> Maybe.map ((|>) { durationMilli = timeDeltaMilli })
         |> Maybe.withDefault sessionInProgress
+
+
+updateSessionInProgressTimeArrivedPartInteractive :
+    { time : Time.Posix }
+    -> State
+    -> SessionInProgressStructure
+    -> SessionInProgressStructure
+updateSessionInProgressTimeArrivedPartInteractive { time } stateBefore sessionInProgress =
+    let
+        currentLessonBefore =
+            sessionInProgress.currentLesson
+
+        challengeBefore =
+            currentLessonBefore.challenge
+
+        interactive =
+            challengeBefore.interactive
+                |> Maybe.map
+                    (updateLastEvaluatedExpression
+                        { time = time
+                        , evaluationContext = stateBefore.evaluationContextResult
+                        }
+                    )
+    in
+    { sessionInProgress
+        | currentLesson =
+            { currentLessonBefore
+                | challenge =
+                    { challengeBefore
+                        | interactive = interactive
+                    }
+            }
+    }
 
 
 progressBarAnimationTask : SessionInProgressStructure -> Maybe ({ durationMilli : Int } -> SessionInProgressStructure)
@@ -520,6 +586,81 @@ workspaceUserInputCheckAnswer workspace =
                                 }
                         }
                     )
+
+
+workspaceUserInputEnterInteractive : LessonWorkspace -> Maybe (State -> String -> LessonWorkspace)
+workspaceUserInputEnterInteractive workspace =
+    case workspace.challenge.usersAnswer of
+        WritingAnswer _ ->
+            Nothing
+
+        CheckedAnswer _ ->
+            Just
+                (\stateBefore expression ->
+                    let
+                        challengeBefore =
+                            workspace.challenge
+
+                        interactiveDefault =
+                            { expression = expression
+                            , lastUserInputExpressionTime = stateBefore.time
+                            , lastEvaluatedExpression = Nothing
+                            }
+
+                        interactiveBefore =
+                            Maybe.withDefault interactiveDefault challengeBefore.interactive
+                    in
+                    { workspace
+                        | challenge =
+                            { challengeBefore
+                                | interactive =
+                                    Just
+                                        { interactiveBefore
+                                            | expression = expression
+                                            , lastUserInputExpressionTime = stateBefore.time
+                                        }
+                            }
+                    }
+                )
+
+
+updateLastEvaluatedExpression :
+    { time : Time.Posix, evaluationContext : Result String Pine.EvalContext }
+    -> InteractiveState
+    -> InteractiveState
+updateLastEvaluatedExpression config stateBefore =
+    let
+        lastUserInputExpressionAgeMilliseconds =
+            Time.posixToMillis config.time - Time.posixToMillis stateBefore.lastUserInputExpressionTime
+
+        expression =
+            stateBefore.expression
+    in
+    if Just expression == Maybe.map Tuple.first stateBefore.lastEvaluatedExpression then
+        stateBefore
+
+    else if lastUserInputExpressionAgeMilliseconds < evalDelayFromUserInputMilliseconds then
+        stateBefore
+
+    else
+        let
+            lastEvaluatedExpression =
+                case config.evaluationContext of
+                    Err error ->
+                        Just ( expression, Err ("Failed to initialize the evaluation context: " ++ error) )
+
+                    Ok evaluationContext ->
+                        Just
+                            ( expression
+                            , if String.isEmpty (String.trim expression) then
+                                Ok { displayText = "" }
+
+                              else
+                                ElmInteractive.submissionInInteractiveInPineContext evaluationContext expression
+                                    |> Result.map Tuple.second
+                            )
+        in
+        { stateBefore | lastEvaluatedExpression = lastEvaluatedExpression }
 
 
 updateTrainingSessionCurrentLesson : (LessonWorkspace -> LessonWorkspace) -> State -> State
@@ -701,12 +842,47 @@ viewLessonWorkspace workspace =
                 |> Element.row
                     [ Element.width Element.fill
                     , Element.paddingXY (defaultFontSize * 2) defaultFontSize
+                    , Element.spacing (defaultFontSize * 2)
                     ]
                 |> Element.el
                     [ Element.width Element.fill
                     , Element.alignBottom
                     , Element.Background.color feedbackBackgroundColor
                     ]
+
+        enterInteractiveButton =
+            if workspaceUserInputEnterInteractive workspace == Nothing then
+                Nothing
+
+            else
+                feedbackButton
+                    { labelText = "Explore"
+                    , onPress = Just (UserInputEnterInteractive workspace.challenge.challenge)
+                    , enabledBackgroundColor = buttonEnabledBackgroundColor
+                    }
+                    |> Element.el [ Element.centerX, Element.padding defaultFontSize ]
+                    |> Just
+
+        ( explorationElement, onKeyDownEnter ) =
+            case workspace.challenge.interactive of
+                Nothing ->
+                    ( Maybe.withDefault Element.none enterInteractiveButton
+                    , buttonOnPress
+                    )
+
+                Just interactive ->
+                    ( [ viewInteractive interactive ]
+                        |> Element.column
+                            [ Element.spacing (defaultFontSize // 2)
+                            , Element.Background.color (Element.rgba 0.13 0.13 0.13 0.1)
+                            , Element.centerX
+                            , Element.centerY
+                            , Element.Border.width 2
+                            , Element.Border.color <| Element.rgba 1 1 1 0.3
+                            , Element.width Element.fill
+                            ]
+                    , Nothing
+                    )
     in
     { visualTree =
         [ viewChallengeElement
@@ -716,14 +892,22 @@ viewLessonWorkspace workspace =
             }
             |> Element.el [ Element.centerX ]
         , feedbackElement
+        , explorationElement
         ]
             |> Element.column
                 [ Element.width Element.fill
                 , Element.height Element.fill
                 , Element.spacing defaultFontSize
                 ]
-    , onKeyDownEnter = buttonOnPress
+    , onKeyDownEnter = onKeyDownEnter
     }
+
+
+viewInteractive : InteractiveState -> Element.Element Event
+viewInteractive state =
+    Frontend.ElmExplorer.viewInteractive
+        { userInputExpression = UserInputEnterInteractive }
+        state
 
 
 feedbackButton : { labelText : String, onPress : Maybe e, enabledBackgroundColor : Element.Color } -> Element.Element e
