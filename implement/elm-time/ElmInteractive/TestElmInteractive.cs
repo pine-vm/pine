@@ -155,14 +155,14 @@ public class TestElmInteractive
     public static Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
     {
         var expectedResponse =
-            sessionStep.GetNodeAtPath(new[] { "expected-value" }) is TreeNodeWithStringPath.BlobNode expectedValueBlob
+            sessionStep.GetNodeAtPath(new[] { "expected-value.txt" }) is TreeNodeWithStringPath.BlobNode expectedValueBlob
             ?
             Encoding.UTF8.GetString(expectedValueBlob.Bytes.Span)
             :
             null;
 
         return
-            (sessionStep.GetNodeAtPath(new[] { "submission" }) switch
+            (sessionStep.GetNodeAtPath(new[] { "submission.txt" }) switch
             {
                 TreeNodeWithStringPath.BlobNode submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
                 _ => Result<string, string>.err("Missing submission"),
