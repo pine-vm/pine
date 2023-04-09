@@ -3,6 +3,7 @@ module Frontend.ElmSilentTeacher exposing (State, main)
 import Browser
 import Browser.Dom
 import Browser.Events
+import Diff
 import Element
 import Element.Background
 import Element.Border
@@ -569,7 +570,7 @@ view state =
                 SessionCompleted ->
                     ( 1000000
                     , { visualTree =
-                            [ [ Element.text "Congratulations! You have completed all exercises! 🎉"
+                            [ [ Element.text "Congratulations! You have completed the exercises! 🎉"
                                     |> Element.el [ Element.Font.size (defaultFontSize * 2) ]
                               ]
                             , [ Element.text "To continue learning about Elm, you might want to check out the guide at "
@@ -651,20 +652,85 @@ viewExerciseWorkspace workspace =
         buttonLabelCheck =
             "Check"
 
-        buildFeedbackElement : Result { correctSolution : String } () -> Element.Element e
+        buildFeedbackElement : Result { submittedAnswer : String, correctSolution : String } () -> Element.Element e
         buildFeedbackElement result =
             let
                 icon =
                     answerClassificationIcon { isCorrect = Result.Extra.isOk result }
                         |> Element.el [ Element.width (Element.px 70) ]
 
-                ( title, correctSolution, color ) =
+                ( title, solutionTextPartsWithUnderlineFlag, color ) =
                     case result of
                         Ok _ ->
-                            ( "Great!", " ", Element.rgb255 88 167 0 )
+                            ( "Great!"
+                            , [ ( " ", False ) ]
+                            , Element.rgb255 88 167 0
+                            )
 
                         Err error ->
-                            ( "Correct solution:", error.correctSolution, Element.rgb255 234 43 43 )
+                            let
+                                diff =
+                                    Diff.diff
+                                        (String.toList error.submittedAnswer)
+                                        (String.toList error.correctSolution)
+
+                                withUnderlineFlags =
+                                    diff
+                                        |> List.concatMap
+                                            (\charResult ->
+                                                case charResult of
+                                                    Diff.Removed _ ->
+                                                        []
+
+                                                    Diff.Added addedChar ->
+                                                        [ ( addedChar, True ) ]
+
+                                                    Diff.NoChange originalChar ->
+                                                        [ ( originalChar, False ) ]
+                                            )
+                            in
+                            ( "Correct solution:"
+                            , withUnderlineFlags
+                                |> List.map (Tuple.mapFirst String.fromChar)
+                                |> aggregateConsecutiveStringsWithTag
+                            , Element.rgb255 234 43 43
+                            )
+
+                textDecorationUnderlineAttributes =
+                    [ ( "text-decoration-line", "underline" )
+                    , ( "text-decoration-style", "wavy" )
+                    , ( "text-underline-offset", "0.4em" )
+                    ]
+                        |> List.map (\( property, value ) -> Element.htmlAttribute (HA.style property value))
+
+                underlinedCount =
+                    solutionTextPartsWithUnderlineFlag
+                        |> List.filter Tuple.second
+                        |> List.map (Tuple.first >> String.length)
+                        |> List.sum
+
+                nonUnderlinedCount =
+                    solutionTextPartsWithUnderlineFlag
+                        |> List.filter (Tuple.second >> not)
+                        |> List.map (Tuple.first >> String.length)
+                        |> List.sum
+
+                disableUnderline =
+                    nonUnderlinedCount <= underlinedCount
+
+                solutionTextElements =
+                    solutionTextPartsWithUnderlineFlag
+                        |> List.map
+                            (\( textElement, underline ) ->
+                                Element.text textElement
+                                    |> Element.el
+                                        (if underline && not disableUnderline then
+                                            textDecorationUnderlineAttributes
+
+                                         else
+                                            []
+                                        )
+                            )
             in
             [ icon
             , [ Element.text title
@@ -672,8 +738,8 @@ viewExerciseWorkspace workspace =
                         [ Element.Font.size (defaultFontSize * 3 // 2)
                         , Element.Font.bold
                         ]
-              , Element.text correctSolution
-                    |> Element.el [ Element.Font.family [ Element.Font.monospace ] ]
+              , solutionTextElements
+                    |> Element.row [ Element.Font.family [ Element.Font.monospace ] ]
               ]
                 |> Element.column
                     [ Element.Font.color color
@@ -710,7 +776,12 @@ viewExerciseWorkspace workspace =
                         else
                             ( buttonColorRed
                             , Element.rgb255 255 223 223
-                            , buildFeedbackElement (Err { correctSolution = workspace.challenge.cachedCorrectAnswer })
+                            , buildFeedbackElement
+                                (Err
+                                    { submittedAnswer = checkedAnswer.answer
+                                    , correctSolution = workspace.challenge.cachedCorrectAnswer
+                                    }
+                                )
                             )
                       , "Continue"
                       )
@@ -792,6 +863,24 @@ viewExerciseWorkspace workspace =
                 ]
     , onKeyDownEnter = onKeyDownEnter
     }
+
+
+aggregateConsecutiveStringsWithTag : List ( appendable, tag ) -> List ( appendable, tag )
+aggregateConsecutiveStringsWithTag =
+    List.foldr
+        (\( nextString, nextTag ) aggregate ->
+            case aggregate of
+                [] ->
+                    [ ( nextString, nextTag ) ]
+
+                ( lastString, lastTag ) :: previous ->
+                    if lastTag == nextTag then
+                        ( nextString ++ lastString, lastTag ) :: previous
+
+                    else
+                        ( nextString, nextTag ) :: aggregate
+        )
+        []
 
 
 viewInteractive : InteractiveState -> Element.Element Event
