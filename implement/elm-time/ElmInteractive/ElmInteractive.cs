@@ -1,3 +1,4 @@
+using ElmTime.Elm019;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -588,6 +589,7 @@ public class ElmInteractive
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
+            workingDirectoryRelative: ImmutableList<string>.Empty,
             ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath });
 
         return
@@ -631,6 +633,7 @@ public class ElmInteractive
             Elm019Binaries.ElmMakeToJavascript(
                 compileElmProgramCodeFiles
                 .Extract(error => throw new NotImplementedException(nameof(LoadCompileElmProgramCodeFiles) + ": " + error)),
+                workingDirectoryRelative: null,
                 ImmutableList.Create("src", "ElmInteractiveMain.elm"));
 
         var javascriptFromElmMake =

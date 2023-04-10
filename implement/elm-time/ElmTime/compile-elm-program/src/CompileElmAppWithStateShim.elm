@@ -10,6 +10,7 @@ import CompileFullstackApp
         , ElmMakeEntryPointStruct
         , ElmTypeAnnotation
         , LocatedInSourceFiles(..)
+        , SourceDirectories
         , SourceParsedElmModule
         , addModulesFromTextToAppFiles
         , buildJsonCodingFunctionsForTypeAnnotation
@@ -94,14 +95,15 @@ type alias StateShimConfigSupportingType =
 
 
 loweredForAppInStateManagementShim :
-    StateShimConfig
+    SourceDirectories
+    -> StateShimConfig
     -> CompileEntryPointConfig
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
-loweredForAppInStateManagementShim stateShimConfig config sourceFiles =
+loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles =
     let
         interfaceToHostRootFilePath =
-            filePathFromElmModuleName config.interfaceToHostRootModuleName
+            filePathFromElmModuleName sourceDirs config.interfaceToHostRootModuleName
 
         entryPoint =
             { elmMakeJavaScriptFunctionName =
@@ -109,7 +111,7 @@ loweredForAppInStateManagementShim stateShimConfig config sourceFiles =
             }
     in
     config.originalSourceModules
-        |> supportingTypesModules stateShimConfig
+        |> supportingTypesModules sourceDirs stateShimConfig
         |> Result.mapError
             (mapLocatedInSourceFiles
                 ((++) "Failed to prepare supporting types modules: " >> OtherCompilationError)
@@ -153,9 +155,11 @@ loweredForAppInStateManagementShim stateShimConfig config sourceFiles =
 
                     ( appFiles, generateSerializersResult ) =
                         sourceFiles
-                            |> addModulesFromTextToAppFiles modulesToAdd
+                            |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
                             |> mapAppFilesToSupportJsonCoding
-                                { generatedModuleNamePrefix = config.interfaceToHostRootModuleName }
+                                { generatedModuleNamePrefix = config.interfaceToHostRootModuleName
+                                , sourceDirs = sourceDirs
+                                }
                                 typeToGenerateSerializersFor
                                 jsonConvertedTypesDependencies
 
@@ -274,7 +278,8 @@ composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
 
 
 supportingTypesModules :
-    StateShimConfig
+    SourceDirectories
+    -> StateShimConfig
     -> Dict.Dict (List String) SourceParsedElmModule
     ->
         Result
@@ -284,12 +289,12 @@ supportingTypesModules :
             , stateShimResponseResultType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
             , jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
             }
-supportingTypesModules stateShimConfig originalSourceModules =
+supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
     [ stateShimTypesModuleText
     , stateShimModuleText
     ]
         ++ stateShimConfig.supportingModules
-        |> CompileFullstackApp.elmModulesDictFromModuleTexts CompileFullstackApp.filePathFromElmModuleName
+        |> CompileFullstackApp.elmModulesDictFromModuleTexts (CompileFullstackApp.filePathFromElmModuleName sourceDirs)
         |> Result.mapError
             (LocatedInSourceFiles
                 { filePath = []

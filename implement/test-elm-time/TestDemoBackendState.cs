@@ -20,6 +20,7 @@ namespace TestElmTime
 
             var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
+                workingDirectoryRelative: ImmutableList<string>.Empty,
                 interfaceConfig: ElmAppInterfaceConfig.Default);
 
             var compilationSuccess =

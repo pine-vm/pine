@@ -314,7 +314,7 @@ ElmMakeResponseStructure ElmMake(ElmMakeRequestStructure elmMakeRequest)
                 */
                 {"ELM_HOME", GetElmHomeDirectory()},
                 },
-                workingDirectory: elmMakeRequest.workingDirectoryPath.ToImmutableList());
+                workingDirectoryRelative: elmMakeRequest.workingDirectoryPath.ToImmutableList());
     }
 
     var commandResults = commandResultsFromArguments(commandLineArguments);

@@ -24,6 +24,7 @@ import CompileFullstackApp
         , entryPointClassFromSetOfEquallyProcessedFunctionNames
         , filePathFromElmModuleName
         , findModuleByName
+        , findSourceDirectories
         , locatedInSourceFilesFromRange
         , mapLocatedInSourceFiles
         , parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation
@@ -99,128 +100,144 @@ loweredForBackendApp :
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
 loweredForBackendApp appDeclaration config sourceFiles =
-    let
-        interfaceToHostRootFilePath =
-            filePathFromElmModuleName config.interfaceToHostRootModuleName
-
-        entryPoint =
-            { elmMakeJavaScriptFunctionName =
-                String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
+    case
+        findSourceDirectories
+            { compilationRootFilePath = config.compilationRootFilePath
+            , sourceFiles = sourceFiles
             }
-    in
-    if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
-        -- Support integrating applications supplying their own lowered version.
-        Ok ( sourceFiles, entryPoint )
+    of
+        Err err ->
+            Err
+                [ LocatedInSourceFiles
+                    { filePath = config.compilationRootFilePath
+                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                    }
+                    (OtherCompilationError ("Failed to find source directories: " ++ err))
+                ]
 
-    else
-        parseAppStateElmTypeAndDependenciesRecursively
-            appDeclaration
-            config.originalSourceModules
-            ( config.compilationRootFilePath, config.compilationRootModule.parsedSyntax )
-            |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type: "))
-            |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
-            |> Result.andThen
-                (\appStateType ->
-                    parseMigrationConfig { originalSourceModules = config.originalSourceModules }
-                        |> Result.andThen
-                            (\maybeMigrationConfig ->
-                                parseExposeFunctionsToAdminConfig
-                                    { originalSourceModules = config.originalSourceModules
-                                    , backendStateType = appStateType.stateTypeAnnotation
-                                    }
-                                    |> Result.mapError (List.map (mapLocatedInSourceFiles OtherCompilationError))
-                                    |> Result.andThen
-                                        (\maybeExposeFunctionsToAdmin ->
-                                            let
-                                                mainDeclarationName =
-                                                    appDeclaration.declaration
-                                                        |> Elm.Syntax.Node.value
-                                                        |> .name
-                                                        |> Elm.Syntax.Node.value
+        Ok sourceDirs ->
+            let
+                interfaceToHostRootFilePath =
+                    filePathFromElmModuleName sourceDirs config.interfaceToHostRootModuleName
 
-                                                appRootDeclarationModuleName =
-                                                    config.compilationRootModule.parsedSyntax.moduleDefinition
-                                                        |> Elm.Syntax.Node.value
-                                                        |> Elm.Syntax.Module.moduleName
-                                                        |> String.join "."
+                entryPoint =
+                    { elmMakeJavaScriptFunctionName =
+                        String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
+                    }
+            in
+            if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
+                -- Support integrating applications supplying their own lowered version.
+                Ok ( sourceFiles, entryPoint )
 
-                                                mainDeclarationNameQualifiedName =
-                                                    appRootDeclarationModuleName ++ "." ++ mainDeclarationName
+            else
+                parseAppStateElmTypeAndDependenciesRecursively
+                    appDeclaration
+                    config.originalSourceModules
+                    ( config.compilationRootFilePath, config.compilationRootModule.parsedSyntax )
+                    |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type: "))
+                    |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
+                    |> Result.andThen
+                        (\appStateType ->
+                            parseMigrationConfig { originalSourceModules = config.originalSourceModules }
+                                |> Result.andThen
+                                    (\maybeMigrationConfig ->
+                                        parseExposeFunctionsToAdminConfig
+                                            { originalSourceModules = config.originalSourceModules
+                                            , backendStateType = appStateType.stateTypeAnnotation
+                                            }
+                                            |> Result.mapError (List.map (mapLocatedInSourceFiles OtherCompilationError))
+                                            |> Result.andThen
+                                                (\maybeExposeFunctionsToAdmin ->
+                                                    let
+                                                        mainDeclarationName =
+                                                            appDeclaration.declaration
+                                                                |> Elm.Syntax.Node.value
+                                                                |> .name
+                                                                |> Elm.Syntax.Node.value
 
-                                                rootModuleSupportingFunctionsMigrate =
-                                                    maybeMigrationConfig
-                                                        |> Maybe.map .rootModuleSupportingFunctions
-                                                        |> Maybe.withDefault []
+                                                        appRootDeclarationModuleName =
+                                                            config.compilationRootModule.parsedSyntax.moduleDefinition
+                                                                |> Elm.Syntax.Node.value
+                                                                |> Elm.Syntax.Module.moduleName
+                                                                |> String.join "."
 
-                                                rootModuleSupportingFunctions =
-                                                    [ "config_init = "
-                                                        ++ mainDeclarationNameQualifiedName
-                                                        ++ ".init"
-                                                    , "config_subscriptions = "
-                                                        ++ mainDeclarationNameQualifiedName
-                                                        ++ ".subscriptions"
-                                                    ]
-                                                        ++ rootModuleSupportingFunctionsMigrate
+                                                        mainDeclarationNameQualifiedName =
+                                                            appRootDeclarationModuleName ++ "." ++ mainDeclarationName
 
-                                                jsonConverterDeclarationsConfigs : Dict.Dict String StateShimConfigJsonConverterConfig
-                                                jsonConverterDeclarationsConfigs =
-                                                    [ ( "jsonDecodeBackendEvent"
-                                                      , { isDecoder = True
-                                                        , moduleName = [ "Backend", "Generated", "WebServerShimTypes" ]
-                                                        , declarationName = "BackendEvent"
-                                                        }
-                                                      )
-                                                    , ( "jsonEncodeBackendEventResponse"
-                                                      , { isDecoder = False
-                                                        , moduleName = [ "Backend", "Generated", "WebServerShimTypes" ]
-                                                        , declarationName = "BackendEventResponseStruct"
-                                                        }
-                                                      )
-                                                    ]
-                                                        |> Dict.fromList
+                                                        rootModuleSupportingFunctionsMigrate =
+                                                            maybeMigrationConfig
+                                                                |> Maybe.map .rootModuleSupportingFunctions
+                                                                |> Maybe.withDefault []
 
-                                                jsonConverterDeclarationsMigrate =
-                                                    maybeMigrationConfig
-                                                        |> Maybe.map .jsonConverterDeclarations
-                                                        |> Maybe.withDefault Dict.empty
+                                                        rootModuleSupportingFunctions =
+                                                            [ "config_init = "
+                                                                ++ mainDeclarationNameQualifiedName
+                                                                ++ ".init"
+                                                            , "config_subscriptions = "
+                                                                ++ mainDeclarationNameQualifiedName
+                                                                ++ ".subscriptions"
+                                                            ]
+                                                                ++ rootModuleSupportingFunctionsMigrate
 
-                                                jsonConverterDeclarationsExposedFunctionsToAdmin =
-                                                    maybeExposeFunctionsToAdmin
-                                                        |> Maybe.map .jsonConverterDeclarations
-                                                        |> Maybe.withDefault Dict.empty
+                                                        jsonConverterDeclarationsConfigs : Dict.Dict String StateShimConfigJsonConverterConfig
+                                                        jsonConverterDeclarationsConfigs =
+                                                            [ ( "jsonDecodeBackendEvent"
+                                                              , { isDecoder = True
+                                                                , moduleName = [ "Backend", "Generated", "WebServerShimTypes" ]
+                                                                , declarationName = "BackendEvent"
+                                                                }
+                                                              )
+                                                            , ( "jsonEncodeBackendEventResponse"
+                                                              , { isDecoder = False
+                                                                , moduleName = [ "Backend", "Generated", "WebServerShimTypes" ]
+                                                                , declarationName = "BackendEventResponseStruct"
+                                                                }
+                                                              )
+                                                            ]
+                                                                |> Dict.fromList
 
-                                                jsonConverterDeclarations =
-                                                    [ ( "jsonEncodeAppState"
-                                                      , { isDecoder = False
-                                                        , typeAnnotation = appStateType.stateTypeAnnotation
-                                                        , dependencies = appStateType.dependencies
-                                                        }
-                                                      )
-                                                    , ( "jsonDecodeAppState"
-                                                      , { isDecoder = True
-                                                        , typeAnnotation = appStateType.stateTypeAnnotation
-                                                        , dependencies = appStateType.dependencies
-                                                        }
-                                                      )
-                                                    ]
-                                                        |> Dict.fromList
-                                                        |> Dict.union jsonConverterDeclarationsMigrate
-                                                        |> Dict.union jsonConverterDeclarationsExposedFunctionsToAdmin
+                                                        jsonConverterDeclarationsMigrate =
+                                                            maybeMigrationConfig
+                                                                |> Maybe.map .jsonConverterDeclarations
+                                                                |> Maybe.withDefault Dict.empty
 
-                                                modulesToImportMigrate =
-                                                    maybeMigrationConfig
-                                                        |> Maybe.map .modulesToImport
-                                                        |> Maybe.withDefault []
+                                                        jsonConverterDeclarationsExposedFunctionsToAdmin =
+                                                            maybeExposeFunctionsToAdmin
+                                                                |> Maybe.map .jsonConverterDeclarations
+                                                                |> Maybe.withDefault Dict.empty
 
-                                                modulesToImportExposeFunctionsToAdmin =
-                                                    maybeExposeFunctionsToAdmin
-                                                        |> Maybe.map .modulesToImport
-                                                        |> Maybe.withDefault []
+                                                        jsonConverterDeclarations =
+                                                            [ ( "jsonEncodeAppState"
+                                                              , { isDecoder = False
+                                                                , typeAnnotation = appStateType.stateTypeAnnotation
+                                                                , dependencies = appStateType.dependencies
+                                                                }
+                                                              )
+                                                            , ( "jsonDecodeAppState"
+                                                              , { isDecoder = True
+                                                                , typeAnnotation = appStateType.stateTypeAnnotation
+                                                                , dependencies = appStateType.dependencies
+                                                                }
+                                                              )
+                                                            ]
+                                                                |> Dict.fromList
+                                                                |> Dict.union jsonConverterDeclarationsMigrate
+                                                                |> Dict.union jsonConverterDeclarationsExposedFunctionsToAdmin
 
-                                                exposedFunctionsGeneral =
-                                                    [ ( "init"
-                                                      , { description = { hasAppStateParam = False, resultContainsAppState = True }
-                                                        , handlerExpression = """
+                                                        modulesToImportMigrate =
+                                                            maybeMigrationConfig
+                                                                |> Maybe.map .modulesToImport
+                                                                |> Maybe.withDefault []
+
+                                                        modulesToImportExposeFunctionsToAdmin =
+                                                            maybeExposeFunctionsToAdmin
+                                                                |> Maybe.map .modulesToImport
+                                                                |> Maybe.withDefault []
+
+                                                        exposedFunctionsGeneral =
+                                                            [ ( "init"
+                                                              , { description = { hasAppStateParam = False, resultContainsAppState = True }
+                                                                , handlerExpression = """
 config_init
     |> (\\( appState, commands ) ->
             Backend.Generated.WebServerShim.backendEventResponseFromRuntimeTasksAndSubscriptions
@@ -234,11 +251,11 @@ config_init
     |> Ok
     |> always
 """
-                                                        }
-                                                      )
-                                                    , ( "processEvent"
-                                                      , { description = { hasAppStateParam = True, resultContainsAppState = True }
-                                                        , handlerExpression = """
+                                                                }
+                                                              )
+                                                            , ( "processEvent"
+                                                              , { description = { hasAppStateParam = True, resultContainsAppState = True }
+                                                                , handlerExpression = """
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
     jsonDecodeBackendEvent
     (\\backendEvent ->
@@ -248,29 +265,29 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
             >> Ok
     )
 """
-                                                        }
-                                                      )
-                                                    ]
-                                                        |> Dict.fromList
+                                                                }
+                                                              )
+                                                            ]
+                                                                |> Dict.fromList
 
-                                                exposedFunctionsMigrate =
-                                                    maybeMigrationConfig
-                                                        |> Maybe.map exposedFunctionsFromMigrationConfig
-                                                        |> Maybe.withDefault Dict.empty
+                                                        exposedFunctionsMigrate =
+                                                            maybeMigrationConfig
+                                                                |> Maybe.map exposedFunctionsFromMigrationConfig
+                                                                |> Maybe.withDefault Dict.empty
 
-                                                exposedFunctionsToAdmin =
-                                                    maybeExposeFunctionsToAdmin
-                                                        |> Maybe.map .exposedFunctions
-                                                        |> Maybe.withDefault Dict.empty
+                                                        exposedFunctionsToAdmin =
+                                                            maybeExposeFunctionsToAdmin
+                                                                |> Maybe.map .exposedFunctions
+                                                                |> Maybe.withDefault Dict.empty
 
-                                                exposedFunctions =
-                                                    exposedFunctionsGeneral
-                                                        |> Dict.union exposedFunctionsMigrate
-                                                        |> Dict.union exposedFunctionsToAdmin
+                                                        exposedFunctions =
+                                                            exposedFunctionsGeneral
+                                                                |> Dict.union exposedFunctionsMigrate
+                                                                |> Dict.union exposedFunctionsToAdmin
 
-                                                stateShimConfigExpression =
-                                                    String.trim
-                                                        """
+                                                        stateShimConfigExpression =
+                                                            String.trim
+                                                                """
 { jsonDecodeAppState = jsonDecodeAppState
 , jsonEncodeAppState = jsonEncodeAppState
 , exposedFunctions = config_exposedFunctions
@@ -278,35 +295,36 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 , appStateLessShim = .stateLessFramework
 }"""
 
-                                                stateShimConfig : StateShimConfig
-                                                stateShimConfig =
-                                                    { jsonConverterDeclarationsConfigs = jsonConverterDeclarationsConfigs
-                                                    , jsonConverterDeclarations = jsonConverterDeclarations
-                                                    , appStateType =
-                                                        { typeAnnotation = appStateType.stateTypeAnnotation
-                                                        , dependencies = appStateType.dependencies
-                                                        }
-                                                    , initAppShimStateExpression = ""
-                                                    , appStateLessShimExpression = ""
-                                                    , exposedFunctions = exposedFunctions
-                                                    , supportingModules =
-                                                        [ webServerShimModuleText
-                                                        , webServerShimTypesModuleText
-                                                        ]
-                                                    , rootModuleSupportingFunctions = rootModuleSupportingFunctions
-                                                    , modulesToImport = modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
-                                                    , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                                                        (++) "Backend.Generated.WebServerShimTypes.WebServerShimState "
-                                                    , stateShimConfigExpression = stateShimConfigExpression
-                                                    }
-                                            in
-                                            loweredForAppInStateManagementShim
-                                                stateShimConfig
-                                                config
-                                                sourceFiles
-                                        )
-                            )
-                )
+                                                        stateShimConfig : StateShimConfig
+                                                        stateShimConfig =
+                                                            { jsonConverterDeclarationsConfigs = jsonConverterDeclarationsConfigs
+                                                            , jsonConverterDeclarations = jsonConverterDeclarations
+                                                            , appStateType =
+                                                                { typeAnnotation = appStateType.stateTypeAnnotation
+                                                                , dependencies = appStateType.dependencies
+                                                                }
+                                                            , initAppShimStateExpression = ""
+                                                            , appStateLessShimExpression = ""
+                                                            , exposedFunctions = exposedFunctions
+                                                            , supportingModules =
+                                                                [ webServerShimModuleText
+                                                                , webServerShimTypesModuleText
+                                                                ]
+                                                            , rootModuleSupportingFunctions = rootModuleSupportingFunctions
+                                                            , modulesToImport = modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
+                                                            , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
+                                                                (++) "Backend.Generated.WebServerShimTypes.WebServerShimState "
+                                                            , stateShimConfigExpression = stateShimConfigExpression
+                                                            }
+                                                    in
+                                                    loweredForAppInStateManagementShim
+                                                        sourceDirs
+                                                        stateShimConfig
+                                                        config
+                                                        sourceFiles
+                                                )
+                                    )
+                        )
 
 
 exposedFunctionsFromMigrationConfig : MigrationConfig -> Dict.Dict String ExposedFunctionConfig

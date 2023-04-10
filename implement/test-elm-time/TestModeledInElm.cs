@@ -1,4 +1,5 @@
 using ElmTime;
+using ElmTime.Elm019;
 using JavaScriptEngineSwitcher.V8;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
@@ -33,6 +34,7 @@ public class TestModeledInElm
     {
         var elmMakeResult = Elm019Binaries.ElmMakeToJavascript(
             elmAppFiles,
+            workingDirectoryRelative: null,
             ImmutableList.Create("src", "Main.elm"));
 
         var javascriptFromElmMake =

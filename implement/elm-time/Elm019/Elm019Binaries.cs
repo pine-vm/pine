@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace ElmTime;
+namespace ElmTime.Elm019;
 
 /// <summary>
 /// Functions to work with the Elm 0.19 binaries from https://github.com/elm/compiler/releases
@@ -14,44 +14,59 @@ namespace ElmTime;
 /// </summary>
 public static class Elm019Binaries
 {
-    public static string? overrideElmMakeHomeDirectory = null;
+    public static string? OverrideElmMakeHomeDirectory = null;
 
-    public static IFileStore? elmMakeResultCacheFileStoreDefault = null;
+    public static IFileStore? ElmMakeResultCacheFileStoreDefault = null;
 
-    private static string? elmHomeDirectory;
+    private static string? _elmHomeDirectory;
 
     public record ElmMakeOk(ReadOnlyMemory<byte> producedFile);
 
     /// <inheritdoc cref="ElmMake"/>
     public static Result<string, ElmMakeOk> ElmMakeToJavascript(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string>? workingDirectoryRelative,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
-        ElmMake(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.js", elmMakeCommandAppendix);
+        ElmMake(
+            elmCodeFiles,
+            workingDirectoryRelative: workingDirectoryRelative,
+            pathToFileWithElmEntryPoint,
+            "file-for-elm-make-output.js",
+            elmMakeCommandAppendix);
 
     /// <inheritdoc cref="ElmMake"/>
     public static Result<string, ElmMakeOk> ElmMakeToHtml(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string>? workingDirectoryRelative,
         IImmutableList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
-        ElmMake(elmCodeFiles, pathToFileWithElmEntryPoint, "file-for-elm-make-output.html", elmMakeCommandAppendix);
+        ElmMake(
+            elmCodeFiles,
+            workingDirectoryRelative: workingDirectoryRelative,
+            pathToFileWithElmEntryPoint,
+            "file-for-elm-make-output.html",
+            elmMakeCommandAppendix);
 
     /// <inheritdoc cref="ElmMakeIgnoringCachedResults"/>
     public static Result<string, ElmMakeOk> ElmMake(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string>? workingDirectoryRelative,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
         string? elmMakeCommandAppendix = null) =>
         ElmMake(
             elmCodeFiles: elmCodeFiles,
+            workingDirectoryRelative: workingDirectoryRelative,
             pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
             outputFileName: outputFileName,
             elmMakeCommandAppendix: elmMakeCommandAppendix,
-            resultCacheFileStore: elmMakeResultCacheFileStoreDefault);
+            resultCacheFileStore: ElmMakeResultCacheFileStoreDefault);
 
     /// <inheritdoc cref="ElmMakeIgnoringCachedResults"/>
     public static Result<string, ElmMakeOk> ElmMake(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string>? workingDirectoryRelative,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
         string? elmMakeCommandAppendix,
@@ -61,7 +76,7 @@ public static class Elm019Binaries
             CommonConversion.StringBase16(
                 PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles)));
 
-        var requestIdentifer = new ElmMakeRequestIdentifier(
+        var requestIdentifier = new ElmMakeRequestIdentifier(
             elmCodeFilesHash: elmCodeFilesHash,
             pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
             outputFileName: outputFileName,
@@ -69,7 +84,7 @@ public static class Elm019Binaries
 
         var requestHash =
             CommonConversion.StringBase16(
-                CommonConversion.HashSHA256(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(requestIdentifer))));
+                CommonConversion.HashSHA256(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(requestIdentifier))));
 
         var cacheEntryPath = ImmutableList.Create(requestHash);
 
@@ -93,6 +108,7 @@ public static class Elm019Binaries
         var result =
             ElmMakeIgnoringCachedResults(
                 elmCodeFiles,
+                workingDirectoryRelative: workingDirectoryRelative,
                 pathToFileWithElmEntryPoint,
                 outputFileName,
                 elmMakeCommandAppendix);
@@ -132,10 +148,11 @@ public static class Elm019Binaries
     [...]
     */
     /// <summary>
-    /// Use the 'elm make' command on the elm executable file.
+    /// Use the 'elm make' command on the Elm executable file.
     /// </summary>
     public static Result<string, ElmMakeOk> ElmMakeIgnoringCachedResults(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
+        IReadOnlyList<string>? workingDirectoryRelative,
         IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string outputFileName,
         string? elmMakeCommandAppendix = null)
@@ -145,7 +162,7 @@ public static class Elm019Binaries
         https://github.com/elm-time/elm-time/blob/a206b8095e9f2300f413ef381342db1dca790542/explore/2020-04-01.automate-testing/2020-04-01.automate-testing.md
         Retry for these class of errors.
         */
-        var maxRetryCount = 2;
+        const int maxRetryCount = 2;
 
         var command = "make " + Filesystem.MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
 
@@ -157,7 +174,7 @@ public static class Elm019Binaries
                 environmentFilesNotExecutable: elmCodeFiles,
                 GetElmExecutableFile,
                 command,
-                new Dictionary<string, string>()
+                new Dictionary<string, string>
                 {
                     //  Avoid elm make failing on `getAppUserDataDirectory`.
                     /* Also, work around problems with elm make like this:
@@ -184,7 +201,8 @@ public static class Elm019Binaries
                     An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
                     */
                     {"ELM_HOME", GetElmHomeDirectory()},
-                });
+                },
+                workingDirectoryRelative: workingDirectoryRelative);
 
             attemptsResults.Add(commandResults);
 
@@ -193,9 +211,12 @@ public static class Elm019Binaries
                 .Where(file => !elmCodeFiles.ContainsKey(file.path))
                 .ToImmutableList();
 
+            var outputFileExpectedPath =
+                (workingDirectoryRelative ?? ImmutableList<string>.Empty).ToImmutableList().Add(outputFileName);
+
             var outputFiles =
                 newFiles
-                .Where(resultFile => resultFile.path.SequenceEqual(ImmutableList.Create(outputFileName)))
+                .Where(resultFile => resultFile.path.SequenceEqual(outputFileExpectedPath))
                 .ToImmutableList();
 
             if (1 <= outputFiles.Count)
@@ -244,13 +265,13 @@ public static class Elm019Binaries
 
     public static string GetElmHomeDirectory()
     {
-        elmHomeDirectory =
-            overrideElmMakeHomeDirectory ??
-            elmHomeDirectory ??
+        _elmHomeDirectory =
+            OverrideElmMakeHomeDirectory ??
+            _elmHomeDirectory ??
             Path.Combine(Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
 
-        Directory.CreateDirectory(elmHomeDirectory);
-        return elmHomeDirectory;
+        Directory.CreateDirectory(_elmHomeDirectory);
+        return _elmHomeDirectory;
     }
 
     private record ElmMakeRequestIdentifier(

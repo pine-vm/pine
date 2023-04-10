@@ -1,3 +1,4 @@
+using ElmTime.Elm019;
 using Pine;
 using Pine.Json;
 using System;
@@ -42,6 +43,7 @@ namespace ElmTime
 
         public static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig)
         {
             var sourceFilesHash =
@@ -58,6 +60,7 @@ namespace ElmTime
             Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> compileNew() =>
                 AsCompletelyLoweredElmApp(
                     sourceFiles,
+                    workingDirectoryRelative: workingDirectoryRelative,
                     compilationRootFilePath: interfaceConfig.compilationRootFilePath,
                     interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
 
@@ -95,16 +98,19 @@ namespace ElmTime
 
         private static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> workingDirectoryRelative,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
+                workingDirectoryRelative: workingDirectoryRelative,
                 compilationRootFilePath: compilationRootFilePath,
                 interfaceToHostRootModuleName,
                 ImmutableStack<StackFrame>.Empty);
 
         private static Result<IReadOnlyList<LocatedCompilationError>, CompilationSuccess> AsCompletelyLoweredElmApp(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> workingDirectoryRelative,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack)
@@ -184,6 +190,7 @@ namespace ElmTime
                             return
                             Elm019Binaries.ElmMake(
                                 elmCodeFiles,
+                                workingDirectoryRelative: workingDirectoryRelative,
                                 pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
                                 outputFileName: "output." + (makeJavascript ? "js" : "html"),
                                 elmMakeCommandAppendix: elmMakeCommandAppendix)
@@ -212,7 +219,7 @@ namespace ElmTime
                                             var elmMakeRequestFiles =
                                                 elmMakeRequest.files
                                                 .ToImmutableDictionary(
-                                                    entry => (IReadOnlyList<string>)entry.path.ToImmutableList(),
+                                                    entry => entry.path.ToImmutableList(),
                                                     entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64),
                                                     keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
@@ -273,6 +280,7 @@ namespace ElmTime
 
                         return AsCompletelyLoweredElmApp(
                             sourceFiles: sourceFiles,
+                            workingDirectoryRelative: workingDirectoryRelative,
                             compilationRootFilePath: compilationRootFilePath,
                             interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                             stack: stack.Push(newStackFrame));
@@ -447,6 +455,7 @@ namespace ElmTime
             var elmMakeResult =
                 Elm019Binaries.ElmMakeToJavascript(
                     compilerElmProgramCodeFiles,
+                    workingDirectoryRelative: null,
                     ImmutableList.Create("src", "Main.elm"));
 
             var javascriptFromElmMake =

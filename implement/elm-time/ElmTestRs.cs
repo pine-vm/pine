@@ -1,3 +1,4 @@
+using ElmTime.Elm019;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -123,7 +124,7 @@ public class ElmTestRs
             executableFile: elmTestExecutableFile.Value,
             arguments: "--compiler=./" + elmExecutableFileName + "  --deno  --report=json",
             environmentStrings: null,
-            workingDirectory: null,
+            workingDirectoryRelative: null,
             environmentFilesExecutable: environmentFilesExecutable,
             environmentPathExecutableFiles: environmentPathExecutableFiles);
 

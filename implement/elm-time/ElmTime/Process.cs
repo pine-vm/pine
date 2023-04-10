@@ -1,4 +1,5 @@
-﻿using Pine;
+﻿using ElmTime.Elm019;
+using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -91,6 +92,7 @@ public class ProcessFromElm019Code
 
         var elmMakeResult = Elm019Binaries.ElmMakeToJavascript(
             elmCodeFiles,
+            workingDirectoryRelative: null,
             ElmAppCompilation.FilePathFromModuleName(ElmAppCompilation.InterfaceToHostRootModuleName));
 
         var javascriptFromElmMake =
@@ -114,46 +116,6 @@ public class ProcessFromElm019Code
                     javascriptPreparedToRun,
                     javascriptEngine: overrideJsEngineFactory?.Invoke() ?? JsEngineJintOptimizedForElmApps.Create()));
     }
-
-    [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
-    public static string CompileElmToJavascript(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
-        IImmutableList<string> pathToFileWithElmEntryPoint,
-        string? elmMakeCommandAppendix = null) =>
-        ExtractFileAsStringFromElmMakeResult(
-            Elm019Binaries.ElmMakeToJavascript(
-                elmCodeFiles.ToImmutableDictionary(e => (IReadOnlyList<string>)e.Key, e => e.Value),
-                pathToFileWithElmEntryPoint,
-                elmMakeCommandAppendix));
-
-    [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
-    public static string CompileElmToHtml(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
-        IImmutableList<string> pathToFileWithElmEntryPoint,
-        string? elmMakeCommandAppendix = null) =>
-        ExtractFileAsStringFromElmMakeResult(
-            Elm019Binaries.ElmMakeToHtml(
-                elmCodeFiles.ToImmutableDictionary(e => (IReadOnlyList<string>)e.Key, e => e.Value),
-                pathToFileWithElmEntryPoint,
-                elmMakeCommandAppendix));
-
-    private static string ExtractFileAsStringFromElmMakeResult(Result<string, Elm019Binaries.ElmMakeOk> result) =>
-        Encoding.UTF8.GetString(
-            result.Extract(err => throw new Exception(err)).producedFile.Span);
-
-    /// <inheritdoc cref="Elm019Binaries.ElmMake"/>
-    [Obsolete(message: "Use the methods on " + nameof(Elm019Binaries) + " instead")]
-    public static string CompileElm(
-        IImmutableDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
-        IImmutableList<string> pathToFileWithElmEntryPoint,
-        string outputFileName,
-        string? elmMakeCommandAppendix = null) =>
-        ExtractFileAsStringFromElmMakeResult(
-            Elm019Binaries.ElmMake(
-                elmCodeFiles: elmCodeFiles.ToImmutableDictionary(e => (IReadOnlyList<string>)e.Key, e => e.Value),
-                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                outputFileName: outputFileName,
-                elmMakeCommandAppendix: elmMakeCommandAppendix));
 
     public const string appStateJsVarName = "app_state";
 

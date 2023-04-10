@@ -67,6 +67,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: deploymentFiles,
+            workingDirectoryRelative: ImmutableList<string>.Empty,
             ElmAppInterfaceConfig.Default)
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 

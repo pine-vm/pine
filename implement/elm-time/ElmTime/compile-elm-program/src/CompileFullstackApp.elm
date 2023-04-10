@@ -22,6 +22,7 @@ import Elm.Syntax.TypeAnnotation
 import FileTree
 import Flate
 import JaroWinkler
+import Json.Decode
 import Json.Encode
 import List
 import List.Extra
@@ -38,6 +39,17 @@ type alias CompilationArguments =
     , dependencies : List ( DependencyKey, Bytes.Bytes )
     , compilationRootFilePath : List String
     , interfaceToHostRootModuleName : List String
+    }
+
+
+type alias SourceDirectories =
+    { mainSourceDirectoryPath : List String
+    , elmJsonDirectoryPath : List String
+    }
+
+
+type alias ElmJson =
+    { sourceDirectories : List String
     }
 
 
@@ -311,81 +323,145 @@ asCompletelyLoweredElmApp :
     -> CompilationArguments
     -> Result (List LocatedCompilationError) CompilationIterationSuccess
 asCompletelyLoweredElmApp entryPointClasses arguments =
-    let
-        sourceModules =
-            elmModulesDictFromAppFiles arguments.sourceFiles
+    case findSourceDirectories arguments of
+        Err err ->
+            Err
+                [ LocatedInSourceFiles
+                    { filePath = arguments.compilationRootFilePath
+                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                    }
+                    (OtherCompilationError ("Failed to find source directories: " ++ err))
+                ]
 
-        compilationInterfaceModuleDependencies : Dict.Dict String (List String)
-        compilationInterfaceModuleDependencies =
-            [ ( "SourceFiles", modulesToAddForBytesCoding )
-            , ( "ElmMake", modulesToAddForBytesCoding )
-            , ( "GenerateJsonCoders", modulesToAddForBase64Coding )
-            , ( "GenerateJsonConverters", modulesToAddForBase64Coding )
-            ]
-                |> Dict.fromList
+        Ok sourceDirs ->
+            let
+                sourceModules =
+                    elmModulesDictFromAppFiles arguments.sourceFiles
 
-        usedCompilationInterfaceModules : Set.Set String
-        usedCompilationInterfaceModules =
-            sourceModules
-                |> Dict.values
-                |> List.map .moduleName
-                |> List.concatMap
-                    (\moduleName ->
-                        arguments.compilationInterfaceElmModuleNamePrefixes
-                            |> List.concatMap
-                                (\compilationInterfacePrefix ->
-                                    case moduleName of
-                                        [] ->
-                                            []
+                compilationInterfaceModuleDependencies : Dict.Dict String (List String)
+                compilationInterfaceModuleDependencies =
+                    [ ( "SourceFiles", modulesToAddForBytesCoding )
+                    , ( "ElmMake", modulesToAddForBytesCoding )
+                    , ( "GenerateJsonCoders", modulesToAddForBase64Coding )
+                    , ( "GenerateJsonConverters", modulesToAddForBase64Coding )
+                    ]
+                        |> Dict.fromList
 
-                                        firstDirectory :: others ->
-                                            if firstDirectory == compilationInterfacePrefix then
-                                                [ String.join "." others ]
+                usedCompilationInterfaceModules : Set.Set String
+                usedCompilationInterfaceModules =
+                    sourceModules
+                        |> Dict.values
+                        |> List.map .moduleName
+                        |> List.concatMap
+                            (\moduleName ->
+                                arguments.compilationInterfaceElmModuleNamePrefixes
+                                    |> List.concatMap
+                                        (\compilationInterfacePrefix ->
+                                            case moduleName of
+                                                [] ->
+                                                    []
 
-                                            else
-                                                []
-                                )
+                                                firstDirectory :: others ->
+                                                    if firstDirectory == compilationInterfacePrefix then
+                                                        [ String.join "." others ]
+
+                                                    else
+                                                        []
+                                        )
+                            )
+                        |> Set.fromList
+
+                modulesToAdd =
+                    usedCompilationInterfaceModules
+                        |> Set.toList
+                        |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
+                        |> List.concat
+            in
+            arguments.sourceFiles
+                |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
+                |> loweredForSourceFiles sourceDirs arguments.compilationInterfaceElmModuleNamePrefixes
+                |> Result.andThen (loweredForJsonCoders { originalSourceModules = sourceModules, sourceDirs = sourceDirs } arguments.compilationInterfaceElmModuleNamePrefixes)
+                |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
+                |> Result.andThen (loweredForElmMake sourceDirs arguments.compilationInterfaceElmModuleNamePrefixes arguments.dependencies)
+                |> Result.andThen
+                    (loweredForCompilationRoot
+                        entryPointClasses
+                        { originalSourceModules = sourceModules
+                        , compilationRootFilePath = arguments.compilationRootFilePath
+                        , interfaceToHostRootModuleName = arguments.interfaceToHostRootModuleName
+                        }
                     )
-                |> Set.fromList
 
-        modulesToAdd =
-            usedCompilationInterfaceModules
-                |> Set.toList
-                |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
-                |> List.concat
+
+findSourceDirectories :
+    { a | compilationRootFilePath : List String, sourceFiles : AppFiles }
+    -> Result String SourceDirectories
+findSourceDirectories arguments =
+    let
+        searchRecursive : List String -> Result String SourceDirectories
+        searchRecursive currentDirectory =
+            case Dict.get (currentDirectory ++ [ "elm.json" ]) arguments.sourceFiles of
+                Nothing ->
+                    if currentDirectory == [] then
+                        Err "Did not find elm.json"
+
+                    else
+                        searchRecursive (currentDirectory |> List.reverse |> List.drop 1 |> List.reverse)
+
+                Just elmJsonFile ->
+                    case stringFromFileContent elmJsonFile of
+                        Nothing ->
+                            Err "Failed to decode file content as string"
+
+                        Just elmJsonString ->
+                            case Json.Decode.decodeString decodeElmJson elmJsonString of
+                                Err err ->
+                                    Err ("Failed to decode elm.json: " ++ Json.Decode.errorToString err)
+
+                                Ok elmJson ->
+                                    case
+                                        elmJson.sourceDirectories
+                                            |> List.head
+                                            |> Maybe.map (String.split "/")
+                                    of
+                                        Nothing ->
+                                            Err "Did not find a matching directory in source-directories"
+
+                                        Just matchingSourceDirectory ->
+                                            Ok
+                                                { mainSourceDirectoryPath =
+                                                    currentDirectory ++ matchingSourceDirectory
+                                                , elmJsonDirectoryPath = currentDirectory
+                                                }
     in
-    arguments.sourceFiles
-        |> addModulesFromTextToAppFiles modulesToAdd
-        |> loweredForSourceFiles arguments.compilationInterfaceElmModuleNamePrefixes
-        |> Result.andThen (loweredForJsonCoders { originalSourceModules = sourceModules } arguments.compilationInterfaceElmModuleNamePrefixes)
-        |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
-        |> Result.andThen (loweredForElmMake arguments.compilationInterfaceElmModuleNamePrefixes arguments.dependencies)
-        |> Result.andThen
-            (loweredForCompilationRoot
-                entryPointClasses
-                { originalSourceModules = sourceModules
-                , compilationRootFilePath = arguments.compilationRootFilePath
-                , interfaceToHostRootModuleName = arguments.interfaceToHostRootModuleName
-                }
-            )
+    searchRecursive arguments.compilationRootFilePath
 
 
-loweredForSourceFiles : List String -> AppFiles -> Result (LocatedInSourceFiles String) AppFiles
-loweredForSourceFiles compilationInterfaceElmModuleNamePrefixes sourceFiles =
+decodeElmJson : Json.Decode.Decoder ElmJson
+decodeElmJson =
+    Json.Decode.map ElmJson
+        (Json.Decode.field "source-directories" (Json.Decode.list Json.Decode.string))
+
+
+loweredForSourceFiles : SourceDirectories -> List String -> AppFiles -> Result (LocatedInSourceFiles String) AppFiles
+loweredForSourceFiles sourceDirs compilationInterfaceElmModuleNamePrefixes sourceFiles =
     compilationInterfaceElmModuleNamePrefixes
         |> listFoldlToAggregateResult
             (\compilationInterfaceElmModuleNamePrefix files ->
                 mapElmModuleWithNameIfExists
+                    sourceDirs
                     locatedInSourceFilesFromJustFilePath
                     (compilationInterfaceElmModuleNamePrefix ++ ".SourceFiles")
-                    mapSourceFilesModuleText
+                    (mapSourceFilesModuleText sourceDirs)
                     files
             )
             (Ok sourceFiles)
 
 
 loweredForJsonCoders :
-    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule }
+    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
+    , sourceDirs : SourceDirectories
+    }
     -> List String
     -> AppFiles
     -> Result (LocatedInSourceFiles String) AppFiles
@@ -394,12 +470,14 @@ loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFil
         |> listFoldlToAggregateResult
             (\compilationInterfaceElmModuleNamePrefix files ->
                 mapElmModuleWithNameIfExists
+                    context.sourceDirs
                     locatedInSourceFilesFromJustFilePath
                     (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonCoders")
                     (mapJsonCodersModuleText context)
                     files
                     |> Result.andThen
                         (mapElmModuleWithNameIfExists
+                            context.sourceDirs
                             locatedInSourceFilesFromJustFilePath
                             (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonConverters")
                             (mapJsonCodersModuleText context)
@@ -408,15 +486,21 @@ loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFil
             (Ok sourceFiles)
 
 
-loweredForElmMake : List String -> List ( DependencyKey, Bytes.Bytes ) -> AppFiles -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
-loweredForElmMake compilationInterfaceElmModuleNamePrefixes dependencies sourceFiles =
+loweredForElmMake :
+    SourceDirectories
+    -> List String
+    -> List ( DependencyKey, Bytes.Bytes )
+    -> AppFiles
+    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
+loweredForElmMake sourceDirs compilationInterfaceElmModuleNamePrefixes dependencies sourceFiles =
     compilationInterfaceElmModuleNamePrefixes
         |> listFoldlToAggregateResult
             (\compilationInterfaceElmModuleNamePrefix files ->
                 mapElmModuleWithNameIfExists
+                    sourceDirs
                     (\context -> OtherCompilationError >> locatedInSourceFilesFromJustFilePath context >> List.singleton)
                     (compilationInterfaceElmModuleNamePrefix ++ ".ElmMake")
-                    (mapElmMakeModuleText dependencies)
+                    (mapElmMakeModuleText sourceDirs dependencies)
                     files
             )
             (Ok sourceFiles)
@@ -558,10 +642,12 @@ functionNameFlagsSeparator =
 
 
 mapJsonCodersModuleText :
-    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule }
+    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
+    , sourceDirs : SourceDirectories
+    }
     -> ( AppFiles, List String, String )
     -> Result (LocatedInSourceFiles String) ( AppFiles, String )
-mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleFilePath, moduleText ) =
+mapJsonCodersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, moduleFilePath, moduleText ) =
     parseElmModuleText moduleText
         |> Result.mapError
             (parserDeadEndsToString moduleText
@@ -636,7 +722,9 @@ mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleFilePath,
                             let
                                 ( appFiles, { generatedModuleName, modulesToImport } ) =
                                     mapAppFilesToSupportJsonCoding
-                                        { generatedModuleNamePrefix = interfaceModuleName }
+                                        { generatedModuleNamePrefix = interfaceModuleName
+                                        , sourceDirs = sourceDirs
+                                        }
                                         (functionsToReplace |> List.map .parsedTypeAnnotation)
                                         (functionsToReplace |> List.map .dependencies |> List.foldl Dict.union Dict.empty)
                                         sourceFiles
@@ -690,12 +778,14 @@ mapJsonCodersModuleText { originalSourceModules } ( sourceFiles, moduleFilePath,
 
 
 mapAppFilesToSupportJsonCoding :
-    { generatedModuleNamePrefix : List String }
+    { generatedModuleNamePrefix : List String
+    , sourceDirs : SourceDirectories
+    }
     -> List ElmTypeAnnotation
     -> Dict.Dict String ElmChoiceTypeStruct
     -> AppFiles
     -> ( AppFiles, { generatedModuleName : List String, modulesToImport : List (List String) } )
-mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
+mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix, sourceDirs } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
     let
         modulesToImportForChoiceTypes =
             choiceTypes
@@ -722,7 +812,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
 
         appFilesAfterExposingChoiceTypesInModules =
             modulesToImportForChoiceTypes
-                |> List.foldl exposeAllInElmModuleInAppFiles appFilesBefore
+                |> List.foldl (exposeAllInElmModuleInAppFiles sourceDirs) appFilesBefore
 
         typeAnnotationsFunctions =
             typeAnnotationsBeforeDeduplicating
@@ -779,7 +869,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix } typeAnnotationsBefo
             generatedModuleNamePrefix ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
 
         generatedModulePath =
-            filePathFromElmModuleName generatedModuleName
+            filePathFromElmModuleName sourceDirs generatedModuleName
 
         generatedModuleText =
             [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
@@ -844,8 +934,11 @@ buildJsonCodingFunctionsForTypeAnnotation typeAnnotation =
     }
 
 
-mapSourceFilesModuleText : ( AppFiles, List String, String ) -> Result (LocatedInSourceFiles String) ( AppFiles, String )
-mapSourceFilesModuleText ( sourceFiles, moduleFilePath, moduleText ) =
+mapSourceFilesModuleText :
+    SourceDirectories
+    -> ( AppFiles, List String, String )
+    -> Result (LocatedInSourceFiles String) ( AppFiles, String )
+mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) =
     let
         mapErrorStringForFunctionDeclaration functionDeclaration =
             let
@@ -881,6 +974,7 @@ mapSourceFilesModuleText ( sourceFiles, moduleFilePath, moduleText ) =
                     |> List.map
                         (\functionDeclaration ->
                             prepareReplaceFunctionInSourceFilesModuleText
+                                sourceDirs
                                 sourceFiles
                                 ( moduleFilePath, parsedModule )
                                 functionDeclaration
@@ -923,7 +1017,7 @@ type FileTreeNode blobStructure
                                     interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
 
                                 generatedModulePath =
-                                    filePathFromElmModuleName generatedModuleName
+                                    filePathFromElmModuleName sourceDirs generatedModuleName
 
                                 generatedModuleText =
                                     [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
@@ -990,10 +1084,11 @@ type FileTreeNode blobStructure
 
 
 mapElmMakeModuleText :
-    List ( DependencyKey, Bytes.Bytes )
+    SourceDirectories
+    -> List ( DependencyKey, Bytes.Bytes )
     -> ( AppFiles, List String, String )
     -> Result (List LocatedCompilationError) ( AppFiles, String )
-mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
+mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, moduleText ) =
     parseElmModuleText moduleText
         |> Result.mapError
             (parserDeadEndsToString moduleText
@@ -1010,6 +1105,7 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
                     |> List.map
                         (\declaration ->
                             prepareReplaceFunctionInElmMakeModuleText dependencies
+                                sourceDirs
                                 sourceFiles
                                 ( moduleFilePath, parsedModule )
                                 (Elm.Syntax.Node.value declaration)
@@ -1040,7 +1136,7 @@ mapElmMakeModuleText dependencies ( sourceFiles, moduleFilePath, moduleText ) =
                                     interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
 
                                 generatedModulePath =
-                                    filePathFromElmModuleName generatedModuleName
+                                    filePathFromElmModuleName sourceDirs generatedModuleName
 
                                 generatedModuleText =
                                     [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
@@ -1081,11 +1177,11 @@ locatedInSourceFilesFromRange filePath node =
             LocatedInSourceFiles { filePath = filePath, locationInModuleText = range } a
 
 
-exposeAllInElmModuleInAppFiles : List String -> AppFiles -> AppFiles
-exposeAllInElmModuleInAppFiles moduleName appFiles =
+exposeAllInElmModuleInAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles
+exposeAllInElmModuleInAppFiles sourceDirs moduleName appFiles =
     let
         moduleFilePath =
-            filePathFromElmModuleName moduleName
+            filePathFromElmModuleName sourceDirs moduleName
     in
     case
         appFiles
@@ -2562,11 +2658,12 @@ parseJsonCodingFunctionType signature =
 
 
 prepareReplaceFunctionInSourceFilesModuleText :
-    AppFiles
+    SourceDirectories
+    -> AppFiles
     -> ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
     -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : List String } -> String -> Result String String }
-prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule originalFunctionDeclaration =
+prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModule originalFunctionDeclaration =
     let
         functionName =
             Elm.Syntax.Node.value
@@ -2577,7 +2674,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceFiles currentModule original
             Err ("Failed to parse function: " ++ error)
 
         Ok ( filePathRepresentation, config ) ->
-            case findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
+            case findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles filePathRepresentation of
                 Err error ->
                     Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
@@ -2750,6 +2847,7 @@ mapBlobs mapBlob node =
 
 prepareReplaceFunctionInElmMakeModuleText :
     List ( DependencyKey, Bytes.Bytes )
+    -> SourceDirectories
     -> AppFiles
     -> ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Expression.Function
@@ -2759,7 +2857,7 @@ prepareReplaceFunctionInElmMakeModuleText :
             { valueFunctionsTexts : List String
             , updateInterfaceModuleText : { generatedModuleName : List String } -> String -> Result String String
             }
-prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule originalFunctionDeclaration =
+prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles currentModule originalFunctionDeclaration =
     let
         functionName =
             Elm.Syntax.Node.value
@@ -2782,7 +2880,7 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule
                             )
 
                 mapTreeLeaf =
-                    prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation = filePathRepresentation }
+                    prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepresentation = filePathRepresentation }
                         >> Result.andThen (continueMapResult >> Result.mapError OtherCompilationError)
 
                 mappedTreeResult : Result (List CompilationError) (CompilationInterfaceRecordTreeNode { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String })
@@ -2845,13 +2943,14 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceFiles currentModule
 
 
 prepareElmMakeFunctionForEmit :
-    AppFiles
+    SourceDirectories
+    -> AppFiles
     -> List ( DependencyKey, Bytes.Bytes )
     -> { filePathRepresentation : String }
     -> InterfaceElmMakeFunctionLeafConfig
     -> Result CompilationError ElmMakeRecordTreeLeafEmit
-prepareElmMakeFunctionForEmit sourceFiles dependencies { filePathRepresentation } config =
-    case findFileWithPathMatchingRepresentationInFunctionName sourceFiles filePathRepresentation of
+prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepresentation } config =
+    case findFileWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles filePathRepresentation of
         Err error ->
             Err (OtherCompilationError ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error))
 
@@ -3116,9 +3215,13 @@ indentElmCodeLines level =
         >> String.join "\n"
 
 
-findFileWithPathMatchingRepresentationInFunctionName : AppFiles -> String -> Result String ( List String, Bytes.Bytes )
-findFileWithPathMatchingRepresentationInFunctionName sourceFiles pathPattern =
-    findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles pathPattern
+findFileWithPathMatchingRepresentationInFunctionName :
+    SourceDirectories
+    -> AppFiles
+    -> String
+    -> Result String ( List String, Bytes.Bytes )
+findFileWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles pathPattern =
+    findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles pathPattern
         |> Result.andThen
             (\( matchPath, matchNode ) ->
                 case matchNode of
@@ -3130,8 +3233,12 @@ findFileWithPathMatchingRepresentationInFunctionName sourceFiles pathPattern =
             )
 
 
-findFileTreeNodeWithPathMatchingRepresentationInFunctionName : AppFiles -> String -> Result String ( List String, FileTree.FileTreeNode Bytes.Bytes )
-findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles pathPattern =
+findFileTreeNodeWithPathMatchingRepresentationInFunctionName :
+    SourceDirectories
+    -> AppFiles
+    -> String
+    -> Result String ( List String, FileTree.FileTreeNode Bytes.Bytes )
+findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles pathPattern =
     let
         fileTree =
             sourceFiles
@@ -3141,6 +3248,8 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceFiles pathPat
 
         nodesWithRepresentations =
             fileTree
+                |> FileTree.getNodeAtPathFromFileTree sourceDirs.elmJsonDirectoryPath
+                |> Maybe.withDefault (FileTree.TreeNode [])
                 |> FileTree.listNodesWithPath
                 |> List.map (\( nodePath, node ) -> ( filePathRepresentationInFunctionName nodePath, ( nodePath, node ) ))
 
@@ -3328,15 +3437,16 @@ parseAndMapElmModuleText mapDependingOnParsing moduleText =
 {-| Consider restricting the interface of `mapElmModuleWithNameIfExists` to not support arbitrary changes to app code but only addition of expose syntax.
 -}
 mapElmModuleWithNameIfExists :
-    ({ filePath : List String } -> String -> err)
+    SourceDirectories
+    -> ({ filePath : List String } -> String -> err)
     -> String
     -> (( AppFiles, List String, String ) -> Result err ( AppFiles, String ))
     -> AppFiles
     -> Result err AppFiles
-mapElmModuleWithNameIfExists errFromString elmModuleName tryMapModuleText appCode =
+mapElmModuleWithNameIfExists sourceDirs errFromString elmModuleName tryMapModuleText appCode =
     let
         elmModuleFilePath =
-            filePathFromElmModuleName (String.split "." elmModuleName)
+            filePathFromElmModuleName sourceDirs (String.split "." elmModuleName)
     in
     case Dict.get elmModuleFilePath appCode of
         Nothing ->
@@ -3890,8 +4000,8 @@ filePathRepresentationInFunctionName =
         >> String.fromList
 
 
-addModulesFromTextToAppFiles : List String -> AppFiles -> AppFiles
-addModulesFromTextToAppFiles modulesToAdd sourceFiles =
+addModulesFromTextToAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles
+addModulesFromTextToAppFiles sourceDirs modulesToAdd sourceFiles =
     modulesToAdd
         |> List.foldl
             (\moduleToAdd prevFiles ->
@@ -3902,6 +4012,7 @@ addModulesFromTextToAppFiles modulesToAdd sourceFiles =
                             let
                                 filePath =
                                     filePathFromElmModuleName
+                                        sourceDirs
                                         (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
                             in
                             prevFiles
@@ -3912,14 +4023,14 @@ addModulesFromTextToAppFiles modulesToAdd sourceFiles =
             sourceFiles
 
 
-filePathFromElmModuleName : List String -> List String
-filePathFromElmModuleName elmModuleName =
+filePathFromElmModuleName : SourceDirectories -> List String -> List String
+filePathFromElmModuleName sourceDirs elmModuleName =
     case elmModuleName |> List.reverse of
         [] ->
             []
 
         moduleLastName :: reversedDirectoryNames ->
-            [ "src" ] ++ List.reverse ((moduleLastName ++ ".elm") :: reversedDirectoryNames)
+            sourceDirs.mainSourceDirectoryPath ++ List.reverse ((moduleLastName ++ ".elm") :: reversedDirectoryNames)
 
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File

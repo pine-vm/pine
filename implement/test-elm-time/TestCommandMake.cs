@@ -100,6 +100,7 @@ public class TestCommandMake
     {
         var makeResult = Program.Make(
             sourceFiles: projectFiles,
+            workingDirectoryRelative: null,
             pathToFileWithElmEntryPoint: entryPointFilePath,
             outputFileName: "should-not-matter",
             elmMakeCommandAppendix: null);

@@ -21,14 +21,14 @@ public class ExecutableFile
         ReadOnlyMemory<byte> executableFile,
         string arguments,
         IDictionary<string, string>? environmentStrings,
-        IImmutableList<string>? workingDirectory = null,
+        IReadOnlyList<string>? workingDirectoryRelative = null,
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? environmentFilesExecutable = null,
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? environmentPathExecutableFiles = null)
     {
         var environmentStringsDict =
             environmentStrings?.ToImmutableDictionary() ?? ImmutableDictionary<string, string>.Empty;
 
-        var environmentPathContainerDirectoryName = "environment-path-cont";
+        const string environmentPathContainerDirectoryName = "environment-path-cont";
 
         var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
@@ -47,7 +47,7 @@ public class ExecutableFile
         foreach (var environmentFile in environmentFilesNotExecutable)
             writeEnvironmentFile(environmentFile);
 
-        var mainExecutableFileName = "name-used-to-execute-file.exe";
+        const string mainExecutableFileName = "name-used-to-execute-file.exe";
         var mainExecutableFilePathRelative = ImmutableList.Create(mainExecutableFileName);
 
         var executableFileNameAppendix =
@@ -79,7 +79,7 @@ public class ExecutableFile
         var workingDirectoryAbsolute =
             Path.Combine(
                 containerDirectory,
-                Filesystem.MakePlatformSpecificPath(workingDirectory ?? ImmutableList<string>.Empty));
+                Filesystem.MakePlatformSpecificPath(workingDirectoryRelative ?? ImmutableList<string>.Empty));
 
         var mainExecutableFilePathAbsolute = Path.Combine(containerDirectory, mainExecutableFileName);
 
@@ -142,77 +142,5 @@ public class ExecutableFile
             StandardError: standardError,
             StandardOutput: standardOutput
         ), createdFiles);
-    }
-
-    /// <summary>
-    /// Offer method with old interface for backwards-compatibility with assembly consumers.
-    /// </summary>
-    [Obsolete("Use the new " + nameof(ExecuteFileWithArguments) + " instead")]
-    public static (ProcessOutput processOutput, IReadOnlyCollection<(IImmutableList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
-    IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
-    ReadOnlyMemory<byte> executableFile,
-    string arguments,
-    IDictionary<string, string>? environmentStrings,
-    IImmutableList<string>? workingDirectory = null,
-    IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>? environmentFilesExecutable = null,
-    IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? environmentPathExecutableFiles = null)
-    {
-        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> toNewDictType(IReadOnlyDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> oldDict) =>
-            oldDict
-            .ToImmutableDictionary(
-                keySelector: e => (IReadOnlyList<string>)e.Key,
-                elementSelector: e => e.Value,
-                keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
-
-        var (processOutput, resultingFilesOld) =
-            ExecuteFileWithArguments(
-                environmentFilesNotExecutable: toNewDictType(environmentFilesNotExecutable),
-                executableFile: executableFile,
-                arguments: arguments,
-                environmentStrings: environmentStrings,
-                workingDirectory: workingDirectory,
-                environmentFilesExecutable: environmentFilesExecutable is null ? null : toNewDictType(environmentFilesExecutable),
-                environmentPathExecutableFiles: environmentPathExecutableFiles);
-
-        var resultingFiles =
-            resultingFilesOld.Select(file => ((IImmutableList<string>)file.path.ToImmutableList(), file.content)).ToImmutableList();
-
-        return (processOutput, resultingFiles);
-    }
-
-
-    //  Helper for Linux platform. Thank you Kyle Spearrin!
-    //  https://stackoverflow.com/questions/45132081/file-permissions-on-linux-unix-with-net-core/47918132#47918132
-    public static void LinuxExecWithBash(string cmd)
-    {
-        var escapedArgs = cmd.Replace("\"", "\\\"");
-
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                FileName = "/bin/bash",
-                Arguments = $"-c \"{escapedArgs}\""
-            }
-        };
-
-        process.Start();
-        process.WaitForExit();
-
-        Console.WriteLine(
-            "Executed command with bash: " +
-            System.Text.Json.JsonSerializer.Serialize(
-                new
-                {
-                    cmd = cmd,
-                    exitCode = process.ExitCode,
-                    standardOut = process.StandardOutput.ReadToEnd(),
-                    standardError = process.StandardError.ReadToEnd(),
-                }));
     }
 }

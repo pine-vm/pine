@@ -1,6 +1,5 @@
 using ElmTime;
 using ElmTime.Platform.WebServer;
-using ElmTime.ProcessStore;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -98,28 +97,10 @@ public class TestSetup
         var compilationResult =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: originalAppFiles,
+                workingDirectoryRelative: ImmutableList<string>.Empty,
                 ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath })
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
         return compilationResult.result.compiledFiles;
     }
-
-    public static IProcessStoreReader EmptyProcessStoreReader() =>
-        new ProcessStoreReaderFromDelegates
-        (
-            EnumerateSerializedCompositionsRecordsReverseDelegate: () => Array.Empty<byte[]>(),
-            GetReductionDelegate: _ => null
-        );
-}
-
-internal record ProcessStoreReaderFromDelegates(
-    Func<IEnumerable<byte[]>> EnumerateSerializedCompositionsRecordsReverseDelegate,
-    Func<byte[], ReductionRecord?> GetReductionDelegate)
-    : IProcessStoreReader
-{
-    public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
-        EnumerateSerializedCompositionsRecordsReverseDelegate();
-
-    public ReductionRecord? GetReduction(byte[] reducedCompositionHash) =>
-        GetReductionDelegate(reducedCompositionHash);
 }

@@ -14,6 +14,13 @@ import Result.Extra
 import Test
 
 
+defaultSourceDirs : CompileFullstackApp.SourceDirectories
+defaultSourceDirs =
+    { mainSourceDirectoryPath = [ "src" ]
+    , elmJsonDirectoryPath = []
+    }
+
+
 dependencies_encoding_roundtrip : Test.Test
 dependencies_encoding_roundtrip =
     [ ( "ElmMakeDependency Empty "
@@ -27,15 +34,15 @@ dependencies_encoding_roundtrip =
     , ( "ElmMakeDependency with only Main.elm to HTML"
       , CompileFullstackApp.ElmMakeDependency
             { files =
-                [ ( [ "elm.json" ]
+                [ ( defaultSourceDirs.elmJsonDirectoryPath ++ [ "elm.json" ]
                   , Bytes.Encode.encode (Bytes.Encode.string "elm.json content")
                   )
-                , ( [ "src", "Main.elm" ]
+                , ( defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
                   , Bytes.Encode.encode (Bytes.Encode.string "Main.elm content")
                   )
                 ]
                     |> Dict.fromList
-            , entryPointFilePath = [ "src", "Main.elm" ]
+            , entryPointFilePath = defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
             , enableDebug = True
             , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
             }
@@ -43,15 +50,15 @@ dependencies_encoding_roundtrip =
     , ( "ElmMakeDependency with only Main.elm to JS"
       , CompileFullstackApp.ElmMakeDependency
             { files =
-                [ ( [ "elm.json" ]
+                [ ( defaultSourceDirs.elmJsonDirectoryPath ++ [ "elm.json" ]
                   , Bytes.Encode.encode (Bytes.Encode.string "elm.json content")
                   )
-                , ( [ "src", "Main.elm" ]
+                , ( defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
                   , Bytes.Encode.encode (Bytes.Encode.string "Main.elm content")
                   )
                 ]
                     |> Dict.fromList
-            , entryPointFilePath = [ "src", "Main.elm" ]
+            , entryPointFilePath = defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
             , enableDebug = True
             , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
             }
@@ -140,7 +147,7 @@ subscriptions _ =
                                 (\( parsedModule, rootFunctionDeclaration ) ->
                                     let
                                         moduleFilePath =
-                                            [ "src", "Backend", "Main.elm" ]
+                                            defaultSourceDirs.mainSourceDirectoryPath ++ [ "Backend", "Main.elm" ]
 
                                         sourceModules =
                                             [ ( moduleFilePath
@@ -527,7 +534,7 @@ type alias MixedRecord =
                                                             moduleName =
                                                                 Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
                                                         in
-                                                        ( filePathFromElmModuleName moduleName
+                                                        ( filePathFromElmModuleName defaultSourceDirs moduleName
                                                         , { fileText = "fake"
                                                           , parsedSyntax = parsedModule
                                                           , moduleName = moduleName
@@ -585,7 +592,7 @@ type alias MixedRecord =
                                                                         (rootModule.moduleDefinition
                                                                             |> Elm.Syntax.Node.value
                                                                             |> Elm.Syntax.Module.moduleName
-                                                                            |> filePathFromElmModuleName
+                                                                            |> filePathFromElmModuleName defaultSourceDirs
                                                                         )
                                                                         rootModule
                                                                     )
