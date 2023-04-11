@@ -1,4 +1,4 @@
-module CompileFullstackApp exposing (..)
+module CompileElmApp exposing (..)
 
 import Base64
 import Bytes

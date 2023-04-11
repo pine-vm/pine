@@ -1,6 +1,6 @@
 module CompileElmAppWithStateShim exposing (..)
 
-import CompileFullstackApp
+import CompileElmApp
     exposing
         ( AppFiles
         , CompilationError(..)
@@ -294,7 +294,7 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
     , stateShimModuleText
     ]
         ++ stateShimConfig.supportingModules
-        |> CompileFullstackApp.elmModulesDictFromModuleTexts (CompileFullstackApp.filePathFromElmModuleName sourceDirs)
+        |> CompileElmApp.elmModulesDictFromModuleTexts (CompileElmApp.filePathFromElmModuleName sourceDirs)
         |> Result.mapError
             (LocatedInSourceFiles
                 { filePath = []
@@ -349,7 +349,7 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                                             )
 
                                     Just ( converterTypeModuleFilePath, converterTypeModule ) ->
-                                        CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                                        CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
                                             (Dict.union typesModules originalSourceModules)
                                             ( ( converterTypeModuleFilePath, converterTypeModule.parsedSyntax )
                                             , syntaxNodeFromEmptyRange
@@ -372,14 +372,14 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                                                 |> Result.map (Tuple.pair declarationName)
                                         )
                         in
-                        CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                        CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
                             (Dict.union typesModules originalSourceModules)
                             ( ( stateShimTypesModuleFilePath, stateShimTypesModule.parsedSyntax )
                             , syntaxNodeFromEmptyRange stateShimRequestFakeTypeAnnotation
                             )
                             |> Result.andThen
                                 (\stateShimRequestType ->
-                                    CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
+                                    CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
                                         (Dict.union typesModules originalSourceModules)
                                         ( ( stateShimTypesModuleFilePath, stateShimTypesModule.parsedSyntax )
                                         , syntaxNodeFromEmptyRange stateShimResponseResultFakeTypeAnnotation

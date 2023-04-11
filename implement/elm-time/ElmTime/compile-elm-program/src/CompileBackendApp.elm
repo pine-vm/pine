@@ -1,14 +1,6 @@
 module CompileBackendApp exposing (..)
 
-import CompileElmAppWithStateShim
-    exposing
-        ( ExposedFunctionConfig
-        , StateShimConfig
-        , StateShimConfigJsonConverter
-        , StateShimConfigJsonConverterConfig
-        , loweredForAppInStateManagementShim
-        )
-import CompileFullstackApp
+import CompileElmApp
     exposing
         ( AppFiles
         , CompilationError(..)
@@ -30,6 +22,14 @@ import CompileFullstackApp
         , parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation
         , parseElmTypeAndDependenciesRecursivelyFromAnnotation
         , syntaxRangeCoveringCompleteModule
+        )
+import CompileElmAppWithStateShim
+    exposing
+        ( ExposedFunctionConfig
+        , StateShimConfig
+        , StateShimConfigJsonConverter
+        , StateShimConfigJsonConverterConfig
+        , loweredForAppInStateManagementShim
         )
 import Dict
 import Elm.Syntax.Declaration

@@ -6,7 +6,7 @@ These functions enable editor features like completion suggestions and hover tip
 
 import Common
 import CompilationInterface.SourceFiles
-import CompileFullstackApp
+import CompileElmApp
 import Elm.Syntax.Comments
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
@@ -893,7 +893,7 @@ updateLanguageServiceState fileTree state =
                                 |> Maybe.andThen
                                     (\asString ->
                                         asString
-                                            |> CompileFullstackApp.parseElmModuleText
+                                            |> CompileElmApp.parseElmModuleText
                                             |> Result.toMaybe
                                             |> Maybe.map (\syntax -> { text = asString, syntax = syntax })
                                     )
@@ -952,7 +952,7 @@ elmCoreModulesParseResults =
         |> List.filterMap
             (\coreModule ->
                 coreModule.moduleText
-                    |> CompileFullstackApp.parseElmModuleText
+                    |> CompileElmApp.parseElmModuleText
                     |> Result.toMaybe
                     |> Maybe.map
                         (\syntax ->

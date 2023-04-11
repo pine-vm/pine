@@ -2,7 +2,7 @@ module Tests exposing (..)
 
 import Bytes.Encode
 import CompileBackendApp
-import CompileFullstackApp
+import CompileElmApp
 import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Module
@@ -14,7 +14,7 @@ import Result.Extra
 import Test
 
 
-defaultSourceDirs : CompileFullstackApp.SourceDirectories
+defaultSourceDirs : CompileElmApp.SourceDirectories
 defaultSourceDirs =
     { mainSourceDirectoryPath = [ "src" ]
     , elmJsonDirectoryPath = []
@@ -24,15 +24,15 @@ defaultSourceDirs =
 dependencies_encoding_roundtrip : Test.Test
 dependencies_encoding_roundtrip =
     [ ( "ElmMakeDependency Empty "
-      , CompileFullstackApp.ElmMakeDependency
+      , CompileElmApp.ElmMakeDependency
             { files = Dict.empty
             , entryPointFilePath = []
             , enableDebug = False
-            , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+            , outputType = CompileElmApp.ElmMakeOutputTypeHtml
             }
       )
     , ( "ElmMakeDependency with only Main.elm to HTML"
-      , CompileFullstackApp.ElmMakeDependency
+      , CompileElmApp.ElmMakeDependency
             { files =
                 [ ( defaultSourceDirs.elmJsonDirectoryPath ++ [ "elm.json" ]
                   , Bytes.Encode.encode (Bytes.Encode.string "elm.json content")
@@ -44,11 +44,11 @@ dependencies_encoding_roundtrip =
                     |> Dict.fromList
             , entryPointFilePath = defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
             , enableDebug = True
-            , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+            , outputType = CompileElmApp.ElmMakeOutputTypeHtml
             }
       )
     , ( "ElmMakeDependency with only Main.elm to JS"
-      , CompileFullstackApp.ElmMakeDependency
+      , CompileElmApp.ElmMakeDependency
             { files =
                 [ ( defaultSourceDirs.elmJsonDirectoryPath ++ [ "elm.json" ]
                   , Bytes.Encode.encode (Bytes.Encode.string "elm.json content")
@@ -60,7 +60,7 @@ dependencies_encoding_roundtrip =
                     |> Dict.fromList
             , entryPointFilePath = defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
             , enableDebug = True
-            , outputType = CompileFullstackApp.ElmMakeOutputTypeJs
+            , outputType = CompileElmApp.ElmMakeOutputTypeJs
             }
       )
     ]
@@ -102,8 +102,8 @@ subscriptions _ =
 """
       , Ok
             { stateTypeAnnotation =
-                CompileFullstackApp.RecordElmType
-                    { fields = [ ( "field_name", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ] }
+                CompileElmApp.RecordElmType
+                    { fields = [ ( "field_name", CompileElmApp.LeafElmType CompileElmApp.IntLeaf ) ] }
             , dependencies = Dict.empty
             , instantiatedConfigTypeName = [ "ElmFullstack", "BackendConfig" ]
             }
@@ -114,7 +114,7 @@ subscriptions _ =
                 Test.test testName <|
                     \() ->
                         moduleText
-                            |> CompileFullstackApp.parseElmModuleText
+                            |> CompileElmApp.parseElmModuleText
                             |> Result.mapError
                                 (\error ->
                                     "Failed to parse supporting module '"
@@ -124,7 +124,7 @@ subscriptions _ =
                                                 |> Maybe.withDefault "???"
                                            )
                                         ++ "': "
-                                        ++ CompileFullstackApp.parserDeadEndsToString moduleText error
+                                        ++ CompileElmApp.parserDeadEndsToString moduleText error
                                 )
                             |> Result.andThen
                                 (\parsedModule ->
@@ -155,7 +155,7 @@ subscriptions _ =
                                               )
                                             ]
                                                 |> Dict.fromList
-                                                |> CompileFullstackApp.elmModulesDictFromAppFiles
+                                                |> CompileElmApp.elmModulesDictFromAppFiles
                                     in
                                     CompileBackendApp.parseAppStateElmTypeAndDependenciesRecursively
                                         rootFunctionDeclaration
@@ -172,47 +172,47 @@ parse_elm_type_annotation : Test.Test
 parse_elm_type_annotation =
     [ { testName = "Leaf String"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.StringLeaf, Dict.empty )
       , rootTypeAnnotationText = "String"
       }
     , { testName = "Leaf Int"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.IntLeaf, Dict.empty )
       , rootTypeAnnotationText = "Int"
       }
     , { testName = "Leaf Bool"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.BoolLeaf, Dict.empty )
       , rootTypeAnnotationText = "Bool"
       }
     , { testName = "Leaf Float"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.FloatLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.FloatLeaf, Dict.empty )
       , rootTypeAnnotationText = "Float"
       }
     , { testName = "Leaf Bytes"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.LeafElmType CompileFullstackApp.BytesLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.BytesLeaf, Dict.empty )
       , rootTypeAnnotationText = "Bytes.Bytes"
       }
     , { testName = "Unit"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.UnitType, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.UnitType, Dict.empty )
       , rootTypeAnnotationText = " () "
       }
     , { testName = "Empty Record"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileFullstackApp.RecordElmType { fields = [] }, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.RecordElmType { fields = [] }, Dict.empty )
       , rootTypeAnnotationText = " {  } "
       }
     , { testName = "Record with simple fields"
       , modulesTexts = []
       , expectedResult =
             Ok
-                ( CompileFullstackApp.RecordElmType
+                ( CompileElmApp.RecordElmType
                     { fields =
-                        [ ( "a", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
-                        , ( "b", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                        [ ( "a", CompileElmApp.LeafElmType CompileElmApp.IntLeaf )
+                        , ( "b", CompileElmApp.LeafElmType CompileElmApp.StringLeaf )
                         ]
                     }
                 , Dict.empty
@@ -223,11 +223,11 @@ parse_elm_type_annotation =
       , modulesTexts = []
       , expectedResult =
             Ok
-                ( CompileFullstackApp.InstanceElmType
-                    { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ResultLeaf
+                ( CompileElmApp.InstanceElmType
+                    { instantiated = CompileElmApp.LeafElmType CompileElmApp.ResultLeaf
                     , arguments =
-                        [ CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
-                        , CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                        [ CompileElmApp.LeafElmType CompileElmApp.StringLeaf
+                        , CompileElmApp.LeafElmType CompileElmApp.IntLeaf
                         ]
                     }
                 , Dict.empty
@@ -244,7 +244,7 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                ( CompileElmApp.LeafElmType CompileElmApp.IntLeaf
                 , Dict.empty
                 )
       , rootTypeAnnotationText = " WithAlias.OurAlias "
@@ -259,7 +259,7 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.ChoiceElmType "WithChoice.ChoiceType"
+                ( CompileElmApp.ChoiceElmType "WithChoice.ChoiceType"
                 , [ ( "WithChoice.ChoiceType"
                     , { parameters = []
                       , tags =
@@ -284,27 +284,27 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.ChoiceElmType "WithChoice.ChoiceType"
+                ( CompileElmApp.ChoiceElmType "WithChoice.ChoiceType"
                 , [ ( "WithChoice.ChoiceType"
                     , { parameters = []
                       , tags =
                             [ ( "TagA"
-                              , [ CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
-                                , CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                              , [ CompileElmApp.LeafElmType CompileElmApp.StringLeaf
+                                , CompileElmApp.LeafElmType CompileElmApp.IntLeaf
                                 ]
                               )
                             , ( "TagB"
-                              , [ CompileFullstackApp.TupleElmType
-                                    [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
-                                    , CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+                              , [ CompileElmApp.TupleElmType
+                                    [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf
+                                    , CompileElmApp.LeafElmType CompileElmApp.StringLeaf
                                     ]
                                 ]
                               )
                             , ( "TagC"
-                              , [ CompileFullstackApp.RecordElmType
+                              , [ CompileElmApp.RecordElmType
                                     { fields =
-                                        [ ( "f0", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
-                                        , ( "f1", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                                        [ ( "f0", CompileElmApp.LeafElmType CompileElmApp.IntLeaf )
+                                        , ( "f1", CompileElmApp.LeafElmType CompileElmApp.StringLeaf )
                                         ]
                                     }
                                 ]
@@ -328,12 +328,12 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.ChoiceElmType "WithChoice.RecursiveType"
+                ( CompileElmApp.ChoiceElmType "WithChoice.RecursiveType"
                 , [ ( "WithChoice.RecursiveType"
                     , { parameters = []
                       , tags =
-                            [ ( "TagTerminate", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
-                            , ( "TagRecurse", [ CompileFullstackApp.ChoiceElmType "WithChoice.RecursiveType" ] )
+                            [ ( "TagTerminate", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
+                            , ( "TagRecurse", [ CompileElmApp.ChoiceElmType "WithChoice.RecursiveType" ] )
                             ]
                                 |> Dict.fromList
                       }
@@ -353,14 +353,14 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileFullstackApp.InstanceElmType
-                    { instantiated = CompileFullstackApp.ChoiceElmType "WithChoice.ChoiceType"
-                    , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+                ( CompileElmApp.InstanceElmType
+                    { instantiated = CompileElmApp.ChoiceElmType "WithChoice.ChoiceType"
+                    , arguments = [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
                     }
                 , [ ( "WithChoice.ChoiceType"
                     , { parameters = [ "a" ]
                       , tags =
-                            [ ( "TagA", [ CompileFullstackApp.GenericType "a" ] )
+                            [ ( "TagA", [ CompileElmApp.GenericType "a" ] )
                             , ( "TagB", [] )
                             ]
                                 |> Dict.fromList
@@ -382,8 +382,8 @@ parse_elm_type_annotation =
       , rootTypeAnnotationText = " WithAlias.RecordAlias Int "
       , expectedResult =
             Ok
-                ( CompileFullstackApp.RecordElmType
-                    { fields = [ ( "parameterized_field", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ]
+                ( CompileElmApp.RecordElmType
+                    { fields = [ ( "parameterized_field", CompileElmApp.LeafElmType CompileElmApp.IntLeaf ) ]
                     }
                 , Dict.empty
                 )
@@ -403,12 +403,12 @@ parse_elm_type_annotation =
                 |> List.map (String.join "\n")
       , expectedResult =
             Ok
-                ( CompileFullstackApp.RecordElmType
+                ( CompileElmApp.RecordElmType
                     { fields =
                         [ ( "field_list"
-                          , CompileFullstackApp.InstanceElmType
-                                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
-                                , arguments = [ CompileFullstackApp.ChoiceElmType "OtherModule.OurType" ]
+                          , CompileElmApp.InstanceElmType
+                                { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
+                                , arguments = [ CompileElmApp.ChoiceElmType "OtherModule.OurType" ]
                                 }
                           )
                         ]
@@ -438,9 +438,9 @@ parse_elm_type_annotation =
                 |> List.map (String.join "\n")
       , expectedResult =
             Ok
-                ( CompileFullstackApp.InstanceElmType
-                    { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
-                    , arguments = [ CompileFullstackApp.ChoiceElmType "Namespace.SomeModule.OurType" ]
+                ( CompileElmApp.InstanceElmType
+                    { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
+                    , arguments = [ CompileElmApp.ChoiceElmType "Namespace.SomeModule.OurType" ]
                     }
                 , [ ( "Namespace.SomeModule.OurType"
                     , { parameters = []
@@ -477,17 +477,17 @@ type alias MixedRecord =
                 |> List.map String.trim
       , expectedResult =
             Ok
-                ( CompileFullstackApp.RecordElmType
+                ( CompileElmApp.RecordElmType
                     { fields =
-                        [ ( "int", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
-                        , ( "opaqueChoiceType", CompileFullstackApp.ChoiceElmType "OpaqueChoiceType.OpaqueChoiceType" )
+                        [ ( "int", CompileElmApp.LeafElmType CompileElmApp.IntLeaf )
+                        , ( "opaqueChoiceType", CompileElmApp.ChoiceElmType "OpaqueChoiceType.OpaqueChoiceType" )
                         ]
                     }
                 , [ ( "OpaqueChoiceType.OpaqueChoiceType"
                     , { parameters = []
                       , tags =
                             [ ( "TagA", [] )
-                            , ( "TagB", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
+                            , ( "TagB", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
                             ]
                                 |> Dict.fromList
                       }
@@ -506,7 +506,7 @@ type alias MixedRecord =
                             |> List.map
                                 (\moduleText ->
                                     moduleText
-                                        |> CompileFullstackApp.parseElmModuleText
+                                        |> CompileElmApp.parseElmModuleText
                                         |> Result.mapError
                                             (\error ->
                                                 "Failed to parse supporting module '"
@@ -516,7 +516,7 @@ type alias MixedRecord =
                                                             |> Maybe.withDefault "???"
                                                        )
                                                     ++ "': "
-                                                    ++ CompileFullstackApp.parserDeadEndsToString moduleText error
+                                                    ++ CompileElmApp.parserDeadEndsToString moduleText error
                                             )
                                 )
                             |> Result.Extra.combine
@@ -524,7 +524,7 @@ type alias MixedRecord =
                                 (\modules ->
                                     let
                                         filePathFromElmModuleName =
-                                            CompileFullstackApp.filePathFromElmModuleName
+                                            CompileElmApp.filePathFromElmModuleName
 
                                         namedModules =
                                             modules
@@ -559,8 +559,8 @@ type alias MixedRecord =
                                                 |> String.join "\n"
                                     in
                                     rootModuleText
-                                        |> CompileFullstackApp.parseElmModuleText
-                                        |> Result.mapError (CompileFullstackApp.parserDeadEndsToString rootModuleText)
+                                        |> CompileElmApp.parseElmModuleText
+                                        |> Result.mapError (CompileElmApp.parserDeadEndsToString rootModuleText)
                                         |> Result.andThen
                                             (\rootModule ->
                                                 rootModule.declarations
@@ -596,7 +596,7 @@ type alias MixedRecord =
                                                                         )
                                                                         rootModule
                                                                     )
-                                                                |> CompileFullstackApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation namedModules
+                                                                |> CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation namedModules
                                                                 |> Expect.equal expectedResult
                                                         )
                                             )
@@ -609,21 +609,21 @@ type alias MixedRecord =
 emit_json_coding_expression_from_type : Test.Test
 emit_json_coding_expression_from_type =
     [ { testName = "Leaf String"
-      , typeAnnotation = CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+      , typeAnnotation = CompileElmApp.LeafElmType CompileElmApp.StringLeaf
       , expectedResult =
             { encodeExpression = "Json.Encode.string valueToEncode"
             , decodeExpression = "Json.Decode.string"
             }
       }
     , { testName = "Unit"
-      , typeAnnotation = CompileFullstackApp.UnitType
+      , typeAnnotation = CompileElmApp.UnitType
       , expectedResult =
             { encodeExpression = "Json.Encode.list (always (Json.Encode.object [])) []"
             , decodeExpression = "Json.Decode.succeed ()"
             }
       }
     , { testName = "Empty record"
-      , typeAnnotation = CompileFullstackApp.RecordElmType { fields = [] }
+      , typeAnnotation = CompileElmApp.RecordElmType { fields = [] }
       , expectedResult =
             { encodeExpression = "Json.Encode.object []"
             , decodeExpression = "Json.Decode.succeed {}"
@@ -631,8 +631,8 @@ emit_json_coding_expression_from_type =
       }
     , { testName = "Record with one primitive field"
       , typeAnnotation =
-            CompileFullstackApp.RecordElmType
-                { fields = [ ( "field_name", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf ) ] }
+            CompileElmApp.RecordElmType
+                { fields = [ ( "field_name", CompileElmApp.LeafElmType CompileElmApp.StringLeaf ) ] }
       , expectedResult =
             { encodeExpression = String.trim """
 Json.Encode.object
@@ -651,10 +651,10 @@ Json.Decode.succeed (\\field_name -> { field_name = field_name })
       }
     , { testName = "Record with two primitive fields"
       , typeAnnotation =
-            CompileFullstackApp.RecordElmType
+            CompileElmApp.RecordElmType
                 { fields =
-                    [ ( "field_a", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf )
-                    , ( "field_b", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                    [ ( "field_a", CompileElmApp.LeafElmType CompileElmApp.IntLeaf )
+                    , ( "field_b", CompileElmApp.LeafElmType CompileElmApp.StringLeaf )
                     ]
                 }
       , expectedResult =
@@ -682,15 +682,15 @@ Json.Decode.succeed (\\field_a field_b -> { field_a = field_a, field_b = field_b
       }
     , { testName = "Nested record"
       , typeAnnotation =
-            CompileFullstackApp.RecordElmType
+            CompileElmApp.RecordElmType
                 { fields =
                     [ ( "field_a"
-                      , CompileFullstackApp.RecordElmType
+                      , CompileElmApp.RecordElmType
                             { fields =
-                                [ ( "field_c", CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ) ]
+                                [ ( "field_c", CompileElmApp.LeafElmType CompileElmApp.IntLeaf ) ]
                             }
                       )
-                    , ( "field_b", CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf )
+                    , ( "field_b", CompileElmApp.LeafElmType CompileElmApp.StringLeaf )
                     ]
                 }
       , expectedResult =
@@ -727,9 +727,9 @@ Json.Decode.succeed (\\field_a field_b -> { field_a = field_a, field_b = field_b
       }
     , { testName = "Tuple"
       , typeAnnotation =
-            CompileFullstackApp.TupleElmType
-                [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
-                , CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
+            CompileElmApp.TupleElmType
+                [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf
+                , CompileElmApp.LeafElmType CompileElmApp.StringLeaf
                 ]
       , expectedResult =
             { encodeExpression = String.trim """
@@ -746,10 +746,10 @@ Json.Decode.map2 (\\item_0 item_1 -> ( item_0, item_1 ))
       }
     , { testName = "Triple"
       , typeAnnotation =
-            CompileFullstackApp.TupleElmType
-                [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
-                , CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
-                , CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
+            CompileElmApp.TupleElmType
+                [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf
+                , CompileElmApp.LeafElmType CompileElmApp.StringLeaf
+                , CompileElmApp.LeafElmType CompileElmApp.BoolLeaf
                 ]
       , expectedResult =
             { encodeExpression = String.trim """
@@ -768,9 +768,9 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
       }
     , { testName = "List Int"
       , typeAnnotation =
-            CompileFullstackApp.InstanceElmType
-                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
-                , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+            CompileElmApp.InstanceElmType
+                { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
+                , arguments = [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
                 }
       , expectedResult =
             { encodeExpression = "jsonEncode__generic_List (\\type_arg -> Json.Encode.int type_arg) valueToEncode"
@@ -779,9 +779,9 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
       }
     , { testName = "Maybe Int"
       , typeAnnotation =
-            CompileFullstackApp.InstanceElmType
-                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.MaybeLeaf
-                , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+            CompileElmApp.InstanceElmType
+                { instantiated = CompileElmApp.LeafElmType CompileElmApp.MaybeLeaf
+                , arguments = [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
                 }
       , expectedResult =
             { encodeExpression = "jsonEncode__generic_Maybe (\\type_arg -> Json.Encode.int type_arg) valueToEncode"
@@ -790,11 +790,11 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
       }
     , { testName = "Result String Int"
       , typeAnnotation =
-            CompileFullstackApp.InstanceElmType
-                { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ResultLeaf
+            CompileElmApp.InstanceElmType
+                { instantiated = CompileElmApp.LeafElmType CompileElmApp.ResultLeaf
                 , arguments =
-                    [ CompileFullstackApp.LeafElmType CompileFullstackApp.StringLeaf
-                    , CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
+                    [ CompileElmApp.LeafElmType CompileElmApp.StringLeaf
+                    , CompileElmApp.LeafElmType CompileElmApp.IntLeaf
                     ]
                 }
       , expectedResult =
@@ -804,10 +804,10 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
       }
     , { testName = "Instance of generic choice type"
       , typeAnnotation =
-            CompileFullstackApp.InstanceElmType
-                { instantiated = CompileFullstackApp.ChoiceElmType "OwnModule.ChoiceType"
+            CompileElmApp.InstanceElmType
+                { instantiated = CompileElmApp.ChoiceElmType "OwnModule.ChoiceType"
                 , arguments =
-                    [ CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
+                    [ CompileElmApp.LeafElmType CompileElmApp.BoolLeaf
                     ]
                 }
       , expectedResult =
@@ -821,7 +821,7 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
                 Test.test testName <|
                     \() ->
                         ( typeAnnotation, [] )
-                            |> CompileFullstackApp.jsonCodingExpressionFromType
+                            |> CompileElmApp.jsonCodingExpressionFromType
                                 { encodeValueExpression = "valueToEncode", typeArgLocalName = "type_arg" }
                             |> Expect.equal expectedResult
             )
@@ -856,8 +856,8 @@ jsonDecode_ModuleName_ChoiceType =
       , choiceType =
             { parameters = []
             , tags =
-                [ ( "TagRecurse", [ CompileFullstackApp.ChoiceElmType "ModuleName.RecursiveType" ] )
-                , ( "TagTerminate", [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ] )
+                [ ( "TagRecurse", [ CompileElmApp.ChoiceElmType "ModuleName.RecursiveType" ] )
+                , ( "TagTerminate", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
                 ]
                     |> Dict.fromList
             }
@@ -885,9 +885,9 @@ jsonDecode_ModuleName_RecursiveType =
             { parameters = []
             , tags =
                 [ ( "TagList"
-                  , [ CompileFullstackApp.InstanceElmType
-                        { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
-                        , arguments = [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf ]
+                  , [ CompileElmApp.InstanceElmType
+                        { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
+                        , arguments = [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
                         }
                     ]
                   )
@@ -915,8 +915,8 @@ jsonDecode_ModuleName_TypeName =
             { parameters = []
             , tags =
                 [ ( "TagAlpha"
-                  , [ CompileFullstackApp.LeafElmType CompileFullstackApp.IntLeaf
-                    , CompileFullstackApp.LeafElmType CompileFullstackApp.BoolLeaf
+                  , [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf
+                    , CompileElmApp.LeafElmType CompileElmApp.BoolLeaf
                     ]
                   )
                 ]
@@ -943,7 +943,7 @@ jsonDecode_ModuleName_TypeName =
             { parameters = [ "test" ]
             , tags =
                 [ ( "TagAlpha"
-                  , [ CompileFullstackApp.GenericType "test"
+                  , [ CompileElmApp.GenericType "test"
                     ]
                   )
                 ]
@@ -970,12 +970,12 @@ jsonDecode_ModuleName_TypeName jsonDecode_type_parameter_test =
             { parameters = [ "key", "value" ]
             , tags =
                 [ ( "Dict"
-                  , [ CompileFullstackApp.InstanceElmType
-                        { instantiated = CompileFullstackApp.LeafElmType CompileFullstackApp.ListLeaf
+                  , [ CompileElmApp.InstanceElmType
+                        { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
                         , arguments =
-                            [ CompileFullstackApp.TupleElmType
-                                [ CompileFullstackApp.GenericType "key"
-                                , CompileFullstackApp.GenericType "value"
+                            [ CompileElmApp.TupleElmType
+                                [ CompileElmApp.GenericType "key"
+                                , CompileElmApp.GenericType "value"
                                 ]
                             ]
                         }
@@ -1010,7 +1010,7 @@ jsonDecode_ListDict_Dict jsonDecode_type_parameter_key jsonDecode_type_parameter
                 Test.test testName <|
                     \() ->
                         choiceType
-                            |> CompileFullstackApp.jsonCodingFunctionFromChoiceType
+                            |> CompileElmApp.jsonCodingFunctionFromChoiceType
                                 { choiceTypeName = choiceTypeName
                                 , encodeValueExpression = "valueToEncode"
                                 , typeArgLocalName = "type_arg"

@@ -3,7 +3,7 @@ module Main exposing (..)
 import Base64
 import Bytes
 import CompileBackendApp
-import CompileFullstackApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointClass)
+import CompileElmApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointClass)
 import Dict
 import Elm.Syntax.Range
 import Json.Decode
@@ -12,21 +12,21 @@ import Platform
 
 
 type alias CompilationResponse =
-    Result String (Result (List CompileFullstackApp.LocatedCompilationError) CompileFullstackApp.CompilationIterationSuccess)
+    Result String (Result (List CompileElmApp.LocatedCompilationError) CompileElmApp.CompilationIterationSuccess)
 
 
 lowerSerialized : String -> String
 lowerSerialized argumentsJson =
     Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson
         |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
-        |> Result.map (CompileFullstackApp.asCompletelyLoweredElmApp defaultEntryPoints)
+        |> Result.map (CompileElmApp.asCompletelyLoweredElmApp defaultEntryPoints)
         |> jsonEncodeLowerForSourceFilesResponse
         |> Json.Encode.encode 0
 
 
 defaultEntryPoints : List EntryPointClass
 defaultEntryPoints =
-    CompileFullstackApp.defaultEntryPoints
+    CompileElmApp.defaultEntryPoints
         ++ CompileBackendApp.entryPoints
 
 
@@ -47,24 +47,24 @@ jsonDecodeCompilationArguments =
         (Json.Decode.field "interfaceToHostRootModuleName" (Json.Decode.list Json.Decode.string))
 
 
-jsonDecodeCompilationArgumentsDependency : Json.Decode.Decoder ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
+jsonDecodeCompilationArgumentsDependency : Json.Decode.Decoder ( CompileElmApp.DependencyKey, Bytes.Bytes )
 jsonDecodeCompilationArgumentsDependency =
     Json.Decode.map2 Tuple.pair
         (Json.Decode.field "key" jsonDecodeDependencyKey)
         (Json.Decode.field "value" json_decode_Bytes)
 
 
-jsonEncodeLocatedCompilationError : CompileFullstackApp.LocatedCompilationError -> Json.Encode.Value
+jsonEncodeLocatedCompilationError : CompileElmApp.LocatedCompilationError -> Json.Encode.Value
 jsonEncodeLocatedCompilationError locatedCompilationError =
     case locatedCompilationError of
-        CompileFullstackApp.LocatedInSourceFiles location error ->
+        CompileElmApp.LocatedInSourceFiles location error ->
             [ ( "location", jsonEncodeLocationInSourceFiles location )
             , ( "error", jsonEncodeCompilationError error )
             ]
                 |> Json.Encode.object
 
 
-jsonEncodeLocationInSourceFiles : CompileFullstackApp.LocationInSourceFiles -> Json.Encode.Value
+jsonEncodeLocationInSourceFiles : CompileElmApp.LocationInSourceFiles -> Json.Encode.Value
 jsonEncodeLocationInSourceFiles location =
     [ ( "filePath", location.filePath |> Json.Encode.list Json.Encode.string )
     , ( "locationInModuleText", location.locationInModuleText |> jsonEncodeRangeInText )
@@ -88,7 +88,7 @@ jsonEncodeLocationInText location =
         |> Json.Encode.object
 
 
-jsonEncodeCompilationIterationSuccess : CompileFullstackApp.CompilationIterationSuccess -> Json.Encode.Value
+jsonEncodeCompilationIterationSuccess : CompileElmApp.CompilationIterationSuccess -> Json.Encode.Value
 jsonEncodeCompilationIterationSuccess success =
     [ ( "compiledFiles", jsonEncodeAppCode success.compiledFiles )
     , ( "rootModuleEntryPointKind"
@@ -98,10 +98,10 @@ jsonEncodeCompilationIterationSuccess success =
         |> Json.Encode.object
 
 
-jsonEncodeElmMakeEntryPointKind : CompileFullstackApp.ElmMakeEntryPointKind -> Json.Encode.Value
+jsonEncodeElmMakeEntryPointKind : CompileElmApp.ElmMakeEntryPointKind -> Json.Encode.Value
 jsonEncodeElmMakeEntryPointKind kind =
     case kind of
-        CompileFullstackApp.ClassicMakeEntryPoint entryPoint ->
+        CompileElmApp.ClassicMakeEntryPoint entryPoint ->
             Json.Encode.object
                 [ ( "ClassicMakeEntryPoint"
                   , [ jsonEncodeElmMakeEntryPointStruct entryPoint ]
@@ -109,7 +109,7 @@ jsonEncodeElmMakeEntryPointKind kind =
                   )
                 ]
 
-        CompileFullstackApp.BlobMakeEntryPoint entryPoint ->
+        CompileElmApp.BlobMakeEntryPoint entryPoint ->
             Json.Encode.object
                 [ ( "BlobMakeEntryPoint"
                   , [ jsonEncodeElmMakeEntryPointStruct entryPoint ]
@@ -118,7 +118,7 @@ jsonEncodeElmMakeEntryPointKind kind =
                 ]
 
 
-jsonEncodeElmMakeEntryPointStruct : CompileFullstackApp.ElmMakeEntryPointStruct -> Json.Encode.Value
+jsonEncodeElmMakeEntryPointStruct : CompileElmApp.ElmMakeEntryPointStruct -> Json.Encode.Value
 jsonEncodeElmMakeEntryPointStruct struct =
     Json.Encode.object
         [ ( "elmMakeJavaScriptFunctionName"
@@ -127,35 +127,35 @@ jsonEncodeElmMakeEntryPointStruct struct =
         ]
 
 
-jsonEncodeCompilationError : CompileFullstackApp.CompilationError -> Json.Encode.Value
+jsonEncodeCompilationError : CompileElmApp.CompilationError -> Json.Encode.Value
 jsonEncodeCompilationError compilationError =
     case compilationError of
-        CompileFullstackApp.MissingDependencyError missingDependencyKey ->
+        CompileElmApp.MissingDependencyError missingDependencyKey ->
             [ ( "MissingDependencyError", Json.Encode.list identity [ jsonEncodeDependencyKey missingDependencyKey ] ) ]
                 |> Json.Encode.object
 
-        CompileFullstackApp.OtherCompilationError otherError ->
+        CompileElmApp.OtherCompilationError otherError ->
             [ ( "OtherCompilationError", Json.Encode.list identity [ Json.Encode.string otherError ] ) ]
                 |> Json.Encode.object
 
 
-jsonEncodeDependencyKey : CompileFullstackApp.DependencyKey -> Json.Encode.Value
+jsonEncodeDependencyKey : CompileElmApp.DependencyKey -> Json.Encode.Value
 jsonEncodeDependencyKey dependencyKey =
     case dependencyKey of
-        CompileFullstackApp.ElmMakeDependency elmMakeRequest ->
+        CompileElmApp.ElmMakeDependency elmMakeRequest ->
             [ ( "ElmMakeDependency", Json.Encode.list identity [ jsonEncodeElmMakeRequest elmMakeRequest ] ) ]
                 |> Json.Encode.object
 
 
-jsonDecodeDependencyKey : Json.Decode.Decoder CompileFullstackApp.DependencyKey
+jsonDecodeDependencyKey : Json.Decode.Decoder CompileElmApp.DependencyKey
 jsonDecodeDependencyKey =
     Json.Decode.oneOf
         [ Json.Decode.field "ElmMakeDependency"
-            (Json.Decode.index 0 (jsonDecodeElmMakeRequest |> Json.Decode.map CompileFullstackApp.ElmMakeDependency))
+            (Json.Decode.index 0 (jsonDecodeElmMakeRequest |> Json.Decode.map CompileElmApp.ElmMakeDependency))
         ]
 
 
-jsonEncodeElmMakeRequest : CompileFullstackApp.ElmMakeRequestStructure -> Json.Encode.Value
+jsonEncodeElmMakeRequest : CompileElmApp.ElmMakeRequestStructure -> Json.Encode.Value
 jsonEncodeElmMakeRequest elmMakeRequest =
     [ ( "files", jsonEncodeAppCode elmMakeRequest.files )
     , ( "entryPointFilePath", Json.Encode.list Json.Encode.string elmMakeRequest.entryPointFilePath )
@@ -165,36 +165,36 @@ jsonEncodeElmMakeRequest elmMakeRequest =
         |> Json.Encode.object
 
 
-jsonDecodeElmMakeRequest : Json.Decode.Decoder CompileFullstackApp.ElmMakeRequestStructure
+jsonDecodeElmMakeRequest : Json.Decode.Decoder CompileElmApp.ElmMakeRequestStructure
 jsonDecodeElmMakeRequest =
-    Json.Decode.map4 CompileFullstackApp.ElmMakeRequestStructure
+    Json.Decode.map4 CompileElmApp.ElmMakeRequestStructure
         (Json.Decode.field "files" jsonDecodeAppCode)
         (Json.Decode.field "entryPointFilePath" (Json.Decode.list Json.Decode.string))
         (Json.Decode.field "outputType" jsonDecodeElmMakeOutputType)
         (Json.Decode.field "enableDebug" Json.Decode.bool)
 
 
-jsonEncodeElmMakeOutputType : CompileFullstackApp.ElmMakeOutputType -> Json.Encode.Value
+jsonEncodeElmMakeOutputType : CompileElmApp.ElmMakeOutputType -> Json.Encode.Value
 jsonEncodeElmMakeOutputType elmMakeOutputType =
     case elmMakeOutputType of
-        CompileFullstackApp.ElmMakeOutputTypeHtml ->
+        CompileElmApp.ElmMakeOutputTypeHtml ->
             [ ( "ElmMakeOutputTypeHtml", Json.Encode.list Json.Encode.string [] ) ]
                 |> Json.Encode.object
 
-        CompileFullstackApp.ElmMakeOutputTypeJs ->
+        CompileElmApp.ElmMakeOutputTypeJs ->
             [ ( "ElmMakeOutputTypeJs", Json.Encode.list Json.Encode.string [] ) ]
                 |> Json.Encode.object
 
 
-jsonDecodeElmMakeOutputType : Json.Decode.Decoder CompileFullstackApp.ElmMakeOutputType
+jsonDecodeElmMakeOutputType : Json.Decode.Decoder CompileElmApp.ElmMakeOutputType
 jsonDecodeElmMakeOutputType =
     Json.Decode.oneOf
-        [ Json.Decode.field "ElmMakeOutputTypeHtml" (jsonDecodeSucceedWhenNotNull CompileFullstackApp.ElmMakeOutputTypeHtml)
-        , Json.Decode.field "ElmMakeOutputTypeJs" (jsonDecodeSucceedWhenNotNull CompileFullstackApp.ElmMakeOutputTypeJs)
+        [ Json.Decode.field "ElmMakeOutputTypeHtml" (jsonDecodeSucceedWhenNotNull CompileElmApp.ElmMakeOutputTypeHtml)
+        , Json.Decode.field "ElmMakeOutputTypeJs" (jsonDecodeSucceedWhenNotNull CompileElmApp.ElmMakeOutputTypeJs)
         ]
 
 
-jsonEncodeAppCode : CompileFullstackApp.AppFiles -> Json.Encode.Value
+jsonEncodeAppCode : CompileElmApp.AppFiles -> Json.Encode.Value
 jsonEncodeAppCode appCode =
     appCode
         |> Dict.toList
@@ -209,7 +209,7 @@ jsonEncodeAppCodeEntry ( filePath, fileContent ) =
         |> Json.Encode.object
 
 
-jsonDecodeAppCode : Json.Decode.Decoder CompileFullstackApp.AppFiles
+jsonDecodeAppCode : Json.Decode.Decoder CompileElmApp.AppFiles
 jsonDecodeAppCode =
     Json.Decode.list jsonDecodeAppCodeEntry
         |> Json.Decode.map Dict.fromList

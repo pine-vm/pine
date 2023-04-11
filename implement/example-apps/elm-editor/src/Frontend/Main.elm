@@ -18,7 +18,7 @@ import Bytes
 import Bytes.Encode
 import Common
 import CompilationInterface.GenerateJsonConverters
-import CompileFullstackApp
+import CompileElmApp
 import Dict
 import Element
 import Element.Background
@@ -138,13 +138,15 @@ type CompilationState
 type alias CompilationInProgressStructure =
     { origin : CompilationOrigin
     , iterationRequest : CompilationIterationRequestStructure
-    , dependenciesFromCompletedIterations : List ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
+    , dependenciesFromCompletedIterations : List ( CompileElmApp.DependencyKey, Bytes.Bytes )
     }
 
 
 type alias CompilationOrigin =
     { requestFromUser : ElmMakeRequestStructure
-    , loweredElmAppFromDependencies : List ( CompileFullstackApp.DependencyKey, Bytes.Bytes ) -> Result (List CompileFullstackApp.LocatedCompilationError) CompileFullstackApp.AppFiles
+    , loweredElmAppFromDependencies :
+        List ( CompileElmApp.DependencyKey, Bytes.Bytes )
+        -> Result (List CompileElmApp.LocatedCompilationError) CompileElmApp.AppFiles
     }
 
 
@@ -156,11 +158,11 @@ type alias CompilationIterationRequestStructure =
 
 type CompilationPendingRequestOrigin
     = ForUserElmMakeRequest
-    | ForDependencyElmMakeRequest CompileFullstackApp.ElmMakeRequestStructure
+    | ForDependencyElmMakeRequest CompileElmApp.ElmMakeRequestStructure
 
 
 type CompilationCompletedState
-    = CompilationFailedLowering (List CompileFullstackApp.LocatedCompilationError)
+    = CompilationFailedLowering (List CompileElmApp.LocatedCompilationError)
     | ElmMakeRequestCompleted (Result (Http.Detailed.Error String) ElmMakeResultStructure)
 
 
@@ -1437,7 +1439,7 @@ syntaxInspectFileOpenedInEditor stateBefore =
                         |> stringFromFileContent
                         |> Maybe.map
                             (\fileContentString ->
-                                Ok ( fileContentString, CompileFullstackApp.parseElmModuleText fileContentString )
+                                Ok ( fileContentString, CompileElmApp.parseElmModuleText fileContentString )
                             )
                         |> Maybe.withDefault (Err "Failed to decode file contents as string")
             in
@@ -1500,7 +1502,7 @@ prepareCompileForFileOpenedInEditor workspace =
                     , workingDirectoryPath = workingDirectoryPath
                     , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
                     , makeOptionDebug = workspace.enableInspectionOnCompile
-                    , outputType = CompileFullstackApp.ElmMakeOutputTypeHtml
+                    , outputType = CompileElmApp.ElmMakeOutputTypeHtml
                     }
 
                 compile () =
@@ -1509,8 +1511,8 @@ prepareCompileForFileOpenedInEditor workspace =
                             filesBeforeLowering |> List.map (Tuple.mapSecond .asBytes)
 
                         loweredElmAppFromDependencies dependencies =
-                            CompileFullstackApp.asCompletelyLoweredElmApp
-                                CompileFullstackApp.defaultEntryPoints
+                            CompileElmApp.asCompletelyLoweredElmApp
+                                CompileElmApp.defaultEntryPoints
                                 { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
                                 , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
                                 , dependencies = dependencies
@@ -1546,9 +1548,9 @@ prepareCompileForFileOpenedInEditor workspace =
 
 
 continueCompileWithResolvedDependency :
-    ( CompileFullstackApp.ElmMakeRequestStructure, ElmMakeResponseStructure )
+    ( CompileElmApp.ElmMakeRequestStructure, ElmMakeResponseStructure )
     -> CompilationInProgressStructure
-    -> Result (List CompileFullstackApp.LocatedCompilationError) CompilationInProgressStructure
+    -> Result (List CompileElmApp.LocatedCompilationError) CompilationInProgressStructure
 continueCompileWithResolvedDependency ( elmMakeDependency, lastIterationResponse ) compilationInProgress =
     let
         newDependencies =
@@ -1557,7 +1559,7 @@ continueCompileWithResolvedDependency ( elmMakeDependency, lastIterationResponse
                     []
 
                 Just outputFileContent ->
-                    [ ( CompileFullstackApp.ElmMakeDependency elmMakeDependency, outputFileContent ) ]
+                    [ ( CompileElmApp.ElmMakeDependency elmMakeDependency, outputFileContent ) ]
 
         dependenciesFromCompletedIterations =
             compilationInProgress.dependenciesFromCompletedIterations ++ newDependencies
@@ -1574,9 +1576,9 @@ continueCompileWithResolvedDependency ( elmMakeDependency, lastIterationResponse
 
 
 continueCompile :
-    List ( CompileFullstackApp.DependencyKey, Bytes.Bytes )
+    List ( CompileElmApp.DependencyKey, Bytes.Bytes )
     -> CompilationOrigin
-    -> Result (List CompileFullstackApp.LocatedCompilationError) CompilationIterationRequestStructure
+    -> Result (List CompileElmApp.LocatedCompilationError) CompilationIterationRequestStructure
 continueCompile dependenciesFromCompletedIterations compilationOrigin =
     let
         base64FromBytes : Bytes.Bytes -> String
@@ -1593,9 +1595,9 @@ continueCompile dependenciesFromCompletedIterations compilationOrigin =
                         |> List.filterMap
                             (\locatedError ->
                                 case locatedError of
-                                    CompileFullstackApp.LocatedInSourceFiles _ error ->
+                                    CompileElmApp.LocatedInSourceFiles _ error ->
                                         case error of
-                                            CompileFullstackApp.MissingDependencyError (CompileFullstackApp.ElmMakeDependency missingDependencyElmMake) ->
+                                            CompileElmApp.MissingDependencyError (CompileElmApp.ElmMakeDependency missingDependencyElmMake) ->
                                                 Just missingDependencyElmMake
 
                                             _ ->
@@ -1629,7 +1631,7 @@ continueCompile dependenciesFromCompletedIterations compilationOrigin =
                 files =
                     completedLowering
                         |> Dict.toList
-                        |> List.filter (Tuple.first >> CompileFullstackApp.includeFilePathInElmMakeRequest)
+                        |> List.filter (Tuple.first >> CompileElmApp.includeFilePathInElmMakeRequest)
             in
             Ok
                 { requestToBackend = { requestFromUser | files = mapFilesToRequestToBackendStructure base64FromBytes files }
@@ -2791,7 +2793,7 @@ viewOutputPaneContent state =
 
                         Ok ( fileContentString, Err parseErrors ) ->
                             parseErrors
-                                |> List.map (CompileFullstackApp.parserDeadEndToString fileContentString)
+                                |> List.map (CompileElmApp.parserDeadEndToString fileContentString)
                                 |> String.join "\n\n"
                                 |> errorElement
 
@@ -3055,10 +3057,10 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
     }
 
 
-viewLoweringCompileError : CompileFullstackApp.LocatedCompilationError -> Element.Element WorkspaceEventStructure
+viewLoweringCompileError : CompileElmApp.LocatedCompilationError -> Element.Element WorkspaceEventStructure
 viewLoweringCompileError locatedLoweringError =
     case locatedLoweringError of
-        CompileFullstackApp.LocatedInSourceFiles errorLocation loweringError ->
+        CompileElmApp.LocatedInSourceFiles errorLocation loweringError ->
             let
                 locationElement =
                     viewElmMakeErrorLocation
@@ -3084,30 +3086,33 @@ viewLoweringCompileError locatedLoweringError =
                     ]
 
 
-loweringCompilationErrorDisplayText : CompileFullstackApp.CompilationError -> String
+loweringCompilationErrorDisplayText : CompileElmApp.CompilationError -> String
 loweringCompilationErrorDisplayText compilationError =
     case compilationError of
-        CompileFullstackApp.MissingDependencyError missingDependency ->
+        CompileElmApp.MissingDependencyError missingDependency ->
             "Missing Dependency: "
                 ++ (case missingDependency of
-                        CompileFullstackApp.ElmMakeDependency elmMakeRequest ->
+                        CompileElmApp.ElmMakeDependency elmMakeRequest ->
                             "Elm Make "
                                 ++ (case elmMakeRequest.outputType of
-                                        CompileFullstackApp.ElmMakeOutputTypeJs ->
+                                        CompileElmApp.ElmMakeOutputTypeJs ->
                                             "javascript"
 
-                                        CompileFullstackApp.ElmMakeOutputTypeHtml ->
+                                        CompileElmApp.ElmMakeOutputTypeHtml ->
                                             "html"
                                    )
                                 ++ " from "
                                 ++ String.join "/" elmMakeRequest.entryPointFilePath
                    )
 
-        CompileFullstackApp.OtherCompilationError otherError ->
+        CompileElmApp.OtherCompilationError otherError ->
             otherError
 
 
-viewElmMakeCompileError : FrontendBackendInterface.ElmMakeRequestStructure -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure -> Element.Element WorkspaceEventStructure
+viewElmMakeCompileError :
+    FrontendBackendInterface.ElmMakeRequestStructure
+    -> ElmMakeExecutableFile.ElmMakeReportCompileErrorStructure
+    -> Element.Element WorkspaceEventStructure
 viewElmMakeCompileError elmMakeRequest elmMakeError =
     elmMakeError.problems
         |> List.map
@@ -3213,7 +3218,7 @@ viewElementFromElmMakeCompileErrorMessage =
 
 editorDocumentMarkersFromFailedLowering :
     { compileRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
-    -> List CompileFullstackApp.LocatedCompilationError
+    -> List CompileElmApp.LocatedCompilationError
     -> List Frontend.MonacoEditor.EditorMarker
 editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } compileErrors =
     let
@@ -3236,7 +3241,7 @@ editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } c
                     |> List.filterMap
                         (\locatedCompilationError ->
                             case locatedCompilationError of
-                                CompileFullstackApp.LocatedInSourceFiles location error ->
+                                CompileElmApp.LocatedInSourceFiles location error ->
                                     if location.filePath == filePathOpenedInEditor then
                                         Just
                                             (editorDocumentMarkerFromLoweringCompileError
@@ -3310,7 +3315,7 @@ elmMakeReportTextFromMessageItem messageItem =
             styled.string
 
 
-editorDocumentMarkerFromLoweringCompileError : ( ElmMakeExecutableFile.ElmMakeReportRegion, CompileFullstackApp.CompilationError ) -> Frontend.MonacoEditor.EditorMarker
+editorDocumentMarkerFromLoweringCompileError : ( ElmMakeExecutableFile.ElmMakeReportRegion, CompileElmApp.CompilationError ) -> Frontend.MonacoEditor.EditorMarker
 editorDocumentMarkerFromLoweringCompileError ( region, error ) =
     { message = loweringCompilationErrorDisplayText error
     , startLineNumber = region.start.line
