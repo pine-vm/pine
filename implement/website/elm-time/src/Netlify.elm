@@ -14,7 +14,7 @@ import Zip.Entry
 fileTree : FileTree.FileTreeNode { base64 : String }
 fileTree =
     Build.fileTree
-        |> FileTree.setBlobsFromTreehInSortedFileTree
+        |> FileTree.setBlobsFromTreeInSortedFileTree
             (Build.mapFileTreeNodeFromSource CompilationInterface.SourceFiles.file_tree____netlify_publish)
 
 

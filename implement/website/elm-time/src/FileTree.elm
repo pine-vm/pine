@@ -18,8 +18,8 @@ type alias TreeNodeEntryStructure blobStructure =
     ( String, FileTreeNode blobStructure )
 
 
-setBlobsFromTreehInSortedFileTree : FileTreeNode b -> FileTreeNode b -> FileTreeNode b
-setBlobsFromTreehInSortedFileTree rootA rootB =
+setBlobsFromTreeInSortedFileTree : FileTreeNode b -> FileTreeNode b -> FileTreeNode b
+setBlobsFromTreeInSortedFileTree rootA rootB =
     rootA
         |> flatListOfBlobsFromFileTreeNode
         |> List.foldl (\( path, blob ) -> setNodeAtPathInSortedFileTree ( path, BlobNode blob ))
