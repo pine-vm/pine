@@ -1,0 +1,37 @@
+name: Build and publish Elm Silent Teacher
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+    - "implement/elm-time/ElmTime/**"
+    - ".github/workflows/build-and-publish-elm-silent-teacher.yml"
+
+jobs:
+  build-and-deploy:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: download elm-time
+      run: |
+        pwsh -nologo -noprofile -command "Invoke-WebRequest 'https://github.com/elm-time/elm-time/releases/download/v2023-04-10/elm-time-bin-v2023-04-10-linux-x64.zip' -OutFile elm-time-linux-x64.zip"
+        pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('elm-time-linux-x64.zip','./elm-time');}"
+    - name: install elm-time
+      run: |
+        chmod  +x  ./elm-time/elm-time
+        sudo  ./elm-time/elm-time  install
+
+    - name: Build for Netlify
+      working-directory: ./implement/elm-time/ElmTime/learn-elm
+      run: |
+        elm-time  make  src/Frontend/ElmSilentTeacher/Build.elm  --output=netlify.zip
+        pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('netlify.zip','./out/netlify');}"
+
+    - name: Deploy to Netlify
+      working-directory: ./implement/elm-time/ElmTime/learn-elm
+      run: |
+        npm  install  netlify-cli  --save-dev
+        netlify  deploy  --dir ./out/netlify  --site silent-teacher  --alias preview  --auth  ${{ secrets.WEBSITE_NETLIFY_AUTH_TOKEN }}

@@ -7,6 +7,7 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
+            "agu-z/elm-zip": "3.0.1",
             "cmditch/elm-bigint": "2.0.1",
             "danfishgold/base64-bytes": "1.1.0",
             "elm/browser": "1.0.2",
@@ -33,6 +34,9 @@
         "indirect": {
             "elm/regex": "1.0.0",
             "elm/virtual-dom": "1.0.3",
+            "folkertdev/elm-flate": "2.0.5",
+            "justinmimbs/date": "4.0.1",
+            "justinmimbs/time-extra": "1.1.1",
             "miniBill/elm-unicode": "1.0.3",
             "rtfeldman/elm-hex": "1.0.0",
             "stil4m/structured-writer": "1.0.3"
