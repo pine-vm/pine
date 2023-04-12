@@ -175,7 +175,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             .TakeUntil(compositionAndReduction => compositionAndReduction.reduction != null)
             .Reverse();
 
-    public static (PersistentProcessLiveRepresentation? process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
+    public static Result<string, RestoreFromCompositionEventSequenceResult>
         LoadFromStoreAndRestoreProcess(
         IProcessStoreReader storeReader,
         Action<string>? logger,
@@ -192,9 +192,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         if (!compositionEventsFromLatestReduction.Any())
         {
-            logger?.Invoke("Found no composition record, default to initial state.");
+            var message = "Found no composition record, default to initial state.";
 
-            return (null, null);
+            logger?.Invoke(message);
+
+            return
+                Result<string, RestoreFromCompositionEventSequenceResult>.err(message);
         }
 
         logger?.Invoke("Found " + compositionEventsFromLatestReduction.Count + " composition log records to use for restore.");
@@ -209,7 +212,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         return processLiveRepresentation;
     }
 
-    public static (PersistentProcessLiveRepresentation process, InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds)
+    public record RestoreFromCompositionEventSequenceResult(
+        PersistentProcessLiveRepresentation process,
+        InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds);
+
+    public static Result<string, RestoreFromCompositionEventSequenceResult>
         RestoreFromCompositionEventSequence(
         IEnumerable<CompositionLogRecordWithResolvedDependencies> compositionLogRecords,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
@@ -221,92 +228,120 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         if (firstCompositionLogRecord.reduction == null &&
             firstCompositionLogRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
         {
-            throw new Exception("Failed to get sufficient history: Composition log record points to parent " + firstCompositionLogRecord.compositionRecord.parentHashBase16);
+            return
+                Result<string, RestoreFromCompositionEventSequenceResult>.err(
+                    "Failed to get sufficient history: Composition log record points to parent " +
+                    firstCompositionLogRecord.compositionRecord.parentHashBase16);
         }
 
-        string? lastCompositionLogRecordHashBase16 = null;
-
-        var processRepresentationDuringRestore = new PersistentProcessLiveRepresentationDuringRestore(
+        var initialProcessRepresentation = new PersistentProcessLiveRepresentationDuringRestore(
+            lastCompositionLogRecordHashBase16: null,
             lastAppConfig: null,
             lastElmAppVolatileProcess: null,
             initOrMigrateCmds: null);
 
-        foreach (var compositionLogRecord in compositionLogRecords)
+
+        Result<string, PersistentProcessLiveRepresentationDuringRestore> integrateCompositionLogRecord(
+            PersistentProcessLiveRepresentationDuringRestore process,
+            CompositionLogRecordWithResolvedDependencies compositionLogRecord)
         {
-            try
+            Result<string, PersistentProcessLiveRepresentationDuringRestore> continueOk(
+                PersistentProcessLiveRepresentationDuringRestore process) =>
+                Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(process
+                with
+                {
+                    lastCompositionLogRecordHashBase16 = compositionLogRecord.compositionRecordHashBase16
+                });
+
+            var compositionEvent = compositionLogRecord.compositionRecord.compositionEvent;
+
+            if (compositionLogRecord.reduction is ReductionWithResolvedDependencies reductionWithResolvedDependencies)
             {
-                var compositionEvent = compositionLogRecord.compositionRecord.compositionEvent;
+                var prepareProcessResult =
+                    ProcessFromDeployment(
+                        reductionWithResolvedDependencies.appConfigAsTree,
+                        overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                        overrideJsEngineFactory: overrideJsEngineFactory);
 
-                if (compositionLogRecord.reduction != null)
-                {
-                    var prepareProcessResult =
-                        ProcessFromDeployment(
-                            compositionLogRecord.reduction.Value.appConfigAsTree,
-                            overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
-                            overrideJsEngineFactory: overrideJsEngineFactory);
+                var newElmAppProcess = prepareProcessResult.startProcess();
 
-                    var newElmAppProcess = prepareProcessResult.startProcess();
+                var elmAppState = JsonSerializer.Deserialize<JsonElement>(reductionWithResolvedDependencies.elmAppState.Span);
 
-                    var elmAppState = JsonSerializer.Deserialize<JsonElement>(compositionLogRecord.reduction.Value.elmAppState.Span);
-
-                    var setStateResponse =
-                        StateShim.StateShim.SetAppStateOnMainBranch(process: newElmAppProcess, stateJson: elmAppState)
-                        .Extract(error => throw new Exception("Failed to set state: " + error));
-
-                    processRepresentationDuringRestore.lastElmAppVolatileProcess?.Dispose();
-
-                    processRepresentationDuringRestore = new PersistentProcessLiveRepresentationDuringRestore(
-                        lastAppConfig: new ProcessAppConfig(
-                            compositionLogRecord.reduction.Value.appConfig,
-                            prepareProcessResult.buildArtifacts),
-                        lastElmAppVolatileProcess: newElmAppProcess,
-                        initOrMigrateCmds: null);
-
-                    continue;
-                }
-
-                if (compositionEvent.RevertProcessTo != null)
-                {
-                    if (compositionEvent.RevertProcessTo.HashBase16 != lastCompositionLogRecordHashBase16)
+                return
+                    StateShim.StateShim.SetAppStateOnMainBranch(process: newElmAppProcess, stateJson: elmAppState)
+                    .AndThen(setStateOk =>
                     {
-                        throw new Exception(
+                        process.lastElmAppVolatileProcess?.Dispose();
+
+                        return
+                            continueOk(
+                                process
+                                with
+                                {
+                                    lastAppConfig = new ProcessAppConfig(
+                                        reductionWithResolvedDependencies.appConfig,
+                                        prepareProcessResult.buildArtifacts),
+                                    lastElmAppVolatileProcess = newElmAppProcess,
+                                    initOrMigrateCmds = null
+                                });
+                    });
+            }
+
+            if (compositionEvent.RevertProcessTo != null)
+            {
+                if (compositionEvent.RevertProcessTo.HashBase16 != process.lastCompositionLogRecordHashBase16)
+                {
+                    return
+                        Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
                             "Error in enumeration of process composition events: Got revert to " +
                             compositionEvent.RevertProcessTo.HashBase16 +
-                            ", but previous version in the enumerated sequence was " + lastCompositionLogRecordHashBase16 + ".");
-                    }
-
-                    continue;
+                            ", but previous version in the enumerated sequence was " + process.lastCompositionLogRecordHashBase16 + ".");
                 }
 
-                processRepresentationDuringRestore =
-                    ApplyCompositionEvent(
-                        compositionLogRecord.composition!.Value,
-                        processRepresentationDuringRestore,
-                        overrideElmAppInterfaceConfig,
-                        overrideJsEngineFactory: overrideJsEngineFactory)
-                    .Extract(error => throw new Exception("Failed to apply composition event: " + error));
+                return continueOk(process);
             }
-            finally
+
+            return
+                ApplyCompositionEvent(
+                    compositionLogRecord.composition!.Value,
+                    process,
+                    overrideElmAppInterfaceConfig,
+                    overrideJsEngineFactory: overrideJsEngineFactory)
+                .AndThen(continueOk);
+        }
+
+        var aggregateLogRecordsResult =
+            compositionLogRecords.Aggregate(
+                seed: Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(initialProcessRepresentation),
+                func: (intermediateResult, compositionLogRecorcd) =>
+                intermediateResult.AndThen(intermediateOk =>
+                integrateCompositionLogRecord(intermediateOk, compositionLogRecorcd)));
+
+        return
+            aggregateLogRecordsResult
+            .AndThen(aggregateOk =>
             {
-                lastCompositionLogRecordHashBase16 = compositionLogRecord.compositionRecordHashBase16;
-            }
-        }
+                if (aggregateOk.lastCompositionLogRecordHashBase16 is null ||
+                    aggregateOk.lastAppConfig is null ||
+                    aggregateOk.lastElmAppVolatileProcess is null)
+                {
+                    return Result<string, RestoreFromCompositionEventSequenceResult>.err(
+                        "Failed to get sufficient history: " + nameof(compositionLogRecords) + " does not contain app init.");
+                }
 
-        if (lastCompositionLogRecordHashBase16 == null ||
-            processRepresentationDuringRestore.lastAppConfig == null ||
-            processRepresentationDuringRestore.lastElmAppVolatileProcess == null)
-        {
-            throw new Exception("Failed to get sufficient history: " + nameof(compositionLogRecords) + " does not contain app init.");
-        }
-
-        return (new PersistentProcessLiveRepresentation(
-            lastCompositionLogRecordHashBase16: lastCompositionLogRecordHashBase16,
-            lastAppConfig: processRepresentationDuringRestore.lastAppConfig.Value,
-            lastElmAppVolatileProcess: processRepresentationDuringRestore.lastElmAppVolatileProcess),
-            processRepresentationDuringRestore.initOrMigrateCmds);
+                return
+                    Result<string, RestoreFromCompositionEventSequenceResult>.ok(
+                        new RestoreFromCompositionEventSequenceResult(
+                            new PersistentProcessLiveRepresentation(
+                                lastCompositionLogRecordHashBase16: aggregateOk.lastCompositionLogRecordHashBase16,
+                                lastAppConfig: aggregateOk.lastAppConfig.Value,
+                                lastElmAppVolatileProcess: aggregateOk.lastElmAppVolatileProcess),
+                            aggregateOk.initOrMigrateCmds));
+            });
     }
 
     private record PersistentProcessLiveRepresentationDuringRestore(
+        string? lastCompositionLogRecordHashBase16,
         ProcessAppConfig? lastAppConfig,
         IDisposableProcessWithStringInterface? lastElmAppVolatileProcess,
         InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds);
@@ -434,12 +469,16 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 {
                     processBefore.lastElmAppVolatileProcess?.Dispose();
 
-                    return new PersistentProcessLiveRepresentationDuringRestore(
-                        lastAppConfig: new ProcessAppConfig(
+                    return
+                    processBefore
+                    with
+                    {
+                        lastAppConfig = new ProcessAppConfig(
                             PineValueComposition.FromTreeWithStringPath(deployAppConfigAndMigrateElmAppState),
                             prepareProcessResult.buildArtifacts),
-                        lastElmAppVolatileProcess: newElmAppProcess,
-                        initOrMigrateCmds: migrationBackendResponse);
+                        lastElmAppVolatileProcess = newElmAppProcess,
+                        initOrMigrateCmds = migrationBackendResponse
+                    };
                 });
         }
 
@@ -485,11 +524,15 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         applyInitOk.resultLessStateJson.WithDefaultBuilder(() => throw new Exception("Missing resultLessStateJson")));
 
                     return
-                    new PersistentProcessLiveRepresentationDuringRestore(
-                        lastAppConfig: new ProcessAppConfig(
+                    processBefore
+                    with
+                    {
+                        lastAppConfig = new ProcessAppConfig(
                             PineValueComposition.FromTreeWithStringPath(appConfig),
                             prepareProcessResult.buildArtifacts),
-                        lastElmAppVolatileProcess: newElmAppProcess, backendResponse);
+                        lastElmAppVolatileProcess = newElmAppProcess,
+                        initOrMigrateCmds = backendResponse
+                    };
                 });
         }
 
@@ -699,12 +742,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         try
         {
-            using var projectedProcess =
+            return
                 LoadFromStoreAndRestoreProcess(
                     new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
-                    logger: message => logger?.Invoke(message)).process;
-
-            return Result<string, FileStoreReaderProjectionResult>.ok(projectionResult);
+                    logger: message => logger?.Invoke(message))
+                .Map(restoreOk => projectionResult);
         }
         catch (Exception e)
         {

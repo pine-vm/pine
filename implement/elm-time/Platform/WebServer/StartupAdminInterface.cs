@@ -145,126 +145,138 @@ public class StartupAdminInterface
                         logger: logEntry => logger.LogInformation(logEntry),
                         overrideJsEngineFactory: jsEngineFactory);
 
-                var processLiveRepresentation = restoreProcessResult.process;
-
-                logger.LogInformation("Completed building the process live representation.");
-
-                var cyclicReductionStoreLock = new object();
-                DateTimeOffset? cyclicReductionStoreLastTime = null;
-                var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
-
-                void maintainStoreReductions()
-                {
-                    var currentDateTime = getDateTimeOffset();
-
-                    System.Threading.Thread.MemoryBarrier();
-                    var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
-
-                    if (!(cyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds))
+                restoreProcessResult
+                    .Unpack(
+                    fromErr: err =>
                     {
-                        if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
+                        logger.LogError(err);
+                        return 0;
+                    },
+                    fromOk: restoreProcessOk =>
+                    {
+                        var processLiveRepresentation = restoreProcessOk.process;
+
+                        logger.LogInformation("Completed building the process live representation.");
+
+                        var cyclicReductionStoreLock = new object();
+                        DateTimeOffset? cyclicReductionStoreLastTime = null;
+                        var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
+
+                        void maintainStoreReductions()
                         {
-                            try
+                            var currentDateTime = getDateTimeOffset();
+
+                            System.Threading.Thread.MemoryBarrier();
+                            var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
+
+                            if (!(cyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds))
                             {
-                                var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
-
-                                if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
-                                    return;
-
-                                lock (avoidConcurrencyLock)
+                                if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
                                 {
-                                    var (reductionRecord, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter!);
-                                }
+                                    try
+                                    {
+                                        var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
 
-                                cyclicReductionStoreLastTime = currentDateTime;
-                                System.Threading.Thread.MemoryBarrier();
-                            }
-                            finally
-                            {
-                                System.Threading.Monitor.Exit(cyclicReductionStoreLock);
+                                        if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
+                                            return;
+
+                                        lock (avoidConcurrencyLock)
+                                        {
+                                            var (reductionRecord, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter!);
+                                        }
+
+                                        cyclicReductionStoreLastTime = currentDateTime;
+                                        System.Threading.Thread.MemoryBarrier();
+                                    }
+                                    finally
+                                    {
+                                        System.Threading.Monitor.Exit(cyclicReductionStoreLock);
+                                    }
+                                }
                             }
                         }
-                    }
-                }
 
-                IHost buildWebHost(
-                    ProcessAppConfig processAppConfig,
-                    IReadOnlyList<string> publicWebHostUrls)
-                {
-                    var appConfigTree =
-                        PineValueComposition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
-                        .Extract(error => throw new Exception(error.ToString()));
+                        IHost buildWebHost(
+                            ProcessAppConfig processAppConfig,
+                            IReadOnlyList<string> publicWebHostUrls)
+                        {
+                            var appConfigTree =
+                                PineValueComposition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
+                                .Extract(error => throw new Exception(error.ToString()));
 
-                    var appConfigFilesNamesAndContents =
-                        appConfigTree.EnumerateBlobsTransitive();
+                            var appConfigFilesNamesAndContents =
+                                appConfigTree.EnumerateBlobsTransitive();
 
-                    var webServerConfigFile =
-                        appConfigFilesNamesAndContents
-                        .Where(filePathAndContent => WebServerConfigFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
-                        .Select(filePathAndContent => filePathAndContent.blobContent)
-                        .Cast<ReadOnlyMemory<byte>?>()
-                        .FirstOrDefault();
+                            var webServerConfigFile =
+                                appConfigFilesNamesAndContents
+                                .Where(filePathAndContent => WebServerConfigFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
+                                .Select(filePathAndContent => filePathAndContent.blobContent)
+                                .Cast<ReadOnlyMemory<byte>?>()
+                                .FirstOrDefault();
 
-                    var webServerConfig =
-                        webServerConfigFile == null
-                        ?
-                        null
-                        :
-                        System.Text.Json.JsonSerializer.Deserialize<WebServerConfigJson>(Encoding.UTF8.GetString(webServerConfigFile.Value.Span));
+                            var webServerConfig =
+                                webServerConfigFile == null
+                                ?
+                                null
+                                :
+                                System.Text.Json.JsonSerializer.Deserialize<WebServerConfigJson>(Encoding.UTF8.GetString(webServerConfigFile.Value.Span));
 
-                    var serverAndElmAppConfig =
-                        new ServerAndElmAppConfig(
-                            ServerConfig: webServerConfig,
-                            ProcessEventInElmApp: serializedEvent =>
-                            {
-                                lock (avoidConcurrencyLock)
-                                {
-                                    var elmEventResponse =
-                                        processLiveRepresentation.ProcessElmAppEvent(
-                                            processStoreWriter!, serializedEvent);
+                            var serverAndElmAppConfig =
+                                new ServerAndElmAppConfig(
+                                    ServerConfig: webServerConfig,
+                                    ProcessEventInElmApp: serializedEvent =>
+                                    {
+                                        lock (avoidConcurrencyLock)
+                                        {
+                                            var elmEventResponse =
+                                                processLiveRepresentation.ProcessElmAppEvent(
+                                                    processStoreWriter!, serializedEvent);
 
-                                    maintainStoreReductions();
+                                            maintainStoreReductions();
 
-                                    return elmEventResponse;
-                                }
-                            },
-                            SourceComposition: processAppConfig.appConfigComponent,
-                            InitOrMigrateCmds: restoreProcessResult.initOrMigrateCmds
-                        );
+                                            return elmEventResponse;
+                                        }
+                                    },
+                                    SourceComposition: processAppConfig.appConfigComponent,
+                                    InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds
+                                );
 
-                    var publicAppState = new PublicAppState(
-                        serverAndElmAppConfig: serverAndElmAppConfig,
-                        getDateTimeOffset: getDateTimeOffset);
+                            var publicAppState = new PublicAppState(
+                                serverAndElmAppConfig: serverAndElmAppConfig,
+                                getDateTimeOffset: getDateTimeOffset);
 
-                    var appBuilder = WebApplication.CreateBuilder();
+                            var appBuilder = WebApplication.CreateBuilder();
 
-                    var app =
-                        publicAppState.Build(
-                            appBuilder,
-                            env,
-                            publicWebHostUrls: publicWebHostUrls);
+                            var app =
+                                publicAppState.Build(
+                                    appBuilder,
+                                    env,
+                                    publicWebHostUrls: publicWebHostUrls);
 
-                    publicAppState.ProcessEventTimeHasArrived();
+                            publicAppState.ProcessEventTimeHasArrived();
 
-                    return app;
-                }
+                            return app;
+                        }
 
-                if (processLiveRepresentation?.lastAppConfig != null)
-                {
-                    var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
+                        if (processLiveRepresentation?.lastAppConfig != null)
+                        {
+                            var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
 
-                    var webHost = buildWebHost(
-                        processLiveRepresentation.lastAppConfig,
-                        publicWebHostUrls: publicWebHostUrls);
+                            var webHost = buildWebHost(
+                                processLiveRepresentation.lastAppConfig,
+                                publicWebHostUrls: publicWebHostUrls);
 
-                    webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
+                            webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
 
-                    logger.LogInformation("Started the public app at '" + string.Join(",", publicWebHostUrls) + "'.");
+                            logger.LogInformation("Started the public app at '" + string.Join(",", publicWebHostUrls) + "'.");
 
-                    publicAppHost = new PublicHostConfiguration(
-                        processLiveRepresentation: processLiveRepresentation,
-                        webHost: webHost);
-                }
+                            publicAppHost = new PublicHostConfiguration(
+                                processLiveRepresentation: processLiveRepresentation,
+                                webHost: webHost);
+                        }
+
+                        return 0;
+                    });
             }
         }
 
@@ -483,6 +495,8 @@ public class StartupAdminInterface
                                 storeReductionReport: null,
                                 storeReductionTimeSpentMilli: null,
                                 totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                                testContinueTimeSpentMilli: null,
+                                logEntries: null,
                                 result: Result<string, string>.ok("Successfully applied this composition event to the process.")
                             ));
 
@@ -846,7 +860,13 @@ public class StartupAdminInterface
 
                     var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
 
-                    var responseBodyString = System.Text.Json.JsonSerializer.Serialize(attemptReport);
+                    var responseBodyString =
+                    System.Text.Json.JsonSerializer.Serialize(
+                        attemptReport,
+                        options: new System.Text.Json.JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        });
 
                     context.Response.StatusCode = statusCode;
                     await context.Response.WriteAsync(responseBodyString);
@@ -919,14 +939,18 @@ public class StartupAdminInterface
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        var logEntries = new List<StringMessageWithTimeMilli>();
+
         var testContinueResult = PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
             compositionLogEvent: compositionLogEvent,
             fileStoreReader: processStoreFileStore,
-            logger: testContinueLogger);
+            logger: message =>
+            {
+                logEntries.Add(new StringMessageWithTimeMilli(message, totalStopwatch.ElapsedMilliseconds));
+                testContinueLogger?.Invoke(message);
+            });
 
-        var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
-            originalFileStore: processStoreFileStore,
-            compositionLogEvent: compositionLogEvent);
+        var testContinueTimeSpentMilli = totalStopwatch.ElapsedMilliseconds;
 
         return
             testContinueResult
@@ -938,7 +962,9 @@ public class StartupAdminInterface
                     compositionEvent: compositionLogEvent,
                     storeReductionReport: null,
                     storeReductionTimeSpentMilli: null,
+                    testContinueTimeSpentMilli: (int)testContinueTimeSpentMilli,
                     totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                    logEntries: logEntries,
                     result: Result<string, string>.err(error)
                 )),
                 fromOk: testContinueOk =>
@@ -953,7 +979,9 @@ public class StartupAdminInterface
                         compositionEvent: compositionLogEvent,
                         storeReductionReport: null,
                         storeReductionTimeSpentMilli: null,
+                        testContinueTimeSpentMilli: (int)testContinueTimeSpentMilli,
                         totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
+                        logEntries: logEntries,
                         result: Result<string, string>.ok("Successfully applied this composition event to the process.")
                     ));
                 });
@@ -965,8 +993,14 @@ public record AttemptContinueWithCompositionEventReport(
     CompositionLogRecordInFile.CompositionEvent compositionEvent,
     StoreProvisionalReductionReport? storeReductionReport,
     int? storeReductionTimeSpentMilli,
+    int? testContinueTimeSpentMilli,
     int totalTimeSpentMilli,
+    IReadOnlyList<StringMessageWithTimeMilli>? logEntries,
     Result<string, string> result);
+
+public record StringMessageWithTimeMilli(
+    string message,
+    long timeMilli);
 
 public record TruncateProcessHistoryReport(
     string beginTime,

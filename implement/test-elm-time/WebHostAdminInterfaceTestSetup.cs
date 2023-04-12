@@ -59,6 +59,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
             storeReader: new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(fileStore),
             logger: null)
+        .Extract(err => throw new Exception(err))
         .process;
 
     public static WebHostAdminInterfaceTestSetup Setup(
