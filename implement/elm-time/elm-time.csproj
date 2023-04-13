@@ -23,7 +23,7 @@
     <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.116.0" />
     <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.21.1" />
     <PackageReference Include="Jint" Version="3.0.0-beta-2049" />
-    <PackageReference Include="LibGit2Sharp" Version="0.27.0-preview-0182" />
+    <PackageReference Include="LibGit2Sharp" Version="0.27.2" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.2" />
     <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.4.1" />
     <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.4.1" />
