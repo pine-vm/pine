@@ -391,7 +391,7 @@ public class PublicAppState
     {
         try
         {
-            var volatileProcess = new VolatileProcess(GetBlobWithSHA256, createVolatileProcess.programCode);
+            var volatileProcess = new VolatileProcess(GetBlobWithSHA256, createVolatileProcess.programCode, scriptGlobals: null);
 
             var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
 

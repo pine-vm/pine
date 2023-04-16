@@ -16,6 +16,8 @@ public class VolatileProcess
 {
     private readonly object @lock = new();
 
+    private readonly object? scriptGlobals;
+
     private ScriptState<object>? scriptState;
 
     private readonly MetadataResolver metadataResolver;
@@ -24,9 +26,11 @@ public class VolatileProcess
 
     public VolatileProcess(
         Func<byte[], byte[]?> getFileFromHashSHA256,
-        string csharpScriptCode)
+        string csharpScriptCode,
+        object? scriptGlobals)
     {
         this.getFileFromHashSHA256 = getFileFromHashSHA256;
+        this.scriptGlobals = scriptGlobals;
 
         metadataResolver = new MetadataResolver(csharpScriptCode: csharpScriptCode, getFileFromHashSHA256);
 
@@ -54,7 +58,9 @@ public class VolatileProcess
                     ?
                     CSharpScript.RunAsync(
                         script,
-                        options: scriptOptions).Result
+                        options: scriptOptions,
+                        globals: scriptGlobals,
+                        globalsType: scriptGlobals?.GetType()).Result
                     :
                     scriptState.ContinueWithAsync(
                         script,
