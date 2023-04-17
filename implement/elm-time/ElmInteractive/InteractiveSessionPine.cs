@@ -195,7 +195,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .ToImmutableList();
 
         return
-            PineCompileToDotNet.CompileExpressionsToCSharpFile(
+            PineCompileToDotNet.CompileExpressionsToCSharpClass(
                 expressionsToCompile,
                 syntaxContainerConfig);
     }

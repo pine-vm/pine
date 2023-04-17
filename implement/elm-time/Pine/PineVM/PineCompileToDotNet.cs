@@ -23,7 +23,7 @@ public class PineCompileToDotNet
         ClassDeclarationSyntax ClassDeclarationSyntax,
         IReadOnlyList<UsingDirectiveSyntax> UsingDirectives);
 
-    public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpFile(
+    public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
         IReadOnlyList<Expression> expressions,
         SyntaxContainerConfig containerConfig)
     {
@@ -806,10 +806,18 @@ public class PineCompileToDotNet
                     if (argumentsResults.ListCombine() is
                         Result<string, IReadOnlyList<(ExpressionSyntax, DependenciesFromCompilation)>>.Ok specializedOk)
                     {
+                        var plainInvocationSyntax =
+                            specializedImpl.CompileInvocation(specializedOk.Value.Select(p => p.Item1).ToImmutableList());
+
+                        var expressionReturningPineValue =
+                            specializedImpl.returnType.isInstanceOfResult ?
+                            wrapInvocationInWithDefault(plainInvocationSyntax)
+                            :
+                            plainInvocationSyntax;
+
                         return
                             Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
-                                (wrapInvocationInWithDefault(
-                                    specializedImpl.CompileInvocation(specializedOk.Value.Select(p => p.Item1).ToImmutableList())),
+                                (expressionReturningPineValue,
                                 DependenciesFromCompilation.Union(specializedOk.Value.Select(p => p.Item2))));
                     }
                 }
@@ -894,7 +902,11 @@ public class PineCompileToDotNet
 
     private record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> parameterTypes,
+        KernelFunctionSpecializedInfoReturnType returnType,
         Func<IReadOnlyList<ExpressionSyntax>, InvocationExpressionSyntax> CompileInvocation);
+
+    private record KernelFunctionSpecializedInfoReturnType(
+        bool isInstanceOfResult);
 
     private enum KernelFunctionParameterType
     {
@@ -910,7 +922,7 @@ public class PineCompileToDotNet
         var kernelFunctionContainerType = typeof(KernelFunction);
         var methodsInfos = kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
 
-        KernelFunctionParameterType parseKernelFunctionParameterType(Type parameterType)
+        static KernelFunctionParameterType parseKernelFunctionParameterType(Type parameterType)
         {
             if (parameterType == typeof(BigInteger))
                 return KernelFunctionParameterType.Integer;
@@ -919,6 +931,19 @@ public class PineCompileToDotNet
                 return KernelFunctionParameterType.Generic;
 
             throw new Exception("Unknown parameter type: " + parameterType.FullName);
+        }
+
+        static Result<string, KernelFunctionSpecializedInfoReturnType> parseKernelFunctionReturnType(Type returnType)
+        {
+            if (returnType == typeof(PineValue))
+                return Result<string, KernelFunctionSpecializedInfoReturnType>.ok(
+                    new KernelFunctionSpecializedInfoReturnType(isInstanceOfResult: false));
+
+            if (returnType == typeof(Result<string, PineValue>))
+                return Result<string, KernelFunctionSpecializedInfoReturnType>.ok(
+                    new KernelFunctionSpecializedInfoReturnType(isInstanceOfResult: true));
+
+            return Result<string, KernelFunctionSpecializedInfoReturnType>.err("Not a supported type");
         }
 
         KernelFunctionInfo ReadKernelFunctionInfo(MethodInfo genericMethodInfo)
@@ -955,16 +980,19 @@ public class PineCompileToDotNet
                         candidateMethod.Name == genericMethodInfo.Name &&
                         candidateMethod != genericMethodInfo &&
                         candidateMethod.DeclaringType == kernelFunctionContainerType)
-                    .Select(specializedMethodInfo =>
+                    .SelectWhere(methodInfo =>
+                    parseKernelFunctionReturnType(methodInfo.ReturnType).ToMaybe().Map(returnType => (methodInfo, returnType)))
+                    .Select(specializedMethodInfoAndReturnType =>
                     {
                         var parameterTypes =
-                            specializedMethodInfo
+                            specializedMethodInfoAndReturnType.methodInfo
                                 .GetParameters().Select(pi => parseKernelFunctionParameterType(pi.ParameterType))
                                 .ToImmutableList();
 
                         return
                             new KernelFunctionSpecializedInfo(
                                 parameterTypes: parameterTypes,
+                                returnType: specializedMethodInfoAndReturnType.returnType,
                                 CompileInvocation: argumentsExpressions =>
                                     compileInvocationForArgumentList(SyntaxFactory.ArgumentList(
                                         SyntaxFactory.SeparatedList(

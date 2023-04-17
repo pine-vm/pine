@@ -107,4 +107,13 @@ public static class EnumerableExtension
             items
             .OrderBy(i => regex.Replace(selector(i), match => match.Value.PadLeft(maxDigits, '0')), stringComparer ?? StringComparer.CurrentCulture);
     }
+
+    public static IEnumerable<OutT> SelectWhere<InT, OutT>(this IEnumerable<InT> source, Func<InT, Maybe<OutT>> selector)
+    {
+        foreach (var item in source)
+        {
+            if (selector(item) is Maybe<OutT>.Just just)
+                yield return just.Value;
+        }
+    }
 }

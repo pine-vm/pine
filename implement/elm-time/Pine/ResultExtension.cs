@@ -7,6 +7,11 @@ namespace Pine;
 
 public static class ResultExtension
 {
+    public static Maybe<OkT> ToMaybe<ErrT, OkT>(this Result<ErrT, OkT> result) =>
+        result.Unpack(
+            fromErr: _ => Maybe<OkT>.nothing(),
+            fromOk: Maybe<OkT>.just);
+
     public static Result<ErrT, IReadOnlyList<OkT>> ListCombine<ErrT, OkT>(this IEnumerable<Result<ErrT, OkT>> list)
     {
         var okList = new List<OkT>();
