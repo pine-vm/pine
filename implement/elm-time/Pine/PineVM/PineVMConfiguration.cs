@@ -74,11 +74,10 @@ public partial class PineVMConfiguration
                         {
                             configurationClassDeclarationInNamespace,
                             compileCSharpClassResult.ClassDeclarationSyntax
-                        }))
-                .NormalizeWhitespace(eol: "\n");
+                        }));
 
-        var syntaxTree = CSharpSyntaxTree.Create(compilationUnitSyntax);
+        var formattedNode = new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
 
-        return Result<string, string>.ok(syntaxTree.ToString());
+        return Result<string, string>.ok(formattedNode.ToFullString());
     }
 }

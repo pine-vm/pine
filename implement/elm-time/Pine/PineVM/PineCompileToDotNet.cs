@@ -377,8 +377,7 @@ public class PineCompileToDotNet
                                     SyntaxFactory.List(
                                         new MemberDeclarationSyntax[] { dictionaryMemberDeclaration }
                                             .Concat(compiledExpressions.Select(f => f.memberDeclarationSyntax))
-                                            .Concat(staticFieldsDeclarations).ToArray()))
-                                .NormalizeWhitespace(eol: "\n"),
+                                            .Concat(staticFieldsDeclarations).ToArray())),
                             UsingDirectives: usings));
                 });
     }
@@ -960,13 +959,7 @@ public class PineCompileToDotNet
                                     SyntaxFactory.IdentifierName("PineVM")),
                                 SyntaxFactory.IdentifierName(kernelFunctionContainerType.Name)),
                             SyntaxFactory.IdentifierName(genericMethodInfo.Name)),
-                        argumentListSyntax
-                            .WithOpenParenToken(
-                                SyntaxFactory.Token(
-                                    SyntaxFactory.TriviaList(),
-                                    SyntaxKind.OpenParenToken,
-                                    SyntaxFactory.TriviaList(
-                                        SyntaxFactory.LineFeed))));
+                        argumentListSyntax);
             }
 
             InvocationExpressionSyntax compileGenericInvocation(ExpressionSyntax argumentExpression) =>
@@ -1039,8 +1032,8 @@ public class PineCompileToDotNet
                     SyntaxKind.EqualsExpression,
                     SyntaxFactory.IdentifierName("value_true"),
                     compiledCondition.expression),
-                compiledIfTrue.expression.InsertTriviaBefore(SyntaxFactory.LineFeed, SyntaxFactory.TriviaList()),
-                compiledIfFalse.expression.InsertTriviaBefore(SyntaxFactory.LineFeed, SyntaxFactory.TriviaList())),
+                compiledIfTrue.expression,
+                compiledIfFalse.expression),
                 compiledCondition.dependencies.Union(compiledIfTrue.dependencies).Union(compiledIfFalse.dependencies)))));
     }
 
