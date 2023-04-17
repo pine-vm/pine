@@ -8,11 +8,28 @@ namespace Pine;
 
 public static class EnumerableExtension
 {
-    public static IEnumerable<T> WhereHasValue<T>(this IEnumerable<T?> orig) where T : struct =>
-        orig.Where(i => i.HasValue).Select(i => i!.Value);
+    public static IEnumerable<T> WhereHasValue<T>(this IEnumerable<T?> source) where T : struct
+    {
+        foreach (var item in source)
+        {
+            if (item.HasValue)
+                yield return item.Value;
+        }
+    }
 
-    public static IEnumerable<T> WhereNotNull<T>(this IEnumerable<T?> orig) where T : class =>
-        orig.Where(i => i != null).Cast<T>();
+    public static IEnumerable<T> WhereNotNull<T>(this IEnumerable<T?> source) where T : class
+    {
+        foreach (var item in source)
+            if (item is not null)
+                yield return item;
+    }
+
+    public static IEnumerable<OutT> SelectWhereNotNull<InT, OutT>(this IEnumerable<InT> source, Func<InT, OutT?> selector) where OutT : class
+    {
+        foreach (var item in source)
+            if (selector(item) is OutT notNull)
+                yield return notNull;
+    }
 
     public static IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T>? orig) =>
         orig ?? Array.Empty<T>();

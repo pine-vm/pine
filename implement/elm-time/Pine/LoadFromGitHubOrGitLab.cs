@@ -328,7 +328,7 @@ public static class LoadFromGitHubOrGitLab
                         commit: request.commit)));
 
                 return
-                loadCandidates.FirstOkOrErrors().MapError(
+                loadCandidates.FirstOkOrAllErrors().MapError(
                     candidatesErrors => "Failed for " + candidatesErrors.Count + " clone urls:\n" + string.Join("\n", candidatesErrors));
             };
 

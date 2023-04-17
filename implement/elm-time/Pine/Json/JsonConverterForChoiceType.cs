@@ -51,10 +51,10 @@ public class JsonConverterForChoiceType : JsonConverterFactory
     {
         var matchingNestedTypes =
             typeToConvert.GetNestedTypes()
-            .SelectMany(nestedType =>
+            .Select(nestedType =>
             {
                 if (typeToConvert.IsAssignableFrom(nestedType))
-                    return ImmutableList.Create(nestedType);
+                    return nestedType;
 
                 if (typeToConvert.IsGenericType && nestedType.IsGenericTypeDefinition)
                 {
@@ -65,11 +65,12 @@ public class JsonConverterForChoiceType : JsonConverterFactory
                     var genericFromNestedType = nestedType.MakeGenericType(typeToConvertGenericArguments);
 
                     if (!genericFromNestedType.ContainsGenericParameters)
-                        return ImmutableList.Create(genericFromNestedType);
+                        return genericFromNestedType;
                 }
 
-                return ImmutableList<Type>.Empty;
+                return null;
             })
+            .WhereNotNull()
             .ToImmutableList();
 
         var variantsResults =

@@ -30,9 +30,12 @@ public static class ResultExtension
         return new Result<ErrT, IReadOnlyList<OkT>>.Ok(okList);
     }
 
-    public static Result<IImmutableList<ErrT>, OkT> FirstOkOrErrors<ErrT, OkT>(
-        this IEnumerable<Func<Result<ErrT, OkT>>> candidates) =>
-        candidates.Aggregate(
+    /// <summary>
+    /// Returns the first Ok item from the <paramref name="source"/>, or all errors if the source contains no Ok item.
+    /// </summary>
+    public static Result<IImmutableList<ErrT>, OkT> FirstOkOrAllErrors<ErrT, OkT>(
+        this IEnumerable<Func<Result<ErrT, OkT>>> source) =>
+        source.Aggregate(
             seed: Result<IImmutableList<ErrT>, OkT>.err(ImmutableList<ErrT>.Empty),
             func: (accumulate, candidateFunc) =>
                 accumulate.Unpack(

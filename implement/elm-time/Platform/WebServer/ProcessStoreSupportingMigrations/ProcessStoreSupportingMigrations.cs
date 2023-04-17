@@ -72,11 +72,11 @@ public interface IProcessStoreReader
             {
                 var fromProjectedFiles =
                     projectedFiles.Keys
-                    .SelectMany(projectedFilePath =>
+                    .SelectWhereNotNull(projectedFilePath =>
                         projectedFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath) ?
-                        ImmutableList.Create(projectedFilePath.RemoveRange(0, directoryPath.Count))
+                        projectedFilePath.RemoveRange(0, directoryPath.Count)
                         :
-                        ImmutableList<IImmutableList<string>>.Empty);
+                        null);
 
                 return
                     originalFileStore.ListFilesInDirectory(directoryPath).Concat(fromProjectedFiles)
