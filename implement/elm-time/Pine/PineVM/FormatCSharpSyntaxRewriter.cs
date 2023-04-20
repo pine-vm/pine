@@ -1,6 +1,7 @@
 ﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
+using System.Linq;
 
 namespace Pine.PineVM;
 
@@ -57,6 +58,42 @@ public class FormatCSharpSyntaxRewriter : CSharpSyntaxRewriter
             .WithArrowToken(node.ArrowToken.WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
     }
 
+    public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax originalNode)
+    {
+        var node = (ConditionalExpressionSyntax)base.VisitConditionalExpression(originalNode)!;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
+
+        return
+            node
+            .WithQuestionToken(node.QuestionToken.WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia))
+            .WithColonToken(node.ColonToken.WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
+    }
+
+    public override SyntaxNode? VisitBlock(BlockSyntax originalNode)
+    {
+        var node = (BlockSyntax)base.VisitBlock(originalNode)!;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
+
+        return
+            node
+            .WithStatements(
+                new SyntaxList<StatementSyntax>(
+                    node.Statements.Select((statement, statementIndex) =>
+                    {
+                        var trailingTrivia =
+                        node.Statements.Count <= statementIndex + 1 ?
+                        new SyntaxTriviaList(SyntaxFactory.LineFeed)
+                        :
+                        new SyntaxTriviaList(SyntaxFactory.LineFeed, SyntaxFactory.LineFeed);
+
+                        return
+                        statement.WithLeadingTrivia(indentationTrivia)
+                        .WithTrailingTrivia(trailingTrivia);
+                    })));
+    }
+
     public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode node) =>
         ComputeIndentationTriviaForNode(node, indentChar, indentCharsPerLevel);
 
@@ -86,7 +123,7 @@ public class FormatCSharpSyntaxRewriter : CSharpSyntaxRewriter
             BlockSyntax => true,
             NamespaceDeclarationSyntax => true,
             ClassDeclarationSyntax => true,
-            MethodDeclarationSyntax => true,
+            ArrowExpressionClauseSyntax => true,
             SwitchStatementSyntax => true,
             SwitchSectionSyntax => true,
             IfStatementSyntax => true,

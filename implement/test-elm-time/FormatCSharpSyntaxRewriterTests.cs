@@ -34,4 +34,64 @@ public class FormatCSharpSyntaxRewriterTests
 
         StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
     }
+
+    [TestMethod]
+    public void Adds_newlines_between_statements_in_method_declaration()
+    {
+        var inputSyntaxText =
+            """
+            int method_name()
+            {
+                var local = 0;
+                return local;
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            int method_name()
+            {
+                var local = 0;
+
+                return local;
+            }
+            """.Trim();
+
+        var inputSyntaxTree = SyntaxFactory.ParseSyntaxTree(
+            inputSyntaxText,
+            options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
+
+        var formattedSyntaxTree = new FormatCSharpSyntaxRewriter().Visit(inputSyntaxTree.GetRoot());
+
+        var formattedSyntaxText = formattedSyntaxTree.ToFullString();
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+
+    [TestMethod]
+    public void Indents_in_arrow_expression_clause()
+    {
+        var inputSyntaxText =
+            """
+            int method_declaration() =>
+            1;
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            int method_declaration() =>
+                1;
+            """.Trim();
+
+        var inputSyntaxTree = SyntaxFactory.ParseSyntaxTree(
+            inputSyntaxText,
+            options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
+
+        var formattedSyntaxTree = new FormatCSharpSyntaxRewriter().Visit(inputSyntaxTree.GetRoot());
+
+        var formattedSyntaxText = formattedSyntaxTree.ToFullString();
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
 }
