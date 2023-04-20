@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-04-17";
+    public static string AppVersionId => "2023-04-19";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1390,7 +1390,7 @@ public class Program
 
                 return
                 loadInputDirectoryResult
-                    .AndThen<LoadForMakeResult>(loadInputDirectoryOk =>
+                    .AndThen(loadInputDirectoryOk =>
                     {
                         if (loadInputDirectoryOk.tree.GetNodeAtPath(ImmutableList.Create("elm.json")) is not
                             TreeNodeWithStringPath.BlobNode elmJsonFile)

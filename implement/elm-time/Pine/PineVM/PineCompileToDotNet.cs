@@ -490,26 +490,135 @@ public class PineCompileToDotNet
         }
     }
 
+    public record CompiledExpression(
+        ExpressionSyntax Syntax,
+
+        /*
+         * true if the type of the expression is Result<string, PineValue>
+         * false if the type of the expression is PineValue
+         * */
+        bool IsTypeResult)
+    {
+        public static CompiledExpression WithTypePlainValue(ExpressionSyntax syntax) =>
+            new CompiledExpression(syntax, IsTypeResult: false);
+
+        public static CompiledExpression WithTypeResult(ExpressionSyntax syntax) =>
+            new CompiledExpression(syntax, IsTypeResult: true);
+
+        public CompiledExpression MapSyntax(Func<ExpressionSyntax, ExpressionSyntax> map) =>
+            this
+            with
+            {
+                Syntax = map(Syntax)
+            };
+
+        public CompiledExpression MapOrAndThen(Func<ExpressionSyntax, CompiledExpression> continueWithPlainValue)
+        {
+            if (!IsTypeResult)
+                return continueWithPlainValue(Syntax);
+
+            var syntaxName = GetNameForExpression(Syntax);
+
+            var okIdentifier = SyntaxFactory.Identifier("ok_of_" + syntaxName);
+
+            var combinedExpression = continueWithPlainValue(SyntaxFactory.IdentifierName(okIdentifier));
+
+            var mapErrorExpression =
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        Syntax,
+                        SyntaxFactory.IdentifierName("MapError")))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.SimpleLambdaExpression(
+                                        SyntaxFactory.Parameter(
+                                            SyntaxFactory.Identifier("err")))
+                                    .WithExpressionBody(
+                                        SyntaxFactory.BinaryExpression(
+                                            SyntaxKind.AddExpression,
+                                            SyntaxFactory.LiteralExpression(
+                                                SyntaxKind.StringLiteralExpression,
+                                                SyntaxFactory.Literal(
+                                                    "Failed to evaluate expression " + syntaxName + ":")),
+                                            SyntaxFactory.IdentifierName("err")))))));
+
+            return
+                WithTypeResult(
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            mapErrorExpression,
+                            SyntaxFactory.IdentifierName(combinedExpression.IsTypeResult ? "AndThen" : "Map")))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.SimpleLambdaExpression(
+                                            SyntaxFactory.Parameter(okIdentifier))
+                                    .WithExpressionBody(combinedExpression.Syntax))))));
+        }
+
+        public CompiledExpression Map(Func<ExpressionSyntax, ExpressionSyntax> map)
+        {
+            return MapOrAndThen(inner => new CompiledExpression(map(inner), IsTypeResult: false));
+        }
+
+        public ExpressionSyntax AsCsWithTypeResult()
+        {
+            if (IsTypeResult)
+                return Syntax;
+
+            return WrapExpressionInPineValueResultOk(Syntax);
+        }
+
+        public static CompiledExpression ListMapOrAndThen(
+            Func<IReadOnlyList<ExpressionSyntax>, CompiledExpression> combine,
+            IReadOnlyList<CompiledExpression> compiledList)
+        {
+            static CompiledExpression recursive(
+                Func<IReadOnlyList<ExpressionSyntax>, CompiledExpression> combine,
+                ImmutableList<CompiledExpression> compiledList,
+                ImmutableList<ExpressionSyntax> syntaxesCs)
+            {
+                if (!compiledList.Any())
+                    return combine(syntaxesCs);
+
+                return
+                    compiledList.First().MapOrAndThen(
+                        itemCs => recursive(
+                            combine,
+                            compiledList.RemoveAt(0),
+                            syntaxesCs.Add(itemCs)));
+            }
+
+            return
+                recursive(
+                    combine,
+                    compiledList.ToImmutableList(),
+                    ImmutableList<ExpressionSyntax>.Empty);
+        }
+    }
+
     public record EnvironmentConfig(
         string argumentEnvironmentName,
         string argumentEvalGenericName);
 
     public record DependenciesFromCompilation(
         ImmutableHashSet<PineValue> Values,
-        IImmutableSet<(string hash, Expression expression)> Expressions,
-        IImmutableSet<(string hash, Expression.DecodeAndEvaluateExpression expression)> LocalDependencies)
+        IImmutableSet<(string hash, Expression expression)> Expressions)
     {
         public static readonly DependenciesFromCompilation Empty = new(
             Values: ImmutableHashSet<PineValue>.Empty,
-            Expressions: ImmutableHashSet<(string, Expression)>.Empty,
-            LocalDependencies: ImmutableHashSet<(string, Expression.DecodeAndEvaluateExpression)>.Empty);
+            Expressions: ImmutableHashSet<(string, Expression)>.Empty);
 
         public static (T, DependenciesFromCompilation) WithNoDependencies<T>(T other) => (other, Empty);
 
         public DependenciesFromCompilation Union(DependenciesFromCompilation other) =>
             new(Values: Values.Union(other.Values),
-                Expressions: Expressions.Union(other.Expressions),
-                LocalDependencies: LocalDependencies.Union(other.LocalDependencies));
+                Expressions: Expressions.Union(other.Expressions));
 
         public static DependenciesFromCompilation Union(IEnumerable<DependenciesFromCompilation> dependencies) =>
             dependencies.Aggregate(
@@ -522,124 +631,13 @@ public class PineCompileToDotNet
             Expression expression,
             EnvironmentConfig environment) =>
         CompileToCSharpExpression(expression, environment)
-            .Map(withLocalDependencies =>
+            .Map(exprWithDependencies =>
             {
-                var declareDependenciesStatements =
-                    withLocalDependencies.dependencies.LocalDependencies
-                        .Select(localDependency =>
-                        {
-                            var invocationExpression =
-                                SyntaxFactory.InvocationExpression(
-                                        SyntaxFactory.IdentifierName(environment.argumentEvalGenericName))
-                                    .WithArgumentList(
-                                        SyntaxFactory.ArgumentList(
-                                            SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                                                new SyntaxNodeOrToken[]
-                                                {
-                                                    SyntaxFactory.Argument(
-                                                        SyntaxFactory.IdentifierName("expression_" + localDependency.hash[..10])),
-                                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                    SyntaxFactory.Argument(
-                                                        SyntaxFactory.IdentifierName(environment.argumentEnvironmentName))
-                                                })));
-
-                            return
-                                SyntaxFactory.LocalDeclarationStatement(
-                                    SyntaxFactory.VariableDeclaration(
-                                            SyntaxFactory.IdentifierName(
-                                                SyntaxFactory.Identifier(
-                                                    SyntaxFactory.TriviaList(),
-                                                    SyntaxKind.VarKeyword,
-                                                    "var",
-                                                    "var",
-                                                    SyntaxFactory.TriviaList())))
-                                        .WithVariables(
-                                            SyntaxFactory.SingletonSeparatedList(
-                                                SyntaxFactory.VariableDeclarator(
-                                                        SyntaxFactory.Identifier("result_of_" + localDependency.hash[..10]))
-                                                    .WithInitializer(
-                                                        SyntaxFactory.EqualsValueClause(invocationExpression)))));
-                        }).ToImmutableList();
-
-                var returnExpression =
-                    WrapAndThenResult(
-                        dependencies:
-                        withLocalDependencies.dependencies.LocalDependencies,
-                        innerResultExpressionSyntax:
-                        WrapExpressionInPineValueResultOk(withLocalDependencies.expression));
-
-                var dependenciesWithLocalRemoved =
-                    withLocalDependencies.dependencies
-                        with
-                    {
-                        LocalDependencies = DependenciesFromCompilation.Empty.LocalDependencies
-                    };
+                var returnExpression = exprWithDependencies.expression.AsCsWithTypeResult();
 
                 return
-                    (SyntaxFactory.Block(
-                        declareDependenciesStatements.Cast<StatementSyntax>().Concat(new[]{
-                            SyntaxFactory.ReturnStatement(returnExpression)}).ToArray()),
-                        dependenciesWithLocalRemoved.Union(
-                            DependenciesFromCompilation.Empty
-                        with
-                            {
-                                Expressions =
-                                withLocalDependencies.dependencies.LocalDependencies
-                                    .Select(hashAndExpr => (hashAndExpr.hash, (Expression)hashAndExpr.expression))
-                                    .ToImmutableHashSet()
-                            }));
+                    (SyntaxFactory.Block(SyntaxFactory.ReturnStatement(returnExpression)), exprWithDependencies.dependencies);
             });
-
-    private static ExpressionSyntax WrapAndThenResult(
-        IEnumerable<(string hash, Expression.DecodeAndEvaluateExpression expression)> dependencies,
-        ExpressionSyntax innerResultExpressionSyntax) =>
-        dependencies
-            .Aggregate(
-                seed: innerResultExpressionSyntax,
-                func: (aggregate, nextDependency) =>
-                {
-                    var nextDependencyName = "result_of_" + nextDependency.hash[..10];
-
-                    var resultOkLocalName = "ok_of_" + nextDependency.hash[..10];
-
-                    var mapErrorExpression =
-                        SyntaxFactory.InvocationExpression(
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.IdentifierName(nextDependencyName),
-                                    SyntaxFactory.IdentifierName("MapError")))
-                            .WithArgumentList(
-                                SyntaxFactory.ArgumentList(
-                                    SyntaxFactory.SingletonSeparatedList(
-                                        SyntaxFactory.Argument(
-                                            SyntaxFactory.SimpleLambdaExpression(
-                                                    SyntaxFactory.Parameter(
-                                                        SyntaxFactory.Identifier("err")))
-                                                .WithExpressionBody(
-                                                    SyntaxFactory.BinaryExpression(
-                                                        SyntaxKind.AddExpression,
-                                                        SyntaxFactory.LiteralExpression(
-                                                            SyntaxKind.StringLiteralExpression,
-                                                            SyntaxFactory.Literal(
-                                                                "Failed to evaluate expression " +
-                                                                nextDependency.hash[..10] + ":")),
-                                                        SyntaxFactory.IdentifierName("err")))))));
-
-                    return
-                        SyntaxFactory.InvocationExpression(
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    mapErrorExpression,
-                                    SyntaxFactory.IdentifierName("AndThen")))
-                            .WithArgumentList(
-                                SyntaxFactory.ArgumentList(
-                                    SyntaxFactory.SingletonSeparatedList(
-                                        SyntaxFactory.Argument(
-                                            SyntaxFactory.SimpleLambdaExpression(
-                                                    SyntaxFactory.Parameter(
-                                                        SyntaxFactory.Identifier(resultOkLocalName)))
-                                                .WithExpressionBody(aggregate)))));
-                });
 
     public static ExpressionSyntax WrapExpressionInPineValueResultOk(ExpressionSyntax expression) =>
         SyntaxFactory.InvocationExpression(
@@ -662,7 +660,7 @@ public class PineCompileToDotNet
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(expression))));
 
-    public static Result<string, (ExpressionSyntax expression, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression expression, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
         Expression expression,
         EnvironmentConfig environment)
     {
@@ -670,9 +668,9 @@ public class PineCompileToDotNet
             expression switch
             {
                 Expression.EnvironmentExpression =>
-                Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
+                Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
                     DependenciesFromCompilation.WithNoDependencies(
-                        SyntaxFactory.IdentifierName(environment.argumentEnvironmentName))),
+                        CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(environment.argumentEnvironmentName)))),
 
                 Expression.ListExpression listExpr =>
                 CompileToCSharpExpression(listExpr, environment),
@@ -693,45 +691,54 @@ public class PineCompileToDotNet
                 CompileToCSharpExpression(stringTagExpr, environment),
 
                 _ =>
-                Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.err(
+                Result<string, (CompiledExpression, DependenciesFromCompilation)>.err(
                     "Unsupported syntax kind: " + expression.GetType().FullName)
             };
     }
 
-    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.ListExpression listExpression,
         EnvironmentConfig environment)
     {
         if (!listExpression.List.Any())
-            return Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
-                (pineValueEmptyListSyntax,
+            return Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+                (CompiledExpression.WithTypePlainValue(pineValueEmptyListSyntax),
                     DependenciesFromCompilation.Empty));
 
         return
             listExpression.List.Select((elementExpression, elementIndex) =>
-                    CompileToCSharpExpression(elementExpression, environment)
-                        .MapError(err => "Failed to translate list element " + elementIndex + ": " + err))
-                .ListCombine()
-                .Map(compiledElements =>
-                    ((ExpressionSyntax)
-                        SyntaxFactory.InvocationExpression(
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.IdentifierName("PineValue"),
-                                    SyntaxFactory.IdentifierName("List")))
-                            .WithArgumentList(
-                                SyntaxFactory.ArgumentList(
-                                    SyntaxFactory.SingletonSeparatedList(
-                                        SyntaxFactory.Argument(
-                                            SyntaxFactory.ImplicitArrayCreationExpression(
-                                                SyntaxFactory.InitializerExpression(
-                                                    SyntaxKind.ArrayInitializerExpression,
-                                                    SyntaxFactory.SeparatedList(
-                                                        compiledElements.Select(ce => ce.expression)))))))),
-                        DependenciesFromCompilation.Union(compiledElements.Select(e => e.dependencies))));
+            CompileToCSharpExpression(elementExpression, environment)
+            .MapError(err => "Failed to translate list element " + elementIndex + ": " + err))
+            .ListCombine()
+            .Map(compiledElements =>
+            {
+                var aggregateSyntax =
+                CompiledExpression.ListMapOrAndThen(
+                    combine:
+                    csharpItems =>
+                CompiledExpression.WithTypePlainValue(
+                    SyntaxFactory.InvocationExpression(
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName("PineValue"),
+                                SyntaxFactory.IdentifierName("List")))
+                        .WithArgumentList(
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.Argument(
+                                        SyntaxFactory.ImplicitArrayCreationExpression(
+                                            SyntaxFactory.InitializerExpression(
+                                                SyntaxKind.ArrayInitializerExpression,
+                                                SyntaxFactory.SeparatedList(csharpItems)))))))),
+                    compiledElements.Select(ce => ce.expression).ToImmutableList());
+
+                var aggregateDeps = DependenciesFromCompilation.Union(compiledElements.Select(e => e.dependencies));
+
+                return (aggregateSyntax, aggregateDeps);
+            });
     }
 
-    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
         EnvironmentConfig environment)
     {
@@ -739,7 +746,7 @@ public class PineCompileToDotNet
               out var kernelFunctionInfo))
         {
             return
-                Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.err(
+                Result<string, (CompiledExpression, DependenciesFromCompilation)>.err(
                     "Kernel function name " + kernelApplicationExpression.functionName + " does not match any of the " +
                     KernelFunctionsInfo.Value.Count + " known names: " +
                     string.Join(", ", KernelFunctionsInfo.Value.Keys));
@@ -752,7 +759,7 @@ public class PineCompileToDotNet
                 environment);
     }
 
-    private static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileKernelFunctionApplicationToCSharpExpression(
+    private static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileKernelFunctionApplicationToCSharpExpression(
         KernelFunctionInfo kernelFunctionInfo,
         Expression kernelApplicationArgumentExpression,
         EnvironmentConfig environment)
@@ -796,26 +803,32 @@ public class PineCompileToDotNet
                             {
                                 if (!staticallyKnownArgumentsList[parameterIndex].argumentSyntaxFromParameterType
                                         .TryGetValue(parameterType, out var param))
-                                    return Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.err(
+                                    return Result<string, (CompiledExpression, DependenciesFromCompilation)>.err(
                                         "No transformation found for parameter type " + parameterType);
 
-                                return Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(param);
+                                return Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(param);
                             });
 
                     if (argumentsResults.ListCombine() is
-                        Result<string, IReadOnlyList<(ExpressionSyntax, DependenciesFromCompilation)>>.Ok specializedOk)
+                        Result<string, IReadOnlyList<(CompiledExpression, DependenciesFromCompilation)>>.Ok specializedOk)
                     {
-                        var plainInvocationSyntax =
-                            specializedImpl.CompileInvocation(specializedOk.Value.Select(p => p.Item1).ToImmutableList());
-
                         var expressionReturningPineValue =
-                            specializedImpl.returnType.isInstanceOfResult ?
-                            wrapInvocationInWithDefault(plainInvocationSyntax)
-                            :
-                            plainInvocationSyntax;
+                            CompiledExpression.ListMapOrAndThen(
+                                argumentsCs =>
+                                {
+                                    var plainInvocationSyntax = specializedImpl.CompileInvocation(argumentsCs);
+
+                                    return
+                                    CompiledExpression.WithTypePlainValue(
+                                        specializedImpl.returnType.isInstanceOfResult ?
+                                        wrapInvocationInWithDefault(plainInvocationSyntax)
+                                        :
+                                        plainInvocationSyntax);
+                                },
+                                specializedOk.Value.Select(p => p.Item1).ToImmutableList());
 
                         return
-                            Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
+                            Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
                                 (expressionReturningPineValue,
                                 DependenciesFromCompilation.Union(specializedOk.Value.Select(p => p.Item2))));
                     }
@@ -825,11 +838,11 @@ public class PineCompileToDotNet
 
         return
             CompileToCSharpExpression(
-                    kernelApplicationArgumentExpression,
-                    environment)
-                .Map(compiledArgument =>
-                    ((ExpressionSyntax)wrapInvocationInWithDefault(kernelFunctionInfo.CompileGenericInvocation(compiledArgument.expression)),
-                compiledArgument.dependencies));
+                kernelApplicationArgumentExpression, environment)
+            .Map(compiledArgument =>
+            (compiledArgument.expression.Map(argumentCs =>
+            wrapInvocationInWithDefault(kernelFunctionInfo.CompileGenericInvocation(argumentCs))),
+            compiledArgument.dependencies));
     }
 
     private static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
@@ -868,7 +881,7 @@ public class PineCompileToDotNet
         Expression argumentExpression,
         EnvironmentConfig environment)
     {
-        var dictionary = new Dictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)>();
+        var dictionary = new Dictionary<KernelFunctionParameterType, (CompiledExpression, DependenciesFromCompilation)>();
 
         if (argumentExpression is Expression.LiteralExpression literal)
         {
@@ -876,9 +889,9 @@ public class PineCompileToDotNet
                 PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)
             {
                 dictionary[KernelFunctionParameterType.Integer] =
-                    (SyntaxFactory.LiteralExpression(
-                        SyntaxKind.NumericLiteralExpression,
-                        SyntaxFactory.Literal((long)okInteger.Value)), DependenciesFromCompilation.Empty);
+                    (CompiledExpression.WithTypePlainValue(
+                        SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal((long)okInteger.Value))),
+                            DependenciesFromCompilation.Empty);
             }
         }
 
@@ -887,13 +900,13 @@ public class PineCompileToDotNet
                 .Map(csharpExpression =>
                     new ParsedKernelApplicationArgumentExpression(
                         argumentSyntaxFromParameterType:
-                        ImmutableDictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)>.Empty
+                        ImmutableDictionary<KernelFunctionParameterType, (CompiledExpression, DependenciesFromCompilation)>.Empty
                             .SetItem(KernelFunctionParameterType.Generic, (csharpExpression.expression, csharpExpression.dependencies))
                             .SetItems(dictionary)));
     }
 
     private record ParsedKernelApplicationArgumentExpression(
-        IReadOnlyDictionary<KernelFunctionParameterType, (ExpressionSyntax, DependenciesFromCompilation)> argumentSyntaxFromParameterType);
+        IReadOnlyDictionary<KernelFunctionParameterType, (CompiledExpression, DependenciesFromCompilation)> argumentSyntaxFromParameterType);
 
     private record KernelFunctionInfo(
         Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
@@ -1007,7 +1020,7 @@ public class PineCompileToDotNet
             .ToImmutableDictionary(m => m.Name, ReadKernelFunctionInfo);
     }
 
-    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.ConditionalExpression conditionalExpression,
         EnvironmentConfig environment)
     {
@@ -1027,17 +1040,41 @@ public class PineCompileToDotNet
                 environment)
             .MapError(err => "Failed to compile branch if false: " + err)
             .Map(compiledIfFalse =>
-            ((ExpressionSyntax)SyntaxFactory.ConditionalExpression(
-                SyntaxFactory.BinaryExpression(
-                    SyntaxKind.EqualsExpression,
-                    SyntaxFactory.IdentifierName("value_true"),
-                    compiledCondition.expression),
-                compiledIfTrue.expression,
-                compiledIfFalse.expression),
-                compiledCondition.dependencies.Union(compiledIfTrue.dependencies).Union(compiledIfFalse.dependencies)))));
+            {
+                CompiledExpression continueWithConditionCs(ExpressionSyntax conditionCs)
+                {
+                    if (!(compiledIfTrue.expression.IsTypeResult || compiledIfFalse.expression.IsTypeResult))
+                    {
+                        return
+                        CompiledExpression.WithTypePlainValue(SyntaxFactory.ConditionalExpression(
+                            conditionCs,
+                            compiledIfTrue.expression.Syntax,
+                            compiledIfFalse.expression.Syntax));
+                    }
+
+                    return
+                    CompiledExpression.WithTypeResult(
+                        SyntaxFactory.ConditionalExpression(
+                            conditionCs,
+                            compiledIfTrue.expression.AsCsWithTypeResult(),
+                            compiledIfFalse.expression.AsCsWithTypeResult()));
+                }
+
+                var
+                combinedExpr =
+                compiledCondition.expression
+                .MapOrAndThen(conditionCs =>
+                continueWithConditionCs(
+                    SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, SyntaxFactory.IdentifierName("value_true"), conditionCs)));
+
+                return
+                (combinedExpr,
+                compiledCondition.dependencies.Union(compiledIfTrue.dependencies).Union(compiledIfFalse.dependencies));
+            }
+            )));
     }
 
-    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
         EnvironmentConfig environment)
     {
@@ -1048,12 +1085,29 @@ public class PineCompileToDotNet
         var decodeAndEvaluateExpressionHash =
             CommonConversion.StringBase16(PineValueHashTree.ComputeHash(decodeAndEvaluateExpressionValue));
 
+        var invocationExpression =
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(environment.argumentEvalGenericName))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.IdentifierName("expression_" + decodeAndEvaluateExpressionHash[..10])),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.IdentifierName(environment.argumentEnvironmentName))
+                        })));
+
         return
-            Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
-                (SyntaxFactory.IdentifierName("ok_of_" + decodeAndEvaluateExpressionHash[..10]),
+            Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+                (CompiledExpression.WithTypeResult(invocationExpression),
                     DependenciesFromCompilation.Empty
                     with
-                    { LocalDependencies = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, decodeAndEvaluateExpression)) }));
+                    {
+                        Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
+                    }));
     }
 
     public static Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
@@ -1167,19 +1221,19 @@ public class PineCompileToDotNet
             .MapError(err => "Inner expression is not independent: " + err));
     }
 
-    public static Result<string, (ExpressionSyntax, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
         Expression.LiteralExpression literalExpression)
     {
         return
-            Result<string, (ExpressionSyntax, DependenciesFromCompilation)>.ok(
-                (SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value)),
+            Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+                (CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value))),
                 DependenciesFromCompilation.Empty with { Values = ImmutableHashSet.Create(literalExpression.Value) }));
     }
 
     public static string DeclarationNameForValue(PineValue pineValue) =>
         "value_" + CommonConversion.StringBase16(PineValueHashTree.ComputeHash(pineValue))[..10];
 
-    public static Result<string, (ExpressionSyntax expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
         EnvironmentConfig environment)
     {
@@ -1190,9 +1244,9 @@ public class PineCompileToDotNet
                 stringTagExpression.tagged,
                 environment)
             .Map(compiledExpr =>
-            (compiledExpr.expression.InsertTriviaBefore(
+            (compiledExpr.expression.MapSyntax(s => s.InsertTriviaBefore(
                 SyntaxFactory.Comment("/*\n" + stringTagExpression.tag + "\n*/"),
-                SyntaxFactory.TriviaList()),
+                SyntaxFactory.TriviaList())),
                 compiledExpr.dependencies));
     }
 
@@ -1320,7 +1374,7 @@ public class PineCompileToDotNet
         };
     }
 
-    private static ExpressionSyntax pineValueEmptyListSyntax =
+    private static readonly ExpressionSyntax pineValueEmptyListSyntax =
         SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
             SyntaxFactory.IdentifierName("PineValue"),
