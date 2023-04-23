@@ -802,13 +802,13 @@ viewExerciseWorkspace workspace =
                 |> Element.el [ Element.alignRight ]
             ]
                 |> Element.row
-                    [ Element.width Element.fill
+                    [ Element.width (Element.fill |> Element.maximum 900)
+                    , Element.centerX
                     , Element.paddingXY (defaultFontSize * 2) defaultFontSize
                     , Element.spacing (defaultFontSize * 2)
                     ]
                 |> Element.el
                     [ Element.width Element.fill
-                    , Element.alignBottom
                     , Element.Background.color feedbackBackgroundColor
                     ]
 
