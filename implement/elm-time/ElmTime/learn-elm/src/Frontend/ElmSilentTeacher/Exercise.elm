@@ -20,7 +20,7 @@ exercises : List Exercise
 exercises =
     [ ( integerAddition, 4 )
     , ( integerSubtraction, 4 )
-    , ( integerMultiplication, 4 )
+    , ( integerMultiplication, 3 )
     , ( integerDivision, 7 )
     , ( concatStrings, 4 )
     , ( concatLists, 5 )
@@ -29,8 +29,8 @@ exercises =
     , ( lessThan, 5 )
     , ( notEquals, 6 )
     , ( greaterThanOrEqual, 5 )
-    , ( letBlockSimple, 4 )
-    , ( letBlockWithTwoDeclarations, 4 )
+    , ( letBlockSimple, 5 )
+    , ( letBlockWithTwoDeclarations, 5 )
     , ( listLength, 3 )
     , ( stringLeft, 4 )
     , ( stringDrop, 4 )
@@ -38,8 +38,8 @@ exercises =
     , ( listHead, 4 )
     , ( listDrop, 4 )
     , ( ifThenElse, 7 )
-    , ( simplestNamedFunction, 4 )
-    , ( namedFunctionWithTwoArguments, 4 )
+    , ( simplestNamedFunction, 5 )
+    , ( namedFunctionWithTwoArguments, 5 )
     , ( twoNamedFunctions, 4 )
     , ( pipeline, 5 )
     ]
@@ -72,8 +72,8 @@ integerMultiplication =
         (\x y ->
             String.fromInt x ++ " * " ++ String.fromInt y
         )
-        (Random.int 0 9)
-        (Random.int 0 9)
+        (Random.uniform 0 [ -4, -2, -1, 1, 2, 4, 6 ])
+        (Random.uniform 0 [ -2, -1, 1, 2, 4 ])
 
 
 integerDivision : Random.Generator ExerciseChallenge
