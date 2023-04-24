@@ -43,7 +43,8 @@ exercises =
     , ( twoNamedFunctions, 4 )
     , ( pipeline, 5 )
     ]
-        |> List.concatMap (\( generator, repetitions ) -> List.repeat repetitions (Exercise generator))
+        |> List.map (\( generator, repetitions ) -> List.repeat repetitions (Exercise generator))
+        |> interleaveExercisesRecursive
 
 
 integerAddition : Random.Generator ExerciseChallenge
@@ -336,3 +337,42 @@ pipeline =
 listSyntaxFromItemsSyntaxes : List String -> String
 listSyntaxFromItemsSyntaxes items =
     "[ " ++ String.join ", " items ++ " ]"
+
+
+interleaveExercisesRecursive : List (List a) -> List a
+interleaveExercisesRecursive =
+    List.map chuckExercisesBeforeInterleaving
+        >> interleaveListsRecursive
+        >> List.concat
+
+
+chuckExercisesBeforeInterleaving : List a -> List (List a)
+chuckExercisesBeforeInterleaving list =
+    case list of
+        first :: second :: others ->
+            [ first, second ] :: List.map List.singleton others
+
+        _ ->
+            List.map List.singleton list
+
+
+interleaveListsRecursive : List (List a) -> List a
+interleaveListsRecursive =
+    let
+        interleaveSingleListInFront front following =
+            case front of
+                [] ->
+                    following
+
+                next :: frontRemaining ->
+                    interleaveSingleListInFront
+                        frontRemaining
+                        (insertInListAtIndexOrBound (List.length frontRemaining - 1) next following)
+    in
+    List.map List.reverse
+        >> List.foldr interleaveSingleListInFront []
+
+
+insertInListAtIndexOrBound : Int -> a -> List a -> List a
+insertInListAtIndexOrBound i item list =
+    List.take i list ++ [ item ] ++ List.drop i list
