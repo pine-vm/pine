@@ -16,6 +16,7 @@ import Html
 import Html.Attributes as HA
 import Html.Events
 import Json.Decode
+import List.Extra
 import Pine
 import Random
 import Result.Extra
@@ -44,6 +45,7 @@ type TrainingSessionState
 
 type alias SessionInProgressStructure =
     { remainingExercises : List Exercise
+    , previousChallenges : List ExerciseChallenge
     , currentExercise : ExerciseWorkspace
     , completedExercises : List Exercise
     , progressBar : AnimatedProgressBar
@@ -107,6 +109,8 @@ init =
                             initExerciseWorkspace
                                 { evaluationContextResult = evaluationContextResult, time = time }
                                 currentExercise
+                                []
+                        , previousChallenges = []
                         , completedExercises = []
                         , progressBar = initProgressBar
                         }
@@ -114,7 +118,7 @@ init =
                 [] ->
                     SessionCompleted
     in
-    ( { time = Time.millisToPosix 0
+    ( { time = time
       , evaluationContextResult = evaluationContextResult
       , trainingSession = trainingSession
       }
@@ -125,14 +129,32 @@ init =
 initExerciseWorkspace :
     { a | evaluationContextResult : Result String Pine.EvalContext, time : Time.Posix }
     -> Exercise
+    -> List ExerciseChallenge
     -> ExerciseWorkspace
-initExerciseWorkspace state exercise =
+initExerciseWorkspace state exercise previousChallenges =
     let
+        ( randomChallenges, randomSeed ) =
+            List.repeat 4 0
+                |> List.foldl
+                    (always
+                        (\( aggregate, seed ) ->
+                            seed
+                                |> Random.step exercise.challengeGenerator
+                                |> Tuple.mapFirst (String.trim >> (::) >> (|>) aggregate)
+                        )
+                    )
+                    ( [], Random.initialSeed (Time.posixToMillis state.time) )
+
+        distanceToIdenticalPreviousChallenge c =
+            previousChallenges
+                |> List.Extra.elemIndex c
+                |> Maybe.withDefault 999
+
         challenge =
-            Random.initialSeed (Time.posixToMillis state.time)
-                |> Random.step exercise.challengeGenerator
-                |> Tuple.first
-                |> String.trim
+            randomChallenges
+                |> List.sortBy (distanceToIdenticalPreviousChallenge >> negate)
+                |> List.head
+                |> Maybe.withDefault (Tuple.first (Random.step exercise.challengeGenerator randomSeed))
 
         correctAnswer =
             case state.evaluationContextResult of
@@ -263,6 +285,11 @@ updateLessFocusCmd event stateBefore =
                             ( stateBefore, Cmd.none )
 
                         CheckedAnswer checkedAnswer ->
+                            let
+                                previousChallenges =
+                                    sessionInProgress.currentExercise.challenge.challenge
+                                        :: sessionInProgress.previousChallenges
+                            in
                             if checkedAnswer.cachedCorrect then
                                 case sessionInProgress.remainingExercises of
                                     [] ->
@@ -274,11 +301,16 @@ updateLessFocusCmd event stateBefore =
                                         ( { stateBefore
                                             | trainingSession =
                                                 SessionInProgress
-                                                    { currentExercise = initExerciseWorkspace stateBefore currentExercise
+                                                    { currentExercise =
+                                                        initExerciseWorkspace
+                                                            stateBefore
+                                                            currentExercise
+                                                            previousChallenges
+                                                    , previousChallenges = previousChallenges
                                                     , remainingExercises = remainingExercises
                                                     , completedExercises =
-                                                        sessionInProgress.completedExercises
-                                                            ++ [ sessionInProgress.currentExercise.exercise ]
+                                                        sessionInProgress.currentExercise.exercise
+                                                            :: sessionInProgress.completedExercises
                                                     , progressBar = sessionInProgress.progressBar
                                                     }
                                           }
@@ -286,9 +318,18 @@ updateLessFocusCmd event stateBefore =
                                         )
 
                             else
-                                ( stateBefore
-                                    |> updateTrainingSessionCurrentExercise
-                                        (\currentExercise -> initExerciseWorkspace stateBefore currentExercise.exercise)
+                                ( { stateBefore
+                                    | trainingSession =
+                                        SessionInProgress
+                                            { sessionInProgress
+                                                | currentExercise =
+                                                    initExerciseWorkspace
+                                                        stateBefore
+                                                        sessionInProgress.currentExercise.exercise
+                                                        previousChallenges
+                                                , previousChallenges = previousChallenges
+                                            }
+                                  }
                                 , Cmd.none
                                 )
 
@@ -397,7 +438,7 @@ progressBarAnimationTask : SessionInProgressStructure -> Maybe ({ durationMilli 
 progressBarAnimationTask sessionInProgress =
     let
         totalExerciseCount =
-            List.length (sessionInProgress.completedExercises ++ sessionInProgress.remainingExercises) + 1
+            List.length sessionInProgress.completedExercises + List.length sessionInProgress.remainingExercises + 1
 
         currentExerciseCheckedCorrect =
             case sessionInProgress.currentExercise.challenge.usersAnswer of
