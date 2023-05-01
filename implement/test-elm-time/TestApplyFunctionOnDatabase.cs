@@ -2,7 +2,9 @@
 using Pine;
 using Pine.Json;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -178,6 +180,53 @@ public class TestApplyFunctionOnDatabase
                     anotherField: "Custom content from argument: Hello world"),
                 customReport);
         }
+    }
+
+    [TestMethod]
+    public async Task List_exposed_functions_via_admin_interface()
+    {
+        var adminPassword = "test";
+
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+            deployAppAndInitElmState: TestElmWebAppHttpServer.CalculatorWebApp,
+            adminPassword: adminPassword);
+
+        using var server = testSetup.StartWebHost();
+
+        using var publicClient = testSetup.BuildPublicAppHttpClient();
+
+        using var adminClient = testSetup.BuildAdminInterfaceHttpClient();
+
+        testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(adminClient);
+
+        var listFunctionsResponse =
+            await adminClient.GetAsync(ElmTime.Platform.WebServer.StartupAdminInterface.PathApiListFunctionsApplicableOnDatabase);
+
+        var listFunctionsResponseContent = await listFunctionsResponse.Content.ReadAsStringAsync();
+
+        Assert.AreEqual(200, (int)listFunctionsResponse.StatusCode, message: "listFunctionsResponse.StatusCode");
+
+        var listFunctionsResponseStruct =
+            JsonSerializer.Deserialize<Result<string, IReadOnlyList<ElmTime.AdminInterface.FunctionApplicableOnDatabase>>>(
+                listFunctionsResponseContent);
+
+        var functionsDescriptions =
+            listFunctionsResponseStruct
+            .Extract(fromErr: err => throw new Exception(err));
+
+        ElmTime.AdminInterface.FunctionApplicableOnDatabase? functionDescriptionFromName(string functionName) =>
+            functionsDescriptions?.FirstOrDefault(
+                functionDescription => functionDescription.functionName == functionName);
+
+        var applyCalculatorOperationFunctionDescription =
+            functionDescriptionFromName("Backend.ExposeFunctionsToAdmin.applyCalculatorOperation");
+
+        var customUsageReportFunctionDescription =
+            functionDescriptionFromName("Backend.ExposeFunctionsToAdmin.customUsageReport");
+
+        Assert.IsNotNull(applyCalculatorOperationFunctionDescription);
+
+        Assert.IsNotNull(customUsageReportFunctionDescription);
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]

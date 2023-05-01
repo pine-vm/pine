@@ -12,3 +12,5 @@ public record ApplyFunctionOnDatabaseSuccess(
     StateShim.InterfaceToHost.FunctionApplicationResult functionApplicationResult,
     bool changedState);
 
+public record FunctionApplicableOnDatabase(
+    string functionName);

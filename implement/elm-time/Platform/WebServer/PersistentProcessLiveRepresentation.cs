@@ -861,6 +861,17 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
+    public Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> ListFunctionsApplicable()
+    {
+        return
+            StateShim.StateShim.ListExposedFunctions(lastElmAppVolatileProcess)
+            .Map(listFunctionsSuccess =>
+            (IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>)
+            listFunctionsSuccess
+            .Select(exposed => new AdminInterface.FunctionApplicableOnDatabase(functionName: exposed.functionName))
+            .ToImmutableList());
+    }
+
     public Result<string, long> EstimateSerializedStateLengthOnMainBranch()
     {
         lock (processLock)

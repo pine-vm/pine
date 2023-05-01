@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-04-20";
+    public static string AppVersionId => "2023-05-01";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -548,7 +548,7 @@ public class Program
     private static CommandLineApplication AddApplyFunctionCommand(CommandLineApplication app) =>
         app.Command("apply-function", applyFunctionCommand =>
     {
-        applyFunctionCommand.Description = "Apply an Elm function on the database containing the state of an Elm app.";
+        applyFunctionCommand.Description = "Apply an Elm function on a database containing the state of an Elm app.";
         applyFunctionCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
         var siteArgument = ProcessSiteArgumentOnCommand(applyFunctionCommand);
@@ -561,7 +561,7 @@ public class Program
 
         var commitResultingStateOption = applyFunctionCommand.Option(
             "--commit-resulting-state",
-            "If the function produces a new application database state, this option allows committing that new state to the database.",
+            "If the applied function returns a new application state, this option enables committing that new state to the database.",
             CommandOptionType.NoValue);
 
         applyFunctionCommand.OnExecute(() =>

@@ -41,6 +41,8 @@ public class StartupAdminInterface
 
     public static string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db/";
 
+    public static string PathApiListFunctionsApplicableOnDatabase => "/api/list-functions-applicable-on-db/";
+
     public static IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
 
     public static IImmutableList<IImmutableList<string>> WebServerConfigFilePathAlternatives =>
@@ -381,10 +383,20 @@ public class StartupAdminInterface
                     lock (avoidConcurrencyLock)
                     {
                         if (publicAppHost?.processLiveRepresentation is null)
-                            return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err("No application deployed.");
+                            return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err(
+                                "No application deployed.");
 
                         return publicAppHost.processLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
                     }
+                }
+
+                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> listFunctionsApplicableOnDatabase()
+                {
+                    if (publicAppHost?.processLiveRepresentation is null)
+                        return Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                            "No application deployed.");
+
+                    return publicAppHost.processLiveRepresentation.ListFunctionsApplicable();
                 }
 
                 var apiRoutes = new[]
@@ -562,6 +574,26 @@ public class StartupAdminInterface
                                     await context.Request.ReadFromJsonAsync<AdminInterface.ApplyFunctionOnDatabaseRequest>();
 
                                 var result = applyFunctionOnDatabase(applyFunctionRequest);
+
+                                context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
+                                await context.Response.WriteAsJsonAsync(result);
+                            }
+                            catch (Exception ex)
+                            {
+                                context.Response.StatusCode = 422;
+                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
+                            }
+                        })
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiListFunctionsApplicableOnDatabase,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        .Add("get", async (context, publicAppHost) =>
+                        {
+                            try
+                            {
+                                var result = listFunctionsApplicableOnDatabase();
 
                                 context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
                                 await context.Response.WriteAsJsonAsync(result);
