@@ -13,4 +13,5 @@ public record ApplyFunctionOnDatabaseSuccess(
     bool changedState);
 
 public record FunctionApplicableOnDatabase(
-    string functionName);
+    string functionName,
+    IReadOnlyList<StateShim.InterfaceToHost.ExposedFunctionParameterDescription> parameters);

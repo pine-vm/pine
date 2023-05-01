@@ -868,7 +868,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             .Map(listFunctionsSuccess =>
             (IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>)
             listFunctionsSuccess
-            .Select(exposed => new AdminInterface.FunctionApplicableOnDatabase(functionName: exposed.functionName))
+            .Select(exposed => new AdminInterface.FunctionApplicableOnDatabase(
+                functionName: exposed.functionName,
+                parameters: exposed.functionDescription.parameters))
             .ToImmutableList());
     }
 

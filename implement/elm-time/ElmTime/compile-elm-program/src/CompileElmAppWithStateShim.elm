@@ -71,6 +71,14 @@ type alias ExposedFunctionConfig =
 type alias ExposedFunctionDescription =
     { hasAppStateParam : Bool
     , resultContainsAppState : Bool
+    , parameters : List ExposedFunctionParameterDescription
+    }
+
+
+type alias ExposedFunctionParameterDescription =
+    { name : String
+    , typeSourceCodeText : String
+    , typeIsAppStateType : Bool
     }
 
 
@@ -262,12 +270,40 @@ composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
 
             else
                 "False"
+
+        parametersTexts =
+            functionConfig.description.parameters
+                |> List.map
+                    (\parameterDescription ->
+                        "{"
+                            ++ ([ ( "name"
+                                  , "\"" ++ parameterDescription.name ++ "\""
+                                  )
+                                , ( "typeSourceCodeText"
+                                  , "\"" ++ parameterDescription.typeSourceCodeText ++ "\""
+                                  )
+                                , ( "typeIsAppStateType"
+                                  , if parameterDescription.typeIsAppStateType then
+                                        "True"
+
+                                    else
+                                        "False"
+                                  )
+                                ]
+                                    |> List.map (\( key, value ) -> key ++ " = " ++ value)
+                                    |> String.join ", "
+                               )
+                            ++ "}"
+                    )
     in
     [ "(\"" ++ functionName ++ "\""
     , ", { description = { hasAppStateParam = "
         ++ syntaxFromBool functionConfig.description.hasAppStateParam
         ++ ", resultContainsAppState = "
         ++ syntaxFromBool functionConfig.description.resultContainsAppState
+        ++ ", parameters = [ "
+        ++ String.join ", " parametersTexts
+        ++ " ]"
         ++ " }"
     , "  , handler ="
     , indentElmCodeLines 1 functionConfig.handlerExpression
@@ -870,6 +906,14 @@ type StateSource
 type alias ExposedFunctionDescription =
     { hasAppStateParam : Bool
     , resultContainsAppState : Bool
+    , parameters : List ExposedFunctionParameterDescription
+    }
+
+
+type alias ExposedFunctionParameterDescription =
+    { name : String
+    , typeSourceCodeText : String
+    , typeIsAppStateType : Bool
     }
 
 

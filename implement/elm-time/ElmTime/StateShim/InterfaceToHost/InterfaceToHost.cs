@@ -92,8 +92,16 @@ public record FunctionApplicationResult(
     Maybe<JsonElement> resultLessStateJson,
     bool producedStateDifferentFromStateArgument);
 
-public record NamedExposedFunction(string functionName, ExposedFunctionDescription functionDescription);
+public record NamedExposedFunction(
+    string functionName,
+    ExposedFunctionDescription functionDescription);
 
 public record ExposedFunctionDescription(
     bool hasAppStateParam,
-    bool resultContainsAppState);
+    bool resultContainsAppState,
+    IReadOnlyList<ExposedFunctionParameterDescription> parameters);
+
+public record ExposedFunctionParameterDescription(
+    string name,
+    string typeSourceCodeText,
+    bool typeIsAppStateType);

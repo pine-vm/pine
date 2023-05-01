@@ -225,8 +225,35 @@ public class TestApplyFunctionOnDatabase
             functionDescriptionFromName("Backend.ExposeFunctionsToAdmin.customUsageReport");
 
         Assert.IsNotNull(applyCalculatorOperationFunctionDescription);
-
         Assert.IsNotNull(customUsageReportFunctionDescription);
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                    name: "operation",
+                    typeSourceCodeText: "Calculator.CalculatorOperation",
+                    typeIsAppStateType: false),
+                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                    name: "stateBefore",
+                    typeSourceCodeText: "Backend.State.State",
+                    typeIsAppStateType: true)
+            },
+            applyCalculatorOperationFunctionDescription!.parameters.ToList());
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                    name: "customArgument",
+                    typeSourceCodeText: "String",
+                    typeIsAppStateType: false),
+                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                    name: "state",
+                    typeSourceCodeText: "Backend.State.State",
+                    typeIsAppStateType: true),
+            },
+            customUsageReportFunctionDescription!.parameters.ToList());
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]

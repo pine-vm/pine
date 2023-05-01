@@ -1286,7 +1286,7 @@ type LeafElmTypeStruct
 parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation :
     Dict.Dict (List String) SourceParsedElmModule
     -> ( ( List String, Elm.Syntax.File.File ), Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
-    -> Result (LocatedInSourceFiles String) ( List ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
+    -> Result (LocatedInSourceFiles String) ( List (Elm.Syntax.Node.Node ElmTypeAnnotation), Dict.Dict String ElmChoiceTypeStruct )
 parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation modules ( ( currentModuleFilePath, currentModule ), typeAnnotationNode ) =
     case Elm.Syntax.Node.value typeAnnotationNode of
         Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation inputNode returnNode ->
@@ -1310,7 +1310,10 @@ parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation modules ( ( current
             parseElmTypeAndDependenciesRecursivelyFromAnnotation
                 modules
                 ( ( currentModuleFilePath, currentModule ), typeAnnotationNode )
-                |> Result.map (Tuple.mapFirst List.singleton)
+                |> Result.map
+                    (Tuple.mapFirst
+                        (Elm.Syntax.Node.Node (Elm.Syntax.Node.range typeAnnotationNode) >> List.singleton)
+                    )
 
 
 parseElmTypeAndDependenciesRecursivelyFromAnnotation :

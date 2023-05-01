@@ -17,6 +17,7 @@ import CompileElmApp
         , filePathFromElmModuleName
         , findModuleByName
         , findSourceDirectories
+        , getTextLinesFromRange
         , locatedInSourceFilesFromRange
         , mapLocatedInSourceFiles
         , parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation
@@ -38,6 +39,7 @@ import Elm.Syntax.File
 import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
+import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
 import Result.Extra
@@ -236,7 +238,11 @@ loweredForBackendApp appDeclaration config sourceFiles =
 
                                                         exposedFunctionsGeneral =
                                                             [ ( "init"
-                                                              , { description = { hasAppStateParam = False, resultContainsAppState = True }
+                                                              , { description =
+                                                                    { hasAppStateParam = False
+                                                                    , resultContainsAppState = True
+                                                                    , parameters = []
+                                                                    }
                                                                 , handlerExpression = """
 config_init
     |> (\\( appState, commands ) ->
@@ -254,7 +260,11 @@ config_init
                                                                 }
                                                               )
                                                             , ( "processEvent"
-                                                              , { description = { hasAppStateParam = True, resultContainsAppState = True }
+                                                              , { description =
+                                                                    { hasAppStateParam = True
+                                                                    , resultContainsAppState = True
+                                                                    , parameters = []
+                                                                    }
                                                                 , handlerExpression = """
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
     jsonDecodeBackendEvent
@@ -330,7 +340,11 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 exposedFunctionsFromMigrationConfig : MigrationConfig -> Dict.Dict String ExposedFunctionConfig
 exposedFunctionsFromMigrationConfig _ =
     [ ( "migrate"
-      , { description = { hasAppStateParam = False, resultContainsAppState = True }
+      , { description =
+            { hasAppStateParam = False
+            , resultContainsAppState = True
+            , parameters = []
+            }
         , handlerExpression = """
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument
     Json.Decode.value
@@ -631,6 +645,10 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                     }
                     error
                 )
+
+        parametersNames =
+            (Elm.Syntax.Node.value functionDeclaration.declaration).arguments
+                |> List.map (composeParameterName { sourceModuleText = interfaceModule.fileText })
     in
     case Maybe.map Elm.Syntax.Node.value functionDeclaration.signature of
         Nothing ->
@@ -646,14 +664,44 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                             [] ->
                                 returnErrorInInterfaceModule "Zero types in function type annotation?"
 
-                            returnTypeAnnotation :: functionArgumentsReversed ->
+                            returnTypeAnnotationNode :: functionArgumentsReversed ->
                                 let
+                                    returnTypeAnnotation =
+                                        Elm.Syntax.Node.value returnTypeAnnotationNode
+
                                     ( hasAppStateParam, functionArgumentsLessState ) =
-                                        if (functionArgumentsReversed |> List.head) == Just backendStateType then
+                                        if
+                                            (functionArgumentsReversed
+                                                |> List.head
+                                                |> Maybe.map Elm.Syntax.Node.value
+                                            )
+                                                == Just backendStateType
+                                        then
                                             ( True, functionArgumentsReversed |> List.drop 1 |> List.reverse )
 
                                         else
                                             ( False, List.reverse functionArgumentsReversed )
+
+                                    parameters : List CompileElmAppWithStateShim.ExposedFunctionParameterDescription
+                                    parameters =
+                                        functionArgumentsReversed
+                                            |> List.reverse
+                                            |> List.indexedMap
+                                                (\parameterIndex parameterTypeAnnotationNode ->
+                                                    { name =
+                                                        parametersNames
+                                                            |> List.drop parameterIndex
+                                                            |> List.head
+                                                            |> Maybe.withDefault "unknown"
+                                                    , typeSourceCodeText =
+                                                        getTextLinesFromRange
+                                                            (Elm.Syntax.Node.range parameterTypeAnnotationNode)
+                                                            interfaceModule.fileText
+                                                            |> String.join "\n"
+                                                    , typeIsAppStateType =
+                                                        Elm.Syntax.Node.value parameterTypeAnnotationNode == backendStateType
+                                                    }
+                                                )
 
                                     localJsonConverterFunctionFromTypeAnnotation { isDecoder } typeAnnotation =
                                         let
@@ -673,7 +721,10 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
 
                                     argumentsJsonDecoders =
                                         functionArgumentsLessState
-                                            |> List.map (localJsonConverterFunctionFromTypeAnnotation { isDecoder = True })
+                                            |> List.map
+                                                (Elm.Syntax.Node.value
+                                                    >> localJsonConverterFunctionFromTypeAnnotation { isDecoder = True }
+                                                )
 
                                     returnTypeJsonEncoders =
                                         if returnTypeAnnotation == backendStateType then
@@ -720,6 +771,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                             { description =
                                                 { hasAppStateParam = hasAppStateParam
                                                 , resultContainsAppState = composeHandler.resultContainsAppState
+                                                , parameters = parameters
                                                 }
                                             , handlerExpression = composeHandler.expression
                                             }
@@ -727,6 +779,34 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                     , modulesToImport = [ interfaceModule.moduleName ]
                                     }
                     )
+
+
+composeParameterName : { sourceModuleText : String } -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> String
+composeParameterName { sourceModuleText } argumentNode =
+    case Elm.Syntax.Node.value argumentNode of
+        Elm.Syntax.Pattern.AllPattern ->
+            "_"
+
+        Elm.Syntax.Pattern.VarPattern var ->
+            var
+
+        Elm.Syntax.Pattern.TuplePattern tuple ->
+            "tuple_of_"
+                ++ String.join "_" (List.map (composeParameterName { sourceModuleText = sourceModuleText }) tuple)
+
+        Elm.Syntax.Pattern.RecordPattern record ->
+            "record_of_"
+                ++ String.join "_" (List.map Elm.Syntax.Node.value record)
+
+        Elm.Syntax.Pattern.UnConsPattern first following ->
+            "uncons_"
+                ++ String.join "_"
+                    (List.map (composeParameterName { sourceModuleText = sourceModuleText })
+                        [ first, following ]
+                    )
+
+        _ ->
+            "other_pattern"
 
 
 buildExposedFunctionHandlerExpression :
