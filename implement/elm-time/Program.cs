@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-01";
+    public static string AppVersionId => "2023-05-02";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -58,6 +58,7 @@ public class Program
         var deployCommand = AddDeployCommand(app);
         var copyAppStateCommand = AddCopyAppStateCommand(app);
         var copyProcessCommand = AddCopyProcessCommand(app);
+        var listFunctionsCommand = AddListFunctionsCommand(app);
         var applyFunctionCommand = AddApplyFunctionCommand(app);
         var truncateProcessHistoryCommand = AddTruncateProcessHistoryCommand(app);
 
@@ -132,6 +133,7 @@ public class Program
                         deployCommand,
                         copyAppStateCommand,
                         copyProcessCommand,
+                        listFunctionsCommand,
                         applyFunctionCommand,
                         truncateProcessHistoryCommand,
                     }
@@ -545,51 +547,117 @@ public class Program
             });
         });
 
+
+    private static CommandLineApplication AddListFunctionsCommand(CommandLineApplication app) =>
+        app.Command("list-functions", listFunctionsCommand =>
+        {
+            listFunctionsCommand.Description = "List the functions exposed by an Elm app for application on a database.";
+            listFunctionsCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var siteArgument = ProcessSiteArgumentOnCommand(listFunctionsCommand);
+            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(listFunctionsCommand);
+
+            listFunctionsCommand.OnExecute(() =>
+            {
+                var site = siteArgument.Value!;
+                var sitePassword = passwordFromSite(site);
+
+                var listFunctionsResult =
+                    ListFunctions(
+                        site: site,
+                        siteDefaultPassword: sitePassword,
+                        promptForPasswordOnConsole: true);
+
+                var console = (Pine.IConsole)StaticConsole.Instance;
+
+                return
+                listFunctionsResult.Unpack(
+                    fromErr:
+                    err =>
+                    {
+                        console.WriteLine("Failed to list functions at " + site + ": " + err, Pine.IConsole.TextColor.Red);
+
+                        return 2;
+                    },
+                    fromOk:
+                    functions =>
+                    {
+                        string describeFunctionParameter(
+                            StateShim.InterfaceToHost.ExposedFunctionParameterDescription functionParameter)
+                        {
+                            return
+                            functionParameter.name + " (" + functionParameter.typeSourceCodeText + ")" +
+                            (functionParameter.typeIsAppStateType ? " (App state type)" : "");
+                        }
+
+                        string describeFunction(
+                            AdminInterface.FunctionApplicableOnDatabase functionApplicableOnDatabase)
+                        {
+                            return
+                            "Function " + functionApplicableOnDatabase.functionName +
+                            " has " + functionApplicableOnDatabase.parameters.Count + " parameters" +
+                            (functionApplicableOnDatabase.parameters.Count < 1 ?
+                            "."
+                            :
+                            ":\n" +
+                            string.Join("\n",
+                            functionApplicableOnDatabase.parameters.Select(p => "   " + describeFunctionParameter(p))));
+                        }
+
+                        console.WriteLine(
+                            "Discovered " + functions.Count + " functions at " + site + ":\n----------\n" +
+                            string.Join("\n\n", functions.Select(describeFunction)));
+
+                        return 0;
+                    });
+            });
+        });
+
     private static CommandLineApplication AddApplyFunctionCommand(CommandLineApplication app) =>
         app.Command("apply-function", applyFunctionCommand =>
-    {
-        applyFunctionCommand.Description = "Apply an Elm function on a database containing the state of an Elm app.";
-        applyFunctionCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-        var siteArgument = ProcessSiteArgumentOnCommand(applyFunctionCommand);
-        var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(applyFunctionCommand);
-        var functionNameArgument = applyFunctionCommand.Argument("function-name", "Name of the function to apply.").IsRequired();
-        var argumentOption = applyFunctionCommand.Option(
-            "--argument",
-            "an argument for the function, encoded as JSON. Can be either a literal or a file name.",
-            optionType: CommandOptionType.MultipleValue);
-
-        var commitResultingStateOption = applyFunctionCommand.Option(
-            "--commit-resulting-state",
-            "If the applied function returns a new application state, this option enables committing that new state to the database.",
-            CommandOptionType.NoValue);
-
-        applyFunctionCommand.OnExecute(() =>
         {
-            var site = siteArgument.Value!;
-            var sitePassword = passwordFromSite(site);
+            applyFunctionCommand.Description = "Apply an Elm function on a database containing the state of an Elm app.";
+            applyFunctionCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var serializedArgumentsJson = argumentOption.Values.Select(LoadArgumentFromUserInterfaceAsJsonOrFileTextContext).ToImmutableList();
+            var siteArgument = ProcessSiteArgumentOnCommand(applyFunctionCommand);
+            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(applyFunctionCommand);
+            var functionNameArgument = applyFunctionCommand.Argument("function-name", "Name of the function to apply.").IsRequired();
+            var argumentOption = applyFunctionCommand.Option(
+                "--argument",
+                "an argument for the function, encoded as JSON. Can be either a literal or a file name.",
+                optionType: CommandOptionType.MultipleValue);
 
-            var applyFunctionReport =
-                ApplyFunction(
-                    site: site,
-                    functionName: functionNameArgument.Value,
-                    serializedArgumentsJson: serializedArgumentsJson,
-                    commitResultingState: commitResultingStateOption.HasValue(),
-                    siteDefaultPassword: sitePassword,
-                    promptForPasswordOnConsole: true);
+            var commitResultingStateOption = applyFunctionCommand.Option(
+                "--commit-resulting-state",
+                "If the applied function returns a new application state, this option enables committing that new state to the database.",
+                CommandOptionType.NoValue);
 
-            WriteReportToFileInReportDirectory(
-                reportContent: System.Text.Json.JsonSerializer.Serialize(
-                    applyFunctionReport,
-                    new System.Text.Json.JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    }),
-                reportKind: "apply-function.json");
+            applyFunctionCommand.OnExecute(() =>
+            {
+                var site = siteArgument.Value!;
+                var sitePassword = passwordFromSite(site);
+
+                var serializedArgumentsJson = argumentOption.Values.Select(LoadArgumentFromUserInterfaceAsJsonOrFileTextContext).ToImmutableList();
+
+                var applyFunctionReport =
+                    ApplyFunction(
+                        site: site,
+                        functionName: functionNameArgument.Value,
+                        serializedArgumentsJson: serializedArgumentsJson,
+                        commitResultingState: commitResultingStateOption.HasValue(),
+                        siteDefaultPassword: sitePassword,
+                        promptForPasswordOnConsole: true);
+
+                WriteReportToFileInReportDirectory(
+                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                        applyFunctionReport,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        }),
+                    reportKind: "apply-function.json");
+            });
         });
-    });
 
     private static string LoadArgumentFromUserInterfaceAsJsonOrFileTextContext(string argumentFromCLI)
     {
@@ -2026,6 +2094,60 @@ public class Program
             deployException: deployException?.ToString(),
             totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
         );
+    }
+
+    public static Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> ListFunctions(
+        string site,
+        string? siteDefaultPassword,
+        bool promptForPasswordOnConsole)
+    {
+        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        if (LooksLikeLocalSite(site))
+        {
+            return
+                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                    "Not implemented for local site");
+        }
+
+        try
+        {
+            var httpRequestUri =
+                site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiListFunctionsApplicableOnDatabase;
+
+            var httpResponse = AttemptHttpRequest(() =>
+            {
+                return new System.Net.Http.HttpRequestMessage
+                {
+                    Method = System.Net.Http.HttpMethod.Get,
+                    RequestUri = MapUriForForAdminInterface(httpRequestUri),
+                };
+            },
+            defaultPassword: siteDefaultPassword,
+            promptForPasswordOnConsole: promptForPasswordOnConsole).Result.httpResponse;
+
+            var responseContentString = httpResponse.Content.ReadAsStringAsync().Result;
+
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                return
+                    Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                        "HTTP response status code not OK: " + httpResponse.StatusCode + ", content:\n" +
+                        responseContentString);
+            }
+
+            return
+                System.Text.Json.JsonSerializer.Deserialize<Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>>(responseContentString)!
+                .MapError(err => "Server returned error: " + err);
+        }
+        catch (Exception e)
+        {
+            return
+                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                    "Failed with runtime exception:\n" + e);
+        }
     }
 
     public static ApplyFunctionReport ApplyFunction(
