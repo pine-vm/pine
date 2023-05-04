@@ -93,4 +93,17 @@ public class CommonConversion
 
         return array;
     }
+
+    public static Result<ExceptionT, OkT> CatchExceptionAsResultErr<ExceptionT, OkT>(Func<OkT> func)
+        where ExceptionT : Exception
+    {
+        try
+        {
+            return Result<ExceptionT, OkT>.ok(func());
+        }
+        catch (ExceptionT e)
+        {
+            return Result<ExceptionT, OkT>.err(e);
+        }
+    }
 }

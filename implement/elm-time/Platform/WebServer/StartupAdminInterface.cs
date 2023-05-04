@@ -39,9 +39,11 @@ public class StartupAdminInterface
 
     public static string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
-    public static string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db/";
+    public static string PathApiListFunctionsApplicableOnDatabase => "/api/list-functions-applicable-on-db";
 
-    public static string PathApiListFunctionsApplicableOnDatabase => "/api/list-functions-applicable-on-db/";
+    public static string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db";
+
+    public static string PathApiGuiRequest => "/api/gui";
 
     public static IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
 
@@ -66,6 +68,8 @@ public class StartupAdminInterface
         {
             logger.LogError(eventArgs.Exception, "Unobserved task exception in sender {Sender}", sender?.ToString());
         };
+
+        BeginMakeAdminGuiHtml();
     }
 
     public static void ConfigureServices(IServiceCollection services)
@@ -377,6 +381,15 @@ public class StartupAdminInterface
                     await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
                 }
 
+                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> listFunctionsApplicableOnDatabase()
+                {
+                    if (publicAppHost?.processLiveRepresentation is null)
+                        return Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                            "No application deployed.");
+
+                    return publicAppHost.processLiveRepresentation.ListFunctionsApplicable();
+                }
+
                 Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> applyFunctionOnDatabase(
                     AdminInterface.ApplyFunctionOnDatabaseRequest request)
                 {
@@ -390,16 +403,29 @@ public class StartupAdminInterface
                     }
                 }
 
-                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> listFunctionsApplicableOnDatabase()
-                {
-                    if (publicAppHost?.processLiveRepresentation is null)
-                        return Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
-                            "No application deployed.");
+                IReadOnlyList<ApiRoute> apiRoutes = null;
 
-                    return publicAppHost.processLiveRepresentation.ListFunctionsApplicable();
-                }
+                IEnumerable<Gui.EventToElmApp> handleMessageFromGui(
+                    Gui.MessageToHost messageFromGui) =>
+                    messageFromGui switch
+                    {
+                        Gui.MessageToHost.ReadAdminInterfaceConfigRequest =>
+                        ImmutableList.Create(
+                            new Gui.EventToElmApp.ReadAdminInterfaceConfigEvent(
+                                new Gui.AdminInterfaceConfig(
+                                    elmTimeVersionId: Program.AppVersionId,
+                                    httpRoutes:
+                                    apiRoutes.Select(apiRoute => new Gui.HttpRoute(
+                                        path: apiRoute.path,
+                                        methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList())
+                                )
+                            ),
 
-                var apiRoutes = new[]
+                        _ =>
+                        throw new Exception("Unknown message from GUI: " + System.Text.Json.JsonSerializer.Serialize(messageFromGui))
+                    };
+
+                apiRoutes = new[]
                 {
                     new ApiRoute
                     (
@@ -529,6 +555,72 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
+                        path : PathApiListFunctionsApplicableOnDatabase,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        .Add("get", async (context, publicAppHost) =>
+                        {
+                            try
+                            {
+                                var result = listFunctionsApplicableOnDatabase();
+
+                                context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
+                                await context.Response.WriteAsJsonAsync(result);
+                            }
+                            catch (Exception ex)
+                            {
+                                context.Response.StatusCode = 422;
+                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
+                            }
+                        })
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiApplyFunctionOnDatabase,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        .Add("post", async (context, publicAppHost) =>
+                        {
+                            try
+                            {
+                                var applyFunctionRequest =
+                                    await context.Request.ReadFromJsonAsync<AdminInterface.ApplyFunctionOnDatabaseRequest>();
+
+                                var result = applyFunctionOnDatabase(applyFunctionRequest);
+
+                                context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
+                                await context.Response.WriteAsJsonAsync(result);
+                            }
+                            catch (Exception ex)
+                            {
+                                context.Response.StatusCode = 422;
+                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
+                            }
+                        })
+                    ),
+                    new ApiRoute
+                    (
+                        path : PathApiGuiRequest,
+                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        .Add("post", async (context, publicAppHost) =>
+                        {
+                            try
+                            {
+                                var guiRequest = await context.Request.ReadFromJsonAsync<Gui.MessageToHost>();
+
+                                var eventsToGui = handleMessageFromGui(guiRequest);
+
+                                context.Response.StatusCode = 200;
+
+                                await context.Response.WriteAsJsonAsync(eventsToGui);
+                            }
+                            catch (Exception ex)
+                            {
+                                context.Response.StatusCode = 422;
+                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
+                            }
+                        })
+                    ),
+                    new ApiRoute
+                    (
                         path : PathApiReplaceProcessHistory,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("post", async (context, publicAppHost) =>
@@ -560,49 +652,6 @@ public class StartupAdminInterface
 
                             context.Response.StatusCode = 200;
                             await context.Response.WriteAsync("Successfully replaced the process history.");
-                        })
-                    ),
-                    new ApiRoute
-                    (
-                        path : PathApiApplyFunctionOnDatabase,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("post", async (context, publicAppHost) =>
-                        {
-                            try
-                            {
-                                var applyFunctionRequest =
-                                    await context.Request.ReadFromJsonAsync<AdminInterface.ApplyFunctionOnDatabaseRequest>();
-
-                                var result = applyFunctionOnDatabase(applyFunctionRequest);
-
-                                context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
-                                await context.Response.WriteAsJsonAsync(result);
-                            }
-                            catch (Exception ex)
-                            {
-                                context.Response.StatusCode = 422;
-                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
-                            }
-                        })
-                    ),
-                    new ApiRoute
-                    (
-                        path : PathApiListFunctionsApplicableOnDatabase,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("get", async (context, publicAppHost) =>
-                        {
-                            try
-                            {
-                                var result = listFunctionsApplicableOnDatabase();
-
-                                context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
-                                await context.Response.WriteAsJsonAsync(result);
-                            }
-                            catch (Exception ex)
-                            {
-                                context.Response.StatusCode = 422;
-                                await context.Response.WriteAsJsonAsync("Failed with runtime exception: " + ex);
-                            }
                         })
                     ),
                 };
@@ -906,20 +955,10 @@ public class StartupAdminInterface
 
                 if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
                 {
-                    var httpApiGuide =
-                        HtmlFromLines(
-                            "<h3>HTTP APIs</h3>\n" +
-                            HtmlFromLines(apiRoutes.Select(HtmlToDescribeApiRoute).ToArray())
-                        );
+                    var html = ComposeAdminGuiHtml(apiRoutes);
 
                     context.Response.StatusCode = 200;
-                    await context.Response.WriteAsync(
-                        HtmlDocument(
-                            HtmlFromLines(
-                                "Welcome to the Elm-Time admin interface version " + Program.AppVersionId + ".",
-                                httpApiGuide,
-                                "",
-                                ApiGuide)));
+                    await context.Response.WriteAsync(html);
                     return;
                 }
 
@@ -928,6 +967,53 @@ public class StartupAdminInterface
                 return;
             });
     }
+
+    private static void BeginMakeAdminGuiHtml() =>
+        System.Threading.Tasks.Task.Run(BuildAdminGuiInteractiveHtml);
+
+    private static string ComposeAdminGuiHtml(IReadOnlyList<ApiRoute> apiRoutes) =>
+        BuildAdminGuiInteractiveHtml()
+        .Unpack(
+            fromErr: err => ComposeAdminGuiStaticHtml(apiRoutes, buildInteractiveGuiError: err),
+            fromOk: html => html);
+
+    private static Result<string, string> BuildAdminGuiInteractiveHtml() =>
+        Gui.MakeGuiCache.MakeGuiHtmlTask.Value.Result;
+
+    private static string ComposeAdminGuiStaticHtml(
+        IReadOnlyList<ApiRoute> apiRoutes,
+        string buildInteractiveGuiError)
+    {
+        var httpApiGuide =
+            HtmlFromLines(
+                "<h3>HTTP APIs</h3>\n" +
+                HtmlFromLines(apiRoutes.Select(HtmlToDescribeApiRoute).ToArray())
+            );
+
+        var describeErrorElement =
+            "<p " + HtmlAttributeCssStyle(
+                ("color", "red"),
+                ("white-space", "pre-wrap"),
+                ("font-family", "monospace")) +
+            ">Failed to build the interactive GUI:\n" + buildInteractiveGuiError + "</p>";
+
+        return
+            HtmlDocument(
+                HtmlFromLines(
+                    "Welcome to the Elm-Time admin interface version " + Program.AppVersionId + ".",
+                    httpApiGuide,
+                    "",
+                    ApiGuide,
+                    describeErrorElement));
+    }
+
+    public static string HtmlAttributeCssStyle(params (string property, string value)[] styles) =>
+        "style=\"" +
+        string.Join(" ", styles.Select(style => style.property + ": " + style.value + ";"))
+        + "\"";
+
+    public static string HtmlAttributeCssStyle(IEnumerable<(string property, string value)> styles) =>
+        HtmlAttributeCssStyle(styles.ToArray());
 
     private static string ApiGuide =>
         HtmlFromLines(
