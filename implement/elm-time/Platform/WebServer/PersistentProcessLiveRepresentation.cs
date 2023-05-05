@@ -836,7 +836,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 StateShim.StateShim.ApplyFunctionOnMainBranch(lastElmAppVolatileProcess, request)
                 .Map(applyFunctionSuccess =>
                 {
-                    if (applyFunctionSuccess.changedState && request.commitResultingState)
+                    if (applyFunctionSuccess.committedResultingState)
                     {
                         var applyFunctionRecord = new CompositionLogRecordInFile.ApplyFunctionOnStateEvent(
                             functionName: request.functionName,

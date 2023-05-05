@@ -3,15 +3,26 @@ module Frontend.Main exposing (..)
 import Browser
 import Browser.Navigation
 import CompilationInterface.GenerateJsonConverters
+import Dict
 import Element
+import Element.Background
+import Element.Border
 import Element.Font
+import Element.Input
 import Frontend.BrowserApplicationInitWithTime
 import Frontend.View as View
 import Frontend.Visuals as Visuals
+    exposing
+        ( defaultFontSize
+        , errorColor
+        , successColor
+        )
 import HostInterface
 import Html
 import Http
 import Json.Decode
+import Json.Encode
+import List.Extra
 import Time
 import Url
 
@@ -20,14 +31,41 @@ type alias State =
     { time : Time.Posix
     , url : Url.Url
     , adminInterfaceConfig : Maybe (Result String HostInterface.AdminInterfaceConfig)
+    , applyFunction : SelectAndApplyFunctionState
+    }
+
+
+type alias SelectAndApplyFunctionState =
+    { selectedFunction : Maybe ( String, ApplyFunctionState )
+    }
+
+
+type alias ApplyFunctionState =
+    { parametersTexts : Dict.Dict Int String
+    , commitResultingState : Bool
+    , applicationRequest :
+        Maybe
+            ( ( HostInterface.ApplyFunctionOnDatabaseRequest, Time.Posix )
+            , Maybe (Result String HostInterface.ApplyFunctionOnDatabaseSuccess)
+            )
     }
 
 
 type Event
-    = OnUrlRequestEvent Browser.UrlRequest
+    = TimeArrivedEvent Time.Posix
+    | OnUrlRequestEvent Browser.UrlRequest
     | OnUrlChangeEvent Url.Url
     | MessageToHostResultEvent HostInterface.MessageToHost (Result String (List HostInterface.EventFromHost))
+    | SelectAndApplyFunctionEvent SelectAndApplyFunctionEventStruct
     | DiscardEvent
+
+
+type SelectAndApplyFunctionEventStruct
+    = SelectFunctionEvent String
+    | UserInputParameterTextEvent Int String
+    | UserInputSetCommitResultingStateEvent Bool
+    | UserInputApplyFunctionEvent HostInterface.ApplyFunctionOnDatabaseRequest
+    | ApplyFunctionResponseEvent HostInterface.ApplyFunctionOnDatabaseRequest (Result String HostInterface.ApplyFunctionOnDatabaseSuccess)
 
 
 main : Frontend.BrowserApplicationInitWithTime.Program () State Event
@@ -87,7 +125,7 @@ mainWithCustomizedInitAndUpdate customizeInit customizeUpdate =
 
 subscriptions : State -> Sub Event
 subscriptions _ =
-    Sub.none
+    Time.every 1 TimeArrivedEvent
 
 
 init : Url.Url -> Browser.Navigation.Key -> Time.Posix -> ( State, Cmd Event )
@@ -95,6 +133,7 @@ init url _ time =
     ( { time = time
       , url = url
       , adminInterfaceConfig = Nothing
+      , applyFunction = { selectedFunction = Nothing }
       }
     , [ sendMessageToHostCmd HostInterface.ReadAdminInterfaceConfigRequest
       ]
@@ -105,6 +144,9 @@ init url _ time =
 update : Event -> State -> ( State, Cmd Event )
 update event stateBefore =
     case event of
+        TimeArrivedEvent time ->
+            ( { stateBefore | time = time }, Cmd.none )
+
         MessageToHostResultEvent message eventsFromHostResult ->
             case message of
                 HostInterface.ReadAdminInterfaceConfigRequest ->
@@ -112,17 +154,24 @@ update event stateBefore =
                         result =
                             eventsFromHostResult
                                 |> Result.andThen
-                                    (\events ->
-                                        events
-                                            |> List.filterMap
-                                                (\fromHostEvent ->
-                                                    case fromHostEvent of
-                                                        HostInterface.ReadAdminInterfaceConfigEvent config ->
-                                                            Just config
-                                                )
-                                            |> List.head
-                                            |> Maybe.map Ok
-                                            |> Maybe.withDefault (Err "No AdminInterfaceConfigEvent found")
+                                    (List.filterMap
+                                        (\fromHostEvent ->
+                                            case fromHostEvent of
+                                                HostInterface.ReadAdminInterfaceConfigEvent config ->
+                                                    Just config
+                                        )
+                                        >> List.head
+                                        >> Maybe.map Ok
+                                        >> Maybe.withDefault (Err "No AdminInterfaceConfigEvent found")
+                                    )
+                                |> Result.map
+                                    (\adminInterfaceConfig ->
+                                        { adminInterfaceConfig
+                                            | functionsApplicableOnDatabase =
+                                                adminInterfaceConfig.functionsApplicableOnDatabase
+                                                    -- For now, only expose functions with a normal module prefix
+                                                    |> List.filter (.functionName >> String.contains ".")
+                                        }
                                     )
                     in
                     ( { stateBefore
@@ -130,6 +179,18 @@ update event stateBefore =
                       }
                     , Cmd.none
                     )
+
+        SelectAndApplyFunctionEvent selectAndApplyFunctionEvent ->
+            let
+                ( selectAndApplyFunctionState, cmd ) =
+                    stateBefore.applyFunction
+                        |> updateApplyFunction { time = stateBefore.time } selectAndApplyFunctionEvent
+            in
+            ( { stateBefore
+                | applyFunction = selectAndApplyFunctionState
+              }
+            , cmd |> Cmd.map SelectAndApplyFunctionEvent
+            )
 
         OnUrlRequestEvent _ ->
             ( stateBefore, Cmd.none )
@@ -141,7 +202,129 @@ update event stateBefore =
             ( stateBefore, Cmd.none )
 
 
-view : State -> Browser.Document e
+updateApplyFunction :
+    { time : Time.Posix }
+    -> SelectAndApplyFunctionEventStruct
+    -> SelectAndApplyFunctionState
+    -> ( SelectAndApplyFunctionState, Cmd SelectAndApplyFunctionEventStruct )
+updateApplyFunction { time } event stateBefore =
+    let
+        updateSelectedFunction updateIfSelectedFunction =
+            case stateBefore.selectedFunction of
+                Nothing ->
+                    ( stateBefore, Cmd.none )
+
+                Just ( selectedFunctionName, selectedFunctionBefore ) ->
+                    let
+                        ( selectedFunction, cmd ) =
+                            updateIfSelectedFunction selectedFunctionBefore
+                    in
+                    ( { stateBefore
+                        | selectedFunction = Just ( selectedFunctionName, selectedFunction )
+                      }
+                    , cmd
+                    )
+    in
+    case event of
+        SelectFunctionEvent functionName ->
+            ( { stateBefore
+                | selectedFunction =
+                    Just
+                        ( functionName
+                        , { parametersTexts = Dict.empty
+                          , commitResultingState = False
+                          , applicationRequest = Nothing
+                          }
+                        )
+              }
+            , Cmd.none
+            )
+
+        UserInputParameterTextEvent paramIndex paramText ->
+            updateSelectedFunction
+                (\selectedFunction ->
+                    ( { selectedFunction
+                        | parametersTexts =
+                            selectedFunction.parametersTexts
+                                |> Dict.insert paramIndex paramText
+                      }
+                    , Cmd.none
+                    )
+                )
+
+        UserInputSetCommitResultingStateEvent commitResultingState ->
+            updateSelectedFunction
+                (\selectedFunction ->
+                    ( { selectedFunction
+                        | commitResultingState = commitResultingState
+                      }
+                    , Cmd.none
+                    )
+                )
+
+        UserInputApplyFunctionEvent applyFunctionRequest ->
+            updateSelectedFunction
+                (\selectedFunction ->
+                    let
+                        readyForNewRequest =
+                            {-
+                               In case user accidentally clicks button to send request twice, we don't want to send the request twice.
+                               To prevent this, we only allow a new request if the previous request was more than 4 seconds ago.
+                            -}
+                            case selectedFunction.applicationRequest of
+                                Nothing ->
+                                    True
+
+                                Just ( ( _, previousRequestTime ), _ ) ->
+                                    Time.posixToMillis time - Time.posixToMillis previousRequestTime > 4 * 1000
+                    in
+                    if not readyForNewRequest then
+                        ( selectedFunction, Cmd.none )
+
+                    else
+                        ( { selectedFunction
+                            | applicationRequest =
+                                Just
+                                    ( ( applyFunctionRequest, time )
+                                    , Nothing
+                                    )
+                          }
+                        , Http.post
+                            { url = "/api/apply-function-on-db"
+                            , body =
+                                applyFunctionRequest
+                                    |> CompilationInterface.GenerateJsonConverters.jsonEncodeApplyFunctionOnDatabaseRequest
+                                    |> Http.jsonBody
+                            , expect = expectApplyFunctionResponse applyFunctionRequest
+                            }
+                        )
+                )
+
+        ApplyFunctionResponseEvent applyFunctionRequest result ->
+            updateSelectedFunction
+                (\selectedFunction ->
+                    case selectedFunction.applicationRequest of
+                        Nothing ->
+                            ( selectedFunction
+                            , Cmd.none
+                            )
+
+                        Just ( requestAndTime, _ ) ->
+                            if Tuple.first requestAndTime /= applyFunctionRequest then
+                                ( selectedFunction
+                                , Cmd.none
+                                )
+
+                            else
+                                ( { selectedFunction
+                                    | applicationRequest = Just ( requestAndTime, Just result )
+                                  }
+                                , Cmd.none
+                                )
+                )
+
+
+view : State -> Browser.Document Event
 view state =
     let
         body =
@@ -165,14 +348,14 @@ view state =
             |> Element.layout
                 [ Element.width Element.fill
                 , Element.height Element.fill
-                , Element.Font.size 16
+                , Element.Font.size defaultFontSize
                 ]
             |> List.singleton
     , title = "Elm-Time Admin Interface"
     }
 
 
-viewAdminInterfaceConfig : State -> HostInterface.AdminInterfaceConfig -> Element.Element e
+viewAdminInterfaceConfig : State -> HostInterface.AdminInterfaceConfig -> Element.Element Event
 viewAdminInterfaceConfig state config =
     let
         stateUrl =
@@ -207,6 +390,16 @@ viewAdminInterfaceConfig state config =
       ]
         |> List.map (Element.paragraph [])
         |> Element.column [ Element.spacing 5 ]
+    , [ Element.text "Apply Function on Database"
+            |> Element.el (Visuals.headingAttributes 3)
+      , viewApplyFunctionOnDatabase state.applyFunction config
+            |> Element.map SelectAndApplyFunctionEvent
+            |> Element.el [ Element.paddingXY 20 0, Element.width Element.fill ]
+      ]
+        |> Element.column
+            [ Element.spacing 10
+            , Element.width Element.fill
+            ]
     , [ Element.text "HTTP APIs"
             |> Element.el (Visuals.headingAttributes 3)
       , config.httpRoutes
@@ -220,9 +413,258 @@ viewAdminInterfaceConfig state config =
         ]
       ]
         |> List.map (Element.paragraph [])
-        |> Element.column [ Element.spacing 7 ]
+        |> Element.column
+            [ Element.spacing 7
+            , Element.width Element.fill
+            ]
     ]
-        |> Element.column [ Element.spacing 20 ]
+        |> Element.column
+            [ Element.spacing 30
+            , Element.width Element.fill
+            ]
+
+
+viewApplyFunctionOnDatabase :
+    SelectAndApplyFunctionState
+    -> HostInterface.AdminInterfaceConfig
+    -> Element.Element SelectAndApplyFunctionEventStruct
+viewApplyFunctionOnDatabase state config =
+    let
+        options =
+            config.functionsApplicableOnDatabase
+                |> List.map
+                    (\exposedFunction ->
+                        Element.Input.option
+                            exposedFunction.functionName
+                            (Element.el viewFunctionNameAttributes
+                                (Element.text exposedFunction.functionName)
+                            )
+                    )
+
+        selectFunctionElement =
+            Element.Input.radio [ Element.spacing 5 ]
+                { onChange = SelectFunctionEvent
+                , options = options
+                , selected = Maybe.map Tuple.first state.selectedFunction
+                , label = Element.Input.labelAbove [ Element.padding 10 ] (Element.text "Select function")
+                }
+
+        selectedFunctionElement =
+            case state.selectedFunction of
+                Nothing ->
+                    Element.none
+
+                Just ( selectedFunctionName, selectedFunctionState ) ->
+                    [ [ Element.text "Apply function "
+                      , Element.text selectedFunctionName
+                            |> Element.el viewFunctionNameAttributes
+                      ]
+                        |> Element.row (Visuals.headingAttributes 4)
+                    , config.functionsApplicableOnDatabase
+                        |> List.filter (\exposedFunction -> exposedFunction.functionName == selectedFunctionName)
+                        |> List.head
+                        |> Maybe.map (viewPrepareApplyFunctionOnDatabase selectedFunctionState)
+                        |> Maybe.withDefault Element.none
+                    ]
+                        |> Element.column
+                            [ Element.spacing 10
+                            , Element.width Element.fill
+                            ]
+    in
+    [ Element.text
+        ("The currently deployed app exposes "
+            ++ String.fromInt (List.length config.functionsApplicableOnDatabase)
+            ++ " functions for application on the database:"
+        )
+    , selectFunctionElement
+    , selectedFunctionElement
+    ]
+        |> Element.column
+            [ Element.spacing 10
+            , Element.width Element.fill
+            ]
+
+
+viewPrepareApplyFunctionOnDatabase :
+    ApplyFunctionState
+    -> HostInterface.FunctionApplicableOnDatabase
+    -> Element.Element SelectAndApplyFunctionEventStruct
+viewPrepareApplyFunctionOnDatabase state config =
+    let
+        parametersElement =
+            config.parameters
+                |> List.indexedMap
+                    (\paramIndex paramConfig ->
+                        let
+                            ( inputElement, hintElement ) =
+                                if paramConfig.typeIsAppStateType then
+                                    ( Element.none
+                                    , Element.text "(Type is app state type)"
+                                    )
+
+                                else
+                                    ( Element.Input.multiline
+                                        [ Element.width Element.fill ]
+                                        { onChange = UserInputParameterTextEvent paramIndex
+                                        , text = state.parametersTexts |> Dict.get paramIndex |> Maybe.withDefault ""
+                                        , placeholder = Nothing
+                                        , label = Element.Input.labelHidden ("Input parameter " ++ paramConfig.name)
+                                        , spellcheck = False
+                                        }
+                                    , Element.none
+                                    )
+                        in
+                        [ [ [ Element.text paramConfig.name
+                            , Element.text " : "
+                            , Element.text paramConfig.typeSourceCodeText
+                            ]
+                                |> Element.row
+                                    [ Element.Font.family [ Element.Font.monospace ]
+                                    , Element.Background.color (Element.rgba 0.5 0.5 0.5 0.2)
+                                    , Element.paddingXY 5 3
+                                    , Element.Border.rounded 3
+                                    ]
+                          , hintElement
+                          ]
+                            |> Element.row [ Element.spacing 10 ]
+                        , inputElement
+                            |> Element.el
+                                [ Element.paddingXY 20 0
+                                , Element.width Element.fill
+                                ]
+                        ]
+                            |> Element.column
+                                [ Element.spacing 10
+                                , Element.width Element.fill
+                                ]
+                    )
+                |> Element.column
+                    [ Element.paddingXY 10 0
+                    , Element.spacing 10
+                    , Element.width Element.fill
+                    ]
+
+        commitResultingStateElement =
+            Element.Input.radio []
+                { onChange = UserInputSetCommitResultingStateEvent
+                , options =
+                    [ Element.Input.option True (Element.text "Yes")
+                    , Element.Input.option False (Element.text "No")
+                    ]
+                , selected = Just state.commitResultingState
+                , label =
+                    Element.Input.labelLeft [ Element.padding 10 ]
+                        (Element.text "Commit resulting state to database?")
+                }
+
+        applyFunctionRequest =
+            { functionName = config.functionName
+            , serializedArgumentsJson =
+                config.parameters
+                    |> List.Extra.dropWhileRight (\param -> param.typeIsAppStateType)
+                    |> List.indexedMap
+                        (\paramIndex _ ->
+                            state.parametersTexts
+                                |> Dict.get paramIndex
+                                |> Maybe.withDefault ""
+                        )
+            , commitResultingState = state.commitResultingState
+            }
+
+        applyFunctionButtonElement =
+            Visuals.buttonElement
+                []
+                { label = Element.text "Apply function"
+                , onPress = Just (UserInputApplyFunctionEvent applyFunctionRequest)
+                , disabled = False
+                }
+
+        applicationRequestElement =
+            case state.applicationRequest of
+                Nothing ->
+                    Element.none
+
+                Just ( ( applicationRequest, _ ), maybeResult ) ->
+                    case maybeResult of
+                        Nothing ->
+                            Element.text "Sending request to apply function..."
+
+                        Just (Err functionApplicationFailed) ->
+                            [ Element.text ("Failed to apply function:\n" ++ functionApplicationFailed)
+                            ]
+                                |> Element.paragraph [ Element.Font.color errorColor ]
+
+                        Just (Ok functionApplicationSuccess) ->
+                            let
+                                newAppStateReportElement =
+                                    if not functionApplicationSuccess.functionApplicationResult.producedStateDifferentFromStateArgument then
+                                        Element.text "Function application did not produce a different application state"
+
+                                    else
+                                        Element.text
+                                            ("Function application produced a different application state "
+                                                ++ (if functionApplicationSuccess.committedResultingState then
+                                                        "that was committed to the main branch"
+
+                                                    else
+                                                        "that was not committed to the main branch"
+                                                   )
+                                            )
+
+                                resultLessStateReportElement =
+                                    case functionApplicationSuccess.functionApplicationResult.resultLessStateJson of
+                                        Nothing ->
+                                            Element.text "Did not return a value besides the application state"
+
+                                        Just resultLessStateJson ->
+                                            [ Element.text "Returned a value besides the application state:"
+                                            , Element.text (Json.Encode.encode 2 resultLessStateJson)
+                                                |> Element.el
+                                                    [ Element.Font.family [ Element.Font.monospace ]
+                                                    , Element.Background.color (Element.rgba 0.5 0.5 0.5 0.2)
+                                                    , Element.paddingXY 5 3
+                                                    , Element.Border.rounded 3
+                                                    , Visuals.elementFontSizePercent 80
+                                                    ]
+                                            ]
+                                                |> Element.column
+                                                    [ Element.spacing 10
+                                                    , Element.width Element.fill
+                                                    ]
+                            in
+                            [ [ Element.text "Succesfully applied function "
+                              , Element.text applicationRequest.functionName |> Element.el viewFunctionNameAttributes
+                              , Element.text " on database"
+                              ]
+                                |> Element.paragraph [ Element.Font.color successColor ]
+                            , newAppStateReportElement
+                            , resultLessStateReportElement
+                            ]
+                                |> Element.column
+                                    [ Element.spacing 10
+                                    , Element.width Element.fill
+                                    ]
+    in
+    [ Element.text ("This function has " ++ String.fromInt (List.length config.parameters) ++ " parameters:")
+    , parametersElement
+    , commitResultingStateElement
+    , applyFunctionButtonElement
+    , applicationRequestElement
+    ]
+        |> Element.column
+            [ Element.spacing 10
+            , Element.width Element.fill
+            ]
+
+
+viewFunctionNameAttributes : List (Element.Attribute msg)
+viewFunctionNameAttributes =
+    [ Element.Font.family [ Element.Font.monospace ]
+    , Element.Background.color (Element.rgba 0.5 0.5 0.5 0.2)
+    , Element.Font.color (Element.rgba 0.4 0.4 0 1)
+    , Element.paddingXY 5 3
+    , Element.Border.rounded 3
+    ]
 
 
 sendMessageToHostCmd : HostInterface.MessageToHost -> Cmd Event
@@ -270,4 +712,41 @@ expectMessageToHostResultEvent message =
                             (Json.Decode.errorToString
                                 >> (++) ("Failed to decode response from " ++ metadata.url ++ ": ")
                             )
+        )
+
+
+expectApplyFunctionResponse : HostInterface.ApplyFunctionOnDatabaseRequest -> Http.Expect SelectAndApplyFunctionEventStruct
+expectApplyFunctionResponse request =
+    Http.expectStringResponse
+        (ApplyFunctionResponseEvent request)
+        (\response ->
+            case response of
+                Http.BadUrl_ badUrl ->
+                    Err ("Bad Url: " ++ badUrl)
+
+                Http.Timeout_ ->
+                    Err "Timeout"
+
+                Http.NetworkError_ ->
+                    Err "Network Error"
+
+                Http.BadStatus_ metadata body ->
+                    Err
+                        ("Bad status code: "
+                            ++ String.fromInt metadata.statusCode
+                            ++ " from "
+                            ++ metadata.url
+                            ++ ":\n"
+                            ++ body
+                        )
+
+                Http.GoodStatus_ metadata bodyString ->
+                    bodyString
+                        |> Json.Decode.decodeString
+                            CompilationInterface.GenerateJsonConverters.jsonDecodeApplyFunctionOnDatabaseResult
+                        |> Result.mapError
+                            (Json.Decode.errorToString
+                                >> (++) ("Failed to decode response from " ++ metadata.url ++ ": ")
+                            )
+                        |> Result.andThen identity
         )

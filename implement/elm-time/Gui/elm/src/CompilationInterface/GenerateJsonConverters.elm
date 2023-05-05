@@ -16,3 +16,13 @@ jsonEncodeMessageToHost =
 jsonDecodeEventFromHost : Json.Decode.Decoder HostInterface.EventFromHost
 jsonDecodeEventFromHost =
     Json.Decode.fail "The compiler replaces this declaration."
+
+
+jsonEncodeApplyFunctionOnDatabaseRequest : HostInterface.ApplyFunctionOnDatabaseRequest -> Json.Encode.Value
+jsonEncodeApplyFunctionOnDatabaseRequest =
+    always (Json.Encode.string "The compiler replaces this declaration.")
+
+
+jsonDecodeApplyFunctionOnDatabaseResult : Json.Decode.Decoder (Result String HostInterface.ApplyFunctionOnDatabaseSuccess)
+jsonDecodeApplyFunctionOnDatabaseResult =
+    Json.Decode.fail "The compiler replaces this declaration."

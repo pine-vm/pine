@@ -79,17 +79,18 @@ public class StateShim
             });
     }
 
-
     public static Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
         IProcess<string, string> process,
         AdminInterface.ApplyFunctionOnDatabaseRequest request)
     {
-        var serializedArgumentsJson =
-            request.serializedArgumentsJson
-            .Select(asString => JsonSerializer.Deserialize<JsonElement>(asString))
-            .ToImmutableList();
-
         return
+            request.serializedArgumentsJson
+            .Select((asString, argumentIndex) =>
+            CommonConversion.CatchExceptionAsResultErr<Exception, JsonElement>(
+                () => JsonSerializer.Deserialize<JsonElement>(asString))
+            .MapError(exception => "Parsing argument " + argumentIndex + " failed: " + exception))
+            .ListCombine()
+            .AndThen(serializedArgumentsJson =>
             ListExposedFunctions(process)
             .AndThen(exposedFunctions =>
             {
@@ -140,14 +141,14 @@ public class StateShim
                         })
                         .Map(applyFunctionOk => new AdminInterface.ApplyFunctionOnDatabaseSuccess(
                             applyFunctionOk,
-                            changedState: stateDestinationBranches.Contains(MainBranchName)));
+                            committedResultingState: stateDestinationBranches.Contains(MainBranchName)));
                 }
                 catch (Exception e)
                 {
                     return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err(
                         "Failed to parse response string: " + e);
                 }
-            });
+            }));
     }
 
     public static Result<string, long> EstimateSerializedStateLengthOnMainBranch(

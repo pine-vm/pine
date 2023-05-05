@@ -10,7 +10,7 @@ public record ApplyFunctionOnDatabaseRequest(
 
 public record ApplyFunctionOnDatabaseSuccess(
     StateShim.InterfaceToHost.FunctionApplicationResult functionApplicationResult,
-    bool changedState);
+    bool committedResultingState);
 
 public record FunctionApplicableOnDatabase(
     string functionName,

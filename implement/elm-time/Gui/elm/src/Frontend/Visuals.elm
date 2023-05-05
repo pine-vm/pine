@@ -1,8 +1,10 @@
 module Frontend.Visuals exposing (..)
 
 import Element
+import Element.Background
 import Element.Border
 import Element.Font
+import Element.Input
 import Element.Region
 import Html.Attributes as HA
 
@@ -11,6 +13,52 @@ type alias LinkConfig =
     { opensInNewTab : Bool
     , color : Element.Color
     , mouseOverColor : Element.Color
+    }
+
+
+buttonElement :
+    List (Element.Attribute event)
+    ->
+        { label : Element.Element event
+        , onPress : Maybe event
+        , disabled : Bool
+        }
+    -> Element.Element event
+buttonElement attributes buttonConfig =
+    let
+        colors =
+            primaryButtonBackgroundColor
+    in
+    Element.Input.button
+        ([ Element.Background.color colors.default
+         , Element.Font.color (Element.rgb 1 1 1)
+         , Element.paddingXY defaultFontSize (defaultFontSize // 2 - 1)
+         ]
+            ++ attributes
+            ++ (if buttonConfig.disabled then
+                    [ Element.alpha 0.5
+                    , Element.htmlAttribute (HA.disabled True)
+                    , Element.htmlAttribute (HA.style "cursor" "default")
+                    ]
+
+                else
+                    [ Element.Background.color colors.default
+                    , Element.mouseOver [ Element.Background.color colors.mouseOver ]
+                    ]
+               )
+        )
+        { label = buttonConfig.label
+        , onPress = buttonConfig.onPress
+        }
+
+
+primaryButtonBackgroundColor :
+    { default : Element.Color
+    , mouseOver : Element.Color
+    }
+primaryButtonBackgroundColor =
+    { default = Element.rgb255 0 95 184
+    , mouseOver = Element.rgb255 24 110 190
     }
 
 
@@ -83,3 +131,18 @@ headingAttributes rank =
 elementFontSizePercent : Int -> Element.Attribute a
 elementFontSizePercent percent =
     Element.htmlAttribute (HA.style "font-size" ((percent |> String.fromInt) ++ "%"))
+
+
+defaultFontSize : Int
+defaultFontSize =
+    16
+
+
+errorColor : Element.Color
+errorColor =
+    Element.rgb 0.8 0.1 0
+
+
+successColor : Element.Color
+successColor =
+    Element.rgb 0.1 0.8 0

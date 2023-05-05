@@ -417,7 +417,10 @@ public class StartupAdminInterface
                                     httpRoutes:
                                     apiRoutes.Select(apiRoute => new Gui.HttpRoute(
                                         path: apiRoute.path,
-                                        methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList())
+                                        methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
+                                    functionsApplicableOnDatabase:
+                                    listFunctionsApplicableOnDatabase()
+                                    .Extract(_ => ImmutableList<AdminInterface.FunctionApplicableOnDatabase>.Empty))
                                 )
                             ),
 

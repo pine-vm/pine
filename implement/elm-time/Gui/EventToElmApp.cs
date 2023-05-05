@@ -12,7 +12,8 @@ public abstract record EventToElmApp
 
 public record AdminInterfaceConfig(
     string elmTimeVersionId,
-    IReadOnlyList<HttpRoute> httpRoutes);
+    IReadOnlyList<HttpRoute> httpRoutes,
+    IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase> functionsApplicableOnDatabase);
 
 public record HttpRoute(
     string path,
