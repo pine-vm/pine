@@ -682,9 +682,7 @@ public class StartupAdminInterface
                                 " is not supported here.",
                                 "Only following " +
                                 (supportedMethodsNames.Count == 1 ? "method is" : "methods are") +
-                                " supported here: " + string.Join(", ", supportedMethodsNames),
-                                "", "",
-                                ApiGuide);
+                                " supported here: " + string.Join(", ", supportedMethodsNames));
 
                         context.Response.StatusCode = 405;
                         await context.Response.WriteAsync(HtmlDocument(guide));
@@ -958,7 +956,7 @@ public class StartupAdminInterface
 
                 if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
                 {
-                    var html = ComposeAdminGuiHtml(apiRoutes);
+                    var html = ComposeAdminGuiHtml();
 
                     context.Response.StatusCode = 200;
                     await context.Response.WriteAsync(html);
@@ -974,25 +972,17 @@ public class StartupAdminInterface
     private static void BeginMakeAdminGuiHtml() =>
         System.Threading.Tasks.Task.Run(BuildAdminGuiInteractiveHtml);
 
-    private static string ComposeAdminGuiHtml(IReadOnlyList<ApiRoute> apiRoutes) =>
+    private static string ComposeAdminGuiHtml() =>
         BuildAdminGuiInteractiveHtml()
         .Unpack(
-            fromErr: err => ComposeAdminGuiStaticHtml(apiRoutes, buildInteractiveGuiError: err),
+            fromErr: err => ComposeAdminGuiStaticHtml(buildInteractiveGuiError: err),
             fromOk: html => html);
 
     private static Result<string, string> BuildAdminGuiInteractiveHtml() =>
         Gui.MakeGuiCache.MakeGuiHtmlTask.Value.Result;
 
-    private static string ComposeAdminGuiStaticHtml(
-        IReadOnlyList<ApiRoute> apiRoutes,
-        string buildInteractiveGuiError)
+    private static string ComposeAdminGuiStaticHtml(string buildInteractiveGuiError)
     {
-        var httpApiGuide =
-            HtmlFromLines(
-                "<h3>HTTP APIs</h3>\n" +
-                HtmlFromLines(apiRoutes.Select(HtmlToDescribeApiRoute).ToArray())
-            );
-
         var describeErrorElement =
             "<p " + HtmlAttributeCssStyle(
                 ("color", "red"),
@@ -1004,9 +994,6 @@ public class StartupAdminInterface
             HtmlDocument(
                 HtmlFromLines(
                     "Welcome to the Elm-Time admin interface version " + Program.AppVersionId + ".",
-                    httpApiGuide,
-                    "",
-                    ApiGuide,
                     describeErrorElement));
     }
 
@@ -1017,12 +1004,6 @@ public class StartupAdminInterface
 
     public static string HtmlAttributeCssStyle(IEnumerable<(string property, string value)> styles) =>
         HtmlAttributeCssStyle(styles.ToArray());
-
-    private static string ApiGuide =>
-        HtmlFromLines(
-            "The easiest way to use the APIs is via the command-line interface in the elm-time executable file.",
-            "To learn about the admin interface and how to deploy an app, see  " + LinkHtmlElementFromUrl(LinkToGuideUrl)
-        );
 
     private static string LinkToGuideUrl => "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md";
 
