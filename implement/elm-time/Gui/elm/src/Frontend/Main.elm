@@ -19,6 +19,7 @@ import Frontend.Visuals as Visuals
         )
 import HostInterface
 import Html
+import Html.Attributes
 import Http
 import Json.Decode
 import Json.Encode
@@ -167,9 +168,9 @@ update event stateBefore =
                                 |> Result.map
                                     (\adminInterfaceConfig ->
                                         { adminInterfaceConfig
-                                            | functionsApplicableOnDatabase =
-                                                adminInterfaceConfig.functionsApplicableOnDatabase
-                                                    -- For now, only expose functions with a normal module prefix
+                                            | databaseFunctions =
+                                                adminInterfaceConfig.databaseFunctions
+                                                    -- For now, only show functions with a normal module prefix
                                                     |> List.filter (.functionName >> String.contains ".")
                                         }
                                     )
@@ -290,7 +291,7 @@ updateApplyFunction { time } event stateBefore =
                                     )
                           }
                         , Http.post
-                            { url = "/api/apply-function-on-db"
+                            { url = "/api/apply-database-function"
                             , body =
                                 applyFunctionRequest
                                     |> CompilationInterface.GenerateJsonConverters.jsonEncodeApplyFunctionOnDatabaseRequest
@@ -419,7 +420,7 @@ viewAdminInterfaceConfig state config =
             ]
     ]
         |> Element.column
-            [ Element.spacing 30
+            [ Element.spacing 50
             , Element.width Element.fill
             ]
 
@@ -431,7 +432,7 @@ viewApplyFunctionOnDatabase :
 viewApplyFunctionOnDatabase state config =
     let
         options =
-            config.functionsApplicableOnDatabase
+            config.databaseFunctions
                 |> List.map
                     (\exposedFunction ->
                         Element.Input.option
@@ -455,26 +456,57 @@ viewApplyFunctionOnDatabase state config =
                     Element.none
 
                 Just ( selectedFunctionName, selectedFunctionState ) ->
-                    [ [ Element.text "Apply function "
-                      , Element.text selectedFunctionName
-                            |> Element.el viewFunctionNameAttributes
-                      ]
-                        |> Element.row (Visuals.headingAttributes 4)
-                    , config.functionsApplicableOnDatabase
-                        |> List.filter (\exposedFunction -> exposedFunction.functionName == selectedFunctionName)
-                        |> List.head
-                        |> Maybe.map (viewPrepareApplyFunctionOnDatabase selectedFunctionState)
-                        |> Maybe.withDefault Element.none
-                    ]
-                        |> Element.column
-                            [ Element.spacing 10
-                            , Element.width Element.fill
+                    case
+                        config.databaseFunctions
+                            |> List.filter (\exposedFunction -> exposedFunction.functionName == selectedFunctionName)
+                            |> List.head
+                    of
+                        Nothing ->
+                            Element.none
+
+                        Just selectedFunctionDescription ->
+                            let
+                                functionTypeSourceCodeText =
+                                    composeFunctionTypeSourceText selectedFunctionDescription
+                                        |> String.lines
+                                        |> List.map ((++) "    ")
+                                        |> String.join "\n"
+                            in
+                            [ [ Element.text "Apply function "
+                              , Element.text selectedFunctionName
+                                    |> Element.el viewFunctionNameAttributes
+                              ]
+                                |> Element.row (Visuals.headingAttributes 4)
+                            , ((selectedFunctionDescription.functionName
+                                    |> String.split "."
+                                    |> List.reverse
+                                    |> List.head
+                                    |> Maybe.withDefault selectedFunctionDescription.functionName
+                               )
+                                ++ " :\n"
+                                ++ functionTypeSourceCodeText
+                              )
+                                |> Html.text
+                                |> Element.html
+                                |> Element.el
+                                    [ Element.Font.family [ Element.Font.monospace ]
+                                    , Element.Background.color (Element.rgba 0.5 0.5 0.5 0.2)
+                                    , Element.paddingXY 5 3
+                                    , Element.Border.rounded 3
+                                    , Visuals.elementFontSizePercent 80
+                                    , Element.htmlAttribute (Html.Attributes.style "line-height" "normal")
+                                    ]
+                            , viewPrepareApplyFunctionOnDatabase selectedFunctionState selectedFunctionDescription
                             ]
+                                |> Element.column
+                                    [ Element.spacing 10
+                                    , Element.width Element.fill
+                                    ]
     in
     [ Element.text
         ("The currently deployed app exposes "
-            ++ String.fromInt (List.length config.functionsApplicableOnDatabase)
-            ++ " functions for application on the database:"
+            ++ String.fromInt (List.length config.databaseFunctions)
+            ++ " database functions:"
         )
     , selectFunctionElement
     , selectedFunctionElement
@@ -485,14 +517,21 @@ viewApplyFunctionOnDatabase state config =
             ]
 
 
+composeFunctionTypeSourceText : HostInterface.DatabaseFunctionDescription -> String
+composeFunctionTypeSourceText function =
+    List.map .typeSourceCodeText function.functionDescription.parameters
+        ++ [ function.functionDescription.returnType.sourceCodeText ]
+        |> String.join "\n-> "
+
+
 viewPrepareApplyFunctionOnDatabase :
     ApplyFunctionState
-    -> HostInterface.FunctionApplicableOnDatabase
+    -> HostInterface.DatabaseFunctionDescription
     -> Element.Element SelectAndApplyFunctionEventStruct
-viewPrepareApplyFunctionOnDatabase state config =
+viewPrepareApplyFunctionOnDatabase state exposedFunction =
     let
         parametersElement =
-            config.parameters
+            exposedFunction.functionDescription.parameters
                 |> List.indexedMap
                     (\paramIndex paramConfig ->
                         let
@@ -504,29 +543,34 @@ viewPrepareApplyFunctionOnDatabase state config =
 
                                 else
                                     ( Element.Input.multiline
-                                        [ Element.width Element.fill ]
+                                        [ Element.width Element.fill
+                                        , Element.Font.family [ Element.Font.monospace ]
+                                        ]
                                         { onChange = UserInputParameterTextEvent paramIndex
                                         , text = state.parametersTexts |> Dict.get paramIndex |> Maybe.withDefault ""
                                         , placeholder = Nothing
-                                        , label = Element.Input.labelHidden ("Input parameter " ++ paramConfig.name)
+                                        , label = Element.Input.labelHidden ("Input parameter " ++ paramConfig.patternSourceCodeText)
                                         , spellcheck = False
                                         }
                                     , Element.none
                                     )
                         in
-                        [ [ [ Element.text paramConfig.name
-                            , Element.text " : "
+                        [ [ [ Element.text (paramConfig.patternSourceCodeText ++ " : ")
                             , Element.text paramConfig.typeSourceCodeText
                             ]
-                                |> Element.row
+                                |> Element.wrappedRow
                                     [ Element.Font.family [ Element.Font.monospace ]
                                     , Element.Background.color (Element.rgba 0.5 0.5 0.5 0.2)
                                     , Element.paddingXY 5 3
                                     , Element.Border.rounded 3
+                                    , Element.width Element.fill
                                     ]
                           , hintElement
                           ]
-                            |> Element.row [ Element.spacing 10 ]
+                            |> Element.wrappedRow
+                                [ Element.spacing 10
+                                , Element.width Element.fill
+                                ]
                         , inputElement
                             |> Element.el
                                 [ Element.paddingXY 20 0
@@ -548,8 +592,8 @@ viewPrepareApplyFunctionOnDatabase state config =
             Element.Input.radio []
                 { onChange = UserInputSetCommitResultingStateEvent
                 , options =
-                    [ Element.Input.option True (Element.text "Yes")
-                    , Element.Input.option False (Element.text "No")
+                    [ Element.Input.option False (Element.text "No")
+                    , Element.Input.option True (Element.text "Yes")
                     ]
                 , selected = Just state.commitResultingState
                 , label =
@@ -557,10 +601,40 @@ viewPrepareApplyFunctionOnDatabase state config =
                         (Element.text "Commit resulting state to database?")
                 }
 
+        ( resultDescriptionText, offerCommitResult ) =
+            if exposedFunction.functionDescription.returnType.containsAppStateType then
+                ( "contains app state"
+                , True
+                )
+
+            else
+                ( "does not contain app state"
+                , False
+                )
+
+        resultElement =
+            [ [ Element.text "Return type"
+              , Element.text " "
+              , Element.text exposedFunction.functionDescription.returnType.sourceCodeText
+                    |> Element.el viewSourceCodeTextAttributes
+              , Element.text " "
+              , Element.text resultDescriptionText
+              ]
+                |> Element.row
+                    [ Element.width Element.fill
+                    ]
+            , commitResultingStateElement
+                |> Element.el [ Element.transparent (not offerCommitResult) ]
+            ]
+                |> Element.column
+                    [ Element.spacing 5
+                    , Element.width Element.fill
+                    ]
+
         applyFunctionRequest =
-            { functionName = config.functionName
+            { functionName = exposedFunction.functionName
             , serializedArgumentsJson =
-                config.parameters
+                exposedFunction.functionDescription.parameters
                     |> List.Extra.dropWhileRight (\param -> param.typeIsAppStateType)
                     |> List.indexedMap
                         (\paramIndex _ ->
@@ -590,7 +664,9 @@ viewPrepareApplyFunctionOnDatabase state config =
                             Element.text "Sending request to apply function..."
 
                         Just (Err functionApplicationFailed) ->
-                            [ Element.text ("Failed to apply function:\n" ++ functionApplicationFailed)
+                            [ Element.text "Failed to apply function "
+                            , Element.text applicationRequest.functionName |> Element.el viewFunctionNameAttributes
+                            , Element.text (": " ++ functionApplicationFailed)
                             ]
                                 |> Element.paragraph [ Element.Font.color errorColor ]
 
@@ -634,7 +710,6 @@ viewPrepareApplyFunctionOnDatabase state config =
                             in
                             [ [ Element.text "Succesfully applied function "
                               , Element.text applicationRequest.functionName |> Element.el viewFunctionNameAttributes
-                              , Element.text " on database"
                               ]
                                 |> Element.paragraph [ Element.Font.color successColor ]
                             , newAppStateReportElement
@@ -645,9 +720,13 @@ viewPrepareApplyFunctionOnDatabase state config =
                                     , Element.width Element.fill
                                     ]
     in
-    [ Element.text ("This function has " ++ String.fromInt (List.length config.parameters) ++ " parameters:")
+    [ Element.text
+        ("This function has "
+            ++ String.fromInt (List.length exposedFunction.functionDescription.parameters)
+            ++ " parameters:"
+        )
     , parametersElement
-    , commitResultingStateElement
+    , resultElement
     , applyFunctionButtonElement
     , applicationRequestElement
     ]
@@ -659,9 +738,14 @@ viewPrepareApplyFunctionOnDatabase state config =
 
 viewFunctionNameAttributes : List (Element.Attribute msg)
 viewFunctionNameAttributes =
+    Element.Font.color (Element.rgba 0.4 0.4 0 1)
+        :: viewSourceCodeTextAttributes
+
+
+viewSourceCodeTextAttributes : List (Element.Attribute msg)
+viewSourceCodeTextAttributes =
     [ Element.Font.family [ Element.Font.monospace ]
     , Element.Background.color (Element.rgba 0.5 0.5 0.5 0.2)
-    , Element.Font.color (Element.rgba 0.4 0.4 0 1)
     , Element.paddingXY 5 3
     , Element.Border.rounded 3
     ]

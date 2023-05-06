@@ -49,8 +49,8 @@ public class TestApplyFunctionOnDatabase
             {
                 var applyFunctionResponse =
                     await adminClient.PostAsJsonAsync(
-                        ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyFunctionOnDatabase,
-                        new ElmTime.AdminInterface.ApplyFunctionOnDatabaseRequest(
+                        ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction,
+                        new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                             functionName: "Backend.ExposeFunctionsToAdmin.addToCounter",
                             serializedArgumentsJson: ImmutableList.Create(17.ToString()),
                             commitResultingState: false));
@@ -71,8 +71,8 @@ public class TestApplyFunctionOnDatabase
 
                 var applyFunctionResponse =
                     await adminClient.PostAsJsonAsync(
-                        ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyFunctionOnDatabase,
-                        new ElmTime.AdminInterface.ApplyFunctionOnDatabaseRequest(
+                        ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction,
+                        new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                             functionName: "Backend.ExposeFunctionsToAdmin.addToCounter",
                             serializedArgumentsJson: ImmutableList.Create(additionViaAdminInterface.ToString()),
                             commitResultingState: true));
@@ -148,8 +148,8 @@ public class TestApplyFunctionOnDatabase
         {
             var applyFunctionResponse =
                 await adminClient.PostAsJsonAsync(
-                    ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyFunctionOnDatabase,
-                    new ElmTime.AdminInterface.ApplyFunctionOnDatabaseRequest(
+                    ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction,
+                    new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.customUsageReport",
                         serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Serialize("Hello world")),
                         commitResultingState: false));
@@ -159,7 +159,7 @@ public class TestApplyFunctionOnDatabase
             Assert.AreEqual(200, (int)applyFunctionResponse.StatusCode, message: "applyFunctionResponse.StatusCode");
 
             var applyFunctionResponseStruct =
-                JsonSerializer.Deserialize<Result<string, ElmTime.AdminInterface.ApplyFunctionOnDatabaseSuccess>>(
+                JsonSerializer.Deserialize<Result<string, ElmTime.AdminInterface.ApplyDatabaseFunctionSuccess>>(
                     applyFunctionResponseContent);
 
             var applyFunctionSuccess =
@@ -193,30 +193,29 @@ public class TestApplyFunctionOnDatabase
 
         using var server = testSetup.StartWebHost();
 
-        using var publicClient = testSetup.BuildPublicAppHttpClient();
-
         using var adminClient = testSetup.BuildAdminInterfaceHttpClient();
 
         testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(adminClient);
 
         var listFunctionsResponse =
-            await adminClient.GetAsync(ElmTime.Platform.WebServer.StartupAdminInterface.PathApiListFunctionsApplicableOnDatabase);
+            await adminClient.GetAsync(ElmTime.Platform.WebServer.StartupAdminInterface.PathApiListDatabaseFunctions);
 
         var listFunctionsResponseContent = await listFunctionsResponse.Content.ReadAsStringAsync();
 
         Assert.AreEqual(200, (int)listFunctionsResponse.StatusCode, message: "listFunctionsResponse.StatusCode");
 
         var listFunctionsResponseStruct =
-            JsonSerializer.Deserialize<Result<string, IReadOnlyList<ElmTime.AdminInterface.FunctionApplicableOnDatabase>>>(
+            JsonSerializer.Deserialize<Result<string, IReadOnlyList<ElmTime.StateShim.InterfaceToHost.NamedExposedFunction>>>(
                 listFunctionsResponseContent);
 
         var functionsDescriptions =
             listFunctionsResponseStruct
             .Extract(fromErr: err => throw new Exception(err));
 
-        ElmTime.AdminInterface.FunctionApplicableOnDatabase? functionDescriptionFromName(string functionName) =>
-            functionsDescriptions?.FirstOrDefault(
-                functionDescription => functionDescription.functionName == functionName);
+        ElmTime.StateShim.InterfaceToHost.ExposedFunctionDescription? functionDescriptionFromName(string functionName) =>
+            functionsDescriptions
+            ?.FirstOrDefault(functionDescription => functionDescription.functionName == functionName)
+            ?.functionDescription;
 
         var applyCalculatorOperationFunctionDescription =
             functionDescriptionFromName("Backend.ExposeFunctionsToAdmin.applyCalculatorOperation");
@@ -227,29 +226,41 @@ public class TestApplyFunctionOnDatabase
         Assert.IsNotNull(applyCalculatorOperationFunctionDescription);
         Assert.IsNotNull(customUsageReportFunctionDescription);
 
-        CollectionAssert.AreEqual(
-            new[]
-            {
-                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
-                    name: "operation",
-                    typeSourceCodeText: "Calculator.CalculatorOperation",
-                    typeIsAppStateType: false),
-                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
-                    name: "stateBefore",
-                    typeSourceCodeText: "Backend.State.State",
-                    typeIsAppStateType: true)
-            },
-            applyCalculatorOperationFunctionDescription!.parameters.ToList());
+        Assert.AreEqual(
+            new ElmTime.StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
+                sourceCodeText: "Backend.State.State",
+                containsAppStateType: true),
+            applyCalculatorOperationFunctionDescription!.returnType);
 
         CollectionAssert.AreEqual(
             new[]
             {
                 new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
-                    name: "customArgument",
+                    patternSourceCodeText: "operation",
+                    typeSourceCodeText: "Calculator.CalculatorOperation",
+                    typeIsAppStateType: false),
+                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                    patternSourceCodeText: "stateBefore",
+                    typeSourceCodeText: "Backend.State.State",
+                    typeIsAppStateType: true)
+            },
+            applyCalculatorOperationFunctionDescription!.parameters.ToList());
+
+        Assert.AreEqual(
+            new ElmTime.StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
+                sourceCodeText: "CustomUsageReport",
+                containsAppStateType: false),
+            customUsageReportFunctionDescription!.returnType);
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                    patternSourceCodeText: "customArgument",
                     typeSourceCodeText: "String",
                     typeIsAppStateType: false),
                 new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
-                    name: "state",
+                    patternSourceCodeText: "state",
                     typeSourceCodeText: "Backend.State.State",
                     typeIsAppStateType: true),
             },

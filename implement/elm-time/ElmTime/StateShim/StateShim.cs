@@ -79,9 +79,9 @@ public class StateShim
             });
     }
 
-    public static Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
+    public static Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunctionOnMainBranch(
         IProcess<string, string> process,
-        AdminInterface.ApplyFunctionOnDatabaseRequest request)
+        AdminInterface.ApplyDatabaseFunctionRequest request)
     {
         return
             request.serializedArgumentsJson
@@ -108,7 +108,7 @@ public class StateShim
             .AndThen(matchingFunction =>
             {
                 var stateArgument =
-                matchingFunction.functionDescription.hasAppStateParam ?
+                matchingFunction.functionDescription.parameters.Any(param => param.typeIsAppStateType) ?
                 Maybe<StateSource>.just(MainStateBranch) :
                 Maybe<StateSource>.nothing();
 
@@ -139,13 +139,13 @@ public class StateShim
                             Result<string, FunctionApplicationResult>.err(
                                 "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
                         })
-                        .Map(applyFunctionOk => new AdminInterface.ApplyFunctionOnDatabaseSuccess(
+                        .Map(applyFunctionOk => new AdminInterface.ApplyDatabaseFunctionSuccess(
                             applyFunctionOk,
                             committedResultingState: stateDestinationBranches.Contains(MainBranchName)));
                 }
                 catch (Exception e)
                 {
-                    return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err(
+                    return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
                         "Failed to parse response string: " + e);
                 }
             }));

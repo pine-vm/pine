@@ -69,14 +69,19 @@ type alias ExposedFunctionConfig =
 
 
 type alias ExposedFunctionDescription =
-    { hasAppStateParam : Bool
-    , resultContainsAppState : Bool
+    { returnType : ExposedFunctionReturnTypeDescription
     , parameters : List ExposedFunctionParameterDescription
     }
 
 
+type alias ExposedFunctionReturnTypeDescription =
+    { sourceCodeText : String
+    , containsAppStateType : Bool
+    }
+
+
 type alias ExposedFunctionParameterDescription =
-    { name : String
+    { patternSourceCodeText : String
     , typeSourceCodeText : String
     , typeIsAppStateType : Bool
     }
@@ -276,8 +281,8 @@ composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
                 |> List.map
                     (\parameterDescription ->
                         "{"
-                            ++ ([ ( "name"
-                                  , "\"" ++ parameterDescription.name ++ "\""
+                            ++ ([ ( "patternSourceCodeText"
+                                  , "\"" ++ parameterDescription.patternSourceCodeText ++ "\""
                                   )
                                 , ( "typeSourceCodeText"
                                   , "\"" ++ parameterDescription.typeSourceCodeText ++ "\""
@@ -297,10 +302,12 @@ composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
                     )
     in
     [ "(\"" ++ functionName ++ "\""
-    , ", { description = { hasAppStateParam = "
-        ++ syntaxFromBool functionConfig.description.hasAppStateParam
-        ++ ", resultContainsAppState = "
-        ++ syntaxFromBool functionConfig.description.resultContainsAppState
+    , ", { description = { "
+        ++ " returnType = { sourceCodeText = \""
+        ++ functionConfig.description.returnType.sourceCodeText
+        ++ "\", containsAppStateType = "
+        ++ syntaxFromBool functionConfig.description.returnType.containsAppStateType
+        ++ " }"
         ++ ", parameters = [ "
         ++ String.join ", " parametersTexts
         ++ " ]"
@@ -904,14 +911,19 @@ type StateSource
 
 
 type alias ExposedFunctionDescription =
-    { hasAppStateParam : Bool
-    , resultContainsAppState : Bool
+    { returnType : ExposedFunctionReturnTypeDescription
     , parameters : List ExposedFunctionParameterDescription
     }
 
 
+type alias ExposedFunctionReturnTypeDescription =
+    { sourceCodeText : String
+    , containsAppStateType : Bool
+    }
+
+
 type alias ExposedFunctionParameterDescription =
-    { name : String
+    { patternSourceCodeText : String
     , typeSourceCodeText : String
     , typeIsAppStateType : Bool
     }

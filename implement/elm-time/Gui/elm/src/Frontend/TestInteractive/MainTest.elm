@@ -44,26 +44,32 @@ fakeAdminInterfaceConfig =
           , methods = [ "post", "get" ]
           }
         ]
-    , functionsApplicableOnDatabase =
+    , databaseFunctions =
         [ { functionName = "Backend.ExposeFunctionsToAdmin.function_update"
-          , parameters =
-                [ { name = "param_1"
-                  , typeSourceCodeText = "String"
-                  , typeIsAppStateType = False
-                  }
-                , { name = "stateBefore"
-                  , typeSourceCodeText = "Backend.State.State"
-                  , typeIsAppStateType = True
-                  }
-                ]
+          , functionDescription =
+                { parameters =
+                    [ { patternSourceCodeText = "param_1"
+                      , typeSourceCodeText = "String"
+                      , typeIsAppStateType = False
+                      }
+                    , { patternSourceCodeText = "stateBefore"
+                      , typeSourceCodeText = "Backend.State.State"
+                      , typeIsAppStateType = True
+                      }
+                    ]
+                , returnType = { sourceCodeText = "Backend.State.State", containsAppStateType = True }
+                }
           }
         , { functionName = "Backend.ExposeFunctionsToAdmin.function_report"
-          , parameters =
-                [ { name = "state"
-                  , typeSourceCodeText = "Backend.State.State"
-                  , typeIsAppStateType = True
-                  }
-                ]
+          , functionDescription =
+                { parameters =
+                    [ { patternSourceCodeText = "state"
+                      , typeSourceCodeText = "Backend.State.State"
+                      , typeIsAppStateType = True
+                      }
+                    ]
+                , returnType = { sourceCodeText = "String", containsAppStateType = False }
+                }
           }
         ]
     }

@@ -37,7 +37,7 @@ public class TestStateShim
             var applyOperationResult =
                 calculatorProcess.ApplyFunctionOnMainBranch(
                     processStore,
-                    new ElmTime.AdminInterface.ApplyFunctionOnDatabaseRequest(
+                    new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation",
                         serializedArgumentsJson: ImmutableList.Create(
                             JsonSerializer.Serialize<CalculatorOperation>(new CalculatorOperation.AddOperation(12345678))),

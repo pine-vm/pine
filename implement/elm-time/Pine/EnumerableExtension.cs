@@ -133,4 +133,20 @@ public static class EnumerableExtension
                 yield return just.Value;
         }
     }
+
+    public static IEnumerable<T> Intersperse<T>(this IEnumerable<T> source, T separator)
+    {
+        using var enumerator = source.GetEnumerator();
+
+        if (!enumerator.MoveNext())
+            yield break;
+
+        yield return enumerator.Current;
+
+        while (enumerator.MoveNext())
+        {
+            yield return separator;
+            yield return enumerator.Current;
+        }
+    }
 }

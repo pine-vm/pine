@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-04";
+    public static string AppVersionId => "2023-05-05";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -547,7 +547,6 @@ public class Program
             });
         });
 
-
     private static CommandLineApplication AddListFunctionsCommand(CommandLineApplication app) =>
         app.Command("list-functions", listFunctionsCommand =>
         {
@@ -571,7 +570,10 @@ public class Program
                 var console = (Pine.IConsole)StaticConsole.Instance;
 
                 return
-                listFunctionsResult.Unpack(
+                listFunctionsResult
+                // For now, only show functions with a normal module prefix
+                .Map(functions => functions.Where(f => f.functionName.Contains('.')).ToImmutableList())
+                .Unpack(
                     fromErr:
                     err =>
                     {
@@ -582,31 +584,33 @@ public class Program
                     fromOk:
                     functions =>
                     {
-                        string describeFunctionParameter(
-                            StateShim.InterfaceToHost.ExposedFunctionParameterDescription functionParameter)
+                        static string describeFunction(
+                            StateShim.InterfaceToHost.NamedExposedFunction databaseFunction)
                         {
-                            return
-                            functionParameter.name + " (" + functionParameter.typeSourceCodeText + ")" +
-                            (functionParameter.typeIsAppStateType ? " (App state type)" : "");
-                        }
+                            var commentOnReturnType =
+                            "-- (return type " +
+                            (databaseFunction.functionDescription.returnType.containsAppStateType ?
+                            "contains app state type" : "does not contain app state type")
+                            + ")";
 
-                        string describeFunction(
-                            AdminInterface.FunctionApplicableOnDatabase functionApplicableOnDatabase)
-                        {
                             return
-                            "Function " + functionApplicableOnDatabase.functionName +
-                            " has " + functionApplicableOnDatabase.parameters.Count + " parameters" +
-                            (functionApplicableOnDatabase.parameters.Count < 1 ?
-                            "."
-                            :
-                            ":\n" +
+                            "Function " + databaseFunction.functionName +
+                            " has " + databaseFunction.functionDescription.parameters.Count + " parameters:\n" +
+                            databaseFunction.functionName.Split('.').LastOrDefault(databaseFunction.functionName) + " :\n" +
                             string.Join("\n",
-                            functionApplicableOnDatabase.parameters.Select(p => "   " + describeFunctionParameter(p))));
+                            string.Join("", databaseFunction.functionDescription.parameters.Select(p => p.typeSourceCodeText)
+                            .Concat(new[] {
+                                databaseFunction.functionDescription.returnType.sourceCodeText +
+                                " " + commentOnReturnType })
+                            .Intersperse("\n-> "))
+                            .Split("\n")
+                            .Select(line => "    " + line));
                         }
 
                         console.WriteLine(
-                            "Discovered " + functions.Count + " functions at " + site + ":\n----------\n" +
-                            string.Join("\n\n", functions.Select(describeFunction)));
+                            "Site " + site + " exposes " + functions.Count + " database functions:\n----------\n" +
+                            string.Join("\n\n", functions.Select(describeFunction)) +
+                            "\n----------\n");
 
                         return 0;
                     });
@@ -1939,7 +1943,7 @@ public class Program
 
     public record ApplyFunctionReport(
         string site,
-        AdminInterface.ApplyFunctionOnDatabaseRequest applyFunctionRequest,
+        AdminInterface.ApplyDatabaseFunctionRequest applyFunctionRequest,
         string beginTime,
         ResponseFromServerReport? responseFromServer,
         string? runtimeException,
@@ -2096,7 +2100,7 @@ public class Program
         );
     }
 
-    public static Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> ListFunctions(
+    public static Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> ListFunctions(
         string site,
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
@@ -2108,14 +2112,14 @@ public class Program
         if (LooksLikeLocalSite(site))
         {
             return
-                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
                     "Not implemented for local site");
         }
 
         try
         {
             var httpRequestUri =
-                site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiListFunctionsApplicableOnDatabase;
+                site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiListDatabaseFunctions;
 
             var httpResponse = AttemptHttpRequest(() =>
             {
@@ -2133,19 +2137,19 @@ public class Program
             if (!httpResponse.IsSuccessStatusCode)
             {
                 return
-                    Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                    Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
                         "HTTP response status code not OK: " + httpResponse.StatusCode + ", content:\n" +
                         responseContentString);
             }
 
             return
-                System.Text.Json.JsonSerializer.Deserialize<Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>>(responseContentString)!
+                System.Text.Json.JsonSerializer.Deserialize<Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>>(responseContentString)!
                 .MapError(err => "Server returned error: " + err);
         }
         catch (Exception e)
         {
             return
-                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
                     "Failed with runtime exception:\n" + e);
         }
     }
@@ -2167,7 +2171,7 @@ public class Program
         Exception? runtimeException = null;
 
         var applyFunctionRequest =
-            new AdminInterface.ApplyFunctionOnDatabaseRequest(
+            new AdminInterface.ApplyDatabaseFunctionRequest(
                 functionName: functionName,
                 serializedArgumentsJson: serializedArgumentsJson,
                 commitResultingState: commitResultingState);
@@ -2180,7 +2184,7 @@ public class Program
             }
 
             var applyAddress =
-                site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiApplyFunctionOnDatabase;
+                site.TrimEnd('/') + Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction;
 
             Console.WriteLine("Attempting to apply function '" + functionName + "' at '" + applyAddress + "'...");
 

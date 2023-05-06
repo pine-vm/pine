@@ -14,18 +14,30 @@ type EventFromHost
 type alias AdminInterfaceConfig =
     { elmTimeVersionId : String
     , httpRoutes : List HttpRoute
-    , functionsApplicableOnDatabase : List FunctionApplicableOnDatabase
+    , databaseFunctions : List DatabaseFunctionDescription
     }
 
 
-type alias FunctionApplicableOnDatabase =
+type alias DatabaseFunctionDescription =
     { functionName : String
-    , parameters : List FunctionApplicableOnDatabaseParameter
+    , functionDescription : ExposedFunctionDescription
     }
 
 
-type alias FunctionApplicableOnDatabaseParameter =
-    { name : String
+type alias ExposedFunctionDescription =
+    { returnType : ExposedFunctionReturnTypeDescription
+    , parameters : List ExposedFunctionParameterDescription
+    }
+
+
+type alias ExposedFunctionReturnTypeDescription =
+    { sourceCodeText : String
+    , containsAppStateType : Bool
+    }
+
+
+type alias ExposedFunctionParameterDescription =
+    { patternSourceCodeText : String
     , typeSourceCodeText : String
     , typeIsAppStateType : Bool
     }

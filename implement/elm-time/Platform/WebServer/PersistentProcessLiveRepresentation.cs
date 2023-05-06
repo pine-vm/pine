@@ -396,7 +396,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             return
                 StateShim.StateShim.ApplyFunctionOnMainBranch(
                     process: processBefore.lastElmAppVolatileProcess,
-                    new AdminInterface.ApplyFunctionOnDatabaseRequest(
+                    new AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: applyFunctionOnElmAppState.functionName,
                         serializedArgumentsJson: applyFunctionOnElmAppState.serializedArgumentsJson,
                         commitResultingState: true))
@@ -762,7 +762,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             return
                 StateShim.StateShim.ApplyFunctionOnMainBranch(
                     process: lastElmAppVolatileProcess,
-                    new AdminInterface.ApplyFunctionOnDatabaseRequest(
+                    new AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "processEvent",
                         serializedArgumentsJson: ImmutableList.Create(serializedAppEvent),
                         commitResultingState: true))
@@ -826,9 +826,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
-    public Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> ApplyFunctionOnMainBranch(
+    public Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunctionOnMainBranch(
         IProcessStoreWriter storeWriter,
-        AdminInterface.ApplyFunctionOnDatabaseRequest request)
+        AdminInterface.ApplyDatabaseFunctionRequest request)
     {
         lock (processLock)
         {
@@ -861,17 +861,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
     }
 
-    public Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> ListFunctionsApplicable()
+    public Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> ListDatabaseFunctions()
     {
-        return
-            StateShim.StateShim.ListExposedFunctions(lastElmAppVolatileProcess)
-            .Map(listFunctionsSuccess =>
-            (IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>)
-            listFunctionsSuccess
-            .Select(exposed => new AdminInterface.FunctionApplicableOnDatabase(
-                functionName: exposed.functionName,
-                parameters: exposed.functionDescription.parameters))
-            .ToImmutableList());
+        return StateShim.StateShim.ListExposedFunctions(lastElmAppVolatileProcess);
     }
 
     public Result<string, long> EstimateSerializedStateLengthOnMainBranch()

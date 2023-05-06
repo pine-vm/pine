@@ -97,11 +97,14 @@ public record NamedExposedFunction(
     ExposedFunctionDescription functionDescription);
 
 public record ExposedFunctionDescription(
-    bool hasAppStateParam,
-    bool resultContainsAppState,
+    ExposedFunctionReturnTypeDescription returnType,
     IReadOnlyList<ExposedFunctionParameterDescription> parameters);
 
+public record ExposedFunctionReturnTypeDescription(
+    string sourceCodeText,
+    bool containsAppStateType);
+
 public record ExposedFunctionParameterDescription(
-    string name,
+    string patternSourceCodeText,
     string typeSourceCodeText,
     bool typeIsAppStateType);

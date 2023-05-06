@@ -2,16 +2,11 @@
 
 namespace ElmTime.AdminInterface;
 
-public record ApplyFunctionOnDatabaseRequest(
+public record ApplyDatabaseFunctionRequest(
     string functionName,
     IReadOnlyList<string> serializedArgumentsJson,
     bool commitResultingState);
 
-
-public record ApplyFunctionOnDatabaseSuccess(
+public record ApplyDatabaseFunctionSuccess(
     StateShim.InterfaceToHost.FunctionApplicationResult functionApplicationResult,
     bool committedResultingState);
-
-public record FunctionApplicableOnDatabase(
-    string functionName,
-    IReadOnlyList<StateShim.InterfaceToHost.ExposedFunctionParameterDescription> parameters);

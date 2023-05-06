@@ -39,9 +39,9 @@ public class StartupAdminInterface
 
     public static string PathApiProcessHistoryFileStoreListFilesInDirectory => PathApiProcessHistoryFileStore + "/list-files-in-directory";
 
-    public static string PathApiListFunctionsApplicableOnDatabase => "/api/list-functions-applicable-on-db";
+    public static string PathApiListDatabaseFunctions => "/api/list-database-functions";
 
-    public static string PathApiApplyFunctionOnDatabase => "/api/apply-function-on-db";
+    public static string PathApiApplyDatabaseFunction => "/api/apply-database-function";
 
     public static string PathApiGuiRequest => "/api/gui";
 
@@ -381,22 +381,22 @@ public class StartupAdminInterface
                     await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
                 }
 
-                Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>> listFunctionsApplicableOnDatabase()
+                Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
                 {
                     if (publicAppHost?.processLiveRepresentation is null)
-                        return Result<string, IReadOnlyList<AdminInterface.FunctionApplicableOnDatabase>>.err(
+                        return Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
                             "No application deployed.");
 
-                    return publicAppHost.processLiveRepresentation.ListFunctionsApplicable();
+                    return publicAppHost.processLiveRepresentation.ListDatabaseFunctions();
                 }
 
-                Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess> applyFunctionOnDatabase(
-                    AdminInterface.ApplyFunctionOnDatabaseRequest request)
+                Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> applyDatabaseFunction(
+                    AdminInterface.ApplyDatabaseFunctionRequest request)
                 {
                     lock (avoidConcurrencyLock)
                     {
                         if (publicAppHost?.processLiveRepresentation is null)
-                            return Result<string, AdminInterface.ApplyFunctionOnDatabaseSuccess>.err(
+                            return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
                                 "No application deployed.");
 
                         return publicAppHost.processLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
@@ -418,9 +418,9 @@ public class StartupAdminInterface
                                     apiRoutes.Select(apiRoute => new Gui.HttpRoute(
                                         path: apiRoute.path,
                                         methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
-                                    functionsApplicableOnDatabase:
-                                    listFunctionsApplicableOnDatabase()
-                                    .Extract(_ => ImmutableList<AdminInterface.FunctionApplicableOnDatabase>.Empty))
+                                    databaseFunctions:
+                                    listDatabaseFunctions()
+                                    .Extract(_ => ImmutableList<StateShim.InterfaceToHost.NamedExposedFunction>.Empty))
                                 )
                             ),
 
@@ -558,13 +558,13 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
-                        path : PathApiListFunctionsApplicableOnDatabase,
+                        path : PathApiListDatabaseFunctions,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
                             try
                             {
-                                var result = listFunctionsApplicableOnDatabase();
+                                var result = listDatabaseFunctions();
 
                                 context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
                                 await context.Response.WriteAsJsonAsync(result);
@@ -578,16 +578,16 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
-                        path : PathApiApplyFunctionOnDatabase,
+                        path : PathApiApplyDatabaseFunction,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("post", async (context, publicAppHost) =>
                         {
                             try
                             {
                                 var applyFunctionRequest =
-                                    await context.Request.ReadFromJsonAsync<AdminInterface.ApplyFunctionOnDatabaseRequest>();
+                                    await context.Request.ReadFromJsonAsync<AdminInterface.ApplyDatabaseFunctionRequest>();
 
-                                var result = applyFunctionOnDatabase(applyFunctionRequest);
+                                var result = applyDatabaseFunction(applyFunctionRequest);
 
                                 context.Response.StatusCode = result.Unpack(fromErr: _ => 400, fromOk: _ => 200);
                                 await context.Response.WriteAsJsonAsync(result);

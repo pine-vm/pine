@@ -39,7 +39,6 @@ import Elm.Syntax.File
 import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
-import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
 import Result.Extra
@@ -239,8 +238,7 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                         exposedFunctionsGeneral =
                                                             [ ( "init"
                                                               , { description =
-                                                                    { hasAppStateParam = False
-                                                                    , resultContainsAppState = True
+                                                                    { returnType = { sourceCodeText = "", containsAppStateType = True }
                                                                     , parameters = []
                                                                     }
                                                                 , handlerExpression = """
@@ -261,9 +259,17 @@ config_init
                                                               )
                                                             , ( "processEvent"
                                                               , { description =
-                                                                    { hasAppStateParam = True
-                                                                    , resultContainsAppState = True
-                                                                    , parameters = []
+                                                                    { returnType = { sourceCodeText = "", containsAppStateType = True }
+                                                                    , parameters =
+                                                                        [ { patternSourceCodeText = "event"
+                                                                          , typeSourceCodeText = ""
+                                                                          , typeIsAppStateType = False
+                                                                          }
+                                                                        , { patternSourceCodeText = "stateBefore"
+                                                                          , typeSourceCodeText = ""
+                                                                          , typeIsAppStateType = True
+                                                                          }
+                                                                        ]
                                                                     }
                                                                 , handlerExpression = """
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
@@ -341,8 +347,7 @@ exposedFunctionsFromMigrationConfig : MigrationConfig -> Dict.Dict String Expose
 exposedFunctionsFromMigrationConfig _ =
     [ ( "migrate"
       , { description =
-            { hasAppStateParam = False
-            , resultContainsAppState = True
+            { returnType = { sourceCodeText = "", containsAppStateType = True }
             , parameters = []
             }
         , handlerExpression = """
@@ -646,9 +651,15 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                     error
                 )
 
-        parametersNames =
+        parametersSourceCodeTexts =
             (Elm.Syntax.Node.value functionDeclaration.declaration).arguments
-                |> List.map (composeParameterName { sourceModuleText = interfaceModule.fileText })
+                |> List.map
+                    (\argumentNode ->
+                        getTextLinesFromRange
+                            (Elm.Syntax.Node.range argumentNode)
+                            interfaceModule.fileText
+                            |> String.join "\n"
+                    )
     in
     case Maybe.map Elm.Syntax.Node.value functionDeclaration.signature of
         Nothing ->
@@ -688,8 +699,8 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                             |> List.reverse
                                             |> List.indexedMap
                                                 (\parameterIndex parameterTypeAnnotationNode ->
-                                                    { name =
-                                                        parametersNames
+                                                    { patternSourceCodeText =
+                                                        parametersSourceCodeTexts
                                                             |> List.drop parameterIndex
                                                             |> List.head
                                                             |> Maybe.withDefault "unknown"
@@ -764,13 +775,21 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                             , returnType = returnTypeAnnotation
                                             , returnTypeEncoderFunction = returnTypeEncoderFunction
                                             }
+
+                                    returnTypeSourceCodeText =
+                                        getTextLinesFromRange
+                                            (Elm.Syntax.Node.range returnTypeAnnotationNode)
+                                            interfaceModule.fileText
+                                            |> String.join "\n"
                                 in
                                 Ok
                                     { exposedFunctions =
                                         Dict.singleton exposedFunctionQualifiedName
                                             { description =
-                                                { hasAppStateParam = hasAppStateParam
-                                                , resultContainsAppState = composeHandler.resultContainsAppState
+                                                { returnType =
+                                                    { sourceCodeText = returnTypeSourceCodeText
+                                                    , containsAppStateType = composeHandler.resultContainsAppState
+                                                    }
                                                 , parameters = parameters
                                                 }
                                             , handlerExpression = composeHandler.expression
@@ -779,34 +798,6 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                     , modulesToImport = [ interfaceModule.moduleName ]
                                     }
                     )
-
-
-composeParameterName : { sourceModuleText : String } -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern -> String
-composeParameterName { sourceModuleText } argumentNode =
-    case Elm.Syntax.Node.value argumentNode of
-        Elm.Syntax.Pattern.AllPattern ->
-            "_"
-
-        Elm.Syntax.Pattern.VarPattern var ->
-            var
-
-        Elm.Syntax.Pattern.TuplePattern tuple ->
-            "tuple_of_"
-                ++ String.join "_" (List.map (composeParameterName { sourceModuleText = sourceModuleText }) tuple)
-
-        Elm.Syntax.Pattern.RecordPattern record ->
-            "record_of_"
-                ++ String.join "_" (List.map Elm.Syntax.Node.value record)
-
-        Elm.Syntax.Pattern.UnConsPattern first following ->
-            "uncons_"
-                ++ String.join "_"
-                    (List.map (composeParameterName { sourceModuleText = sourceModuleText })
-                        [ first, following ]
-                    )
-
-        _ ->
-            "other_pattern"
 
 
 buildExposedFunctionHandlerExpression :
