@@ -156,9 +156,9 @@ public class TestLoadFromGithub
 
         var readmeFile =
             loadedFilesPathsAndContents
-            .FirstOrDefault(c => c.filePath.Equals("readme.md", StringComparison.InvariantCultureIgnoreCase));
+            .FirstOrDefault(c => c.filePath.Equals("README.md", StringComparison.InvariantCultureIgnoreCase));
 
-        Assert.IsNotNull(readmeFile.fileContent, "Loaded files contain readme.md");
+        Assert.IsNotNull(readmeFile.fileContent, "Loaded files contain README.md");
     }
 
     [TestMethod]

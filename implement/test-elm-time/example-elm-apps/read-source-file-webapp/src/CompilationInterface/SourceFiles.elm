@@ -14,6 +14,6 @@ file_tree____static_content =
     TreeNode []
 
 
-file____readme_md : { utf8 : String }
-file____readme_md =
+file____README_md : { utf8 : String }
+file____README_md =
     { utf8 = "The compiler replaces this value." }

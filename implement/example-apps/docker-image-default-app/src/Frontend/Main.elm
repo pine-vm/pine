@@ -212,7 +212,7 @@ view state =
 
 viewGuide : Html.Html event
 viewGuide =
-    CompilationInterface.SourceFiles.file____readme_md.utf8
+    CompilationInterface.SourceFiles.file____README_md.utf8
         |> Markdown.Parser.parse
         |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
         |> Result.andThen (Markdown.Parser.render Markdown.Parser.defaultHtmlRenderer)

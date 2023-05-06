@@ -615,7 +615,7 @@ view state =
 
 appDescriptionHtml : Html.Html a
 appDescriptionHtml =
-    CompilationInterface.SourceFiles.file____readme_md.utf8
+    CompilationInterface.SourceFiles.file____README_md.utf8
         |> Markdown.Parser.parse
         |> Result.map
             (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer

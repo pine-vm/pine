@@ -238,8 +238,8 @@ To map the source file path to a name in this module, replace any non-alphanumer
 
 | file path                         | Name in the Elm module                    |
 | --------------------------------  | --------------------------                |
-| `readme.md`                       | `file____readme_md`                       |
-| `static/readme.md`                | `file____static_readme_md`                |
+| `README.md`                       | `file____README_md`                       |
+| `static/README.md`                | `file____static_README_md`                |
 | `static/chat.message-added.0.mp3` | `file____static_chat_message_added_0_mp3` |
 
 The compilation will fail if this module contains a name that matches more than one or none of the source files.

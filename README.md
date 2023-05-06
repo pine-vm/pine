@@ -44,7 +44,7 @@ As we can see in the [workflow file](./.github/workflows/test-and-publish.yml), 
 ### Rich Chat Room
 
 The [rich chat room example app](https://github.com/elm-time/elm-time/tree/main/implement/example-apps/rich-chat-room) demonstrates features typically found in a chat app, such as user names, message rate-limiting, sound effects, etc.
-For a detailed description of this app, see the readme file at https://github.com/elm-time/elm-time/blob/main/implement/example-apps/rich-chat-room/readme.md
+For a detailed description of this app, see the readme file at <https://github.com/elm-time/elm-time/blob/main/implement/example-apps/rich-chat-room/README.md>
 
 ### Elm Editor
 
@@ -52,10 +52,10 @@ For a detailed description of this app, see the readme file at https://github.co
 
 As an integrated development environment, it assists us in reading, writing, and testing Elm programs and in collaborating with other developers.
 
-<a href="https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor/readme.md">
+<a href="https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor/README.md">
 <img src="./guide/image/2021-03-17-elm-editor-user-interface.png" width="500" />
 </a>
 
 To see Elm Editor in action, check out the public instance at https://elm-editor.com
 
-To learn more about Elm Editor, see https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor/readme.md
+To learn more about Elm Editor, see <https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor/README.md>
