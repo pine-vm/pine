@@ -1,13 +1,13 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
 import Build
 import Bytes.Encode
 import FileTree
-import Platform.WebServer
+import Platform.WebService
 import Url
 
 
@@ -15,21 +15,24 @@ type alias State =
     {}
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( {}, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent :
+    Platform.WebService.HttpRequestEventStruct
+    -> State
+    -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         bodyFromString =
@@ -115,5 +118,5 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
     in
     ( stateBefore
-    , [ Platform.WebServer.RespondToHttpRequest httpResponse ]
+    , [ Platform.WebService.RespondToHttpRequest httpResponse ]
     )

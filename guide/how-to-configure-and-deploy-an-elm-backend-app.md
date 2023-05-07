@@ -9,8 +9,8 @@ In this guide, I use the `elm-time` command-line interface (CLI) program. You ca
 
 Here are direct links to the downloads, containing the `elm-time` executable file in a zip archive:
 
-+ Windows: https://github.com/elm-time/elm-time/releases/download/v2023-03-25/elm-time-bin-v2023-03-25-win10-x64.zip
-+ Linux: https://github.com/elm-time/elm-time/releases/download/v2023-03-25/elm-time-bin-v2023-03-25-linux-x64.zip
++ Windows: <https://github.com/elm-time/elm-time/releases/download/v2023-05-07/elm-time-bin-v2023-05-07-win10-x64.zip>
++ Linux: <https://github.com/elm-time/elm-time/releases/download/v2023-05-07/elm-time-bin-v2023-05-07-linux-x64.zip>
 
 To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -35,12 +35,12 @@ I copied the executable file to '/bin/elm-time'. You will be able to use the 'el
 As part of a deployment, Elm-Time compiles the app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing backend and frontend: https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app
+Here is an example app containing backend and frontend: <https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app>
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -49,10 +49,10 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 5b9728ea2ce0909097d211aea67e37f3db19c20d
-The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/ec2bf67cd7a53925bff6b29176a5e1d24e674e11/implement/example-apps/docker-image-default-app
-Loaded source composition 62dbd3bd1732fa33c1187b180932f1560cd4b4fe449d0dedce9bd5a1ce049a71 from 'https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app'.
-Starting the web server with the admin interface...
+This path points to commit 0ae86d63e4353c8225794fd3cc214121d6c02847
+The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/3f192abd835ddb3c7ed9802fb83b036ba37b5ac9/implement/example-apps/docker-image-default-app
+Loaded source composition fd5d797f02af65e87bad9a70522b47d2d63ea680609f7c94c7463b88010c3ed2 from 'https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app'.
+Starting web server with admin interface (using engine JavaScript_Jint)...
 info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
       Begin to build the process live representation.
 info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
@@ -82,19 +82,19 @@ This section covers the conventions for structuring the app code so that we can 
 
 ### `Backend.Main` Elm Module
 
-The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `webServerMain`:
+The [main Elm module of the backend](/implement/example-apps/minimal-backend-hello-world/src/Backend/Main.elm) configures the backend with the declaration of `webServiceMain`:
 
 ```Elm
-webServerMain : Platform.WebServer.WebServerConfig ()
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig ()
+webServiceMain =
 [...]
 ```
 
 As we can see in the example apps, we compose the backend from an `init` value and an `subscriptions` function:
 
 ```Elm
-webServerMain : Platform.WebServer.WebServerConfig ()
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig ()
+webServiceMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
     }
@@ -200,7 +200,7 @@ The `SourceFiles` module provides access to the app source code files.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
+The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
@@ -266,7 +266,7 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: https://github.com/elm-time/elm-time/blob/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/elm-time/elm-time/blob/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
 
 ### `web-server.json`
 
@@ -327,7 +327,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/5b9728ea2ce0909097d211aea67e37f3db19c20d/implement/example-apps/docker-image-default-app  http://localhost:4000
+elm-time  deploy  --init-app-state  https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.

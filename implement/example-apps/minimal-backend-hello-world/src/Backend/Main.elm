@@ -1,32 +1,35 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
 import Bytes.Encode
-import Platform.WebServer
+import Platform.WebService
 
 
 type alias State =
     ()
 
 
-webServerMain : Platform.WebServer.WebServerConfig ()
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig ()
+webServiceMain =
     { init = ( (), [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent :
+    Platform.WebService.HttpRequestEventStruct
+    -> State
+    -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent state =
     let
         httpResponse =
@@ -40,7 +43,7 @@ updateForHttpRequestEvent httpRequestEvent state =
             }
     in
     ( state
-    , [ Platform.WebServer.RespondToHttpRequest
+    , [ Platform.WebService.RespondToHttpRequest
             { httpRequestId = httpRequestEvent.httpRequestId
             , response = httpResponse
             }
