@@ -82,7 +82,7 @@ exposeFunctionsToAdminModuleName =
 entryPoints : List EntryPointClass
 entryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
-        (Set.fromList [ "webServerMain", "backendMain" ])
+        (Set.fromList [ "webServiceMain", "webServerMain", "backendMain" ])
         (\functionDeclaration entryPointConfig ->
             loweredForBackendApp functionDeclaration entryPointConfig
                 >> Result.map
@@ -184,13 +184,13 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                         jsonConverterDeclarationsConfigs =
                                                             [ ( "jsonDecodeBackendEvent"
                                                               , { isDecoder = True
-                                                                , moduleName = [ "Backend", "Generated", "WebServerShimTypes" ]
+                                                                , moduleName = [ "Backend", "Generated", "WebServiceShimTypes" ]
                                                                 , declarationName = "BackendEvent"
                                                                 }
                                                               )
                                                             , ( "jsonEncodeBackendEventResponse"
                                                               , { isDecoder = False
-                                                                , moduleName = [ "Backend", "Generated", "WebServerShimTypes" ]
+                                                                , moduleName = [ "Backend", "Generated", "WebServiceShimTypes" ]
                                                                 , declarationName = "BackendEventResponseStruct"
                                                                 }
                                                               )
@@ -244,10 +244,10 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                                 , handlerExpression = """
 config_init
     |> (\\( appState, commands ) ->
-            Backend.Generated.WebServerShim.backendEventResponseFromRuntimeTasksAndSubscriptions
+            Backend.Generated.WebServiceShim.backendEventResponseFromRuntimeTasksAndSubscriptions
                 config_subscriptions
                 commands
-                (Backend.Generated.WebServerShim.initWebServerShimState appState)
+                (Backend.Generated.WebServiceShim.initWebServiceShimState appState)
         )
     |> Tuple.mapSecond jsonEncodeBackendEventResponse
     |> Tuple.mapFirst Just
@@ -275,7 +275,7 @@ config_init
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
     jsonDecodeBackendEvent
     (\\backendEvent ->
-        Backend.Generated.WebServerShim.processWebServerEvent config_subscriptions backendEvent
+        Backend.Generated.WebServiceShim.processWebServiceEvent config_subscriptions backendEvent
             >> Tuple.mapFirst Just
             >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Just)
             >> Ok
@@ -307,9 +307,25 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 { jsonDecodeAppState = jsonDecodeAppState
 , jsonEncodeAppState = jsonEncodeAppState
 , exposedFunctions = config_exposedFunctions
-, initAppShimState = Backend.Generated.WebServerShim.initWebServerShimState
+, initAppShimState = Backend.Generated.WebServiceShim.initWebServiceShimState
 , appStateLessShim = .stateLessFramework
 }"""
+
+                                                        platformModuleName =
+                                                            [ [ "Platform", "WebService" ]
+                                                            , [ "Platform", "WebServer" ]
+                                                            ]
+                                                                |> Set.fromList
+                                                                |> Set.intersect
+                                                                    (config.originalSourceModules
+                                                                        |> Dict.values
+                                                                        |> List.map .moduleName
+                                                                        |> Set.fromList
+                                                                    )
+                                                                |> Set.toList
+                                                                |> List.head
+                                                                |> Maybe.withDefault [ "Platform", "WebService" ]
+                                                                |> String.join "."
 
                                                         stateShimConfig : StateShimConfig
                                                         stateShimConfig =
@@ -323,13 +339,13 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
                                                             , appStateLessShimExpression = ""
                                                             , exposedFunctions = exposedFunctions
                                                             , supportingModules =
-                                                                [ webServerShimModuleText
-                                                                , webServerShimTypesModuleText
+                                                                [ webServiceShimModuleText { platformModuleName = platformModuleName }
+                                                                , webServiceShimTypesModuleText { platformModuleName = platformModuleName }
                                                                 ]
                                                             , rootModuleSupportingFunctions = rootModuleSupportingFunctions
                                                             , modulesToImport = modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
                                                             , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                                                                (++) "Backend.Generated.WebServerShimTypes.WebServerShimState "
+                                                                (++) "Backend.Generated.WebServiceShimTypes.WebServiceShimState "
                                                             , stateShimConfigExpression = stateShimConfigExpression
                                                             }
                                                     in
@@ -353,7 +369,7 @@ exposedFunctionsFromMigrationConfig _ =
         , handlerExpression = """
 Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument
     Json.Decode.value
-    (migrateFromStringPackageWebServerShim
+    (migrateFromStringPackageWebServiceShim
         >> Result.map
             (Tuple.mapFirst Just
                 >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Just)
@@ -398,15 +414,15 @@ parseMigrationConfig { originalSourceModules } =
                                     |> Dict.fromList
                             , rootModuleSupportingFunctions =
                                 [ """
-migrateFromStringPackageWebServerShim =
+migrateFromStringPackageWebServiceShim =
     Json.Decode.decodeValue jsonDecodeMigratePreviousState
         >> Result.mapError Json.Decode.errorToString
         >> Result.map """ ++ String.join "." (appStateMigrationInterfaceModuleName ++ [ appStateMigrationInterfaceFunctionName ]) ++ """
         >> Result.map
             (\\( appState, appCommands ) ->
                 appState
-                    |> Backend.Generated.WebServerShim.initWebServerShimState
-                    |> Backend.Generated.WebServerShim.backendEventResponseFromRuntimeTasksAndSubscriptions
+                    |> Backend.Generated.WebServiceShim.initWebServiceShimState
+                    |> Backend.Generated.WebServiceShim.backendEventResponseFromRuntimeTasksAndSubscriptions
                         config_subscriptions
                         appCommands
             )
@@ -869,18 +885,18 @@ buildExposedFunctionHandlerExpression config =
             }
 
 
-webServerShimModuleText : String
-webServerShimModuleText =
+webServiceShimModuleText : { platformModuleName : String } -> String
+webServiceShimModuleText { platformModuleName } =
     String.trimLeft """
-module Backend.Generated.WebServerShim exposing (..)
+module Backend.Generated.WebServiceShim exposing (..)
 
-import Backend.Generated.WebServerShimTypes exposing (..)
+import Backend.Generated.WebServiceShimTypes exposing (..)
 import Dict
-import Platform.WebServer
+import """ ++ platformModuleName ++ """ as PlatformWebService
 
 
-initWebServerShimState : appState -> WebServerShimState appState
-initWebServerShimState stateLessFramework =
+initWebServiceShimState : appState -> WebServiceShimState appState
+initWebServiceShimState stateLessFramework =
     { stateLessFramework = stateLessFramework
     , nextTaskIndex = 0
     , posixTimeMilli = 0
@@ -890,12 +906,12 @@ initWebServerShimState stateLessFramework =
     }
 
 
-processWebServerEvent :
-    (appState -> Platform.WebServer.Subscriptions appState)
-    -> Backend.Generated.WebServerShimTypes.BackendEvent
-    -> WebServerShimState appState
-    -> ( WebServerShimState appState, Backend.Generated.WebServerShimTypes.BackendEventResponseStruct )
-processWebServerEvent subscriptions hostEvent stateBefore =
+processWebServiceEvent :
+    (appState -> PlatformWebService.Subscriptions appState)
+    -> Backend.Generated.WebServiceShimTypes.BackendEvent
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, Backend.Generated.WebServiceShimTypes.BackendEventResponseStruct )
+processWebServiceEvent subscriptions hostEvent stateBefore =
     let
         maybeEventPosixTimeMilli =
             case hostEvent of
@@ -916,15 +932,15 @@ processWebServerEvent subscriptions hostEvent stateBefore =
                 Just eventPosixTimeMilli ->
                     { stateBefore | posixTimeMilli = max stateBefore.posixTimeMilli eventPosixTimeMilli }
     in
-    processWebServerEventLessRememberTime subscriptions hostEvent state
+    processWebServiceEventLessRememberTime subscriptions hostEvent state
 
 
-processWebServerEventLessRememberTime :
-    (appState -> Platform.WebServer.Subscriptions appState)
-    -> Backend.Generated.WebServerShimTypes.BackendEvent
-    -> WebServerShimState appState
-    -> ( WebServerShimState appState, Backend.Generated.WebServerShimTypes.BackendEventResponseStruct )
-processWebServerEventLessRememberTime subscriptions hostEvent stateBefore =
+processWebServiceEventLessRememberTime :
+    (appState -> PlatformWebService.Subscriptions appState)
+    -> Backend.Generated.WebServiceShimTypes.BackendEvent
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, Backend.Generated.WebServiceShimTypes.BackendEventResponseStruct )
+processWebServiceEventLessRememberTime subscriptions hostEvent stateBefore =
     let
         continueWithState newState =
             ( newState
@@ -1001,10 +1017,10 @@ processWebServerEventLessRememberTime subscriptions hostEvent stateBefore =
 
 
 backendEventResponseFromRuntimeTasksAndSubscriptions :
-    (appState -> Platform.WebServer.Subscriptions appState)
-    -> List (Platform.WebServer.Command appState)
-    -> WebServerShimState appState
-    -> ( WebServerShimState appState, BackendEventResponseStruct )
+    (appState -> PlatformWebService.Subscriptions appState)
+    -> List (PlatformWebService.Command appState)
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, BackendEventResponseStruct )
 backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBefore =
     tasks
         |> List.foldl
@@ -1022,9 +1038,9 @@ backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBe
 
 
 backendEventResponseFromRuntimeTask :
-    Platform.WebServer.Command appState
-    -> WebServerShimState appState
-    -> ( WebServerShimState appState, BackendEventResponseStruct )
+    PlatformWebService.Command appState
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, BackendEventResponseStruct )
 backendEventResponseFromRuntimeTask task stateBefore =
     let
         createTaskId stateBeforeCreateTaskId =
@@ -1042,13 +1058,13 @@ backendEventResponseFromRuntimeTask task stateBefore =
             )
     in
     case task of
-        Platform.WebServer.RespondToHttpRequest respondToHttpRequest ->
+        PlatformWebService.RespondToHttpRequest respondToHttpRequest ->
             ( stateBefore
             , passiveBackendEventResponse
                 |> withCompleteHttpResponsesAdded [ respondToHttpRequest ]
             )
 
-        Platform.WebServer.CreateVolatileProcess createVolatileProcess ->
+        PlatformWebService.CreateVolatileProcess createVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -1066,7 +1082,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                     ]
             )
 
-        Platform.WebServer.RequestToVolatileProcess requestToVolatileProcess ->
+        PlatformWebService.RequestToVolatileProcess requestToVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -1088,7 +1104,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
                     ]
             )
 
-        Platform.WebServer.TerminateVolatileProcess terminateVolatileProcess ->
+        PlatformWebService.TerminateVolatileProcess terminateVolatileProcess ->
             let
                 ( stateAfterCreateTaskId, taskId ) =
                     createTaskId stateBefore
@@ -1106,7 +1122,7 @@ backendEventResponseFromRuntimeTask task stateBefore =
             )
 
 
-backendEventResponseFromSubscriptions : Platform.WebServer.Subscriptions appState -> BackendEventResponseStruct
+backendEventResponseFromSubscriptions : PlatformWebService.Subscriptions appState -> BackendEventResponseStruct
 backendEventResponseFromSubscriptions subscriptions =
     { startTasks = []
     , completeHttpResponses = []
@@ -1130,7 +1146,7 @@ withStartTasksAdded startTasksToAdd responseBefore =
 
 
 withCompleteHttpResponsesAdded :
-    List Platform.WebServer.RespondToHttpRequestStruct
+    List PlatformWebService.RespondToHttpRequestStruct
     -> BackendEventResponseStruct
     -> BackendEventResponseStruct
 withCompleteHttpResponsesAdded httpResponsesToAdd responseBefore =
@@ -1161,32 +1177,32 @@ concatBackendEventResponse responses =
 """
 
 
-webServerShimTypesModuleText : String
-webServerShimTypesModuleText =
+webServiceShimTypesModuleText : { platformModuleName : String } -> String
+webServiceShimTypesModuleText { platformModuleName } =
     String.trimLeft """
-module Backend.Generated.WebServerShimTypes exposing (..)
+module Backend.Generated.WebServiceShimTypes exposing (..)
 
 import Dict
-import Platform.WebServer
+import """ ++ platformModuleName ++ """ as PlatformWebService
 
 
-type alias WebServerShimState appState =
+type alias WebServiceShimState appState =
     { stateLessFramework : appState
     , nextTaskIndex : Int
     , posixTimeMilli : Int
     , createVolatileProcessTasks :
         Dict.Dict
             TaskId
-            (Platform.WebServer.CreateVolatileProcessResult
+            (PlatformWebService.CreateVolatileProcessResult
              -> appState
-             -> ( appState, Platform.WebServer.Commands appState )
+             -> ( appState, PlatformWebService.Commands appState )
             )
     , requestToVolatileProcessTasks :
         Dict.Dict
             TaskId
-            (Platform.WebServer.RequestToVolatileProcessResult
+            (PlatformWebService.RequestToVolatileProcessResult
              -> appState
-             -> ( appState, Platform.WebServer.Commands appState )
+             -> ( appState, PlatformWebService.Commands appState )
             )
     , terminateVolatileProcessTasks : Dict.Dict TaskId ()
     }
@@ -1198,7 +1214,7 @@ type alias ExposedFunctionArguments =
 
 
 type BackendEvent
-    = HttpRequestEvent Platform.WebServer.HttpRequestEventStruct
+    = HttpRequestEvent PlatformWebService.HttpRequestEventStruct
     | TaskCompleteEvent TaskCompleteEventStruct
     | PosixTimeHasArrivedEvent { posixTimeMilli : Int }
 
@@ -1206,7 +1222,7 @@ type BackendEvent
 type alias BackendEventResponseStruct =
     { startTasks : List StartTaskStructure
     , notifyWhenPosixTimeHasArrived : Maybe { minimumPosixTimeMilli : Int }
-    , completeHttpResponses : List Platform.WebServer.RespondToHttpRequestStruct
+    , completeHttpResponses : List PlatformWebService.RespondToHttpRequestStruct
     }
 
 
@@ -1217,8 +1233,8 @@ type alias TaskCompleteEventStruct =
 
 
 type TaskResultStructure
-    = CreateVolatileProcessResponse (Result Platform.WebServer.CreateVolatileProcessErrorStruct Platform.WebServer.CreateVolatileProcessComplete)
-    | RequestToVolatileProcessResponse (Result Platform.WebServer.RequestToVolatileProcessError Platform.WebServer.RequestToVolatileProcessComplete)
+    = CreateVolatileProcessResponse (Result PlatformWebService.CreateVolatileProcessErrorStruct PlatformWebService.CreateVolatileProcessComplete)
+    | RequestToVolatileProcessResponse (Result PlatformWebService.RequestToVolatileProcessError PlatformWebService.RequestToVolatileProcessComplete)
     | CompleteWithoutResult
 
 
@@ -1231,7 +1247,7 @@ type alias StartTaskStructure =
 type Task
     = CreateVolatileProcess CreateVolatileProcessLessUpdateStruct
     | RequestToVolatileProcess RequestToVolatileProcessLessUpdateStruct
-    | TerminateVolatileProcess Platform.WebServer.TerminateVolatileProcessStruct
+    | TerminateVolatileProcess PlatformWebService.TerminateVolatileProcessStruct
 
 
 type alias CreateVolatileProcessLessUpdateStruct =

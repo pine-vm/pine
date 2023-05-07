@@ -81,14 +81,14 @@ backend_state_type_name_from_root_elm_module =
     [ ( "Without module name qualifier"
       , """module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 type alias State = { field_name : Int }
 
 
-webServerMain : ElmFullstack.BackendConfig State
-webServerMain =
+webServiceMain : ElmFullstack.BackendConfig State
+webServiceMain =
     { init = ( {}, [] )
     , subscriptions = subscriptions
     }
