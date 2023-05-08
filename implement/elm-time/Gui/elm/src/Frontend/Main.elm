@@ -391,7 +391,7 @@ viewAdminInterfaceConfig state config =
       ]
         |> List.map (Element.paragraph [])
         |> Element.column [ Element.spacing 5 ]
-    , [ Element.text "Apply Function on Database"
+    , [ Element.text "Database Functions"
             |> Element.el (Visuals.headingAttributes 3)
       , viewApplyFunctionOnDatabase state.applyFunction config
             |> Element.map SelectAndApplyFunctionEvent
