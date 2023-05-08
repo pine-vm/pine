@@ -589,13 +589,10 @@ viewPrepareApplyFunctionOnDatabase state exposedFunction =
                     ]
 
         commitResultingStateElement =
-            Element.Input.radio []
+            Element.Input.checkbox []
                 { onChange = UserInputSetCommitResultingStateEvent
-                , options =
-                    [ Element.Input.option False (Element.text "No")
-                    , Element.Input.option True (Element.text "Yes")
-                    ]
-                , selected = Just state.commitResultingState
+                , icon = Element.Input.defaultCheckbox
+                , checked = state.commitResultingState
                 , label =
                     Element.Input.labelLeft [ Element.padding 10 ]
                         (Element.text "Commit resulting state to database?")
