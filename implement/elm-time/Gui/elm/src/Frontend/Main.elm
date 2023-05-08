@@ -708,7 +708,7 @@ viewPrepareApplyFunctionOnDatabase state exposedFunction =
                                                     , Element.width Element.fill
                                                     ]
                             in
-                            [ [ Element.text "Succesfully applied function "
+                            [ [ Element.text "Successfully applied function "
                               , Element.text applicationRequest.functionName |> Element.el viewFunctionNameAttributes
                               ]
                                 |> Element.paragraph [ Element.Font.color successColor ]

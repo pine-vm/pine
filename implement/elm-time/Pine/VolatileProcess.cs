@@ -151,7 +151,7 @@ public class VolatileProcess
                 fromErr:
                 err => "Failed to load: " + err,
                 fromOk:
-                ok => "Succesfully loaded " + ok.Length + " assembly");
+                ok => "Successfully loaded " + ok.Length + " assembly");
 
         return
             resolution.HashSHA256Base16 switch

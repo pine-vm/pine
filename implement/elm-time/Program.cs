@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-07";
+    public static string AppVersionId => "2023-05-08";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1089,7 +1089,7 @@ public class Program
                             CommonConversion.StringBase16(PineValueHashTree.ComputeHash(aggregateComposition));
 
                         console.WriteLine(
-                            "Succesfully loaded " + namedDistinctScenarios.Count +
+                            "Successfully loaded " + namedDistinctScenarios.Count +
                             " distinct scenario(s) with an aggregate hash of " + aggregateCompositionHash + ".");
 
                         var exceptLoadingStopwatch = System.Diagnostics.Stopwatch.StartNew();
