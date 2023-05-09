@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
@@ -15,7 +15,7 @@ import Dict
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
-import Platform.WebServer
+import Platform.WebService
 import SHA1
 import Url
 
@@ -51,14 +51,14 @@ type alias UserProfile =
     }
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions state =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast =
@@ -75,7 +75,7 @@ subscriptions state =
     }
 
 
-processPendingHttpRequests : State -> ( State, Platform.WebServer.Commands State )
+processPendingHttpRequests : State -> ( State, Platform.WebService.Commands State )
 processPendingHttpRequests stateBefore =
     let
         ( state, httpResponses ) =
@@ -135,11 +135,11 @@ processPendingHttpRequests stateBefore =
                 |> List.foldl Dict.remove stateBefore.pendingHttpRequests
     in
     ( { state | pendingHttpRequests = pendingHttpRequests }
-    , List.map Platform.WebServer.RespondToHttpRequest httpResponses
+    , List.map Platform.WebService.RespondToHttpRequest httpResponses
     )
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         ( ( state, pendingHttpRequestsCmds ), directCmds ) =
@@ -151,7 +151,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     )
 
 
-updateForHttpRequestEventWithoutPendingHttpRequests : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEventWithoutPendingHttpRequests : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBeforeUpdatingTime =
     let
         stateBefore =
@@ -159,7 +159,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
 
         respondWithFrontendHtmlDocument { enableInspector } =
             ( stateBefore
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
@@ -210,7 +210,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                             }
                     in
                     ( stateBefore
-                    , [ Platform.WebServer.RespondToHttpRequest httpResponse ]
+                    , [ Platform.WebService.RespondToHttpRequest httpResponse ]
                     )
 
                 Ok requestFromUser ->
@@ -269,7 +269,7 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                             }
             in
             ( stateBefore
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -408,7 +408,7 @@ initUserProfile =
     { chosenName = "" }
 
 
-userSessionIdAndStateFromRequestOrCreateNew : Platform.WebServer.HttpRequestProperties -> State -> ( String, UserSessionState )
+userSessionIdAndStateFromRequestOrCreateNew : Platform.WebService.HttpRequestProperties -> State -> ( String, UserSessionState )
 userSessionIdAndStateFromRequestOrCreateNew httpRequest state =
     state |> getFirstMatchingUserSessionOrCreateNew (getSessionIdsFromHttpRequest httpRequest)
 
@@ -437,7 +437,7 @@ getFirstMatchingUserSessionOrCreateNew sessionIds state =
         |> Maybe.withDefault (state |> getNextUserSessionIdAndState)
 
 
-getSessionIdsFromHttpRequest : Platform.WebServer.HttpRequestProperties -> List String
+getSessionIdsFromHttpRequest : Platform.WebService.HttpRequestProperties -> List String
 getSessionIdsFromHttpRequest httpRequest =
     let
         cookies =
@@ -541,7 +541,7 @@ encodeStringToBytes =
     Bytes.Encode.string >> Bytes.Encode.encode
 
 
-addCookieUserSessionId : String -> Platform.WebServer.HttpResponse -> Platform.WebServer.HttpResponse
+addCookieUserSessionId : String -> Platform.WebService.HttpResponse -> Platform.WebService.HttpResponse
 addCookieUserSessionId userSessionId httpResponse =
     let
         cookieHeader =

@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Array
@@ -13,7 +13,7 @@ import CompilationInterface.GenerateJsonConverters
 import Dict
 import Json.Encode
 import ListDict
-import Platform.WebServer
+import Platform.WebService
 import Set
 import Url
 
@@ -22,21 +22,24 @@ type alias State =
     Backend.State.State
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent :
+    Platform.WebService.HttpRequestEventStruct
+    -> State
+    -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -75,7 +78,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 }
     in
     ( state
-    , [ Platform.WebServer.RespondToHttpRequest { httpRequestId = httpRequestEvent.httpRequestId, response = httpResponse }
+    , [ Platform.WebService.RespondToHttpRequest
+            { httpRequestId = httpRequestEvent.httpRequestId, response = httpResponse }
       ]
     )
 

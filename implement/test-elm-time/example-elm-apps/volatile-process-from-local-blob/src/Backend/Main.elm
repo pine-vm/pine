@@ -1,35 +1,35 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
 import Bytes.Encode
 import CompilationInterface.SourceFiles
-import Platform.WebServer
+import Platform.WebService
 
 
 type alias State =
     { volatileProcessId : Maybe String
-    , pendingHttpRequest : Maybe Platform.WebServer.HttpRequestEventStruct
+    , pendingHttpRequest : Maybe Platform.WebService.HttpRequestEventStruct
     }
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( { volatileProcessId = Nothing, pendingHttpRequest = Nothing }, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -38,7 +38,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     ( state, state |> volatileProcessCmdsFromState )
 
 
-volatileProcessCmdsFromState : State -> Platform.WebServer.Commands State
+volatileProcessCmdsFromState : State -> Platform.WebService.Commands State
 volatileProcessCmdsFromState state =
     case state.pendingHttpRequest of
         Nothing ->
@@ -47,14 +47,14 @@ volatileProcessCmdsFromState state =
         Just pendingHttpRequest ->
             case state.volatileProcessId of
                 Nothing ->
-                    [ Platform.WebServer.CreateVolatileProcess
+                    [ Platform.WebService.CreateVolatileProcess
                         { programCode = CompilationInterface.SourceFiles.file____src_Backend_VolatileProcess_csx.utf8
                         , update = updateForCreateVolatileProcess pendingHttpRequest
                         }
                     ]
 
                 Just volatileProcessId ->
-                    [ Platform.WebServer.RequestToVolatileProcess
+                    [ Platform.WebService.RequestToVolatileProcess
                         { processId = volatileProcessId
                         , request = ""
                         , update = updateForRequestToVolatileProcess pendingHttpRequest
@@ -62,12 +62,12 @@ volatileProcessCmdsFromState state =
                     ]
 
 
-updateForCreateVolatileProcess : Platform.WebServer.HttpRequestEventStruct -> Platform.WebServer.CreateVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
+updateForCreateVolatileProcess : Platform.WebService.HttpRequestEventStruct -> Platform.WebService.CreateVolatileProcessResult -> State -> ( State, Platform.WebService.Commands State )
 updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse stateBefore =
     case createVolatileProcessResponse of
         Err { exceptionToString } ->
             ( stateBefore
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = pendingHttpRequest.httpRequestId
                     , response = httpResponseInternalServerError ("Error creating volatile process: " ++ exceptionToString)
                     }
@@ -82,12 +82,12 @@ updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse 
             ( state, state |> volatileProcessCmdsFromState )
 
 
-updateForRequestToVolatileProcess : Platform.WebServer.HttpRequestEventStruct -> Platform.WebServer.RequestToVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
+updateForRequestToVolatileProcess : Platform.WebService.HttpRequestEventStruct -> Platform.WebService.RequestToVolatileProcessResult -> State -> ( State, Platform.WebService.Commands State )
 updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessResponse stateBefore =
     let
         httpResponse =
             case requestToVolatileProcessResponse of
-                Err Platform.WebServer.ProcessNotFound ->
+                Err Platform.WebService.ProcessNotFound ->
                     httpResponseInternalServerError "Error running in volatile process: ProcessNotFound"
 
                 Ok requestToVolatileProcessComplete ->
@@ -102,7 +102,7 @@ updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessRes
                             }
     in
     ( { stateBefore | pendingHttpRequest = Nothing }
-    , [ Platform.WebServer.RespondToHttpRequest
+    , [ Platform.WebService.RespondToHttpRequest
             { httpRequestId = pendingHttpRequest.httpRequestId
             , response = httpResponse
             }
@@ -110,7 +110,7 @@ updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessRes
     )
 
 
-httpResponseInternalServerError : String -> Platform.WebServer.HttpResponse
+httpResponseInternalServerError : String -> Platform.WebService.HttpResponse
 httpResponseInternalServerError errorMessage =
     { statusCode = 500
     , bodyAsBase64 = bodyFromString errorMessage

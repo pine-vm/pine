@@ -1,28 +1,28 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
 import Bytes
 import Bytes.Encode
-import Platform.WebServer
+import Platform.WebService
 
 
 type alias State =
     { posixTimeMilli : Int
-    , httpRequestsToRespondTo : List Platform.WebServer.HttpRequestEventStruct
+    , httpRequestsToRespondTo : List Platform.WebService.HttpRequestEventStruct
     }
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions state =
     let
         nextCompletionPosixTimeMilli =
@@ -42,7 +42,7 @@ subscriptions state =
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -54,7 +54,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     state |> updateForHttpResponses
 
 
-updateForHttpResponses : State -> ( State, Platform.WebServer.Commands State )
+updateForHttpResponses : State -> ( State, Platform.WebService.Commands State )
 updateForHttpResponses state =
     ( state
     , state
@@ -78,17 +78,17 @@ updateForHttpResponses state =
                     }
                 }
             )
-        |> List.map Platform.WebServer.RespondToHttpRequest
+        |> List.map Platform.WebService.RespondToHttpRequest
     )
 
 
-getHttpRequestsWithCompletionTimes : State -> List ( Platform.WebServer.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
+getHttpRequestsWithCompletionTimes : State -> List ( Platform.WebService.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
 getHttpRequestsWithCompletionTimes state =
     state.httpRequestsToRespondTo
         |> List.map (\requestEvent -> ( requestEvent, completionTimeForHttpRequest requestEvent ))
 
 
-completionTimeForHttpRequest : Platform.WebServer.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
+completionTimeForHttpRequest : Platform.WebService.HttpRequestEventStruct -> { completionPosixTimeMilli : Int }
 completionTimeForHttpRequest httpRequest =
     let
         delayMilliseconds =

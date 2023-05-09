@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
@@ -8,7 +8,7 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import Json.Decode
-import Platform.WebServer
+import Platform.WebService
 
 
 type alias State =
@@ -19,21 +19,21 @@ type alias CounterEvent =
     { addition : Int }
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( 0, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         ( state, result ) =
@@ -67,7 +67,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
     in
     ( state
-    , [ Platform.WebServer.RespondToHttpRequest httpResponse ]
+    , [ Platform.WebService.RespondToHttpRequest httpResponse ]
     )
 
 

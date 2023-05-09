@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Backend.Route
@@ -14,21 +14,21 @@ import Dict
 import FileTree
 import Flate
 import MonacoHtml
-import Platform.WebServer
+import Platform.WebService
 import Set
 import Url
 
 
 type Event
-    = HttpRequestEvent Platform.WebServer.HttpRequestEventStruct
-    | CreateVolatileProcessResponse Platform.WebServer.CreateVolatileProcessResult
-    | RequestToVolatileProcessResponse String Platform.WebServer.RequestToVolatileProcessResult
+    = HttpRequestEvent Platform.WebService.HttpRequestEventStruct
+    | CreateVolatileProcessResponse Platform.WebService.CreateVolatileProcessResult
+    | RequestToVolatileProcessResponse String Platform.WebService.RequestToVolatileProcessResult
 
 
 type alias State =
     { posixTimeMilli : Int
     , volatileProcessesIds : Set.Set String
-    , pendingHttpRequests : List Platform.WebServer.HttpRequestEventStruct
+    , pendingHttpRequests : List Platform.WebService.HttpRequestEventStruct
     , pendingTasksForRequestVolatileProcess : Dict.Dict String { volatileProcessId : String, startPosixTimeMilli : Int }
     }
 
@@ -43,8 +43,8 @@ requestToVolatileProcessTimeoutMilliseconds =
     1000 * 30
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
@@ -59,19 +59,19 @@ initState =
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent =
     processEvent (HttpRequestEvent httpRequestEvent)
 
 
-processEvent : Event -> State -> ( State, Platform.WebServer.Commands State )
+processEvent : Event -> State -> ( State, Platform.WebService.Commands State )
 processEvent hostEvent stateBefore =
     let
         ( ( state, toVolatileProcessesCmds ), responseCmds ) =
@@ -83,12 +83,12 @@ processEvent hostEvent stateBefore =
     )
 
 
-updatePartRequestsToVolatileProcess : State -> ( State, Platform.WebServer.Commands State )
+updatePartRequestsToVolatileProcess : State -> ( State, Platform.WebService.Commands State )
 updatePartRequestsToVolatileProcess stateBefore =
     let
         tasksToEnsureEnoughVolatileProcessesCreated =
             if Set.size stateBefore.volatileProcessesIds < parallelVolatileProcessesCount then
-                [ Platform.WebServer.CreateVolatileProcess
+                [ Platform.WebService.CreateVolatileProcess
                     { programCode = VolatileProcess.volatileProcessProgramCode
                     , update =
                         \createVolatileProcessResult ->
@@ -140,7 +140,7 @@ updatePartRequestsToVolatileProcess stateBefore =
                 Just volatileProcessId ->
                     let
                         task =
-                            Platform.WebServer.RequestToVolatileProcess
+                            Platform.WebService.RequestToVolatileProcess
                                 { processId = volatileProcessId
                                 , request =
                                     httpRequestEvent.request.bodyAsBase64
@@ -166,7 +166,7 @@ updatePartRequestsToVolatileProcess stateBefore =
                     )
 
 
-updateExceptRequestsToVolatileProcess : Event -> State -> ( State, Platform.WebServer.Commands State )
+updateExceptRequestsToVolatileProcess : Event -> State -> ( State, Platform.WebService.Commands State )
 updateExceptRequestsToVolatileProcess hostEvent stateBefore =
     case hostEvent of
         HttpRequestEvent httpRequestEvent ->
@@ -180,9 +180,9 @@ updateExceptRequestsToVolatileProcess hostEvent stateBefore =
 
 
 updateForHttpRequestEventExceptRequestsToVolatileProcess :
-    Platform.WebServer.HttpRequestEventStruct
+    Platform.WebService.HttpRequestEventStruct
     -> State
-    -> ( State, Platform.WebServer.Commands State )
+    -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateBeforeUpdatingTime =
     let
         stateBefore =
@@ -225,7 +225,7 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
 
         continueWithStaticHttpResponse httpResponse =
             ( stateBefore
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -301,9 +301,9 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
 
 updateForRequestToVolatileProcessResult :
     String
-    -> Platform.WebServer.RequestToVolatileProcessResult
+    -> Platform.WebService.RequestToVolatileProcessResult
     -> State
-    -> ( State, Platform.WebServer.Commands State )
+    -> ( State, Platform.WebService.Commands State )
 updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult stateBefore =
     case
         stateBefore.pendingHttpRequests
@@ -338,7 +338,7 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
 
                         Just pendingTask ->
                             case requestToVolatileProcessResult of
-                                Err Platform.WebServer.ProcessNotFound ->
+                                Err Platform.WebService.ProcessNotFound ->
                                     ( httpResponseInternalServerError
                                         ("Error: Volatile process '"
                                             ++ pendingTask.volatileProcessId
@@ -396,7 +396,7 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
                 , volatileProcessesIds = volatileProcessesIds
                 , pendingTasksForRequestVolatileProcess = stateBefore.pendingTasksForRequestVolatileProcess |> Dict.remove taskId
               }
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -405,9 +405,9 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
 
 
 updateForCreateVolatileProcessResult :
-    Platform.WebServer.CreateVolatileProcessResult
+    Platform.WebService.CreateVolatileProcessResult
     -> State
-    -> ( State, Platform.WebServer.Commands State )
+    -> ( State, Platform.WebService.Commands State )
 updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
     case createVolatileProcessResult of
         Err createVolatileProcessError ->
@@ -431,7 +431,7 @@ updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
                             )
             in
             ( { stateBefore | pendingHttpRequests = [] }
-            , List.map Platform.WebServer.RespondToHttpRequest httpResponses
+            , List.map Platform.WebService.RespondToHttpRequest httpResponses
             )
 
         Ok { processId } ->
@@ -442,7 +442,7 @@ updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
             )
 
 
-taskIdForHttpRequest : Platform.WebServer.HttpRequestEventStruct -> String
+taskIdForHttpRequest : Platform.WebService.HttpRequestEventStruct -> String
 taskIdForHttpRequest httpRequestEvent =
     "http-request-api-" ++ httpRequestEvent.httpRequestId
 

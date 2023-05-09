@@ -1,6 +1,6 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
@@ -9,7 +9,7 @@ import CompilationInterface.ElmMake
 import CompilationInterface.GenerateJsonConverters
 import Dict
 import Json.Encode
-import Platform.WebServer
+import Platform.WebService
 import Url
 import Url.Parser exposing ((</>))
 
@@ -22,8 +22,8 @@ type Route
     = EntryRoute (Maybe Int)
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init =
         ( { store = Dict.empty }
         , []
@@ -32,14 +32,14 @@ webServerMain =
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         staticContentHttpHeaders { contentType, contentEncoding } =
@@ -74,7 +74,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
         continueWithStaticHttpResponse httpResponse =
             ( stateBefore
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response = httpResponse
                     }
@@ -95,7 +95,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                 |> Dict.map (\_ entry -> { length = (String.length entry.entryBase64 // 4) * 3 })
                     in
                     ( stateBefore
-                    , [ Platform.WebServer.RespondToHttpRequest
+                    , [ Platform.WebService.RespondToHttpRequest
                             { httpRequestId = httpRequestEvent.httpRequestId
                             , response =
                                 { statusCode = 200
@@ -118,7 +118,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                             case stateBefore.store |> Dict.get entryId of
                                 Nothing ->
                                     ( stateBefore
-                                    , [ Platform.WebServer.RespondToHttpRequest
+                                    , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 404
@@ -131,7 +131,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                                 Just entry ->
                                     ( stateBefore
-                                    , [ Platform.WebServer.RespondToHttpRequest
+                                    , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 httpResponseOkWithBodyAsBase64 (Just entry.entryBase64)
@@ -147,7 +147,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                             case httpRequestEvent.request.bodyAsBase64 of
                                 Nothing ->
                                     ( stateBefore
-                                    , [ Platform.WebServer.RespondToHttpRequest
+                                    , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 400
@@ -164,7 +164,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                             stateBefore.store |> Dict.insert entryId { entryBase64 = entryContentBase64 }
                                     in
                                     ( { stateBefore | store = store }
-                                    , [ Platform.WebServer.RespondToHttpRequest
+                                    , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 200
@@ -177,7 +177,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                         _ ->
                             ( stateBefore
-                            , [ Platform.WebServer.RespondToHttpRequest
+                            , [ Platform.WebService.RespondToHttpRequest
                                     { httpRequestId = httpRequestEvent.httpRequestId
                                     , response =
                                         { statusCode = 405

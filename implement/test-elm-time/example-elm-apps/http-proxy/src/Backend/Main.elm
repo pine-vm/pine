@@ -1,23 +1,23 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Backend.HttpViaVolatileProcess as HttpViaVolatileProcess
 import Base64
 import Bytes.Encode
 import Json.Decode
-import Platform.WebServer
+import Platform.WebService
 
 
 type alias State =
     { createVolatileProcessResult : Maybe (Result String { processId : String })
-    , httpRequestToForward : Maybe Platform.WebServer.HttpRequestEventStruct
+    , httpRequestToForward : Maybe Platform.WebService.HttpRequestEventStruct
     }
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init =
         ( { createVolatileProcessResult = Nothing
           , httpRequestToForward = Nothing
@@ -28,14 +28,14 @@ webServerMain =
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent event stateBefore =
     let
         state =
@@ -44,7 +44,7 @@ updateForHttpRequestEvent event stateBefore =
     ( state, state |> httpRequestForwardRequestsFromState )
 
 
-httpRequestForwardRequestsFromState : State -> Platform.WebServer.Commands State
+httpRequestForwardRequestsFromState : State -> Platform.WebService.Commands State
 httpRequestForwardRequestsFromState state =
     case state.httpRequestToForward of
         Nothing ->
@@ -53,14 +53,14 @@ httpRequestForwardRequestsFromState state =
         Just httpRequestToForward ->
             case state.createVolatileProcessResult of
                 Nothing ->
-                    [ Platform.WebServer.CreateVolatileProcess
+                    [ Platform.WebService.CreateVolatileProcess
                         { programCode = HttpViaVolatileProcess.programCode
                         , update = updateForCreateVolatileProcess
                         }
                     ]
 
                 Just (Err createVolatileProcessErr) ->
-                    [ Platform.WebServer.RespondToHttpRequest
+                    [ Platform.WebService.RespondToHttpRequest
                         { httpRequestId = httpRequestToForward.httpRequestId
                         , response =
                             { statusCode = 500
@@ -84,7 +84,7 @@ httpRequestForwardRequestsFromState state =
                     in
                     case maybeForwardTo of
                         Nothing ->
-                            [ Platform.WebServer.RespondToHttpRequest
+                            [ Platform.WebService.RespondToHttpRequest
                                 { httpRequestId = httpRequestToForward.httpRequestId
                                 , response =
                                     { statusCode = 400
@@ -107,7 +107,7 @@ httpRequestForwardRequestsFromState state =
                                     , bodyAsBase64 = httpRequestToForward.request.bodyAsBase64
                                     }
                             in
-                            [ Platform.WebServer.RequestToVolatileProcess
+                            [ Platform.WebService.RequestToVolatileProcess
                                 { processId = createVolatileProcessOk.processId
                                 , request = HttpViaVolatileProcess.requestToVolatileProcess httpRequest
                                 , update = updateForRequestToVolatileProcess
@@ -115,7 +115,7 @@ httpRequestForwardRequestsFromState state =
                             ]
 
 
-updateForCreateVolatileProcess : Platform.WebServer.CreateVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
+updateForCreateVolatileProcess : Platform.WebService.CreateVolatileProcessResult -> State -> ( State, Platform.WebService.Commands State )
 updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
     let
         createVolatileProcessResult =
@@ -128,7 +128,7 @@ updateForCreateVolatileProcess createVolatileProcessResponse stateBefore =
     ( state, state |> httpRequestForwardRequestsFromState )
 
 
-updateForRequestToVolatileProcess : Platform.WebServer.RequestToVolatileProcessResult -> State -> ( State, Platform.WebServer.Commands State )
+updateForRequestToVolatileProcess : Platform.WebService.RequestToVolatileProcessResult -> State -> ( State, Platform.WebService.Commands State )
 updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
     case stateBefore.httpRequestToForward of
         Nothing ->
@@ -138,7 +138,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
             let
                 httpResponse =
                     case requestToVolatileProcessResponse of
-                        Err Platform.WebServer.ProcessNotFound ->
+                        Err Platform.WebService.ProcessNotFound ->
                             { statusCode = 500
                             , bodyAsBase64 = bodyBase64FromString "Error running in volatile process: ProcessNotFound"
                             , headersToAdd = []
@@ -179,7 +179,7 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                             }
             in
             ( { stateBefore | httpRequestToForward = Nothing }
-            , [ Platform.WebServer.RespondToHttpRequest
+            , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = httpRequestToForward.httpRequestId
                     , response = httpResponse
                     }

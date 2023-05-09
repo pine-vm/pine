@@ -1,37 +1,37 @@
 module Backend.Main exposing
     ( State
-    , webServerMain
+    , webServiceMain
     )
 
 import Base64
 import Bytes.Encode
 import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
-import Platform.WebServer
+import Platform.WebService
 import Url
 
 
 type alias State =
     { httpRequestsCount : Int
-    , lastHttpRequests : List Platform.WebServer.HttpRequestEventStruct
+    , lastHttpRequests : List Platform.WebService.HttpRequestEventStruct
     }
 
 
-webServerMain : Platform.WebServer.WebServerConfig State
-webServerMain =
+webServiceMain : Platform.WebService.WebServiceConfig State
+webServiceMain =
     { init = ( initState, [] )
     , subscriptions = subscriptions
     }
 
 
-subscriptions : State -> Platform.WebServer.Subscriptions State
+subscriptions : State -> Platform.WebService.Subscriptions State
 subscriptions _ =
     { httpRequest = updateForHttpRequestEvent
     , posixTimeIsPast = Nothing
     }
 
 
-updateForHttpRequestEvent : Platform.WebServer.HttpRequestEventStruct -> State -> ( State, Platform.WebServer.Commands State )
+updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
@@ -67,7 +67,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 }
     in
     ( state
-    , [ Platform.WebServer.RespondToHttpRequest
+    , [ Platform.WebService.RespondToHttpRequest
             { httpRequestId = httpRequestEvent.httpRequestId
             , response = httpResponse
             }
