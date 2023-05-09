@@ -7,6 +7,9 @@ import Browser.Navigation
 import Element
 import Element.Background
 import Element.Font
+import FontAwesome
+import FontAwesome.Brands
+import FontAwesome.Brands.Definitions
 import FontAwesome.Styles
 import Frontend.Page.Download
 import Frontend.Page.Home
@@ -297,7 +300,7 @@ viewFooter _ =
             , Element.spacing Visuals.defaultFontSize
             , Element.padding (Visuals.defaultFontSize * 2)
             ]
-    , [ Element.link
+    , [ [ Element.link
             [ Element.pointer ]
             { url = "https://elm-time.org"
             , label =
@@ -306,10 +309,16 @@ viewFooter _ =
                     , description = "Elm-Time Icon"
                     }
             }
-      , Element.text "Elm-Time"
-            |> Element.el [ Element.centerY ]
+        , Element.text "Elm-Time"
+            |> Element.el []
+        ]
+            |> Element.row [ Element.spacing Visuals.defaultFontSize ]
+      , weblinksElement
       ]
-        |> Element.row [ Element.centerX, Element.spacing Visuals.defaultFontSize ]
+        |> Element.row
+            [ Element.centerX
+            , Element.spacing (Visuals.defaultFontSize * 2)
+            ]
     ]
         |> Element.column
             [ Element.width Element.fill
@@ -323,6 +332,38 @@ viewFooter _ =
             [ Element.width Element.fill
             , Element.Background.color Visuals.footerBackgroundColor
             , Element.alignBottom
+            ]
+
+
+weblinksElement : Element.Element e
+weblinksElement =
+    [ ( FontAwesome.Brands.github, "https://github.com/elm-time/elm-time" )
+    , ( FontAwesome.Brands.discord, "https://discord.gg/UEYUj3MXZf" )
+    , ( FontAwesome.Brands.twitter, "https://twitter.com/ElmTime" )
+    ]
+        |> List.map
+            (\( icon, url ) ->
+                Element.link
+                    [ Element.pointer
+                    , Element.Font.color (Element.rgb 0 0 0)
+                    , Element.alpha 0.6
+                    , Element.mouseOver
+                        [ Element.alpha 1
+                        ]
+                    ]
+                    { url = url
+                    , label =
+                        icon
+                            |> FontAwesome.view
+                            |> Element.html
+                            |> Element.el
+                                [ Element.Font.size (Visuals.defaultFontSize * 2)
+                                , Element.padding 4
+                                ]
+                    }
+            )
+        |> Element.row
+            [ Element.spacing Visuals.defaultFontSize
             ]
 
 
