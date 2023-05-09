@@ -313,9 +313,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         var aggregateLogRecordsResult =
             compositionLogRecords.Aggregate(
                 seed: Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(initialProcessRepresentation),
-                func: (intermediateResult, compositionLogRecorcd) =>
+                func: (intermediateResult, compositionLogRecord) =>
                 intermediateResult.AndThen(intermediateOk =>
-                integrateCompositionLogRecord(intermediateOk, compositionLogRecorcd)));
+                integrateCompositionLogRecord(intermediateOk, compositionLogRecord)));
 
         return
             aggregateLogRecordsResult
@@ -734,7 +734,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         TestContinueWithCompositionEvent(
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
             IFileStoreReader fileStoreReader,
-            Action<string>? logger = null)
+            Action<string>? logger = null,
+            Func<IJsEngine>? overrideJsEngineFactory = null)
     {
         var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
             originalFileStore: fileStoreReader,
@@ -745,7 +746,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             return
                 LoadFromStoreAndRestoreProcess(
                     new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
-                    logger: message => logger?.Invoke(message))
+                    logger: message => logger?.Invoke(message),
+                    overrideJsEngineFactory: overrideJsEngineFactory)
                 .Map(restoreOk => projectionResult);
         }
         catch (Exception e)

@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-08";
+    public static string AppVersionId => "2023-05-09";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -345,11 +345,22 @@ public class Program
                         processStoreFileStore.SetFileContent(file.Key.ToImmutableList(), file.Value.ToArray());
                 }
 
+                var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
+
+                var jsEngineFactory =
+                    elmEngineType switch
+                    {
+                        ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJintOptimizedForElmApps.Create),
+                        ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
+
+                        object other => throw new NotImplementedException("Engine type not implemented here: " + other)
+                    };
+
                 var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
                 var deployOptionValue = deployOption.Value();
 
-                if (deployOptionValue != null)
+                if (deployOptionValue is not null)
                 {
                     Console.WriteLine("Loading app config to deploy...");
 
@@ -387,23 +398,13 @@ public class Program
 
                     var testDeployResult = Platform.WebServer.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                         compositionLogEvent: compositionLogEvent,
-                        fileStoreReader: processStoreFileStore)
+                        fileStoreReader: processStoreFileStore,
+                        overrideJsEngineFactory: jsEngineFactory)
                     .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
 
                     foreach (var (filePath, fileContent) in testDeployResult.projectedFiles)
                         processStoreFileStore.SetFileContent(filePath, fileContent);
                 }
-
-                var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
-
-                var jsEngineFactory =
-                    elmEngineType switch
-                    {
-                        ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJintOptimizedForElmApps.Create),
-                        ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
-
-                        object other => throw new NotImplementedException("Engine type not implemented here: " + other)
-                    };
 
                 var webHostBuilder =
                     Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
