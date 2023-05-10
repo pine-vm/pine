@@ -3,7 +3,7 @@ using Pine.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ElmTime.Platform.WebServer.InterfaceToHost;
+namespace ElmTime.Platform.WebService.InterfaceToHost;
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record BackendEventStruct

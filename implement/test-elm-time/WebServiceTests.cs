@@ -1,4 +1,4 @@
-using ElmTime.Platform.WebServer;
+using ElmTime.Platform.WebService;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -18,7 +18,7 @@ using static MoreLinq.Extensions.BatchExtension;
 namespace TestElmTime;
 
 [TestClass]
-public class TestWebServer
+public class WebServiceTests
 {
     [TestMethod]
     public void Web_host_stores_process_reduction_every_ten_minutes_by_default()
@@ -180,9 +180,9 @@ public class TestWebServer
                 .ToList();
 
         var deploymentFiles =
-            TestSetup.WithWebServerConfigJson(
+            TestSetup.WithWebServiceConfigJson(
                 TestSetup.CounterElmWebApp,
-                new WebServerConfigJson
+                new WebServiceConfigJson
                 (
                     singleRateLimitWindowPerClientIPv4Address: new RateLimitWindow
                     (
@@ -200,7 +200,7 @@ public class TestWebServer
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
             .SelectMany(processEvent => processEvent switch
             {
-                ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
+                ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
                 httpRequestEvent.Struct.request.bodyAsBase64
                 .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64)).WithDefault(ImmutableList<string>.Empty),
 
@@ -285,9 +285,9 @@ public class TestWebServer
         const int requestSizeLimit = 20_000;
 
         var deploymentFiles =
-            TestSetup.WithWebServerConfigJson(
+            TestSetup.WithWebServiceConfigJson(
                 TestSetup.StringBuilderElmWebApp,
-                new WebServerConfigJson
+                new WebServiceConfigJson
                 {
                     httpRequestEventSizeLimit = requestSizeLimit,
                 });
@@ -299,7 +299,7 @@ public class TestWebServer
             testSetup.EnumerateStoredUpdateElmAppStateForEvents()
             .SelectMany(processEvent => processEvent switch
             {
-                ElmTime.Platform.WebServer.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
+                ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
                 httpRequestEvent.Struct.request.bodyAsBase64
                 .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64))
                 .WithDefault(ImmutableList<string>.Empty),
@@ -512,7 +512,7 @@ public class TestWebServer
             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
             var echoRequestStructure =
-                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.HttpRequest>(responseContentString)!;
+                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebService.InterfaceToHost.HttpRequest>(responseContentString)!;
 
             Assert.AreEqual(
                 Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
@@ -554,7 +554,7 @@ public class TestWebServer
             var responseContentString = response.Content.ReadAsStringAsync().Result;
 
             var echoRequestStructure =
-                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebServer.InterfaceToHost.HttpRequest>(responseContentString)!;
+                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebService.InterfaceToHost.HttpRequest>(responseContentString)!;
 
             var observedContentType =
                 echoRequestStructure.headers
@@ -935,7 +935,7 @@ public class TestWebServer
         }
 
         var processVersionAfterFirstBatch =
-            ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
+            ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
                 testSetup
                 .BuildProcessStoreReaderInFileDirectory()
                 .EnumerateSerializedCompositionLogRecordsReverse().First());
@@ -1344,7 +1344,7 @@ public class TestWebServer
 
         using (var restoredProcess =
             PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
-                new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
+                new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(testDirectory)),
                     logger: null)
             .Extract(err => throw new Exception(err)).process)

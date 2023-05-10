@@ -1,5 +1,5 @@
 using ElmTime;
-using ElmTime.Platform.WebServer;
+using ElmTime.Platform.WebService;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -60,17 +60,17 @@ public class TestSetup
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
        GetElmAppFromExampleName("http-proxy");
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServerConfigJson(
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServiceConfigJson(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalDeploymentFiles,
-        WebServerConfigJson jsonStructure)
+        WebServiceConfigJson jsonStructure)
     {
         return
             jsonStructure == null ?
-            originalDeploymentFiles.RemoveRange(StartupAdminInterface.WebServerConfigFilePathAlternatives)
+            originalDeploymentFiles.RemoveRange(StartupAdminInterface.WebServiceConfigFilePathAlternatives)
             :
             originalDeploymentFiles
             .SetItem(
-                StartupAdminInterface.WebServerConfigFilePathDefault,
+                StartupAdminInterface.WebServiceConfigFilePathDefault,
                 System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 

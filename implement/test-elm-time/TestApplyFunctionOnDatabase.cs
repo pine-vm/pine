@@ -49,7 +49,7 @@ public class TestApplyFunctionOnDatabase
             {
                 var applyFunctionResponse =
                     await adminClient.PostAsJsonAsync(
-                        ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction,
+                        ElmTime.Platform.WebService.StartupAdminInterface.PathApiApplyDatabaseFunction,
                         new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                             functionName: "Backend.ExposeFunctionsToAdmin.addToCounter",
                             serializedArgumentsJson: ImmutableList.Create(17.ToString()),
@@ -71,7 +71,7 @@ public class TestApplyFunctionOnDatabase
 
                 var applyFunctionResponse =
                     await adminClient.PostAsJsonAsync(
-                        ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction,
+                        ElmTime.Platform.WebService.StartupAdminInterface.PathApiApplyDatabaseFunction,
                         new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                             functionName: "Backend.ExposeFunctionsToAdmin.addToCounter",
                             serializedArgumentsJson: ImmutableList.Create(additionViaAdminInterface.ToString()),
@@ -148,7 +148,7 @@ public class TestApplyFunctionOnDatabase
         {
             var applyFunctionResponse =
                 await adminClient.PostAsJsonAsync(
-                    ElmTime.Platform.WebServer.StartupAdminInterface.PathApiApplyDatabaseFunction,
+                    ElmTime.Platform.WebService.StartupAdminInterface.PathApiApplyDatabaseFunction,
                     new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.customUsageReport",
                         serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Serialize("Hello world")),
@@ -198,7 +198,7 @@ public class TestApplyFunctionOnDatabase
         testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(adminClient);
 
         var listFunctionsResponse =
-            await adminClient.GetAsync(ElmTime.Platform.WebServer.StartupAdminInterface.PathApiListDatabaseFunctions);
+            await adminClient.GetAsync(ElmTime.Platform.WebService.StartupAdminInterface.PathApiListDatabaseFunctions);
 
         var listFunctionsResponseContent = await listFunctionsResponse.Content.ReadAsStringAsync();
 

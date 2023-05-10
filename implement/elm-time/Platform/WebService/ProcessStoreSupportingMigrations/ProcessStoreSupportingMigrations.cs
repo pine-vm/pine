@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
+namespace ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 
 public record FileStoreReaderProjectionResult(
     IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles,

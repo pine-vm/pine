@@ -9,7 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace ElmTime.Platform.WebServer;
+namespace ElmTime.Platform.WebService;
 
 public static class Asp
 {
@@ -23,12 +23,12 @@ public static class Asp
         services.AddSingleton(new ClientsRateLimitStateContainer());
     }
 
-    public static async Task MiddlewareFromWebServerConfig(
-        WebServerConfigJson? serverConfig, HttpContext context, Func<Task> next) =>
-        await RateLimitMiddlewareFromWebServerConfig(serverConfig, context, next);
+    public static async Task MiddlewareFromWebServiceConfig(
+        WebServiceConfigJson? serverConfig, HttpContext context, Func<Task> next) =>
+        await RateLimitMiddlewareFromWebServiceConfig(serverConfig, context, next);
 
-    private static async Task RateLimitMiddlewareFromWebServerConfig(
-        WebServerConfigJson? serverConfig,
+    private static async Task RateLimitMiddlewareFromWebServiceConfig(
+        WebServiceConfigJson? serverConfig,
         HttpContext context,
         Func<Task> next)
     {
@@ -63,7 +63,7 @@ public static class Asp
         return;
     }
 
-    private static IMutableRateLimit BuildRateLimitContainerForClient(WebServerConfigJson? jsonStructure)
+    private static IMutableRateLimit BuildRateLimitContainerForClient(WebServiceConfigJson? jsonStructure)
     {
         if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
             return new MutableRateLimitAlwaysPassing();

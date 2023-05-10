@@ -1,4 +1,4 @@
-using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
+using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -15,7 +15,7 @@ using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 
-namespace ElmTime.Platform.WebServer;
+namespace ElmTime.Platform.WebService;
 
 public class StartupAdminInterface
 {
@@ -45,17 +45,17 @@ public class StartupAdminInterface
 
     public static string PathApiGuiRequest => "/api/gui";
 
-    public static IImmutableList<string> WebServerConfigFilePathDefault => ImmutableList.Create("web-server.json");
+    public static IImmutableList<string> WebServiceConfigFilePathDefault => ImmutableList.Create("web-service.json");
 
-    public static IImmutableList<IImmutableList<string>> WebServerConfigFilePathAlternatives =>
+    public static IImmutableList<IImmutableList<string>> WebServiceConfigFilePathAlternatives =>
         ImmutableList.Create(
-            WebServerConfigFilePathDefault,
+            WebServiceConfigFilePathDefault,
 
             /*
              * Support smooth migration of projects with backwards compatibility here:
-             * Support the name used before 2023 as alternative.
+             * Support the name used before 2023-05 as alternative.
              * */
-            ImmutableList.Create("elm-web-server.json"),
+            ImmutableList.Create("web-server.json"),
             ImmutableList.Create("elm-fullstack.json"));
 
     private readonly ILogger<StartupAdminInterface> logger;
@@ -213,23 +213,23 @@ public class StartupAdminInterface
                             var appConfigFilesNamesAndContents =
                                 appConfigTree.EnumerateBlobsTransitive();
 
-                            var webServerConfigFile =
+                            var webServiceConfigFile =
                                 appConfigFilesNamesAndContents
-                                .Where(filePathAndContent => WebServerConfigFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
+                                .Where(filePathAndContent => WebServiceConfigFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
                                 .Select(filePathAndContent => filePathAndContent.blobContent)
                                 .Cast<ReadOnlyMemory<byte>?>()
                                 .FirstOrDefault();
 
-                            var webServerConfig =
-                                webServerConfigFile == null
+                            var webServiceConfig =
+                                webServiceConfigFile == null
                                 ?
                                 null
                                 :
-                                System.Text.Json.JsonSerializer.Deserialize<WebServerConfigJson>(Encoding.UTF8.GetString(webServerConfigFile.Value.Span));
+                                System.Text.Json.JsonSerializer.Deserialize<WebServiceConfigJson>(Encoding.UTF8.GetString(webServiceConfigFile.Value.Span));
 
                             var serverAndElmAppConfig =
                                 new ServerAndElmAppConfig(
-                                    ServerConfig: webServerConfig,
+                                    ServerConfig: webServiceConfig,
                                     ProcessEventInElmApp: serializedEvent =>
                                     {
                                         lock (avoidConcurrencyLock)

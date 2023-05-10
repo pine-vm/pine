@@ -1,4 +1,4 @@
-using ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations;
+using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine;
 using System;
 using System.Collections.Concurrent;
@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 
-namespace ElmTime.Platform.WebServer;
+namespace ElmTime.Platform.WebService;
 
 public interface IPersistentProcess
 {
@@ -549,17 +549,17 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     {
         var asString = Encoding.UTF8.GetString(updateElmAppEventFromStore);
 
-        Result<string, UpdateElmAppStateForEvent> continueWithWebServerEvent(InterfaceToHost.BackendEventStruct webServerEvent) =>
+        Result<string, UpdateElmAppStateForEvent> continueWithWebServiceEvent(InterfaceToHost.BackendEventStruct webServiceEvent) =>
             Result<string, UpdateElmAppStateForEvent>.ok(new UpdateElmAppStateForEvent(
                 functionName: "processEvent",
                 arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<bool>(
                     stateArgument: true,
-                    serializedArgumentsJson: ImmutableList.Create(JsonSerializer.SerializeToElement(webServerEvent)))));
+                    serializedArgumentsJson: ImmutableList.Create(JsonSerializer.SerializeToElement(webServiceEvent)))));
         try
         {
-            var webServerEvent = JsonSerializer.Deserialize<InterfaceToHost.BackendEventStruct>(asString);
+            var webServiceEvent = JsonSerializer.Deserialize<InterfaceToHost.BackendEventStruct>(asString);
 
-            return continueWithWebServerEvent(webServerEvent);
+            return continueWithWebServiceEvent(webServiceEvent);
         }
         catch (JsonException)
         {
@@ -567,20 +567,21 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         try
         {
-            var webServerEvent_2023_02_27 = JsonSerializer.Deserialize<InterfaceToHost._2023_02_27.AppEventStructure>(asString);
+            var webServiceEvent_2023_02_27 = JsonSerializer.Deserialize<InterfaceToHost._2023_02_27.AppEventStructure>(asString);
 
             return
-                webServerEvent_2023_02_27 switch
+                webServiceEvent_2023_02_27 switch
                 {
-                    InterfaceToHost._2023_02_27.AppEventStructure webServerEvent when webServerEvent.ArrivedAtTimeEvent is InterfaceToHost._2023_02_27.ArrivedAtTimeEventStructure arrivedAtTime =>
-                    continueWithWebServerEvent(
+                    InterfaceToHost._2023_02_27.AppEventStructure webServiceEvent
+                    when webServiceEvent.ArrivedAtTimeEvent is InterfaceToHost._2023_02_27.ArrivedAtTimeEventStructure arrivedAtTime =>
+                    continueWithWebServiceEvent(
                         new InterfaceToHost.BackendEventStruct.PosixTimeHasArrivedEvent(
                             new InterfaceToHost.PosixTimeHasArrivedEventStruct(posixTimeMilli: arrivedAtTime.posixTimeMilli))),
 
-                    InterfaceToHost._2023_02_27.AppEventStructure webServerEvent
-                    when webServerEvent.HttpRequestEvent is InterfaceToHost._2023_02_27.HttpRequestEvent httpRequestEvent =>
+                    InterfaceToHost._2023_02_27.AppEventStructure webServiceEvent
+                    when webServiceEvent.HttpRequestEvent is InterfaceToHost._2023_02_27.HttpRequestEvent httpRequestEvent =>
 
-                    continueWithWebServerEvent(
+                    continueWithWebServiceEvent(
                         new InterfaceToHost.BackendEventStruct.HttpRequestEvent(
                             new InterfaceToHost.HttpRequestEventStruct(
                                 posixTimeMilli: httpRequestEvent.posixTimeMilli,
@@ -593,12 +594,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                                     bodyAsBase64: Maybe.NothingFromNull(httpRequestEvent.request.bodyAsBase64),
                                     headers: httpRequestEvent.request.headers)))),
 
-                    InterfaceToHost._2023_02_27.AppEventStructure webServerEvent
-                    when webServerEvent.TaskCompleteEvent is InterfaceToHost._2023_02_27.ResultFromTaskWithId taskCompleteEvent =>
+                    InterfaceToHost._2023_02_27.AppEventStructure webServiceEvent
+                    when webServiceEvent.TaskCompleteEvent is InterfaceToHost._2023_02_27.ResultFromTaskWithId taskCompleteEvent =>
 
                     InterfaceToHost.TaskResult.From_2023_02_27(taskCompleteEvent.taskResult)
                     .AndThen(taskResult =>
-                    continueWithWebServerEvent(
+                    continueWithWebServiceEvent(
                         new InterfaceToHost.BackendEventStruct.TaskCompleteEvent(
                             new InterfaceToHost.ResultFromTaskWithId(
                                 taskId: taskCompleteEvent.taskId,
@@ -606,8 +607,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                     _ =>
                     Result<string, UpdateElmAppStateForEvent>.err(
-                        "Unexpected structure in webServerEvent_2023_02_27: " +
-                        JsonSerializer.Serialize(webServerEvent_2023_02_27))
+                        "Unexpected structure in webServiceEvent_2023_02_27: " +
+                        JsonSerializer.Serialize(webServiceEvent_2023_02_27))
                 };
         }
         catch (JsonException)

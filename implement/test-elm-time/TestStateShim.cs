@@ -20,7 +20,7 @@ public class TestStateShim
 
         var fileStore = new FileStoreFromSystemIOFile(testSetup.ProcessStoreDirectory);
 
-        var processStore = new ElmTime.Platform.WebServer.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+        var processStore = new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
             fileStore,
             getTimeForCompositionLogBatch:
             () => DateTimeOffset.UtcNow, fileStore);

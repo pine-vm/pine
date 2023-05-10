@@ -6,7 +6,7 @@ using Pine;
 using System;
 using System.Collections.Generic;
 
-namespace ElmTime.Platform.WebServer;
+namespace ElmTime.Platform.WebService;
 
 public static class Configuration
 {

@@ -1,6 +1,6 @@
 using System;
 
-namespace ElmTime.Platform.WebServer.InterfaceToHost._2023_02_27;
+namespace ElmTime.Platform.WebService.InterfaceToHost._2023_02_27;
 
 public record AppEventStructure(
     ArrivedAtTimeEventStructure? ArrivedAtTimeEvent = null,

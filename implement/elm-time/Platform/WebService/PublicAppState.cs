@@ -11,7 +11,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ElmTime.Platform.WebServer;
+namespace ElmTime.Platform.WebService;
 
 public class PublicAppState
 {
@@ -135,7 +135,7 @@ public class PublicAppState
 
         app.Run(async context =>
         {
-            await Asp.MiddlewareFromWebServerConfig(
+            await Asp.MiddlewareFromWebServiceConfig(
                 serverAndElmAppConfig.ServerConfig,
                 context,
                 () => HandleRequestAsync(context));
@@ -481,7 +481,7 @@ public class PublicAppState
 }
 
 public record ServerAndElmAppConfig(
-    WebServerConfigJson? ServerConfig,
+    WebServiceConfigJson? ServerConfig,
     Func<string, Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>> ProcessEventInElmApp,
     PineValue SourceComposition,
     InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds);
