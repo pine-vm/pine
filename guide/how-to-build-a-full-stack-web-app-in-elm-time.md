@@ -32,7 +32,7 @@ This enables the Elm compiler to check for type mismatches and generate error me
 So we have delivered the frontend app to client web browsers and made sure the update functions for communication between them use matching types.
 But how do we let them exchange Elm values? Any software that wants to communicate over the network must serialize and deserialize these messages. Since the code implementing these functions depends entirely on the message type, we let Elm-Time generate this code automatically at build time.
 
-The Elm module `CompilationInterface.GenerateJsonConverters` provides automatically generated JSON encoders and decoders for Elm types.
+The Elm module `CompilationInterface.GenerateJsonConverters` provides automatically generated JSON encoders and decoders for Elm types of your choice.
 
 By adding a declaration in this module, we instruct the compiler to generate a JSON encoder or decoder. The compiler replaces the declaration with the generated code. The compiler also checks that the type is serializable and deserializable.
 
@@ -51,6 +51,25 @@ jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.Message
 jsonDecodeMessageToClient =
     Json.Decode.fail "The compiler replaces this declaration."
 ```
+
+In the example above, we use a type declared in another module.
+We are free to distribute the type declarations over any number of modules. The parser follows imports to recursively collect the graph of type declarations until it reaches atomic Elm types at the leaves.
+
+> Note that, at the moment, the serialization of functions is not implemented.
+> 
+> ```Elm
+> jsonEncodeMyRecordType : { field_with_function_type : Int -> Int } -> Json.Encode.Value
+> jsonEncodeMyRecordType =
+>     always (Json.Encode.string "The compiler replaces this declaration.")
+> ```
+> 
+> When the type we pick in the type annotation contains a function type somewhere, the compiler will show an error message like this:
+> 
+> ```
+> Compilation failed with 1 error:
+> 
+> in file src/CompilationInterface/GenerateJsonConverters.elm: Failed to prepare mapping 'jsonEncodeMyRecordType': Failed to parse type annotation: Failed to parse annotation of field 'field_with_function_type': FunctionTypeAnnotation not implemented
+> ```
 
 Now that we have taken care of the serialization, we can use the generic HTTP APIs in the frontend and backend to send and receive them.
 
