@@ -505,8 +505,8 @@ monacoHtmlDocument =
 -}
 monacoCdnURLs : List String
 monacoCdnURLs =
-    [ "https://cdn.jsdelivr.net/npm/monaco-editor@0.34.0/min"
-    , "https://unpkg.com/monaco-editor@0.34.0/min"
+    [ "https://cdn.jsdelivr.net/npm/monaco-editor@0.38.0/min"
+    , "https://unpkg.com/monaco-editor@0.38.0/min"
     ]
 
 
