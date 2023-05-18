@@ -32,8 +32,13 @@ docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  gh
 
 ## Guides
 
-To learn about building full-stack web apps, see <https://github.com/elm-time/elm-time/tree/main/guide/how-to-build-a-full-stack-web-app-in-elm-time.md>
+A selection of guides on the most popular topics:
 
++ Building full-stack web apps: [./guide/how-to-build-a-full-stack-web-app-in-elm-time.md](./guide/how-to-build-a-full-stack-web-app-in-elm-time.md)
+
++ Building a backend or web service: [./guide/how-to-build-a-backend-app-in-elm-time.md](./guide/how-to-build-a-backend-app-in-elm-time.md)
+
+For an overview of all guides and documentation, see the [`guide` directory](./guide/).
 
 ## Example Apps
 

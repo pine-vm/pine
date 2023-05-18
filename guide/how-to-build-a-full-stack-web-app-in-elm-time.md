@@ -76,10 +76,13 @@ Now that we have taken care of the serialization, we can use the generic HTTP AP
 Since we have automated the changing parts, our code to exchange messages between the frontend and backend stays the same, no matter the message type.
 
 
-## Multiple Frontends
+## Flexibility in Integrating and Compiling Multiple Frontends
 
-The approach introduced above allows for any number of separate frontend apps integrated into the backend build.
-When using multiple frontend apps, we can choose whether to use the same message type for multiple frontends or whether to use different message types.
+The approach introduced above allows for the flexible composition of frontends:
+
++ We can integrate any number of frontends into the backend build.
++ We can compile separate frontends with separate compiler flags. For example, some full-stack apps enable the `--debug` flag on the `make` command to integrate the Elm frontend debugger with some of the frontends.
++ When using multiple frontend apps, we can choose whether to use the same message type for multiple frontends or whether to use different message types.
 
 
 ## Background and Design Goals of Elm-Time
