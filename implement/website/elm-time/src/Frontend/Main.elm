@@ -9,8 +9,8 @@ import Element.Background
 import Element.Font
 import FontAwesome
 import FontAwesome.Brands
-import FontAwesome.Brands.Definitions
 import FontAwesome.Styles
+import Frontend.ElmTimeLogo as ElmTimeLogo
 import Frontend.Page.Download
 import Frontend.Page.Home
 import Frontend.Visuals as Visuals
@@ -243,6 +243,32 @@ viewHomePage =
 header : Element.Element e
 header =
     let
+        elmTimeLogoElement =
+            Element.link
+                [ Element.pointer ]
+                { url = "https://elm-time.org"
+                , label =
+                    [ [ ElmTimeLogo.elmTimeLogoSvg
+                            { strokeThicknessMikro = 30 }
+                            { fill = "#8DBFF0"
+                            , svgAttributes = [ Html.Attributes.style "height" "2.4em" ]
+                            }
+                            |> Element.html
+                      ]
+                        |> Element.row []
+                    , Element.text "Elm-Time"
+                        |> Element.el
+                            [ Element.Font.bold
+                            , Element.Font.color (Element.rgb 0.8 0.9 1)
+                            ]
+                    ]
+                        |> Element.row
+                            [ Element.spacing Visuals.defaultFontSize
+                            , Element.htmlAttribute (Html.Attributes.style "letter-spacing" "3px")
+                            , Element.mouseOver [ Element.alpha 0.8 ]
+                            ]
+                }
+
         navigationButtonFromDestination destination =
             linkToPage
                 [ Element.Font.bold
@@ -271,7 +297,9 @@ header =
                         |> Element.el [ Element.paddingXY 10 5 ]
                 }
     in
-    [ Element.wrappedRow
+    [ elmTimeLogoElement
+        |> Element.el [ Element.alignLeft ]
+    , Element.wrappedRow
         [ Element.spacing Visuals.defaultFontSize
         , Element.padding (Visuals.defaultFontSize * 2)
         , Element.centerX
@@ -279,11 +307,17 @@ header =
         ]
         (topNavigationElements |> List.map navigationButtonFromDestination)
     , linkToRepositoryElement
-        |> Element.el [ Element.alignRight ]
+        |> Element.el
+            [ Element.alignRight ]
+        |> Element.el
+            [ Element.alignRight
+            , Element.width (Element.px 120)
+            ]
     ]
         |> Element.row
             [ Element.width Element.fill
             , Element.Background.color Visuals.headerBackgroundColor
+            , Element.paddingXY (Visuals.defaultFontSize * 3) 0
             ]
 
 
@@ -300,20 +334,7 @@ viewFooter _ =
             , Element.spacing Visuals.defaultFontSize
             , Element.padding (Visuals.defaultFontSize * 2)
             ]
-    , [ [ Element.link
-            [ Element.pointer ]
-            { url = "https://elm-time.org"
-            , label =
-                Element.image [ Element.height (Element.px (Visuals.defaultFontSize * 2)) ]
-                    { src = "footer-icon.png"
-                    , description = "Elm-Time Icon"
-                    }
-            }
-        , Element.text "Elm-Time"
-            |> Element.el []
-        ]
-            |> Element.row [ Element.spacing Visuals.defaultFontSize ]
-      , weblinksElement
+    , [ weblinksElement
       ]
         |> Element.row
             [ Element.centerX
