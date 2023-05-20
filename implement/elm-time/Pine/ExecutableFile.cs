@@ -47,11 +47,11 @@ public class ExecutableFile
         foreach (var environmentFile in environmentFilesNotExecutable)
             writeEnvironmentFile(environmentFile);
 
-        const string mainExecutableFileName = "name-used-to-execute-file.exe";
-        var mainExecutableFilePathRelative = ImmutableList.Create(mainExecutableFileName);
-
         var executableFileNameAppendix =
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "";
+
+        var mainExecutableFileName = "name-used-to-execute-file" + executableFileNameAppendix;
+        var mainExecutableFilePathRelative = ImmutableList.Create(mainExecutableFileName);
 
         var allExecutableFiles =
             (environmentFilesExecutable ?? ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>.Empty)
