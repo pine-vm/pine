@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-20";
+    public static string AppVersionId => "2023-05-21";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -267,7 +267,7 @@ public class Program
             var elmEngineOption = AddElmEngineOptionOnCommand(
                 runServerCommand,
                 defaultFromEnvironmentVariablePrefix: "web_server",
-                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.ElmEngineType.JavaScript_Jint);
+                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.ElmEngineType.JavaScript_V8);
 
             runServerCommand.OnExecute(() =>
             {
