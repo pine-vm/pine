@@ -13,6 +13,7 @@ import Frontend.Visuals as Visuals
 type alias DownloadLinksByPlatform =
     { windows : String
     , linux : String
+    , macOS : String
     }
 
 
@@ -33,6 +34,10 @@ downloadPlatforms =
       , icon = FontAwesome.Brands.windows
       , getDownloadLink = .windows
       }
+    , { title = "MacOS"
+      , icon = FontAwesome.Brands.apple
+      , getDownloadLink = .macOS
+      }
     ]
 
 
@@ -43,8 +48,9 @@ dockerImageUrl =
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-05-07/elm-time-bin-v2023-05-07-linux-x64.zip"
-    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-05-07/elm-time-bin-v2023-05-07-win10-x64.zip"
+    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-05-21/elm-time-bin-v2023-05-21-linux-x64.zip"
+    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-05-21/elm-time-bin-v2023-05-21-win10-x64.zip"
+    , macOS = "https://github.com/elm-time/elm-time/releases/download/v2023-05-21/elm-time-bin-v2023-05-21-osx-x64.zip"
     }
 
 
