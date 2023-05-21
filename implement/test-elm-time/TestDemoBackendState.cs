@@ -3,34 +3,33 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace TestElmTime
+namespace TestElmTime;
+
+[TestClass]
+public class TestDemoBackendState
 {
-    [TestClass]
-    public class TestDemoBackendState
+    [TestMethod]
+    public void Test_demo_backend_state()
     {
-        [TestMethod]
-        public void Test_demo_backend_state()
-        {
-            var sourceFiles =
-                TestSetup.GetElmAppFromDirectoryPath(
-                    ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "demo-backend-state"));
+        var sourceFiles =
+            TestSetup.GetElmAppFromDirectoryPath(
+                ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "demo-backend-state"));
 
-            var webAppSource =
-                TestSetup.AppConfigComponentFromFiles(sourceFiles);
+        var webAppSource =
+            TestSetup.AppConfigComponentFromFiles(sourceFiles);
 
-            var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
-                sourceFiles: sourceFiles,
-                workingDirectoryRelative: ImmutableList<string>.Empty,
-                interfaceConfig: ElmAppInterfaceConfig.Default);
+        var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
+            sourceFiles: sourceFiles,
+            workingDirectoryRelative: ImmutableList<string>.Empty,
+            interfaceConfig: ElmAppInterfaceConfig.Default);
 
-            var compilationSuccess =
-                compilationResult.Extract(err => throw new System.Exception(
-                    "Failed compilation:\n" +
-                    string.Join("\n", err.Select(singleErr => ElmAppCompilation.DescribeCompilationError(singleErr)))));
+        var compilationSuccess =
+            compilationResult.Extract(err => throw new System.Exception(
+                "Failed compilation:\n" +
+                string.Join("\n", err.Select(singleErr => ElmAppCompilation.DescribeCompilationError(singleErr)))));
 
-            using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
-            using var server = testSetup.StartWebHost();
-            using var publicAppClient = testSetup.BuildPublicAppHttpClient();
-        }
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
+        using var server = testSetup.StartWebHost();
+        using var publicAppClient = testSetup.BuildPublicAppHttpClient();
     }
 }
