@@ -81,7 +81,11 @@ public class ElmTestRs
         .Add(
             OSPlatform.Windows,
             ("b9a2d5d68307426e0b35f8030efbac940a3fa621a33ad2d84334a313cac33090",
-            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_windows.zip"));
+            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_windows.zip"))
+        .Add(
+            OSPlatform.OSX,
+            ("bfe56245ac8648a705366defb8c6cf5d95c721527fcf318f87200c608354e61e",
+            @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_macos.tar.gz"));
 
     public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
@@ -92,7 +96,11 @@ public class ElmTestRs
         .Add(
             OSPlatform.Windows,
             ("166dfe795d6331ac9fb1c672374007129ea25e61650045d17e6c3f22083fc9f8",
-            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-pc-windows-msvc.zip"));
+            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-pc-windows-msvc.zip"))
+        .Add(
+            OSPlatform.OSX,
+            ("7d484dd75c6237e47e145d007b7a46b13c10a8fcd8a72de4765c67ef088418ac",
+            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-apple-darwin.zip"));
 
     public static ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
@@ -103,11 +111,11 @@ public class ElmTestRs
     {
         var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
 
-        var elmExecutableFileName = "elm.exe";
+        var elmExecutableFileName = "elm" + ExecutableFile.ExecutableFileNameAppendix;
 
         /*
          * We found no way yet to point elm-test-rs to the deno executable file.
-         * As a temporary solution, use the path environment variable to help elm-test-rs find it.
+         * As a temporary solution, use the PATH environment variable to help elm-test-rs find it.
          * */
 
         var environmentPathExecutableFiles =

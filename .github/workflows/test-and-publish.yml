@@ -8,12 +8,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ubuntu-22.04, windows-2022]
+        environment: [ubuntu-22.04, windows-2022, macos-12]
         include:
           - environment: ubuntu-22.04
             publish-runtime-id: linux-x64
           - environment: windows-2022
             publish-runtime-id: win10-x64
+          - environment: macos-12
+            publish-runtime-id: osx-x64
 
     runs-on: ${{ matrix.environment }}
 
@@ -56,4 +58,8 @@ jobs:
         path: ./publish-separate-assemblies
 
     - name: Elm App Compiler - Run tests with elm-time elm-test-rs
+      # Adapt to elm-test-rs crashing on macOS
+      # elm-test-rs also wrote the following before crashing:
+      # elm: security: createProcess: runInteractiveProcess: exec: does not exist (No such file or directory)
+      if: ${{ !contains( matrix.environment, 'macos') }}
       run: ./publish/elm-time  elm-test-rs  ./implement/elm-time/ElmTime/compile-elm-program

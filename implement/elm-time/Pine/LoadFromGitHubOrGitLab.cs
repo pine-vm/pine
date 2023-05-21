@@ -374,7 +374,20 @@ public static class LoadFromGitHubOrGitLab
         string cloneUrl,
         string commit)
     {
-        var tempWorkingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
+        var tempWorkingDirectory =
+            Path.GetFullPath(Filesystem.CreateRandomDirectoryInTempDirectory().TrimEnd('/') + "/");
+
+        /*
+         * 2023-05-20
+         * Adapt to https://github.com/libgit2/libgit2sharp/issues/1945:
+         * On MacOS, `Repository.Init` yields different WorkingDirectory than provided in constructor
+         * 
+         * Before we started to map the directory path to resolve symbolic links here, `Repository.CheckoutPaths` failed on OSX with an error message like this:
+         * Unable to process file '/var/folders/24/8k48jl6d249_n_qfxwsl6xvm0000gn/T/zqdzg3qp.4ni/'. This file is not located under the working directory of the repository ('/private/var/folders/24/8k48jl6d249_n_qfxwsl6xvm0000gn/T/zqdzg3qp.4ni/').
+         * 
+         * */
+        tempWorkingDirectory =
+            ResolveLinkTargetFullNameIncludingParents(tempWorkingDirectory);
 
         try
         {
@@ -403,6 +416,22 @@ public static class LoadFromGitHubOrGitLab
         {
             DeleteLocalDirectoryRecursive(tempWorkingDirectory);
         }
+    }
+
+    static string ResolveLinkTargetFullNameIncludingParents(string directory)
+    {
+        if (directory == Path.GetPathRoot(directory))
+            return directory;
+
+        if (Directory.ResolveLinkTarget(directory, returnFinalTarget: true) is FileSystemInfo resolved)
+            return resolved.FullName;
+
+        if (Path.GetDirectoryName(directory) is string parent)
+        {
+            return ResolveLinkTargetFullNameIncludingParents(parent) + Path.DirectorySeparatorChar + Path.GetFileName(directory);
+        }
+
+        return directory;
     }
 
     public static string RefCanonicalNameFromPathComponentInGitHubRepository(string? refPathComponent)

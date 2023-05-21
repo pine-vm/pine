@@ -47,8 +47,7 @@ public class ExecutableFile
         foreach (var environmentFile in environmentFilesNotExecutable)
             writeEnvironmentFile(environmentFile);
 
-        var executableFileNameAppendix =
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "";
+        var executableFileNameAppendix = ExecutableFileNameAppendix;
 
         var mainExecutableFileName = "name-used-to-execute-file" + executableFileNameAppendix;
         var mainExecutableFilePathRelative = ImmutableList.Create(mainExecutableFileName);
@@ -66,7 +65,8 @@ public class ExecutableFile
         {
             var fileAbsolutePath = writeEnvironmentFile(environmentFile);
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
+                RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 var unixFileInfo = new UnixFileInfo(fileAbsolutePath);
 
@@ -79,23 +79,52 @@ public class ExecutableFile
         var workingDirectoryAbsolute =
             Path.Combine(
                 containerDirectory,
-                Filesystem.MakePlatformSpecificPath(workingDirectoryRelative ?? ImmutableList<string>.Empty));
+                Filesystem.MakePlatformSpecificPath(workingDirectoryRelative ?? ImmutableList<string>.Empty))
+            .TrimEnd(Path.DirectorySeparatorChar)
+            + Path.DirectorySeparatorChar.ToString();
 
         var mainExecutableFilePathAbsolute = Path.Combine(containerDirectory, mainExecutableFileName);
 
         var environmentPathExecutableFilesPathAbsolute = Path.Combine(containerDirectory, environmentPathContainerDirectoryName);
 
-        var pathEnvironmentVarSeparator =
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ";" : ":";
+        var pathEnvironmentVarSeparator = PathEnvironmentVarSeparator.ToString();
 
         var environmentPathEntryBefore =
             environmentStringsDict.FirstOrDefault(c => c.Key.Equals("PATH", StringComparison.InvariantCultureIgnoreCase));
 
-        var environmentPath = environmentPathExecutableFilesPathAbsolute + pathEnvironmentVarSeparator + environmentPathEntryBefore.Value;
+        var environmentVarsForNewPath =
+            /*
+             * Branch to account for failure on OSX/MacOS observed 2023-05-20:
+             * When we added an environment variable 'PATH' with empty value, `elm  make` crashed with an error message like this:
+             * 
+             * security: createProcess: runInteractiveProcess: exec: does not exist (No such file or directory)
+             * 
+             * -- ERROR -----------------------------------------------------------------------
+             * 
+             * I ran into something that bypassed the normal error reporting process! I
+             * extracted whatever information I could from the internal error:
+             * 
+             * >   thread blocked indefinitely in an MVar operation
+             * */
+            Directory.Exists(environmentPathExecutableFilesPathAbsolute)
+            ?
+            ImmutableList.Create(
+                new KeyValuePair<string, string>(
+                    "PATH",
+                    string.Join(
+                        pathEnvironmentVarSeparator,
+                        new[]
+                        {
+                            environmentPathExecutableFilesPathAbsolute,
+                            environmentPathEntryBefore.Value
+                        }
+                        .Where(c => 0 < c?.Length))))
+            :
+            ImmutableList<KeyValuePair<string, string>>.Empty;
 
         var environmentStringsWithExecutableFiles =
             environmentStringsDict
-            .SetItem(environmentPathEntryBefore.Key ?? "PATH", environmentPath);
+            .SetItems(environmentVarsForNewPath);
 
         var process = new Process
         {
@@ -143,4 +172,18 @@ public class ExecutableFile
             StandardOutput: standardOutput
         ), createdFiles);
     }
+
+    public static IEnumerable<string> GetExecutablePath(string executableFileName) =>
+        Environment.GetEnvironmentVariable("PATH")
+        ?.Split(PathEnvironmentVarSeparator)
+        .Select(s => Path.Combine(s, executableFileName))
+        .Where(File.Exists)
+        ??
+        Array.Empty<string>();
+
+    public static char PathEnvironmentVarSeparator =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ';' : ':';
+
+    public static string ExecutableFileNameAppendix =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "";
 }

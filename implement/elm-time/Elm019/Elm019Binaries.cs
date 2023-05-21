@@ -261,7 +261,15 @@ public static class Elm019Binaries
             */
             OSPlatform.Windows,
             ("821e61ee150b660ca173584b66d1784b7be08b7107e7aa4977135686dc9d2fb2",
-            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz"));
+            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz"))
+        .Add(
+            /*
+            Loaded 2023-05-20 from
+            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-mac-64-bit.gz
+            */
+            OSPlatform.OSX,
+            ("ae645d3ff3d2fbe87460c077f644d3d64de87b5c40e5dbadd8bb08978148a117",
+            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-mac-64-bit.gz"));
 
     public static string GetElmHomeDirectory()
     {

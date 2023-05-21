@@ -454,7 +454,11 @@ static public class ElmFormat
         .Add(
             System.Runtime.InteropServices.OSPlatform.Windows,
             ("277a57429a810a70a432f7a0a64b0eba4f0213d5ea86f60103ad6b17d80b0381",
-            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-win-x64.zip"));
+            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-win-x64.zip"))
+        .Add(
+            System.Runtime.InteropServices.OSPlatform.OSX,
+            ("46256d56d798a9fa2989ed8138c0c5198224a4e3b206dba28314cbc0e15fe163",
+            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-mac-x64.tgz"));
 
 }
 
