@@ -91,16 +91,16 @@ public class ElmTestRs
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("3239864beb7ea1b85a18ccf757b1905eedeeb246c8a882c34c070de4301d5506",
-            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-unknown-linux-gnu.zip"))
+            ("29ac935066d598d98980107c924ed6e9511d3a9e0cb5ab18711ae735e7c8c257",
+            @"https://github.com/denoland/deno/releases/download/v1.33.4/deno-x86_64-unknown-linux-gnu.zip"))
         .Add(
             OSPlatform.Windows,
-            ("166dfe795d6331ac9fb1c672374007129ea25e61650045d17e6c3f22083fc9f8",
-            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-pc-windows-msvc.zip"))
+            ("9e52db0ccc7619f1d1b6934122f1cfd01836bf579888ed4aee2c5ccad1c7eb64",
+            @"https://github.com/denoland/deno/releases/download/v1.33.4/deno-x86_64-pc-windows-msvc.zip"))
         .Add(
             OSPlatform.OSX,
-            ("7d484dd75c6237e47e145d007b7a46b13c10a8fcd8a72de4765c67ef088418ac",
-            @"https://github.com/denoland/deno/releases/download/v1.27.0/deno-x86_64-apple-darwin.zip"));
+            ("e2522d5217a8a3d78e1876e184eae7b68f7d6498eb40765c1f6331b4756b4d6e",
+            @"https://github.com/denoland/deno/releases/download/v1.33.4/deno-x86_64-apple-darwin.zip"));
 
     public static ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
 
