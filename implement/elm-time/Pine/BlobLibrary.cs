@@ -173,11 +173,56 @@ public class BlobLibrary
         }
     }
 
+    static int DownloadViaHttpRetryCountDefault =>
+        /*
+         * Adapt to problem observed 2023-05-21 on environment windows-2022:
+         * On that environment, the HTTP request sometimes failed with a runtime exception like the following:
+         * 
+         * System.Net.Http.HttpRequestException: The SSL connection could not be established, see inner exception.
+         * ---> System.Security.Authentication.AuthenticationException: Authentication failed, see inner exception. 
+         * ---> System.ComponentModel.Win32Exception: The Local Security Authority cannot be contacted
+         * 
+         * [...]
+         * at System.Net.Http.ConnectHelper.EstablishSslConnectionAsync(SslClientAuthenticationOptions sslOptions, HttpRequestMessage request, Boolean async, Stream stream, CancellationToken cancellationToken)
+         * at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+         * at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+         * at System.Net.Http.HttpConnectionPool.AddHttp11ConnectionAsync(QueueItem queueItem)
+         * [...]
+         * */
+        1;
+
     public static HttpResponseMessage DownloadViaHttp(string url) =>
         DownloadViaHttpAsync(url).Result;
 
-    public static async Task<HttpResponseMessage> DownloadViaHttpAsync(string url)
+    public static async Task<HttpResponseMessage> DownloadViaHttpAsync(string url) =>
+        await DownloadViaHttpAsync(url, retryCountLimit: DownloadViaHttpRetryCountDefault);
+
+    public static async Task<HttpResponseMessage> DownloadViaHttpAsync(
+        string url,
+        int retryCountLimit) =>
+        await RetryOnExceptionAsync<HttpResponseMessage, Exception>(
+            retryCountLimit: retryCountLimit,
+            async () => await DownloadViaHttpAsyncWithoutRetry(url),
+            retryDelay: TimeSpan.FromSeconds(3));
+
+    public static async Task<HttpResponseMessage> DownloadViaHttpAsyncWithoutRetry(string url)
     {
+        /*
+         * 2023-05-21 this method was observed to sporadically fail on environment windows-2022:
+         * On that environment, the HTTP request sometimes failed with a runtime exception like the following:
+         * 
+         * System.Net.Http.HttpRequestException: The SSL connection could not be established, see inner exception.
+         * ---> System.Security.Authentication.AuthenticationException: Authentication failed, see inner exception. 
+         * ---> System.ComponentModel.Win32Exception: The Local Security Authority cannot be contacted
+         * 
+         * [...]
+         * at System.Net.Http.ConnectHelper.EstablishSslConnectionAsync(SslClientAuthenticationOptions sslOptions, HttpRequestMessage request, Boolean async, Stream stream, CancellationToken cancellationToken)
+         * at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+         * at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+         * at System.Net.Http.HttpConnectionPool.AddHttp11ConnectionAsync(QueueItem queueItem)
+         * [...]
+         * */
+
         var handler = new HttpClientHandler
         {
             AutomaticDecompression = DecompressionMethods.All
@@ -275,6 +320,46 @@ public class BlobLibrary
 
             if (fromGzip is not null)
                 yield return TreeNodeWithStringPath.Blob(fromGzip.Value);
+        }
+    }
+
+    public static async Task<TResult> RetryOnExceptionAsync<TResult, TException>(
+        int retryCountLimit,
+        Func<Task<TResult>> operation)
+        where TException : Exception =>
+        await RetryOnExceptionAsync<TResult, TException>(retryCountLimit, operation, retryDelay: TimeSpan.Zero);
+
+    public static async Task<TResult> RetryOnExceptionAsync<TResult, TException>(
+        int retryCountLimit,
+        Func<Task<TResult>> operation,
+        TimeSpan retryDelay)
+        where TException : Exception
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        if (retryCountLimit <= 0)
+            throw new ArgumentOutOfRangeException(nameof(retryCountLimit));
+
+        for (int attempts = 1; ; attempts++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (TException e)
+            {
+                if (retryCountLimit < attempts)
+                {
+                    Console.WriteLine(
+                        "Failed " + attempts +
+                        " attempts in " + stopwatch.Elapsed.TotalSeconds +
+                        " seconds, last exception is " + e.GetType().FullName + "(" + e.Message + ")");
+
+                    throw; // rethrow the last exception if we have reached the limit of attempts
+                }
+
+                await Task.Delay(retryDelay); // wait before the next attempt
+            }
         }
     }
 }
