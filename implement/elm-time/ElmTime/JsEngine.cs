@@ -1,4 +1,5 @@
-﻿using JavaScriptEngineSwitcher.V8;
+﻿using ElmTime.JavaScript;
+using JavaScriptEngineSwitcher.V8;
 using System;
 
 namespace ElmTime;
@@ -39,10 +40,12 @@ public class JsEngineFromJavaScriptEngineSwitcher : IJsEngine
     public static int? OverrideJsEngineSettingsMaxStackSize = null;
 
     public static IJsEngine ConstructJsEngine() =>
-        new JsEngineFromJavaScriptEngineSwitcher(ConstructJavaScriptEngineSwitcherJsEngine());
+        new JsEngineFromJavaScriptEngineSwitcher(ConstructClearScriptJavaScriptEngine());
 
-    public static JavaScriptEngineSwitcher.Core.IJsEngine ConstructJavaScriptEngineSwitcherJsEngine()
+    public static JavaScriptEngineSwitcher.Core.IJsEngine ConstructClearScriptJavaScriptEngine()
     {
+        ClearScript.EnsureNativeLibrariesAvailableForCurrentPlatform();
+
         return new V8JsEngine(
             new V8Settings
             {

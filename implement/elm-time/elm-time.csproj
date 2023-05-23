@@ -5,8 +5,8 @@
     <TargetFramework>net7.0</TargetFramework>
     <RootNamespace>ElmTime</RootNamespace>
     <AssemblyName>elm-time</AssemblyName>
-    <AssemblyVersion>2023.0521.0.0</AssemblyVersion>
-    <FileVersion>2023.0521.0.0</FileVersion>
+    <AssemblyVersion>2023.0523.0.0</AssemblyVersion>
+    <FileVersion>2023.0523.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -25,9 +25,6 @@
     <PackageReference Include="Jint" Version="3.0.0-beta-2049" />
     <PackageReference Include="LibGit2Sharp" Version="0.27.2" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.2" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.4.1" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.osx-x64" Version="7.4.1" />
-    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.4.1" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.5.0" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.5" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />

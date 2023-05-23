@@ -237,6 +237,20 @@ public class BlobLibrary
         return await httpClient.GetAsync(url);
     }
 
+    public static ReadOnlyMemory<byte>? DownloadFromUrlAndExtractBlobWithMatchingHashFromListOfRemoteSources(
+        IReadOnlyList<string> sourceUrls,
+        ReadOnlyMemory<byte> sha256)
+    {
+        return
+            sourceUrls
+            .Select(sourceUrl =>
+            DownloadFromUrlAndExtractBlobs(sourceUrl)
+            .Where(BlobHasSHA256(sha256)).Cast<ReadOnlyMemory<byte>?>()
+            .FirstOrDefault())
+            .WhereHasValue()
+            .FirstOrDefault(defaultValue: null);
+    }
+
     public static ReadOnlyMemory<byte>? DownloadFromUrlAndExtractBlobWithMatchingHash(
         string sourceUrl,
         ReadOnlyMemory<byte> sha256)

@@ -47,11 +47,7 @@ public class TestModeledInElm
                 new[]
                 {(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)});
 
-        var javascriptEngine = new V8JsEngine(
-            new V8Settings
-            {
-            }
-        );
+        var javascriptEngine = JsEngineFromJavaScriptEngineSwitcher.ConstructClearScriptJavaScriptEngine();
 
         javascriptEngine.Evaluate(javascriptPreparedToRun);
 
