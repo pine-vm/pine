@@ -28,7 +28,6 @@ jobs:
     - uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '7.0.203'
-        include-prerelease: true
 
     - name: Try use dotnet
       run: dotnet --info
