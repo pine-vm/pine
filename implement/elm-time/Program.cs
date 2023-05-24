@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-23";
+    public static string AppVersionId => "2023-05-24";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -2776,13 +2776,10 @@ public class Program
 
                 var registerExecutableForCurrentUser = new Action(() =>
                 {
-                    File.WriteAllBytes(destinationExecutableFilePath, currentExecuableFileContent);
-
-                    var unixFileInfo = new Mono.Unix.UnixFileInfo(destinationExecutableFilePath);
-
-                    unixFileInfo.FileAccessPermissions |=
-                        Mono.Unix.FileAccessPermissions.GroupExecute | Mono.Unix.FileAccessPermissions.UserExecute | Mono.Unix.FileAccessPermissions.OtherExecute |
-                        Mono.Unix.FileAccessPermissions.GroupRead | Mono.Unix.FileAccessPermissions.UserRead | Mono.Unix.FileAccessPermissions.OtherRead;
+                    ExecutableFile.CreateAndWriteFileToPath(
+                        destinationExecutableFilePath,
+                        currentExecuableFileContent,
+                        executable: true);
 
                     Console.WriteLine(
                         "I copied the executable file to '" + destinationExecutableFilePath +

@@ -1,5 +1,4 @@
-﻿using Mono.Unix;
-using Pine;
+﻿using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -87,19 +86,6 @@ public class ClearScript
 
         var fileAbsolutePath = Path.Combine(clearScriptCacheDirectory, dependency.ExpectedFileName);
 
-        void SetUpFilePermissions()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
-                RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                var unixFileInfo = new UnixFileInfo(fileAbsolutePath);
-
-                unixFileInfo.FileAccessPermissions |=
-                    FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
-                    FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
-            }
-        }
-
         if (File.Exists(fileAbsolutePath))
         {
             var fileContent = File.ReadAllBytes(fileAbsolutePath);
@@ -108,7 +94,6 @@ public class ClearScript
 
             if (fileContentHash.SequenceEqual(hash))
             {
-                SetUpFilePermissions();
                 return;
             }
         }
@@ -123,13 +108,7 @@ public class ClearScript
                 "Did not find dependency " + dependency.HashBase16 + " (" + dependency.ExpectedFileName + ") in any of the " +
                 dependency.RemoteSources.Count + " remote sources");
 
-        var destDirectory = Path.GetDirectoryName(fileAbsolutePath);
-
-        Directory.CreateDirectory(destDirectory);
-
-        File.WriteAllBytes(fileAbsolutePath, file.ToArray());
-
-        SetUpFilePermissions();
+        ExecutableFile.CreateAndWriteFileToPath(fileAbsolutePath, file, executable: true);
     }
 
     /// <summary>

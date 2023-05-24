@@ -1,4 +1,3 @@
-using Mono.Unix;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -32,20 +31,17 @@ public class ExecutableFile
 
         var containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        string writeEnvironmentFile(KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFile)
+        void writeEnvironmentFile(
+            KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFile,
+            bool executable)
         {
             var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.Key));
-            var environmentFileDirectory = Path.GetDirectoryName(environmentFilePath)!;
 
-            Directory.CreateDirectory(environmentFileDirectory);
-
-            File.WriteAllBytes(environmentFilePath, environmentFile.Value.ToArray());
-
-            return environmentFilePath;
+            CreateAndWriteFileToPath(environmentFilePath, environmentFile.Value, executable);
         }
 
         foreach (var environmentFile in environmentFilesNotExecutable)
-            writeEnvironmentFile(environmentFile);
+            writeEnvironmentFile(environmentFile, executable: false);
 
         var executableFileNameAppendix = ExecutableFileNameAppendix;
 
@@ -63,17 +59,7 @@ public class ExecutableFile
 
         foreach (var environmentFile in allExecutableFiles)
         {
-            var fileAbsolutePath = writeEnvironmentFile(environmentFile);
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
-                RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                var unixFileInfo = new UnixFileInfo(fileAbsolutePath);
-
-                unixFileInfo.FileAccessPermissions |=
-                    FileAccessPermissions.GroupExecute | FileAccessPermissions.UserExecute | FileAccessPermissions.OtherExecute |
-                    FileAccessPermissions.GroupRead | FileAccessPermissions.UserRead | FileAccessPermissions.OtherRead;
-            }
+            writeEnvironmentFile(environmentFile, executable: true);
         }
 
         var workingDirectoryAbsolute =
@@ -172,6 +158,45 @@ public class ExecutableFile
             StandardOutput: standardOutput
         ), createdFiles);
     }
+
+    public static void CreateAndWriteFileToPath(
+        string filePath,
+        ReadOnlyMemory<byte> fileContent,
+        bool executable)
+    {
+        var directory = Path.GetDirectoryName(filePath);
+
+        if (directory is not null)
+            Directory.CreateDirectory(directory);
+
+        var unixCreateMode =
+            executable
+            ?
+            (UnixFileMode?)UnixFileModeForExecutableFile
+            :
+            null;
+
+        var fileStreamOptions = new FileStreamOptions
+        {
+            Mode = FileMode.Create,
+            Access = FileAccess.Write
+        };
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            fileStreamOptions.UnixCreateMode = unixCreateMode;
+
+        using var fileStream = new FileStream(filePath, options: fileStreamOptions);
+
+        fileStream.Write(fileContent.Span);
+
+        fileStream.Flush(flushToDisk: true);
+
+        fileStream.Close();
+    }
+
+    public static UnixFileMode UnixFileModeForExecutableFile =>
+        UnixFileMode.GroupExecute | UnixFileMode.UserExecute | UnixFileMode.OtherExecute |
+        UnixFileMode.GroupRead | UnixFileMode.UserRead | UnixFileMode.OtherRead;
 
     public static IEnumerable<string> GetExecutablePath(string executableFileName) =>
         Environment.GetEnvironmentVariable("PATH")
