@@ -45,11 +45,11 @@ jobs:
         name: test-results-${{ github.sha }}-${{ matrix.environment }}
         path: ./implement/test-elm-time/TestResults
 
-    - name: Summarize Test Results
+    - name: Compile Overview of Test Results
       uses: EnricoMi/publish-unit-test-result-action/composite@v2
       if: always()
       with:
-        check_name: "Test Results Summaries ${{ matrix.environment }}"
+        check_name: "Test Results Overview ${{ matrix.environment }}"
         files: |
           ./implement/test-elm-time/TestResults/**/*.xml
           ./implement/test-elm-time/TestResults/**/*.trx
