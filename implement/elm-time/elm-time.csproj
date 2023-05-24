@@ -28,7 +28,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.5.0" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.5" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
-    <PackageReference Include="MSTest.TestFramework" Version="2.2.10" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.0.2" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.33.0" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />

@@ -36,7 +36,7 @@ jobs:
       run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
 
     - name: Run tests with dotnet test
-      run: dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger trx
+      run: dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger "trx"  --diag "./implement/test-elm-time/TestResults/diag-log.txt"  --verbosity  diagnostic
 
     - name: Publish test results
       uses: actions/upload-artifact@v3
@@ -44,6 +44,16 @@ jobs:
       with:
         name: test-results-${{ github.sha }}-${{ matrix.environment }}
         path: ./implement/test-elm-time/TestResults
+
+    - name: Summarize Test Results
+      uses: EnricoMi/publish-unit-test-result-action/composite@v2
+      if: always()
+      with:
+        check_name: "Test Results Summaries ${{ matrix.environment }}"
+        files: |
+          ./implement/test-elm-time/TestResults/**/*.xml
+          ./implement/test-elm-time/TestResults/**/*.trx
+          ./implement/test-elm-time/TestResults/**/*.json
 
     - name: dotnet publish
       run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./publish  ./implement/elm-time
