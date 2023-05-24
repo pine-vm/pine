@@ -38,6 +38,13 @@ jobs:
     - name: Run tests with dotnet test
       run: dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger trx
 
+    - name: Publish test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ github.sha }}-${{ matrix.environment }}
+        path: ./implement/test-elm-time/TestResults
+
     - name: dotnet publish
       run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./publish  ./implement/elm-time
 
