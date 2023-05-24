@@ -2759,7 +2759,7 @@ public class Program
             }
             else
             {
-                var destinationExecutableFilePath = "/bin/" + commandName;
+                var destinationExecutableFilePath = "/usr/local/bin/" + commandName;
 
                 byte[]? currentRegisteredFileContent = null;
 
