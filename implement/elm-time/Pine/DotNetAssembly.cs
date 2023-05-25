@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 
@@ -119,4 +120,20 @@ public class DotNetAssembly
 
         return memoryStream.ToArray();
     }
+
+    public static readonly Lazy<string> ProgramExecutableFileName = new(() =>
+    // Assembly.GetExecutingAssembly().Location for cases where process comes from `dotnet test`
+    Assembly.GetExecutingAssembly().Location switch
+    {
+        { Length: > 0 } executingAssemblyLocation =>
+        executingAssemblyLocation,
+
+        _ =>
+        Environment.ProcessPath ??
+        /*
+         * Do not rely on Environment.ProcessPath because it is often null on Linux:
+         * https://github.com/dotnet/runtime/issues/66323
+         * */
+        Process.GetCurrentProcess().MainModule!.FileName
+    });
 }

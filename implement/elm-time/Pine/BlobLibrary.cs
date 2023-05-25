@@ -173,7 +173,7 @@ public class BlobLibrary
         }
     }
 
-    static int DownloadViaHttpRetryCountDefault =>
+    private static int DownloadViaHttpRetryCountDefault =>
         /*
          * Adapt to problem observed 2023-05-21 on environment windows-2022:
          * On that environment, the HTTP request sometimes failed with a runtime exception like the following:

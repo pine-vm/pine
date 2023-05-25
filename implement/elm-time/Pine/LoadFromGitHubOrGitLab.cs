@@ -111,6 +111,8 @@ public static class LoadFromGitHubOrGitLab
         string sourceUrl,
         Func<GetRepositoryFilesPartialForCommitRequest, Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> getRepositoryFilesPartialForCommit)
     {
+        ElmTime.Git.LibGit2Sharp.SetupTask.Value.Wait();
+
         var parsedUrl = ParseUrl(sourceUrl);
 
         if (parsedUrl == null)
@@ -362,6 +364,8 @@ public static class LoadFromGitHubOrGitLab
         string cloneUrl,
         string? branchName)
     {
+        ElmTime.Git.LibGit2Sharp.SetupTask.Value.Wait();
+
         var refName = RefCanonicalNameFromPathComponentInGitHubRepository(branchName);
 
         return
@@ -418,7 +422,7 @@ public static class LoadFromGitHubOrGitLab
         }
     }
 
-    static string ResolveLinkTargetFullNameIncludingParents(string directory)
+    private static string ResolveLinkTargetFullNameIncludingParents(string directory)
     {
         if (directory == Path.GetPathRoot(directory))
             return directory;

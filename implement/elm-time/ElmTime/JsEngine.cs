@@ -44,12 +44,12 @@ public class JsEngineFromJavaScriptEngineSwitcher : IJsEngine
 
     public static JavaScriptEngineSwitcher.Core.IJsEngine ConstructClearScriptJavaScriptEngine()
     {
-        ClearScript.EnsureNativeLibrariesAvailableForCurrentPlatform();
+        ClearScriptV8.SetupTask.Value.Wait();
 
         return new V8JsEngine(
             new V8Settings
             {
-                MaxStackUsage = (UIntPtr)(OverrideJsEngineSettingsMaxStackSize ?? 40_000_000),
+                MaxStackUsage = (nuint)(OverrideJsEngineSettingsMaxStackSize ?? 40_000_000),
             }
         );
     }

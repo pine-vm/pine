@@ -1,7 +1,6 @@
 using ElmTime.Elm019;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Pine;
 using Pine.PineVM;
 using System;
@@ -18,7 +17,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-05-24";
+    public static string AppVersionId => "2023-05-25";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -52,6 +51,8 @@ public class Program
                 checkInstallation().registerExecutableDirectoryOnPath();
             });
         });
+
+        AddSelfTestCommand(app);
 
         var runServerCommand = AddRunServerCommand(app);
 
@@ -249,6 +250,18 @@ public class Program
         return executeAndGuideInCaseOfException();
     }
 
+    private static CommandLineApplication AddSelfTestCommand(CommandLineApplication app) =>
+        app.Command("self-test", selfTestCommand =>
+        {
+            selfTestCommand.Description = "Tests integration of native dependencies";
+            selfTestCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            selfTestCommand.OnExecute(() =>
+            {
+                return Test.SelfTest.RunAllTestsAndPrintToConsole();
+            });
+        });
+
     private static CommandLineApplication AddRunServerCommand(CommandLineApplication app) =>
         app.Command("run-server", runServerCommand =>
         {
@@ -277,148 +290,19 @@ public class Program
                     publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
                     PublicWebHostUrlsDefault;
 
-                var copyProcess = copyProcessOption.Value();
-
-                if ((deletePreviousProcessOption.HasValue() || copyProcess != null) && processStorePath != null)
-                {
-                    Console.WriteLine("Deleting the previous process state from '" + processStorePath + "'...");
-
-                    if (Directory.Exists(processStorePath))
-                        Directory.Delete(processStorePath, true);
-
-                    Console.WriteLine("Completed deleting the previous process state from '" + processStorePath + "'.");
-                }
-
-                IFileStore buildProcessStoreFileStore()
-                {
-                    if (processStorePath == null)
-                    {
-                        Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
-
-                        var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
-
-                        var fileStoreWriter = new DelegatingFileStoreWriter
-                        (
-                            SetFileContentDelegate: file => files[file.path] = file.fileContent,
-                            AppendFileContentDelegate: file => files.AddOrUpdate(
-                               file.path, _ => file.fileContent,
-                               (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
-                            DeleteFileDelegate: path => files.Remove(path, out var _)
-                        );
-
-                        var fileStoreReader = new DelegatingFileStoreReader
-                        (
-                            ListFilesInDirectoryDelegate: path =>
-                                files.Select(file =>
-                                {
-                                    if (!file.Key.Take(path.Count).SequenceEqual(path))
-                                        return null;
-
-                                    return file.Key.Skip(path.Count).ToImmutableList();
-                                }).WhereNotNull(),
-                            GetFileContentDelegate: path =>
-                            {
-                                files.TryGetValue(path, out var fileContent);
-
-                                return fileContent;
-                            }
-                        );
-
-                        return new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
-                    }
-                    else
-                    {
-                        return new FileStoreFromSystemIOFile(processStorePath);
-                    }
-                }
-
-                var processStoreFileStore = buildProcessStoreFileStore();
-
-                if (copyProcess != null)
-                {
-                    var copyFiles =
-                        LoadFilesForRestoreFromPathAndLogToConsole(
-                            sourcePath: copyProcess,
-                            sourcePassword: null);
-
-                    foreach (var file in copyFiles)
-                        processStoreFileStore.SetFileContent(file.Key.ToImmutableList(), file.Value.ToArray());
-                }
-
                 var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
-
-                var jsEngineFactory =
-                    elmEngineType switch
-                    {
-                        ElmInteractive.ElmEngineType.JavaScript_Jint => new Func<IJsEngine>(JsEngineJintOptimizedForElmApps.Create),
-                        ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
-
-                        object other => throw new NotImplementedException("Engine type not implemented here: " + other)
-                    };
 
                 var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
-                var deployOptionValue = deployOption.Value();
-
-                if (deployOptionValue is not null)
-                {
-                    Console.WriteLine("Loading app config to deploy...");
-
-                    var appConfigZipArchive =
-                        Platform.WebService.BuildConfigurationFromArguments.BuildConfigurationZipArchiveFromPath(
-                            sourcePath: deployOptionValue).configZipArchive;
-
-                    var appConfigTree =
-                        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                            ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
-
-                    var appConfigComponent = PineValueComposition.FromTreeWithStringPath(appConfigTree);
-
-                    var processStoreWriter =
-                        new Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-                            processStoreFileStore,
-                            getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
-                            processStoreFileStore);
-
-                    processStoreWriter.StoreComponent(appConfigComponent);
-
-                    var appConfigValueInFile =
-                        new Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure
-                        {
-                            HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfigComponent))
-                        };
-
-                    var initElmAppState =
-                        (deletePreviousProcessOption.HasValue() || processStorePath == null) && !copyProcessOption.HasValue();
-
-                    var compositionLogEvent =
-                        Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
-                            appConfigValueInFile: appConfigValueInFile,
-                            initElmAppState: initElmAppState);
-
-                    var testDeployResult = Platform.WebService.PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
-                        compositionLogEvent: compositionLogEvent,
-                        fileStoreReader: processStoreFileStore,
-                        overrideJsEngineFactory: jsEngineFactory)
-                    .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
-
-                    foreach (var (filePath, fileContent) in testDeployResult.projectedFiles)
-                        processStoreFileStore.SetFileContent(filePath, fileContent);
-                }
-
-                var webHostBuilder =
-                    Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-                    .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
-                    .UseUrls(adminInterfaceUrls)
-                    .UseStartup<Platform.WebService.StartupAdminInterface>()
-                    .WithSettingPublicWebHostUrls(publicAppUrls)
-                    .WithJsEngineFactory(jsEngineFactory)
-                    .WithProcessStoreFileStore(processStoreFileStore);
-
-                if (adminPasswordOption.HasValue())
-                    webHostBuilder = webHostBuilder.WithSettingAdminPassword(adminPasswordOption.Value());
-
-                var webHost = webHostBuilder.Build();
+                var webHost = RunServer.BuildWebHostToRunServer(
+                    processStorePath: processStorePath,
+                    adminInterfaceUrls: adminInterfaceUrls,
+                    adminPassword: adminPasswordOption.Value(),
+                    publicAppUrls: publicAppUrls,
+                    elmEngineType: elmEngineType,
+                    deletePreviousProcess: deletePreviousProcessOption.HasValue(),
+                    copyProcess: copyProcessOption.Value(),
+                    deployApp: deployOption.Value());
 
                 Console.WriteLine("Starting web server with admin interface (using engine " + elmEngineType + ")...");
 
@@ -533,7 +417,7 @@ public class Program
                 Console.WriteLine("Begin reading process history from '" + site + "' ...");
 
                 var (files, lastCompositionLogRecordHashBase16) =
-                    ReadFilesForRestoreProcessFromAdminInterface(site, sitePassword!);
+                    RunServer.ReadFilesForRestoreProcessFromAdminInterface(site, sitePassword!);
 
                 Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + site + "'.");
 
@@ -1618,7 +1502,7 @@ public class Program
             });
         });
 
-    record LoadForMakeResult(
+    private record LoadForMakeResult(
         TreeNodeWithStringPath sourceFiles,
         IReadOnlyList<string> workingDirectoryRelative,
         IReadOnlyList<string> pathToFileWithElmEntryPoint);
@@ -2258,7 +2142,7 @@ public class Program
         {
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                 "Basic",
-                Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(password))));
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(Platform.WebService.Configuration.BasicAuthenticationForAdmin(password))));
         }
 
         setHttpClientPassword(defaultPassword);
@@ -2317,7 +2201,7 @@ public class Program
         return uri;
     }
 
-    private static bool LooksLikeLocalSite(string site)
+    public static bool LooksLikeLocalSite(string site)
     {
         if (site.StartsWith(".") || site.StartsWith("/"))
             return true;
@@ -2595,122 +2479,6 @@ public class Program
             responseFromServer: responseFromServer,
             totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
         );
-    }
-
-    private static (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
-        string sourceAdminInterface,
-        string? sourceAdminPassword)
-    {
-        using var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) };
-
-        sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sourceAdminPassword))));
-
-        var processHistoryFileStoreRemoteReader = new DelegatingFileStoreReader
-        (
-            ListFilesInDirectoryDelegate: directoryPath =>
-            {
-                var httpRequestPath =
-                    Platform.WebService.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
-                    string.Join("/", directoryPath);
-
-                var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
-
-                if (!response.IsSuccessStatusCode)
-                    throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
-
-                return
-                    response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(path => path.Split('/').ToImmutableList());
-            },
-            GetFileContentDelegate: filePath =>
-            {
-                var httpRequestPath =
-                    Platform.WebService.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
-                    string.Join("/", filePath);
-
-                var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
-
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    return null;
-
-                if (!response.IsSuccessStatusCode)
-                    throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
-
-                return response.Content.ReadAsByteArrayAsync().Result;
-            }
-        );
-
-        return Platform.WebService.PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
-    }
-
-    private static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
-        string sourcePath, string? sourcePassword)
-    {
-        if (!LooksLikeLocalSite(sourcePath))
-        {
-            Console.WriteLine("Begin reading process history from '" + sourcePath + "' ...");
-
-            var (files, lastCompositionLogRecordHashBase16) = ReadFilesForRestoreProcessFromAdminInterface(
-                sourceAdminInterface: sourcePath,
-                sourceAdminPassword: sourcePassword);
-
-            Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + sourcePath + "'.");
-
-            return files;
-        }
-
-        var archive = File.ReadAllBytes(sourcePath);
-
-        var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
-
-        return
-            PineValueComposition.ToFlatDictionaryWithPathComparer(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
-                .EnumerateBlobsTransitive());
-    }
-
-    public static void ReplicateProcessAndLogToConsole(
-        string site,
-        string sitePassword,
-        string sourcePath,
-        string sourcePassword)
-    {
-        var restoreFiles =
-            LoadFilesForRestoreFromPathAndLogToConsole(sourcePath: sourcePath, sourcePassword: sourcePassword);
-
-        var processHistoryTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
-
-        var processHistoryComponentHash = PineValueHashTree.ComputeHashNotSorted(processHistoryTree);
-        var processHistoryComponentHashBase16 = CommonConversion.StringBase16(processHistoryComponentHash);
-
-        var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
-
-        using var httpClient = new System.Net.Http.HttpClient();
-
-        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(sitePassword))));
-
-        var deployAddress =
-            site.TrimEnd('/') +
-            Platform.WebService.StartupAdminInterface.PathApiReplaceProcessHistory;
-
-        Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
-
-        var httpContent = new System.Net.Http.ByteArrayContent(processHistoryZipArchive);
-
-        httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
-        httpContent.Headers.ContentDisposition =
-            new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = processHistoryComponentHashBase16 + ".zip" };
-
-        var httpResponse = httpClient.PostAsync(deployAddress, httpContent).Result;
-
-        Console.WriteLine(
-            "Server response: " + httpResponse.StatusCode + "\n" +
-             httpResponse.Content.ReadAsStringAsync().Result);
     }
 
     private static (string commandName, Func<(bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath)> checkInstallation)

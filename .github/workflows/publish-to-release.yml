@@ -42,7 +42,13 @@ jobs:
       run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
 
     - name: dotnet publish
-      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./publish  ./implement/elm-time
+      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/elm-time
+
+    - name: Copy artifacts to publish
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "./publish";
+        Get-ChildItem -Path "./dotnet-build/" -Filter "elm-time*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
       uses: actions/upload-artifact@v3

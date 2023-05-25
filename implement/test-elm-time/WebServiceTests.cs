@@ -1031,7 +1031,7 @@ public class WebServiceTests
 
             using var replicaHost = replicaSetup.StartWebHost();
 
-            ElmTime.Program.ReplicateProcessAndLogToConsole(
+            ElmTime.RunServer.ReplicateProcessAndLogToConsole(
                 site: replicaAdminInterfaceUrl,
                 sitePassword: replicaAdminPassword,
                 sourcePath: testSetup.AdminWebHostUrl,

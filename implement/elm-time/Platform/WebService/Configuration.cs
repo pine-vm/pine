@@ -18,7 +18,9 @@ public static class Configuration
 
     public static string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
 
-    //  https://en.wikipedia.org/wiki/Basic_access_authentication
+    /// <summary>
+    ///  https://en.wikipedia.org/wiki/Basic_access_authentication
+    /// </summary>
     public static string BasicAuthenticationForAdmin(string? password) => ":" + password;
 
     public static IWebHostBuilder WithProcessStoreFileStore(
